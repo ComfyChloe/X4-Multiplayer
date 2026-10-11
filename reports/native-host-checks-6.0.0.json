@@ -1,0 +1,12 @@
+{
+  "native_host_pass": true,
+  "remote_shots": 20,
+  "target_shield_percent": 88.7304,
+  "shared_credits": 225060,
+  "mission_delivered": 20,
+  "mission_targets": 2,
+  "reward_count": 1,
+  "game_callbacks_median_hz": 5.78,
+  "game_callback_maxgap_median_ms": 294.92,
+  "samples": 139
+}

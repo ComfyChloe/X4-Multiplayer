@@ -1,0 +1,32 @@
+X4 LAN Lab v5 — 1920x1080 Low graphics launcher update
+10 October 2026
+
+For an existing matching v5 Linux/Windows package pair. No new session key,
+mod reinstall or server restart is required. Close X4 before applying this update.
+
+Linux:
+Back up setup.py in your existing X4-LAN-Linux folder, then replace that file
+with Linux/setup.py from this update. Use your usual 3-START-X4-TEST.sh.
+
+Windows:
+Back up setup.ps1 in your existing X4-LAN-Windows11 folder, then replace that file
+with Windows11/setup.ps1 from this update. Use your usual 3-START-X4-TEST.cmd.
+
+Keep the rest of your existing package, including installation.json and
+session.json. Do not run these setup files from the update folder by themselves.
+You do not need to rerun 1-INSTALL after replacing a launcher.
+
+At every test launch, the launcher configures isolated profile 45841:
+- 1920x1080, regular windowed mode (fullscreen and borderless disabled).
+- The game's X4 9.00 Low graphics preset: low textures, shadows, shader/detail
+  settings; SSAO, glow and volumetric fog off.
+- 60 FPS cap; upscaling and frame generation off.
+
+The previous test config is backed up in backups/graphics-* when it changes.
+Other profiles and save files are not edited. Changes take effect on the next
+X4 start. This is not a verified fix for repeated network timeouts.
+
+Verification: six existing Linux installer/profile/launcher checks passed.
+The Windows start path was checked with PowerShell 7 on Linux and a mocked
+Steam launch: settings, exact backup, unrelated preferences and test-profile
+arguments were preserved. A live Windows or Linux rendered frame was not checked.

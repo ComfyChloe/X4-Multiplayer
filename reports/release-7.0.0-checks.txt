@@ -1,0 +1,63 @@
+X4 LAN LAB 7.0.0 / W01 - INTERNAL RELEASE CHECKS
+11 October 2026 | X4 9.00 (611726), Steam build 23660954
+
+RESULT: NPC SECTOR SCENE MILESTONE ONLY. FULL MULTIPLAYER ACCEPTANCE IS OPEN.
+Public Test 01 is withheld. This package must not be represented as a synchronized
+universe release. Ordinary cargo/magnet pickup is still missing.
+
+AUTOMATED
+162 Python/LuaJIT tests passed, with zero failures, errors or skips. Includes
+actual local UDP sockets and the bundled Linux transport; randomized packet loss,
+reordering, duplicate acknowledgements, atomic empty/non-empty baselines, limits,
+Python/Lua interoperability, protected player objects, paused engine application,
+stale motion recovery and return-sector cache regression. All 13 Lua files also
+compile with system LuaJIT. All 9 MD scripts validate against the installed X4
+9.00 engine schemas. Schemas are development references, not distributed assets.
+
+NATIVE LINUX X4
+Ryzen 7 7800X3D, Radeon RX 7900 XTX. Fresh creative worlds in profile 45841;
+additional third-party mods disabled only in that test profile. Source guards
+prevent the new adapter from running in normal profiles.
+
+Host: actual NPC enumeration and native poses transmitted over UDP through the
+real relay to a synthetic guest. Eight complete sector baselines contained
+126, 130, 131, 130, 130, 130, 127 and 124 NPCs. Motion recorded for 124 known IDs.
+
+Guest: actual X4 connected to a synthetic authoritative host. Two controlled
+ships appeared, moved by 2 km and were removed. A recorded complete native-host
+sector with 124 ships was then replayed into X4. All 124 were operational in 14
+readback samples; maximum settled position deviation was 0.004 m. The final
+empty baseline removed them: saved native component IDs were no longer
+operational. The local player remained operational in every diagnostic sample.
+There were no Lua errors or UNIVERSE STOPPED messages in this successful run.
+
+Game callback median: 60.96/s host, 60.90/s guest. Guest minimum 23.11/s during
+this short run. These are Lua callback rates, not benchmarked FPS. Spawning a
+sector can cause a transient hitch; no performance improvement is claimed.
+
+KNOWN ENGINE WARNINGS
+The successful full-sector guest run logged 14 mass-traffic-offset warnings while
+suppressing newly arriving local NPCs. Readback confirms tested replica removal,
+but broader NPC jobs, vanilla mission references and long-session effects remain
+unverified. Guest NPC suppression is an experimental operation in a disposable
+world, not general control over all independent guest simulation.
+
+PRESERVATION / SCOPE
+All normal save bytes and their modification times remained unchanged. No test
+save was created. Steam refreshed only its cloud-metadata timestamp; those bytes
+were unchanged. The old installed mod was backed up. The user authorized leaving
+the new internal version installed. No third-party multiplayer code or binary
+is included in W01; references remain separately under research/.
+
+NOT VERIFIED / NOT IMPLEMENTED
+- Real simultaneous Windows/Linux gameplay, Windows X4 native engine calls,
+  extended ZeroTier sessions and travel/highway/SETA behavior.
+- Full NPC equipment, names, orders, weapons, damage, cargo or boarding authority.
+- Ordinary jettisoned cargo and normal cargo-magnet transactions.
+- Station production/construction, general economy, vanilla missions, save/load.
+- Reliable global object-generation hooks and long-session guest job suppression.
+
+Read WORLD-SYNC-TEST.txt for the next real two-computer test. Transport commit
+means complete packet receipt, not proof of a successful client engine update.
+The relay NPC counter alone cannot establish full universe synchronization.
+Archive/inventory/install checks are recorded separately with this internal pair.

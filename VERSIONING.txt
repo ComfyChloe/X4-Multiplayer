@@ -1,0 +1,40 @@
+X4 LAN Lab version numbering
+
+Format: MAJOR.MINOR.PATCH, for example 5.0.1.
+- MAJOR: a new major development stage or incompatible multiplayer changes.
+- MINOR: new features within that stage.
+- PATCH: fixes, defaults, documentation and packaging improvements.
+Every published update gets a higher version, including launcher-only fixes.
+
+Current internal release: 7.0.0 (W01)
+Adds NPC sector scene synchronization; full shared-universe work remains open.
+Install the new matched Linux/Windows pair, including the new Linux server.
+
+Historical mapping:
+7.0.0 = internal W01 NPC scenes; original world1 protocol, no full-world claim.
+6.0.0 = sector-aware co-op fleet, shared treasury and Cooperative Trial.
+5.1.0 = reconnect, ejection/respawn, suit replicas and exclusive fullscreen.
+5.0.2 = 5.0.1 + Windows OneDrive profile check fix (no gameplay changes).
+5.0.1 = v5 + 1920x1080 Low graphics/60 FPS + consistent package version labels.
+5.0.0 = former v5: seat-exit fix and 30-second connection timeout.
+4.0.0 = former v4: live server console and English packaging.
+Earlier archives keep their original names as historical test snapshots.
+
+Where to see the version:
+- ZIP and extracted folder names: X4-LAN-7.0.0-Linux / Windows11.
+- VERSION.txt and package.json inside each package.
+- Launcher output, server dashboard/status log and installed mod display name.
+
+Use both archives from the same release folder. Each newly built pair has a shared
+session key; identical version labels alone do not make separate builds a pair.
+Exception: the 5.0.2 Windows launcher-only update preserves the existing pair.
+After that small update, the folder name and installed mod display name keep
+their previous label; VERSION.txt and the launcher show the updated version.
+This is the mod/package version, not the X4 game version (currently 9.00).
+
+Development:
+The source VERSION.txt is the canonical package version. The package builder
+reads it and stamps file/folder names, VERSION.txt, package.json, user guides and
+the mod display name. Update the changelog and this release map when advancing it.
+X4 content.xml's integer version is its separate engine compatibility revision;
+do not put a dotted package version in that XML attribute.

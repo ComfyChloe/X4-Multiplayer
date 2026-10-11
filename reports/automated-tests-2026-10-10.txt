@@ -1,0 +1,54 @@
+test_action_is_not_a_cargo_transaction_in_relay (test_bubble.BubbleTests.test_action_is_not_a_cargo_transaction_in_relay) ... ok
+test_duplicate_completed_request_survives_new_client_lease (test_bubble.BubbleTests.test_duplicate_completed_request_survives_new_client_lease) ... ok
+test_fire_replays_do_not_extend_trigger (test_bubble.BubbleTests.test_fire_replays_do_not_extend_trigger) ... ok
+test_host_disconnect_cancels_ambiguous_command (test_bubble.BubbleTests.test_host_disconnect_cancels_ambiguous_command) ... ok
+test_invalid_world_rejected (test_bubble.BubbleTests.test_invalid_world_rejected) ... ok
+test_readiness_probe_does_not_claim_slot (test_bubble.BubbleTests.test_readiness_probe_does_not_claim_slot) ... ok
+test_result_can_be_retrieved_after_requester_disconnect_without_reexecution (test_bubble.BubbleTests.test_result_can_be_retrieved_after_requester_disconnect_without_reexecution) ... ok
+test_world_only_from_host_and_monotonic (test_bubble.BubbleTests.test_world_only_from_host_and_monotonic) ... ok
+test_wrong_controller_ip_and_changed_request_rejected (test_bubble.BubbleTests.test_wrong_controller_ip_and_changed_request_rejected) ... ok
+test_commands_deduplicated_before_engine_and_after_result (test_bubble_adapter.BubbleAdapterTests.test_commands_deduplicated_before_engine_and_after_result) ... ok
+test_docking_locks_remote_pose_even_before_next_world_update (test_bubble_adapter.BubbleAdapterTests.test_docking_locks_remote_pose_even_before_next_world_update) ... ok
+test_pause_defers_commands_and_trade_done_is_forwarded (test_bubble_adapter.BubbleAdapterTests.test_pause_defers_commands_and_trade_done_is_forwarded) ... ok
+test_peer_pose_never_moves_local_player (test_bubble_adapter.BubbleAdapterTests.test_peer_pose_never_moves_local_player) ... ok
+test_repeated_fire_packet_stops_and_does_not_count_local_shots (test_bubble_adapter.BubbleAdapterTests.test_repeated_fire_packet_stops_and_does_not_count_local_shots) ... ok
+test_setup_waits_and_original_profile_is_inactive (test_bubble_adapter.BubbleAdapterTests.test_setup_waits_and_original_profile_is_inactive) ... ok
+test_world_guest_apply_dock_prevents_position_writes (test_bubble_adapter.BubbleAdapterTests.test_world_guest_apply_dock_prevents_position_writes) ... ok
+test_existing_test_save_and_symlink_refused_before_change (test_distribution.DistributionTests.test_existing_test_save_and_symlink_refused_before_change) ... ok
+test_full_install_start_and_remove_only_owned_files (test_distribution.DistributionTests.test_full_install_start_and_remove_only_owned_files) ... ok
+test_native_and_flatpak_library_discovery (test_distribution.DistributionTests.test_native_and_flatpak_library_discovery) ... ok
+test_profile_only_changes_test_config_and_preserves_other_files (test_distribution.DistributionTests.test_profile_only_changes_test_config_and_preserves_other_files) ... ok
+test_interaction_harness_hands_off_only_proxy_once (test_game_adapter.GameAdapterTests.test_interaction_harness_hands_off_only_proxy_once) ... ok
+test_noop_setter_fails_the_displacement_probe (test_game_adapter.GameAdapterTests.test_noop_setter_fails_the_displacement_probe) ... ok
+test_only_proxy_moves_and_radians_convert_to_degrees (test_game_adapter.GameAdapterTests.test_only_proxy_moves_and_radians_convert_to_degrees) ... ok
+test_reconnect_preserves_the_coordinate_origin (test_game_adapter.GameAdapterTests.test_reconnect_preserves_the_coordinate_origin) ... ok
+test_refuses_to_activate_in_an_existing_player_profile (test_game_adapter.GameAdapterTests.test_refuses_to_activate_in_an_existing_player_profile) ... ok
+test_telemetry_is_readonly_and_pause_sends_idle (test_game_adapter.GameAdapterTests.test_telemetry_is_readonly_and_pause_sends_idle) ... ok
+test_unloaded_world_prevents_game_queries_and_missing_export_stops_init (test_game_adapter.GameAdapterTests.test_unloaded_world_prevents_game_queries_and_missing_export_stops_init) ... ok
+test_waits_for_world_load_before_connecting_or_spawning (test_game_adapter.GameAdapterTests.test_waits_for_world_load_before_connecting_or_spawning) ... ok
+test_auth_build_sector_bubble_and_slot_mismatch (test_host.HostTests.test_auth_build_sector_bubble_and_slot_mismatch) ... ok
+test_endpoint_cannot_take_another_slot (test_host.HostTests.test_endpoint_cannot_take_another_slot) ... ok
+test_expiry_new_lease_and_old_packet_rejection (test_host.HostTests.test_expiry_new_lease_and_old_packet_rejection) ... ok
+test_idle_removes_pose_and_reordered_state_cannot_restore_it (test_host.HostTests.test_idle_removes_pose_and_reordered_state_cannot_restore_it) ... ok
+test_lost_welcome_can_be_retried (test_host.HostTests.test_lost_welcome_can_be_retried) ... ok
+test_malformed_packets_do_not_change_state (test_host.HostTests.test_malformed_packets_do_not_change_state) ... ok
+test_missing_state_expires_even_if_peer_heartbeats (test_host.HostTests.test_missing_state_expires_even_if_peer_heartbeats) ... ok
+test_nonfinite_and_bounds_are_rejected (test_host.HostTests.test_nonfinite_and_bounds_are_rejected) ... ok
+test_preparation_makes_distinct_clients_and_refuses_overwrite (test_host.HostTests.test_preparation_makes_distinct_clients_and_refuses_overwrite) ... ok
+test_real_udp (test_host.HostTests.test_real_udp) ... ok
+test_source_binding_and_sequence_order (test_host.HostTests.test_source_binding_and_sequence_order) ... ok
+test_two_clients_receive_only_remote_pose (test_host.HostTests.test_two_clients_receive_only_remote_pose) ... ok
+test_all_lua_files_parse_under_luajit (test_lua.LuaTests.test_all_lua_files_parse_under_luajit) ... ok
+test_client_filters_packets_and_interpolates_angle_wrap (test_lua.LuaTests.test_client_filters_packets_and_interpolates_angle_wrap) ... ok
+test_linux_native_clients_exchange_poses_through_real_udp (test_lua.LuaTests.test_linux_native_clients_exchange_poses_through_real_udp) ... ok
+test_native_argument_limits_and_idempotent_close (test_lua.LuaTests.test_native_argument_limits_and_idempotent_close) ... ok
+
+----------------------------------------------------------------------
+Ran 44 tests in 0.062s
+
+OK
+Installiert. Vorhandene Spielerprofile bleiben unberuehrt.
+Testprofil: /tmp/tmpqx9fhssz/home/.var/app/com.valvesoftware.Steam/.config/EgoSoft/X4/45841
+Naechster Schritt: 2-SERVER-STARTEN.sh. Danach 3-X4-TEST-STARTEN.sh.
+Steam startet eine neue kreative Sandbox. Keine vorhandene Partie laden.
+Testmod aus X4 entfernt und im Paketordner archiviert. Testprofil bleibt erhalten; keine Saves geloescht.

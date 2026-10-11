@@ -1,0 +1,34 @@
+{
+  "x4lan.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan_bubble.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan_coop.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan_interactions.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan_life.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan_quest.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan_trade.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan_walk.xml": {
+    "valid": true,
+    "errors": []
+  }
+}

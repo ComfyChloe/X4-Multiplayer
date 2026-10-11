@@ -1,0 +1,18 @@
+{
+  "duration_s": 20.012,
+  "cpu_s": 0.8548,
+  "cpu_percent_one_logical_core": 4.27,
+  "peak_rss_mib": 17.6,
+  "rx_packets": 2774,
+  "tx_packets": 3952,
+  "rx_bytes": 215551,
+  "tx_bytes": 410785,
+  "send_errors": 0,
+  "connected": 2,
+  "rx_packets_per_s": 138.6,
+  "tx_packets_per_s": 197.5,
+  "step_us_p50": 30.69,
+  "step_us_p99": 975.77,
+  "step_us_max": 2975.17,
+  "scope": "Synthetic two-player loopback traffic, 6-ware economy, cooperative navigation, crew, sector body, world, metrics and quest channels, dashboard render and files twice per second; excludes X4, ZeroTier and terminal emulator."
+}

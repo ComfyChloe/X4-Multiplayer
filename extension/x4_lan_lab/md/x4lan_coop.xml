@@ -1,0 +1,86 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_Coop" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Session" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+    <set_value name="$arena.$coop" exact="true"/>
+    <do_all exact="2" counter="$i"><set_known object="$arena.$ships.{$i}" known="true"/></do_all>
+    <!-- Guest collisions or delayed shots must not permanently remove a target
+         before the authoritative host reports its destruction. -->
+    <do_if value="not $arena.$host"><do_all exact="2" counter="$i"><set_object_min_hull object="$arena.$targets.{$i}" exact="1"/></do_all></do_if>
+    <raise_lua_event name="'X4LAN_Coop.Ready'"/>
+    <debug_text text="'[X4LAN] COOP_READY: sector-aware fleet, shared treasury, exclusive pilot authority'"/>
+   </actions>
+   <cues>
+    <cue name="Docks" instantiate="true" checkinterval="0.2s">
+     <conditions><check_value value="md.X4LAN_Trade.Market.$markets?"/></conditions>
+     <actions>
+      <set_value name="$docks" exact="[0,0]"/>
+      <do_all exact="2" counter="$i"><set_value name="$ship" exact="$arena.$ships.{$i}"/>
+       <do_if value="$ship.isoperational and $ship.dock">
+        <do_all exact="2" counter="$m"><do_if value="$ship.dock.container == md.X4LAN_Trade.Market.$markets.{$m}"><set_value name="$docks.{$i}" exact="$m"/></do_if></do_all>
+       </do_if>
+      </do_all>
+      <raise_lua_event name="'X4LAN_Coop.Docks'" param="'%s|%s'.[$docks.{1},$docks.{2}]"/>
+     </actions>
+    </cue>
+    <cue name="Fire" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'Fire'"/></conditions><actions>
+     <set_value name="$ship" exact="$arena.$ships.{event.param3.$ship}"/>
+     <do_if value="$ship.isoperational"><do_if value="event.param3.$on"><shoot object="$ship"/></do_if><do_else><stop_shooting object="$ship"/></do_else></do_if>
+    </actions></cue>
+    <cue name="LeaveControls" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'LeaveControls'"/></conditions><actions>
+     <set_value name="$ship" exact="$arena.$ships.{event.param3}"/>
+     <do_if value="$ship.isoperational and player.occupiedship == $ship">
+      <teleport_player object="$ship" control="false" instant="true" force="true"/>
+      <show_notification text="'The ship is already piloted, trading or unavailable. Wait for the other pilot to leave the controls.'" timeout="6s" priority="8"/>
+     </do_if>
+    </actions></cue>
+    <cue name="SectorMove" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'SectorMove'"/></conditions><actions>
+     <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$arena.$ships.{$v.$ship}"/>
+     <do_if value="$ship.isoperational and $v.$sector.exists">
+      <warp object="$ship" sector="$v.$sector"><position x="$v.$x * 1m" y="$v.$y * 1m" z="$v.$z * 1m"/><rotation yaw="$v.$yaw * 1deg" pitch="$v.$pitch * 1deg" roll="$v.$roll * 1deg"/></warp>
+      <debug_text text="'[X4LAN] COOP_SECTOR ship=%s sector=%s position=%s'.[$v.$ship,$ship.sector.macro.id,$ship.position]"/>
+     </do_if>
+    </actions></cue>
+    <cue name="Dock" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'Dock'"/></conditions><actions>
+     <set_value name="$v" exact="event.param3"/><set_value name="$m" exact="$v.$market"/><set_value name="$ship" exact="$arena.$ships.{$v.$ship}"/>
+     <do_if value="$ship.isoperational and not $arena.$dead.{event.param3.$ship}">
+      <do_if value="$m == 0">
+       <do_if value="$ship.dock"><undock ship="$ship"/></do_if>
+       <do_if value="$ship.assigneddock"><remove_docking_request ship="$ship" container="$ship.assigneddock.container" immediate="true"/></do_if>
+       <!-- Undock alone can leave the empty replica attached to its old pad. Move
+            it into the received sector frame to finish the remote transition. -->
+       <warp object="$ship" sector="$v.$sector"><position x="$v.$x * 1m" y="$v.$y * 1m" z="$v.$z * 1m"/><rotation yaw="$v.$yaw * 1deg" pitch="$v.$pitch * 1deg" roll="$v.$roll * 1deg"/></warp>
+      </do_if>
+      <!-- Navigation can arrive before the trading stations finish setup.
+           Lua retries docking, so defer this request until both markets exist. -->
+      <do_elseif value="md.X4LAN_Trade.Market.$markets?">
+       <set_value name="$station" exact="md.X4LAN_Trade.Market.$markets.{$m}"/>
+       <do_if value="$v.$sector == $station.sector and $ship.dock and $ship.dock.container != $station">
+        <undock ship="$ship"/>
+        <do_if value="$ship.assigneddock"><remove_docking_request ship="$ship" container="$ship.assigneddock.container" immediate="true"/></do_if>
+        <warp object="$ship" sector="$station.sector"><position object="$station" space="$station.sector" y="2km"/></warp>
+       </do_if>
+       <do_elseif value="$v.$sector == $station.sector and not $ship.dock and ($ship.sector != $station.sector or $ship.distanceto.{$station} ge 8km)">
+        <!-- A lost approach packet must not strand a replica far from the dock.
+             Arrive outside the station, then let X4 select a free local pad. -->
+        <warp object="$ship" sector="$station.sector"><position object="$station" space="$station.sector" y="2km"/></warp>
+       </do_elseif>
+       <do_if value="$ship.assigneddock and $ship.assigneddock.container != $station"><remove_docking_request ship="$ship" container="$ship.assigneddock.container" immediate="true"/></do_if>
+       <do_if value="$ship.sector == $station.sector and $ship.distanceto.{$station} lt 8km and not $ship.dock">
+        <do_if value="not $ship.assigneddock"><request_docking ship="$ship" container="$station" requiretrading="true" allowplayeronly="true" queuedresult="$queued" grantedresult="$granted"/></do_if>
+        <do_if value="$ship.assigneddock"><dock ship="$ship"/></do_if>
+       </do_if>
+      </do_elseif>
+     </do_if>
+    </actions></cue>
+   </cues>
+  </cue>
+  <cue name="ResolveSector" instantiate="true" namespace="this"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'ResolveSector'"/></conditions><actions>
+   <find_sector name="$sector" macro="macro.{event.param3}" required="false"/>
+   <do_if value="$sector.exists"><raise_lua_event name="'X4LAN_Coop.Sector.' + event.param3" param="$sector"/></do_if>
+  </actions></cue>
+ </cues>
+</mdscript>

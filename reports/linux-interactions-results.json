@@ -1,0 +1,192 @@
+{
+  "events": [
+    {
+      "time": 3.61,
+      "event": "BEGIN",
+      "p1": "0xae8bb",
+      "p2": "0x1767b2",
+      "p1_weapons": 2,
+      "p2_weapons_before": 2
+    },
+    {
+      "time": 3.61,
+      "event": "EQUIPPED",
+      "slot": 1,
+      "weapons": 2,
+      "cargo_capacity": 540,
+      "target_hull": 6000
+    },
+    {
+      "time": 3.61,
+      "event": "EQUIPPED",
+      "slot": 2,
+      "weapons": 2,
+      "cargo_capacity": 540,
+      "target_hull": 6000
+    },
+    {
+      "time": 13.63,
+      "event": "FIRE_BEGIN"
+    },
+    {
+      "time": 13.63,
+      "event": "HEALTH_BEFORE",
+      "slot": 1,
+      "hull": 6000,
+      "shield": 8840,
+      "maxshield": 8840
+    },
+    {
+      "time": 13.63,
+      "event": "HEALTH_BEFORE",
+      "slot": 2,
+      "hull": 6000,
+      "shield": 5400,
+      "maxshield": 5400
+    },
+    {
+      "time": 18.68,
+      "event": "PLAYER_FIRE_SCRIPT_DONE"
+    },
+    {
+      "time": 21.84,
+      "event": "WEAPONS",
+      "slot": 1,
+      "shots": 30,
+      "hits": 5,
+      "target_hull": 6000,
+      "target_maxhull": 6000,
+      "target_shield": 7796
+    },
+    {
+      "time": 21.84,
+      "event": "WEAPONS",
+      "slot": 2,
+      "shots": 30,
+      "hits": 5,
+      "target_hull": 6000,
+      "target_maxhull": 6000,
+      "target_shield": 4320
+    },
+    {
+      "time": 21.84,
+      "event": "PICKUP_BEFORE",
+      "slot": 1,
+      "cargo": 0,
+      "drops": 1,
+      "donor": 20
+    },
+    {
+      "time": 21.84,
+      "event": "PICKUP_BEFORE",
+      "slot": 2,
+      "cargo": 0,
+      "drops": 1,
+      "donor": 0
+    },
+    {
+      "time": 22.11,
+      "event": "COLLECT_EVENT",
+      "slot": 2,
+      "amount": 20
+    },
+    {
+      "time": 22.11,
+      "event": "COLLECT_EVENT",
+      "slot": 1,
+      "amount": 20
+    },
+    {
+      "time": 25.16,
+      "event": "PICKUP_AFTER",
+      "slot": 1,
+      "cargo": 20,
+      "collected": 20
+    },
+    {
+      "time": 25.16,
+      "event": "PICKUP_AFTER",
+      "slot": 2,
+      "cargo": 20,
+      "collected": 20
+    },
+    {
+      "time": 25.16,
+      "event": "STATION",
+      "stock": 200,
+      "modules": 5
+    },
+    {
+      "time": 25.16,
+      "event": "DOCK_REQUEST",
+      "p1_queued": 0,
+      "p1_granted": 1,
+      "p2_queued": 0,
+      "p2_granted": 1
+    },
+    {
+      "time": 31.24,
+      "event": "TRADE_BEFORE",
+      "slot": 1,
+      "docked": "0x176b8f",
+      "cargo": 20,
+      "stock": 200
+    },
+    {
+      "time": 37.29,
+      "event": "TRADE_AFTER",
+      "slot": 1,
+      "result": 1,
+      "cargo": 50,
+      "stock": 170
+    },
+    {
+      "time": 37.29,
+      "event": "TRADE_BEFORE",
+      "slot": 2,
+      "docked": "0x176b3a",
+      "cargo": 20,
+      "stock": 170
+    },
+    {
+      "time": 43.31,
+      "event": "TRADE_AFTER",
+      "slot": 2,
+      "result": 1,
+      "cargo": 50,
+      "stock": 140
+    },
+    {
+      "time": 43.31,
+      "event": "TRADE_DONE"
+    },
+    {
+      "time": 118.25,
+      "event": "FINAL",
+      "p1_cargo": 50,
+      "p2_cargo": 50,
+      "station_stock": 140,
+      "p1_docked": "0x176b8f",
+      "p2_docked": "0x176b3a"
+    },
+    {
+      "time": 118.25,
+      "event": "END"
+    }
+  ],
+  "test_errors": [],
+  "game": "X4 9.00 (611726)",
+  "steam_build": 23660954,
+  "platform": "Linux",
+  "instances": 1,
+  "second_participant": "synthetic pose sender; local engine scripts trigger actions",
+  "network_actions_implemented": false,
+  "passed_local_interactions": true,
+  "original_save_files_unchanged": 7,
+  "steam_cloud_metadata_timestamp_changed": true,
+  "steam_cloud_metadata_content_unchanged": true,
+  "save_contents_and_metadata_checked": true,
+  "test_save_files": 0,
+  "test_mod_removed_from_installation": true,
+  "automated_tests_passed": 24
+}

@@ -1,0 +1,162 @@
+SHARED UNIVERSE - INTERNAL REQUIREMENTS AND DIAGNOSIS
+11 October 2026 | Status: W01 NPC SCENE MILESTONE IN DEVELOPMENT | Public Test 01: WITHHELD
+
+USER REQUIREMENT
+Both players must participate in one host-authoritative universe, including its
+NPC ships and ordinary cargo interactions. Synchronizing player positions and
+predefined test objects is insufficient. Work is INTERNAL unless the user
+explicitly requests another public package.
+
+REPORTED REPRODUCTION
+1. Host and guest connect with the internal 6.0.0 pair.
+2. Host jettisons Energy Cells through normal gameplay.
+3. Guest cannot see that cargo or collect it with the normal cargo magnet.
+4. The NPC ships visible to the host differ from the guest's NPC ships.
+The user explicitly confirmed ordinary jettisoning/magnet pickup, not the
+6-COLLECT-CONTAINER action. Exact position, quantity and guest logs are not known;
+they are not needed to establish that this replication path is absent.
+
+VERIFIED 6.0.0 BEHAVIOUR (HISTORICAL DIAGNOSIS)
+- The installed host content.xml and bubble/coop Lua and MD files match the
+  original internal 6.0.0 package byte for byte. The host is p1, profile 45841,
+  build 9.00-steam23660954, with bubble actions, trading and co-op enabled.
+- The inspected host log shows COOP_READY, relay=connected, remote=receiving and
+  advancing fixed-object revisions. This establishes received client traffic;
+  it does not establish equality of the two worlds or end-to-end cargo success.
+- coop_game.lua c.entity() recognizes only the two original ships. NAV carries
+  their sector, pose, dock and shot counter. CoopSession accepts ship IDs 1 and 2.
+- x4lan_bubble.xml creates two test containers locally on each peer. Its WORLD
+  payload contains 17 numeric values for the fixed ships, targets, station stock,
+  two container-existence flags, docks and shot counters. There is no arbitrary
+  object identity, creation descriptor or dynamic object list in this channel.
+- PICKUP maps the current shared ship to its assigned test container and calls
+  collect_drop on the host. It does not handle a native magnet interaction with
+  a freely jettisoned container.
+- x4lan_trade.xml mirrors six ware counts for two ships and two test markets.
+  trade_game.lua reapplies host cargo periodically (at least every two seconds
+  while valid snapshots arrive). A native guest-side pickup not committed on the
+  host can therefore be overwritten. This is a code-derived consequence, not an
+  additional observed guest-log event from this playtest.
+- General NPC jobs, station economies and vanilla missions run independently.
+  The Python relay routes selected state; it is not an X4 universe simulator.
+
+CONCLUSION
+Both observations follow from missing core synchronization. Changing network
+ports, the sensor range, a pickup distance or package contents cannot add the
+missing state. A repeated identical start or copied initial save would only
+align an initial state; it would not prevent independent simulations diverging.
+That investigation did not fix either issue. Subsequent W01 development adds
+NPC scene replication; ordinary cargo and full universe authority remain open.
+
+REQUIRED ARCHITECTURAL CHANGE (PARTIALLY IMPLEMENTED BY W01)
+1. One world authority
+   The host X4 process owns NPC decisions, object lifetimes, cargo, damage,
+   station stock, production, faction state and world consequences. The relay
+   authenticates, orders, acknowledges and replays state. A Windows host and a
+   Linux host must use the same authority rules.
+
+2. Stable dynamic object identity and initial synchronization
+   Give each shared object a session-scoped network ID and generation independent
+   of local X4 component IDs. Supply creation descriptors, ownership and state,
+   then ordered deltas and explicit removals. A late guest needs a consistent
+   baseline plus changes since that baseline. Lost or reordered packets must
+   not resurrect collected cargo or destroyed ships. Retired IDs cannot be
+   reused within the session without a new generation.
+
+3. Interest management without separate worlds
+   High-rate movement can be limited to sectors relevant to either player.
+   The host still owns the rest of the universe. Leaving sensor range or a
+   sector is not object destruction. When the players split up, each must see
+   the relevant portion of the same host world. Out-of-sector consequences,
+   new stations/ships and removals need later reconciliation.
+
+4. Guest simulation control
+   Identify and control competing local NPC AI, spawning, economy and world-
+   altering mission effects. A visible clone alone is insufficient: duplicates,
+   independent damage and locally generated loot must not affect shared state.
+   Do not indiscriminately delete guest ships/stations as a shortcut: missions,
+   occupants and object references may depend on them. Prove the required engine
+   controls in an isolated test world before enabling a replica-only client.
+
+5. Native cargo interactions
+   Host jettison: observe the actual new container(s), preserve ware, quantity,
+   position and lifetime, assign IDs and create guest replicas.
+   Guest jettison: submit a deduplicated intention to the host, validate cargo
+   and pilot authority, then commit the actual removal and shared drop once.
+   Native guest magnet: map the local collected object to its network ID and
+   request host validation/collection. Reconcile any local prediction, including
+   failure, full cargo holds, partial collection and simultaneous pickup attempts.
+   A received notification after local collection is not itself host approval.
+   Replicate the removal and resulting inventories as one committed transition;
+   retries must not double-credit cargo. Prevent replica-generated events from
+   feeding back as new user operations. No external collect launcher is required
+   for the intended normal gameplay.
+
+6. Shared interactions beyond visibility
+   NPC combat, destruction, ownership changes, loot, docking and trade must affect
+   the same entity and shared economy. Persisting/rejoining a session needs an
+   explicit world/session epoch and recovery design; current fresh-world restart
+   requirements remain until such support is implemented and tested.
+
+ENGINE FEASIBILITY FINDINGS AND OPEN RISKS
+Additional reference found after the user supplied Neresco/X4Multiplayer_Mod:
+its multiplayer C++ source is in Neresco/X4Native_Linux, inspected at commit
+0acec0f8bb50dee5814bbd6a1728cb90254f4b53. It implements NPC enumeration, sector
+streaming and client ship deactivation with ActivateObject(false). Our installed
+Linux X4 exports that function and the enumeration functions (read-only ELF
+check). This provides a concrete next probe; behaviour and ABI still require
+isolated game validation. It does not establish full economy/mission suppression.
+See ../../research/neresco-x4mp/REVIEW.txt for limitations and source findings.
+
+The installed X4 9.00 schema, libraries/common.xsd, declares:
+- event_object_dropped_objects: source object and list in event.param.
+- event_player_owned_dropped_objects: source object and list in event.param2.
+- event_object_collected_ware: collecting object, ware, amount and collected object.
+- event_player_collected_ware: ware, amount and collected object in event.param3.
+- find_object/find_ship, drop_cargo and collect_drop.
+These are suitable API candidates. Schema presence is not evidence that native
+magnet timing, destroyed-object metadata or all necessary replica operations have
+been tested. Capture actual event ordering before implementing prediction rollback.
+
+set_space_jobs_allowed controls job-system use of a space. Its documentation does
+not promise to stop existing AI, production or mission scripts. Related faction/
+station-generation permissions are similarly not proof of a full simulation stop.
+No verified all-purpose client replica mode or complete universe snapshot API has
+been established. Full-world feasibility and performance remain open engineering
+questions; do not promise that the present MD/Lua interfaces are sufficient.
+
+FIRST INTERNAL IMPLEMENTATION AND ACCEPTANCE ORDER
+A. Establish actual native drop/collect event ordering and lifetime metadata in
+   an isolated world, including ordinary magnet pickup on both OS game builds.
+B. Implement dynamic identity, reliable creation/removal and host-authoritative
+   inventory commits. Exercise both drop directions using the native UI.
+C. Implement one sector's host-owned NPC lifecycle and relevant interactions,
+   including control of competing guest simulation. This is an intermediate
+   internal milestone, not acceptance of the full-universe requirement.
+D. Expand baseline/delta reconciliation to different sectors, stations/economy,
+   world consequences and session recovery. Measure engine FPS and bandwidth.
+
+REQUIRED TWO-GAME REGRESSIONS
+- Host drops Energy Cells; guest sees the same quantity and uses the normal
+  magnet. Both inventories and removal converge and remain correct past several
+  periodic reconciliation cycles. Repeat with the guest dropping cargo.
+- Both try to collect one drop: exactly one collection is committed; total cargo
+  is conserved. Repeat with full holds, partial pickup and multiple drops.
+- Packet loss, duplicate/reordered messages and reconnect do not duplicate cargo,
+  respawn removed drops, or leave one peer with a permanently missing object.
+- The same ordinary NPC ship is present on both peers with matching identity,
+  type, faction, position and lifecycle. Its destruction/loot have one outcome.
+- Sector changes and players in different sectors retain the same authoritative
+  world and reconcile on return; local-only NPC traffic cannot change its economy.
+- Late join obtains the current baseline, not the original starting population.
+- Native Windows/Linux host/guest directions and existing handoff, suit respawn,
+  trades and quests regressions remain covered. Synthetic UDP peers alone do
+  not pass these gameplay criteria.
+
+SOURCE REFERENCES
+Existing implementation: extension/x4_lan_lab/ui/{bubble,coop,trade}_game.lua,
+extension/x4_lan_lab/md/x4lan_{bubble,coop,trade}.xml, x4lan/{bubble,coop,economy}.py.
+Local schema reference: ../../preparation/game-schemas/libraries/common.xsd
+(engine-owned development reference; do not redistribute in release archives).
+Egosoft Mission Director Guide (event/cue model and saved MD state):
+https://wiki.egosoft.com/X%20Rebirth%20Wiki/Modding%20support/Mission%20Director%20Guide/

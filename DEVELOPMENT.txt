@@ -1,0 +1,74 @@
+X4 MULTIPLAYER - PC / FEDORA LAPTOP DEVELOPMENT
+
+Repository: https://github.com/Lith7ium/X4-Multiplayer
+Current work: internal 7.0.0 / W01 NPC scene synchronization.
+Read CONTINUE-HERE.txt before changing gameplay. Public Test 01 is withheld.
+
+FIRST CHECKOUT (Fedora, Bazzite or another Linux development machine)
+1. Keep any existing project folder unchanged until local edits are secured.
+   Clone into a new sibling folder:
+     git clone https://github.com/Lith7ium/X4-Multiplayer.git X4-Multiplayer-current
+     cd X4-Multiplayer-current
+2. Create this machine's own Python environment:
+     python3 dev/bootstrap.py
+3. Run all checks, including real local UDP and LuaJIT tests:
+     .venv/bin/python dev/check.py
+   No game installation is needed for these checks. They do not launch X4.
+   Local UDP must be permitted; missing dependencies or skipped tests are failures.
+
+Python 3.10+ and Git are required. Standard Fedora can install missing tools with
+its package manager; Bazzite should use its supported immutable-OS workflow.
+The Python relay itself has no third-party runtime dependency. Development tests
+use pinned lupa 2.8 with its LuaJIT runtime. Do not copy .venv between computers.
+
+USING AN EXISTING LAPTOP CHECKOUT
+First inspect it with git status and git remote -v. Commit or otherwise back up
+local edits before fetching. If it is not a Git checkout, keep it and use the
+fresh sibling clone above. Do not run reset --hard or overwrite the old folder.
+Compare any old edits deliberately; the current source already includes changes
+made after the original 6.0.0 transfer.
+
+BEFORE CHANGING COMPUTERS
+Finish a coherent change, run the relevant checks, then:
+  git status
+  git add <the source files you changed>
+  git commit -m "Describe the change"
+  git pull --rebase
+  git push
+On the other machine, start with a clean checkout and git pull --ff-only.
+Use separate branches if both machines are working independently. Resolve real
+conflicts explicitly. A remote repository does not synchronize uncommitted files.
+
+LOCAL DATA
+Keep generated packages, logs, credentials, installation metadata and backups in
+.local/ or outside the checkout. Ignore rules exclude those files. The tracked
+extension/ui/config.lua is intentionally inert and contains no session secret.
+Never replace it with a machine's installed configuration. Session keys are
+generated for each matched internal package pair, outside the repository.
+Game installations, saves, Steam libraries and graphics settings are machine-local.
+The presence of this source checkout does not install or launch X4.
+
+PACKAGES / LIVE TESTS
+Record exact-version checks first, then build a new INTERNAL pair:
+  python3 distribution/build_packages.py .local/playtest/<new-folder-name>
+This creates matched Linux-host and Windows-guest archives with a fresh shared
+session key. Install using the generated launchers on each machine. Linux paths
+are discovered locally; no old PC/laptop game path is hard-coded in the package.
+Use only fresh creative worlds in isolated profile 45841 with autosave disabled.
+Read distribution/WORLD-SYNC-TEST.txt for the limited W01 acceptance test.
+
+The existing native transport binaries are included for Linux x86_64 and Windows
+x64. Source is in native/net.c. Rebuilding both requires Zig 0.15.2:
+  python3 native/build.py --zig /path/to/zig --platform both
+Ordinary Python/Lua changes do not require rebuilding the transport.
+
+The optional native engine harness is dev/native_world_test.py. It requires a
+known installed internal package and explicit install/launch actions; it is never
+called by bootstrap or automated checks. It stores evidence under .local/ and
+accepts --game /path/to/X4 to select this machine's native installation. Read its
+source before using it to replace an installation. Run a host capture before
+using the guest --replay option. dev/validate_native_world.py checks its evidence.
+
+Do not invoke distribution/public/build.py for routine internal development.
+Public packages require a new explicit user request. No Neresco source, binary
+or framework is part of this repository's multiplayer implementation.

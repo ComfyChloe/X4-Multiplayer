@@ -1,0 +1,36 @@
+X4 MULTIPLAYER PUBLIC TEST 01 - REPORT
+Do not include JOIN-SESSION.json, session.json or ui/config.lua.
+
+Package version: 6.0.1 Public Test 01
+Test date/time and timezone:
+Duration:
+Host OS / CPU / GPU / RAM:
+Guest OS / CPU / GPU / RAM:
+X4 version and Steam build on BOTH computers:
+DLC selection and other enabled extensions in TEST PROFILE:
+Network: LAN / ZeroTier; any packet-loss/latency observations:
+Graphics settings and separately measured rendering FPS on both machines:
+
+Mark PASS / FAIL / NOT RUN, with observations:
+Connection and mutual movement:
+Takeover/undocking in both directions:
+Beyond sensor range / rejoin:
+Gate and sector transition / return:
+Container pickup and duplicate protection:
+Both traders, stock/cargo and common balance:
+Mission progress / both target deaths / one shared reward:
+40-second interruption / reconnect / no duplicate reward:
+Friendly fire / ship destruction / ejection:
+Suit death / station respawn / subsequent takeover:
+Highways / travel drive / passengers (optional):
+
+First failure: exact action, time, sector, original ship and pilot:
+Expected result:
+Actual result on HOST:
+Actual result on GUEST:
+Reproduction steps:
+Relevant server console status/errors:
+Save/profile preservation and cleanup observations:
+
+Attach 4-DIAGNOSTICS logs from BOTH PCs, including host server-*.jsonl and both
+full engine logs. Review local paths/IPs before sharing. Send to your test organiser.

@@ -1,0 +1,33 @@
+X4 LAN Lab 5.0.2 - Windows launcher update for OneDrive Documents
+
+Use this small update with an existing matched v5 / 5.0.0 / 5.0.1 package pair.
+It fixes "ERROR: Refusing to modify linked test profiles." when Windows stores
+Documents in OneDrive. OneDrive's cloud-file markers are now recognised; real
+symbolic links, junctions and unknown reparse types remain blocked.
+
+1. Close X4 on Windows. The Linux game and server can stay running.
+2. Extract the update ZIP. Copy ALL extracted files into your existing Windows
+   package folder, beside 1-INSTALL.cmd and 3-START-X4-TEST.cmd.
+3. Double-click UPDATE-WINDOWS.cmd in that folder. Wait for:
+   "Updated Windows launcher to 5.0.2 (OneDrive profile fix)."
+4. Run 3-START-X4-TEST.cmd again. If the error originally happened during
+   installation and installation did not complete, run 1-INSTALL.cmd first.
+
+Do not uninstall or install a fresh package pair for this launcher-only update.
+No administrator rights, OneDrive disablement or Documents relocation is needed.
+The update preserves session.json, the pairing IDs, host IP and installed mod.
+It does not open or edit game profiles or saves. Previous launcher/metadata files
+are kept under backups/launcher-before-5.0.2-... in the Windows package folder.
+
+VERSION.txt, package.json, the installation record (if present) and the launcher
+show 5.0.2. The existing folder name, old guides and installed mod's display name
+retain their original version: the gameplay files did not change. This is the
+exception to the full-release rule that both players install matching new ZIPs.
+Never substitute a fresh release's session.json or configuration files into your
+current pair. Separately built complete packages have different session keys.
+
+This fixes the launcher check only. It does not fix performance or disconnects.
+Checks used PowerShell on Linux with simulated Windows file metadata. A live
+Windows 11 / OneDrive run is still needed to verify the native metadata call.
+If the updated launcher still stops, keep the complete new error including its
+file path and tag; do not delete profiles or bypass the safety check.

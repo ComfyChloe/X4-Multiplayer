@@ -1,0 +1,45 @@
+{
+  "balances_cents": [
+    9985400,
+    9965900,
+    100074200,
+    99974500
+  ],
+  "energy_cargo_p1_p2_alpha_beta": [
+    30,
+    20,
+    275,
+    415
+  ],
+  "hullparts_cargo_p1_p2_alpha_beta": [
+    0,
+    2,
+    298,
+    400
+  ],
+  "target_min_shield_percent": [
+    86.2261,
+    82.4696
+  ],
+  "world_snapshots": 2583,
+  "economy_snapshots": 164,
+  "native_menu_trades": 2,
+  "synthetic_peer": true,
+  "date": "2026-10-10",
+  "game": "9.00 (611726)",
+  "steam_build": "23660954",
+  "simultaneous_two_games": false,
+  "windows_game_tested": false,
+  "guest_native_menu_orders": [
+    "energycells,20,1400",
+    "energycells,-5,1200;hullparts,2,18800"
+  ],
+  "guest_pose_packets": 2518,
+  "guest_min_target_shield_percent": [
+    86.2261,
+    82.4696
+  ],
+  "guest_undocking_confirmed": true,
+  "verified_unchanged_original_saves": 7,
+  "automated_tests_passed": 62
+}

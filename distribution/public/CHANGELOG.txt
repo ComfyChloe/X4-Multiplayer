@@ -1,0 +1,15 @@
+6.0.1 - Public Test 01 - 11 October 2026
+
+- First explicitly requested public package set, separate from internal 6.0.0.
+- Both platform packages include server, platform-native mod, portable Python,
+  setup/removal/diagnostics tools, verification hashes and English documentation.
+- HOST/GUEST role selection on either Windows or native Linux.
+- Per-group private session creation/import; no shared public download secret.
+- Public test profile and UDP port 45842, with a distinct protocol build label.
+  Internal profile/port 45841 and original archives remain separate.
+- Profile guard accepts the selected isolated internal/public test profile.
+- Windows server address discovery, terminal output and peak memory diagnostics;
+  UDP disconnect/reset handling no longer terminates a Windows relay.
+- Ownership checks when starting/removing; configuration locked while serving.
+- Shared gameplay remains the limited 6.0.0 co-op scope. This release does not
+  establish a full-universe multiplayer implementation or native Windows QA.

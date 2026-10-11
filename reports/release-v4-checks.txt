@@ -1,0 +1,28 @@
+X4 LAN Lab v4 release verification — 10 October 2026
+
+PASS: 71 automated tests, no failures and no skips. The packaged
+AUTOMATED-TESTS.txt contains the complete test output.
+
+PASS: Packaged Linux launcher tested through real pseudoterminals and local UDP,
+on an isolated test port, with two synthetic peers. Both player slots appeared;
+the guest timed out while the host continued near 20 updates per second.
+Starting the same server again attached a viewer. Closing that viewer left the
+server running. Stopping the owning console published the stopped state and
+restored the terminal. Status output contained no session key or connection lease.
+These are console/network checks, not a two-computer X4 gameplay test.
+
+PASS: Both archive contents and all per-file checksums matched the expanded
+packages; ZIP integrity checks passed. Packages have matching session settings.
+English launcher names/messages, XML parsing, referenced Lua files, Linux shell
+syntax, version metadata and Windows host-address placeholder were checked.
+Regenerating the MD/AI scripts reproduced the distributed source byte for byte.
+
+PASS: Windows PowerShell scripts parsed with PowerShell 7 on Linux. The packaged
+diagnostic function preserved a complete fixture engine log, including non-mod
+errors, and wrote the separately filtered mod log. Fixture paths contained spaces.
+This does not validate Windows PowerShell 5.1 or a live Windows X4 launch.
+
+Known open issue: the user's first real Linux/Windows ZeroTier session connected,
+but performance was poor and disconnected in under 30 seconds. Version 4 adds
+visibility and English usability; it does not claim a performance or stability fix.
+The precise disconnect cause and sustained shared gameplay remain unverified.

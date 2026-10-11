@@ -1,0 +1,303 @@
+"""Original W01 sector snapshot transport. No third-party multiplayer code.
+
+This extends co-op with bounded, acknowledged, atomic object baselines. It does
+not simulate NPCs, validate pickup transactions, or synchronize vanilla missions.
+The host X4 process supplies state. Absence means removal from a sector view,
+not proof of global destruction. Sessions use a distinct world1- build label.
+"""
+from dataclasses import dataclass
+import math
+import zlib
+
+from .coop import CoopSession, pose
+from .host import ATOM, HEX, MAX_PACKET, sequence
+
+MAX_OBJECTS = 4096
+MAX_RECORD = 512
+WINDOW = 12
+RETRY = .25
+STAGE_TIMEOUT = 15
+
+
+def atom(value, macro=False):
+    if not ATOM.fullmatch(value) or (macro and not value.endswith('_macro')):
+        raise ValueError('invalid object identifier')
+    return value
+
+
+def record(value):
+    """id,kind,macro,owner,x,y,z,yaw,pitch,roll,ware,amount (all ASCII)."""
+    if len(value) > MAX_RECORD or not value.isascii() or any(c.isspace() for c in value):
+        raise ValueError('record size/encoding')
+    f = value.split(',')
+    if len(f) != 12 or not sequence(f[0]):
+        raise ValueError('record fields/id')
+    if f[1] not in ('ship', 'drop'):
+        raise ValueError('object kind')
+    atom(f[2], True); atom(f[3]); atom(f[10])
+    for i, text in enumerate(f[4:10]):
+        v = float(text)
+        if not math.isfinite(v) or abs(v) > (50_000_000 if i < 3 else math.tau):
+            raise ValueError('object pose')
+    amount = sequence(f[11])
+    if amount > 1_000_000 or (f[1] == 'ship' and (f[10] != 'none' or amount)):
+        raise ValueError('object cargo')
+    if f[1] == 'drop' and (f[10] == 'none' or not amount):
+        raise ValueError('empty drop')
+    return int(f[0])
+
+
+def checksum(rows):
+    # Integrity check for assembly, not authentication; the lease authenticates.
+    return zlib.adler32('\n'.join(rows).encode('ascii')) & 0xffffffff
+
+
+@dataclass(frozen=True)
+class Baseline:
+    epoch: str
+    revision: int
+    sector: str
+    rows: tuple[str, ...]
+    digest: int
+
+    @classmethod
+    def create(cls, epoch, revision, sector, rows):
+        rows = tuple(rows)
+        if not HEX.fullmatch(epoch) or not 0 < revision <= 2147483647:
+            raise ValueError('baseline identity')
+        atom(sector, True)
+        if len(rows) > MAX_OBJECTS:
+            raise ValueError('sector exceeds object limit; never truncate')
+        ids = [record(row) for row in rows]
+        if ids != sorted(set(ids)):
+            raise ValueError('records must have unique increasing IDs')
+        return cls(epoch, revision, sector, rows, checksum(rows))
+
+    def packet(self, lease, index):
+        head = f'|1|{lease}|{self.epoch}|{self.revision}'
+        if index == 0:
+            body = f'UBEGIN{head}|{self.sector}|{len(self.rows)}|{self.digest}'
+        elif index == len(self.rows) + 1:
+            body = f'UCOMMIT{head}'
+        else:
+            body = f'UOBJECT{head}|{index}|{self.rows[index - 1]}'
+        data = body.encode('ascii')
+        if len(data) > MAX_PACKET:
+            raise ValueError('packet exceeds transport MTU')
+        return data
+
+
+class Receiver:
+    """Only a verified commit replaces visible state. At most one staged sector."""
+    def __init__(self):
+        self.latest = None
+        self.pending = None
+
+    def receive(self, f, now):
+        """Return (ack index, committed baseline), or (None, None) on rejection."""
+        if len(f) < 5 or not HEX.fullmatch(f[3]):
+            return None, None
+        epoch, rev = f[3], sequence(f[4])
+        if not rev:
+            return None, None
+        old = self.latest
+        if old:
+            if epoch != old.epoch or rev < old.revision:
+                return None, None
+            if rev == old.revision:
+                # Lost final acknowledgement: retransmit completion, not effects.
+                return len(old.rows) + 1, None
+        p = self.pending
+        if p and now - p['at'] > STAGE_TIMEOUT:
+            self.pending = p = None
+        if f[0] == 'UBEGIN' and len(f) == 8:
+            sector = atom(f[5], True)
+            count = sequence(f[6])
+            if count > MAX_OBJECTS or not f[7].isascii() or not f[7].isdecimal():
+                return None, None
+            digest = int(f[7])
+            if not 0 <= digest <= 0xffffffff:
+                return None, None
+            identity = (epoch, rev, sector, count, digest)
+            if p:
+                if identity != p['identity']:
+                    return None, None  # A newer begin cannot evict in-flight work.
+            else:
+                self.pending = dict(identity=identity, rows={}, at=now)
+            return 0, None
+        if not p or p['identity'][:2] != (epoch, rev):
+            return -1, None  # Sender must restart this transfer from its begin.
+        _, _, sector, count, digest = p['identity']
+        if f[0] == 'UOBJECT' and len(f) == 7:
+            index = sequence(f[5]); record(f[6])
+            if not 1 <= index <= count:
+                return None, None
+            previous = p['rows'].get(index)
+            if previous is not None and previous != f[6]:
+                self.pending = None
+                return -1, None
+            if previous is None:
+                p['rows'][index] = f[6]; p['at'] = now
+            return index, None
+        if f[0] == 'UCOMMIT' and len(f) == 5:
+            if len(p['rows']) != count:
+                return None, None
+            rows = tuple(p['rows'][i] for i in range(1, count + 1))
+            try:
+                baseline = Baseline.create(epoch, rev, sector, rows)
+            except ValueError:
+                self.pending = None
+                return -1, None
+            if baseline.digest != digest:
+                self.pending = None
+                return -1, None
+            self.latest, self.pending = baseline, None
+            return count + 1, baseline
+        return None, None
+
+
+class Sender:
+    """Selective acknowledgement with a bounded sliding window and retries."""
+    def __init__(self, baseline):
+        self.baseline = baseline
+        self.acked = set()
+        self.sent_at = {}
+        self.done = False
+
+    def acknowledge(self, epoch, revision, index):
+        b = self.baseline
+        if epoch != b.epoch or revision != b.revision:
+            return
+        end = len(b.rows) + 1
+        if index == -1:
+            self.acked.clear(); self.sent_at.clear()
+        elif index == end and end in self.sent_at:
+            self.done = True
+        elif 0 <= index < end and index in self.sent_at:
+            self.acked.add(index)
+
+    def packets(self, lease, now):
+        if self.done:
+            return []
+        b = self.baseline
+        if 0 not in self.acked:
+            indices = [0]
+        else:
+            outstanding = [i for i in range(1, len(b.rows) + 1) if i not in self.acked]
+            indices = outstanding[:WINDOW] or [len(b.rows) + 1]
+        result = []
+        for i in indices:
+            if now - self.sent_at.get(i, -math.inf) >= RETRY:
+                self.sent_at[i] = now
+                result.append(b.packet(lease, i))
+        return result
+
+
+class UniverseSession(CoopSession):
+    """Opt-in INTERNAL W01. Host lease owns the epoch for the whole relay life."""
+    def __init__(self, *args):
+        super().__init__(*args)
+        if not self.build.startswith('world1-'):
+            raise ValueError('world synchronization requires a world1- build label')
+        self.universe = Receiver()
+        self.universe_epoch = None
+        self.sectors = {}
+        self.entity_ids = {}
+        self.interest = None
+        self.interest_after_revision = 0
+        self.delivery = None
+        self.delivery_lease = None
+        self.delivered = None
+        self.positions = {}
+        self.position_cursor = 0
+
+    def receive(self, raw, address, now):
+        if not raw.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|', b'UACK|', b'UINTEREST|', b'UPOS|')):
+            return super().receive(raw, address, now)
+        self.expire(now)
+        if len(raw) > MAX_PACKET:
+            return []
+        try:
+            f = raw.decode('ascii').split('|')
+            if len(f) < 3 or f[1] != '1':
+                return []
+            slot, peer = self._peer(f[2], address)
+            if not peer:
+                return []
+            if f[0] == 'UINTEREST' and slot == 'p2' and len(f) == 5:
+                seq = sequence(f[3]); sector = atom(f[4], True)
+                old = self.interest
+                if old and old[0] == peer.lease and seq <= old[1]:
+                    return []
+                self.interest = (peer.lease, seq, sector)
+                if not old or old[0] != peer.lease or old[2] != sector:
+                    self.delivery = None; self.delivered = None
+                    # The guest's receiver has a global monotonic revision. On
+                    # sector return, an older cached baseline would be rejected
+                    # forever and block delivery of the next fresh one. Require
+                    # a capture newer than any baseline already sent to this
+                    # guest; a genuinely new guest may use the cache immediately.
+                    self.interest_after_revision = (self.universe.latest.revision
+                        if old and old[0] == peer.lease and self.universe.latest else 0)
+                return []
+            if f[0] == 'UACK' and slot == 'p2' and len(f) == 6:
+                rev = sequence(f[4]); index = -1 if f[5] == '-1' else sequence(f[5])
+                if self.delivery and self.delivery_lease == peer.lease:
+                    self.delivery.acknowledge(f[3], rev, index)
+                    if self.delivery.done:
+                        self.delivered = self.delivery.baseline.revision
+                return []
+            if slot != 'p1' or len(f) < 5 or f[3] != peer.lease:
+                return []
+            if self.universe_epoch and self.universe_epoch != peer.lease:
+                return []  # A fresh host game needs a new relay and fresh guest.
+            if f[0] == 'UPOS' and len(f) == 13:
+                entity, seq = sequence(f[4]), sequence(f[5]); sector = atom(f[6], True)
+                pose(f[7:])
+                baseline = self.sectors.get(sector)
+                if not baseline or entity not in self.entity_ids.get(sector, set()):
+                    return []
+                old = self.positions.get(entity)
+                if old and seq <= old[0]:
+                    return []
+                self.positions[entity] = (seq, now, sector, f[3:])
+                return []
+            ack, committed = self.universe.receive(f, now)
+            if ack is None:
+                return []
+            self.universe_epoch = peer.lease
+            if committed:
+                self.sectors.pop(committed.sector, None)
+                self.sectors[committed.sector] = committed
+                while len(self.sectors) > 8:
+                    del self.sectors[next(iter(self.sectors))]
+                self.entity_ids = {k: {record(row) for row in b.rows} for k, b in self.sectors.items()}
+                live = set().union(*self.entity_ids.values())
+                self.positions = {k: v for k, v in self.positions.items() if k in live}
+            return [f'UACK|1|{peer.lease}|{f[3]}|{f[4]}|{ack}'.encode('ascii')]
+        except (ValueError, OverflowError, UnicodeError):
+            return []
+
+    def snapshots(self, now):
+        result = super().snapshots(now)
+        host, guest = self.peers.get('p1'), self.peers.get('p2')
+        if not host or not guest or not self.interest or self.interest[0] != guest.lease:
+            return result
+        _, seq, sector = self.interest
+        result.append((host.address, f'UINTEREST|1|{host.lease}|{seq}|{sector}'.encode()))
+        if self.delivery_lease != guest.lease:
+            self.delivery = None; self.delivered = None; self.delivery_lease = guest.lease
+        latest = self.sectors.get(sector)
+        if (latest and latest.revision > self.interest_after_revision and
+                (not self.delivery or self.delivery.done) and latest.revision != self.delivered):
+            self.delivery = Sender(latest)
+        if self.delivery:
+            result.extend((guest.address, p) for p in self.delivery.packets(guest.lease, now))
+        # Independent, lossy motion cannot create entities or commit a baseline.
+        live = [v for v in self.positions.values() if v[2] == sector and now - v[1] < .75]
+        if live:
+            for i in range(min(WINDOW, len(live))):
+                fields = live[(self.position_cursor + i) % len(live)][3]
+                result.append((guest.address, ('UPOS|1|' + guest.lease + '|' + '|'.join(fields)).encode()))
+            self.position_cursor = (self.position_cursor + WINDOW) % len(live)
+        return result

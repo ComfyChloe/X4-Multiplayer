@@ -1,0 +1,19 @@
+Test graphics: 1920x1080 exclusive fullscreen, Low preset, 60 FPS limit.
+Steam is starting a new creative sandbox. Do not load an existing game.
+Updated Windows launcher to 5.0.2 (OneDrive profile fix).
+Previous launcher and metadata backed up in: /tmp/x4lan-profile-55d9b2c2ad3045df91baee1dea495d68/Windows package with spaces/backups/launcher-before-5.0.2-5167ab87353a4ec9a35c99b8f7b92e90
+Your session key, host IP, installed mod and game profiles were not changed.
+The Linux host can keep its existing package and running server.
+Next: 3-START-X4-TEST.cmd. If installation had not completed, run 1-INSTALL.cmd first.
+Updated Windows launcher to 5.0.2 (OneDrive profile fix).
+Previous launcher and metadata backed up in: /tmp/x4lan-profile-55d9b2c2ad3045df91baee1dea495d68/Windows package with spaces/backups/launcher-before-5.0.2-fd3b4a1ec8d94daa856ac844fffe8e5a
+Your session key, host IP, installed mod and game profiles were not changed.
+The Linux host can keep its existing package and running server.
+Next: 3-START-X4-TEST.cmd. If installation had not completed, run 1-INSTALL.cmd first.
+Updated Windows launcher to 5.0.2 (OneDrive profile fix).
+Previous launcher and metadata backed up in: /tmp/x4lan-profile-55d9b2c2ad3045df91baee1dea495d68/Windows package with spaces/backups/launcher-before-5.0.2-1aef502948254b29a3a080adcae31f7a
+Your session key, host IP, installed mod and game profiles were not changed.
+The Linux host can keep its existing package and running server.
+Next: 3-START-X4-TEST.cmd. If installation had not completed, run 1-INSTALL.cmd first.
+PASS: cloud tag classification; OneDrive start; links/unknowns/errors blocked; config backup; saved-profile protection; isolated launch; paired updater, backups, checksums, rollback and version guards; uninstalled legacy v5 update.
+Native Windows metadata reads were simulated. This is not a live Windows/OneDrive test.

@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<addon name="x4_lan_lab" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="../../ui/core/addon.xsd">
+  <environment type="menus">
+    <dependency name="ego_detailmonitor" />
+    <file name="ui/config.lua" />
+    <file name="ui/transport.lua" />
+    <file name="ui/client.lua" />
+    <file name="ui/game.lua" />
+    <file name="ui/bubble_game.lua" />
+    <file name="ui/coop_game.lua" />
+    <file name="ui/universe_protocol.lua" />
+    <file name="ui/universe_game.lua" />
+    <file name="ui/life_game.lua" />
+    <file name="ui/walk_game.lua" />
+    <file name="ui/trade_protocol.lua" />
+    <file name="ui/trade_game.lua" />
+    <file name="ui/quest_game.lua" />
+  </environment>
+</addon>

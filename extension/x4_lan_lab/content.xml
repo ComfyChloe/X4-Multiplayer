@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<content id="x4_lan_lab" name="X4 LAN Lab (experimental)" description="Internal W01: host NPC sector scenes plus the existing co-op test fleet. Ordinary cargo, NPC combat, station economy and vanilla missions are not yet shared. Use isolated profile 45841." author="X4 LAN Lab" version="8" date="2026-10-11" save="false">
+  <dependency version="900" />
+</content>

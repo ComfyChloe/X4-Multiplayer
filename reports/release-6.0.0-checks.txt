@@ -1,0 +1,116 @@
+X4 LAN Lab 6.0.0 — verification and limits
+10 October 2026 | X4 9.00 (611726), Steam build 23660954
+
+Scope of evidence
+-----------------
+Native Linux X4 was tested as host and as guest, in separate fresh creative
+worlds. Each counterpart was a deterministic local UDP peer. These tests run
+real X4 MD/Lua/AI code, but are NOT a new Windows/Linux two-computer playtest.
+The user's earlier real 5.1.0 session confirmed visibility, suit ejection and
+station respawn. Windows 6.0.0, ZeroTier latency and long sessions need retesting.
+
+Native host checks
+------------------
+PASS: an absolute position 200 km from spawn and another sector were transmitted.
+Both local shared objects reached cluster_01_sector001_macro in the travel check.
+Ships were retained, and original ship 1 transferred to player 2 while player 1
+subsequently controlled original ship 2. Authority epochs rejected old owners.
+
+PASS: 20 native shots from the synthetic guest's replicated ship affected the
+host target, reducing its shield to 88.7304 percent.
+PASS: the replicated ship left its dock and reached the other station, including
+an intentionally missing approach update. Native docking used a local free pad.
+PASS: actual native purchases and sales from BOTH transferred ships:
+  Buy 10 Energy Cells at Alpha: 200,000 -> 199,860 credits.
+  Sell those 10 at Beta from the remotely controlled ship: 200,030 credits.
+  Buy another 10 using the other shared ship: 199,890 credits.
+  Sell those 10 at Beta: 200,060 credits and combined mission delivery 20/20.
+The common account paid for all four transactions. Proxy ship money stayed zero.
+
+PASS: both targets were destroyed with deterministic engine damage in the
+mission-completion check. The mission recorded two kills and paid 25,000 credits
+EXACTLY ONCE: final shared balance 225,060 credits. Replayed delivery
+completion did not add another reward. The earlier live shot check was separate;
+this is not a claim that both entire kills were manually flown over a network.
+PASS: destruction while controlling the other original ship caused ejection;
+a suit hit led to station respawn without Game Over.
+
+Native guest checks
+-------------------
+PASS: an arriving dock snapshot waited for local station setup; no missing-market
+MD error remained. Local simulated lethal damage to a shared ship and target
+was reconciled while the host still considered both alive.
+PASS: host-confirmed ship destruction caused ejection, then suit death caused
+respawn at Alpha. The guest took the other shared ship's cockpit. The normal
+native UndockPlayerShip(false) command returned granted, and both MD and the
+native UI reported that it was no longer docked.
+PASS: the controlled ship reached cluster_01_sector001_macro at (250000,10000,0)
+metres, beyond the former movement boundary.
+PASS: delivery/combat/completion mission states were mirrored. Completed and
+older snapshots were replayed without regression or a guest-side reward call.
+Both host-confirmed target deaths removed their guest replicas.
+PASS: all guest network packets were dropped for 40 seconds. After the 30-second
+timeout the game resumed the SAME lease, retained ship authority/epoch and the
+completed mission, and displayed 225,000 credits from the synthetic host's
+200,000 + 25,000 balance. This scenario intentionally performed no actual trades.
+The guest ended with Game Over false. No X4LAN MD/Lua runtime error remained.
+
+Automated and static checks
+---------------------------
+PASS: 122 Python/LuaJIT tests, zero skips. Includes real local UDP handshakes,
+timeout/resume and prior trade/lifecycle/installer regression coverage, plus
+sector-aware navigation, exclusive pilot handoff, stale epochs, transferred-ship
+trading/container pickup, pending-action locks, host-only mission progress,
+monotonic completion, transport-failure fire stop and periodic reconciliation.
+PASS: all 8 MD and 4 AI XML scripts validate against the installed engine schemas.
+PASS: all 11 Lua files compile using LuaJIT; generated MD/AI files reproduce exactly.
+PASS: PowerShell fixture checks cover redirected OneDrive cloud tags, blocked
+links/unknown tags, profile protections, graphics backup and the existing updater.
+Windows native metadata was simulated on Linux; this is not native Windows QA.
+Archive and exact paired-package checks are recorded in PACKAGE-CHECKS.txt beside
+the release archives. Both packages must come from that one generated pair.
+
+Performance evidence
+--------------------
+Version 6 real UDP loopback relay benchmark: 20.012 seconds, two synthetic
+peers, navigation/crew/body/world/economy/quest/metrics traffic and status output.
+CPU: 4.27% of ONE logical core. Peak RSS: 17.6 MiB.
+Receive/transmit: 138.6/197.5 packets/s, 0 send errors.
+99th-percentile relay step: 0.976 ms.
+This excludes X4, ZeroTier and the terminal emulator. Moving the small relay alone
+is therefore not established as a solution to poor laptop game performance.
+
+A separate native creative-world baseline disabled LAN gameplay, networking and
+fixture creation, while retaining the same 1080p exclusive Low profile and the
+same disabled third-party selection. After 30 seconds of settling, it collected
+47 callback windows: median 15.79 callbacks/s, median
+window maximum gap 71.16 ms. Active multiplayer scenes varied
+substantially with location and being in a cockpit, suit or station room.
+These are UI callback timings, NOT rendered FPS. Different generated worlds and
+scenes prevent a controlled percentage attribution to the mod or GPU driver.
+Unchanged pose/cargo writes were reduced, with periodic authoritative refresh.
+No general FPS improvement or resolution of the laptop bottleneck is claimed.
+
+Save and installation protection
+--------------------------------
+PASS: all 7 original saves retained their exact bytes AND modification times.
+Steam cloud metadata content is unchanged; no test save was created.
+The previous installed 5.1.0 mod and test graphics configuration were restored
+from their exact backups. Development harnesses are outside the distributables.
+The 6.0.0 packages are prepared for explicit normal installation; production was
+not silently upgraded. Older release folders remain available.
+
+Remaining scope limits
+----------------------
+Shared: the two original ships, two targets, two assigned cargo containers,
+Alpha/Beta's six supported wares, common treasury, and Cooperative Trial.
+The normal trade interface works at Alpha/Beta for the ship currently piloted.
+General NPC markets, universe economy, construction, arbitrary cargo magnets,
+vanilla plots/missions and session save/load are not synchronized.
+Sector-aware movement is native-tested; actual two-game gate/highway/travel-drive
+and passenger behaviour still require a playtest. Walking avatars remain off.
+Friendly fire stays enabled. Suit weapons are not replicated. Respawn searches
+accessible non-hostile stations in the current sector; it waits if none exists.
+Destroyed ships/cargo are not replaced. An uncertain native trade needs fresh
+worlds, not a second request. Restarting either game or relay requires both new
+worlds. Both endpoints must use the complete matching 6.0.0 pair.

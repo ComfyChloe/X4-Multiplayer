@@ -1,0 +1,40 @@
+Historical interaction-bubble report — 10 October 2026 (before market trading)
+
+X4 9.00 (611726), Steam build 23660954, native Linux via Flatpak Steam on the
+available Fedora 44 KDE host, isolated profile 45841. No separate Bazzite test.
+Host and guest ran sequentially in ONE real game installation with a synthetic
+second participant. No Windows or simultaneous two-game result belongs to this run.
+
+HOST
+Received firing counters caused native proxy weapon events. The development-only
+fixture also triggered a five-second local firing sequence. Target minimum shields:
+86.2261% and 76.2087%. Four UDP actions succeeded: PICKUP and TRADE for p1 and p2.
+Native collect_drop added 20 energy cells per ship; native execute_trade added
+30 more per ship from the station, with real dock pads but shortened approach
+and no credit settlement. Final stocks: 50 / 50 / 140. Containers gone, both ships
+docked. Synthetic peer received 1551 world snapshots. The accepted full run followed
+corrections to early setup and docking/position-write conflicts.
+
+GUEST
+The real game then ran as p2. Synthetic p1 replayed the genuine preceding host
+states. Actual local stocks reached 50 / 50 / 140, both containers were removed,
+both ships docked and target shield changes applied. Guest weapon counters reached
+30; the synthetic peer received 1886 actual guest position packets.
+
+CHECKS AND BOUNDARIES
+44 automated tests passed with none skipped: real local UDP, LuaJIT/native Linux
+module, leases, invalid packets, interpolation, action deduplication, docking locks,
+world parsing and installer protections. Windows script syntax and selected logic
+ran in PowerShell 7 on Linux, not Windows PowerShell 5.1. Both cargo starters retrieved
+an already completed request without a duplicate transfer. The Windows DLL had been
+built but not run inside Windows X4 at that time.
+
+All seven original save files retained SHA256, size and modification time. No test
+saves. The game/server stopped and the development fixture was archived. No automatic
+firing fixture is included in user packages. Historical raw logs keep their original
+wording. See TRADE_TESTS.txt for later market and user-reported two-computer evidence.
+
+This historical release covered one fixed station and energy cells. It did not yet
+integrate the normal trade menu. No full universe economy, cargo magnet, shared NPC
+AI, station damage, sector changes, PvP/destruction or persistent sessions was accepted.
+An interrupted transaction can have uncertain results: restart both worlds and relay.

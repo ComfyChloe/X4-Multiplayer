@@ -1,0 +1,18 @@
+{
+  "x4lan.bubble.trade.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan.interaction.fire.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan.interaction.trade.xml": {
+    "valid": true,
+    "errors": []
+  },
+  "x4lan.market.trade.xml": {
+    "valid": true,
+    "errors": []
+  }
+}

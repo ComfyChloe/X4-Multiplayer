@@ -1,0 +1,62 @@
+W01 / 7.0.0 - INTERNAL NPC SCENE TEST
+11 October 2026 | X4 9.00 Steam build 23660954
+
+This is an engineering milestone towards a shared universe. It is not a public
+release or a complete multiplayer universe. Use both matching 7.0.0 packages and
+the new server. Older 6.x builds cannot join the world1 protocol.
+
+WHAT CHANGED
+The host enumerates actual NPC ships in the guest's current sector. Each receives
+a session identity, ship macro, owner and pose. Complete sector baselines are
+acknowledged, retried and checked before they replace the guest's visible set.
+Movement updates cannot create unknown objects. A missing packet cannot remove
+ships; a verified empty baseline can. Baselines also support joining late.
+
+In the guest's current sector, independent non-player NPC ships are removed
+after a verified baseline arrives, and host-controlled replicas replace them.
+Co-op fixtures, player-owned ships and live player occupants are excluded.
+Replica AI is disabled. This operation changes a disposable test world and can
+invalidate vanilla mission references. Never load or save a normal game with it.
+
+The host can capture the guest's sector even when the two pilots split up.
+Only the guest's current NPC sector scene is mirrored. Host simulation continues
+elsewhere. Leaving a sector removes its local replicas, not its host objects.
+
+TEST SEQUENCE
+1. Close both games and stop the previous relay. Install the matching pair.
+   Use isolated profile 45841, matching official DLC and no other third-party
+   mods. Start the Linux server, then fresh creative worlds on both computers.
+2. Stay in Argon Prime for at least 30 seconds. Watch the console's NPC scene:
+   host revision, ship count and guest committed revision should advance.
+3. Compare identifiable nearby NPC ship types, owners, positions and motion.
+   Host ships should appear on the guest. Duplicate independent NPCs should
+   disappear after synchronization. Names and equipment are not mirrored yet.
+4. Let traffic arrive and leave. Check that ships appear/disappear consistently.
+5. Move the guest to another sector; wait for its committed baseline. Return to
+   Argon Prime. Confirm that old-sector replicas do not accumulate.
+6. Briefly interrupt the connection while keeping both games and relay running.
+   Reconnect and check recovery. Restarting a game/relay requires two new worlds.
+7. Run 4-DIAGNOSTICS on both computers and retain the server logs. Report the
+   sector, ship type, time, host/guest revisions and what differed visually.
+
+DO NOT USE THIS TEST TO CLAIM THESE WORK:
+- Ordinary jettisoned cargo and the normal cargo magnet: still not implemented.
+- NPC damage, weapons, boarding, ownership transfer, docking or cargo: not shared.
+  Guest-side damage may be replaced when the host still has the ship.
+- NPC names, equipment, pilots, orders and engine effects: not replicated.
+- Station construction, production, general trading, faction changes, the full
+  economy, vanilla missions and save/load: not synchronized.
+- Guest-created player ships outside the original two-ship fixture: not shared.
+
+The old Alpha/Beta trade and test-container action remain fixture-only tests.
+The separate 6-COLLECT-CONTAINER action does not fix ordinary cargo pickup.
+Avoid boarding NPC replicas, SETA and combat with NPCs during W01 scene checks.
+The adapter stops instead of deleting a replica occupied by the local player.
+
+Bounds: at most 4096 NPC ships per sector, 8 cached sector baselines, 768-byte
+UDP packets. An overflowing/incomplete enumeration must not publish a truncated
+sector. Movement rate is shared across the sector; dense scenes need performance
+testing. Read RELEASE-CHECKS.txt for measured evidence and remaining gaps.
+
+All W01 implementation code was written for this project. No Neresco framework,
+multiplayer source or binary is included. Public Test 01 remains withheld.

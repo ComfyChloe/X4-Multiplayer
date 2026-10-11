@@ -1,0 +1,15 @@
+X4 LAN Lab 5.0.1 — versioning and complete-package checks
+
+13 existing launcher/profile/server-monitor checks passed after these changes.
+Both packaged launchers reported X4 LAN Lab 5.0.1 using their read-only version
+actions. Windows was checked with PowerShell 7 on Linux, not a live Windows game.
+The server dashboard and JSON status include the package version.
+
+Archive contents, checksums, matching pair settings, XML parsing and shell syntax
+passed. Folder names, VERSION.txt, package.json, guide text and mod display names
+agree on 5.0.1. The 30-second timeout and complete Low graphics launchers are included.
+
+The previous complete gameplay/protocol regression run comprised 80 passing tests;
+that historical output remains in each package's AUTOMATED-TESTS.txt. Neither those
+tests nor the versioning checks establish live two-computer game stability.
+The user's subsequently reported timeouts remain open.

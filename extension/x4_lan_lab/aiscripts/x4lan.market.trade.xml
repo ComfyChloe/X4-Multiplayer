@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="x4lan.market.trade" version="1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="aiscripts.xsd">
+<params><param name="ship"/><param name="station"/><param name="request"/><param name="lines"/><param name="account"/><param name="coop_delivery" default="false"/></params>
+<attention min="unknown"><actions>
+ <set_value name="$status" exact="'OK'"/><set_value name="$completed" exact="0"/>
+ <do_all exact="2" counter="$phase">
+  <do_all exact="$lines.count" counter="$i">
+   <set_value name="$line" exact="$lines.{$i}"/><set_value name="$ware" exact="$line.{1}"/><set_value name="$qty" exact="$line.{2}"/><set_value name="$price" exact="$line.{3}"/>
+   <do_if value="$status == 'OK' and (($phase == 1 and $qty lt 0) or ($phase == 2 and $qty gt 0))">
+    <set_value name="$before" exact="$ship.cargo.{$ware}.count"/><set_value name="$stockbefore" exact="$station.cargo.{$ware}.count"/>
+    <set_value name="$amount" exact="if $qty gt 0 then $qty else -$qty"/>
+    <set_value name="$result" exact="false"/><set_value name="$paid" exact="0ct"/>
+    <set_value name="$moneybefore" exact="$account.money"/><set_value name="$stationmoneybefore" exact="$station.money"/>
+    <do_if value="$ship.dock and $ship.dock.container == $station">
+     <do_if value="$qty gt 0"><create_trade_offer name="$offer" object="$station" seller="$station" ware="$ware" amount="$amount" price="$price" playeronly="true" virtual="false" virtualmoney="true"/></do_if>
+     <do_else><create_trade_offer name="$offer" object="$station" buyer="$station" ware="$ware" amount="$amount" price="$price" playeronly="true" virtual="false" virtualmoney="true"/></do_else>
+     <execute_trade tradeoffer="$offer" tradepartner="$ship" amount="$amount" custom="true" result="$result"/>
+     <remove_trade_offer object="$station" tradeoffer="$offer"/>
+    </do_if>
+    <do_if value="$ship.cargo.{$ware}.count == $before + $qty and $station.cargo.{$ware}.count == $stockbefore - $qty">
+     <do_if value="$qty gt 0"><transfer_money from="$account" to="$station" amount="$amount * $price" result="$paid"/></do_if>
+     <do_else><transfer_money from="$station" to="$account" amount="$amount * $price" result="$paid"/></do_else>
+     <set_value name="$completed" operation="add" exact="1"/>
+     <do_if value="$coop_delivery and $qty lt 0 and $ware == ware.energycells">
+      <raise_lua_event name="'X4LAN_Quest.Delivery'" param="'%s|%s'.[$request, -$qty]"/>
+     </do_if>
+     <do_if value="$account.money != $moneybefore - $qty * $price or $station.money != $stationmoneybefore + $qty * $price"><set_value name="$status" exact="'PARTIAL'"/></do_if>
+    </do_if>
+    <do_else><set_value name="$status" exact="if $completed gt 0 or $ship.cargo.{$ware}.count != $before or $station.cargo.{$ware}.count != $stockbefore then 'PARTIAL' else 'REJECTED'"/></do_else>
+    <debug_text text="'[X4LAN] MARKET_LINE request=%s ware=%s qty=%s result=%s before=%s after=%s station_before=%s station_after=%s paid=%s status=%s'.[$request,$ware.id,$qty,$result,$before,$ship.cargo.{$ware}.count,$stockbefore,$station.cargo.{$ware}.count,$paid,$status]"/>
+   </do_if>
+  </do_all>
+ </do_all>
+ <raise_lua_event name="'X4LAN_Trade.Result'" param="'%s|%s'.[$request,$status]"/>
+</actions></attention></aiscript>

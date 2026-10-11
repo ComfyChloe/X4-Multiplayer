@@ -1,0 +1,17 @@
+{
+  "native_guest_pass": true,
+  "native_undock": "granted and undocked",
+  "local_damage_reconciled": true,
+  "shared_credits": 225000,
+  "same_lease_after_40_second_interruption": true,
+  "mission_completion_mirrors": 1,
+  "guest_reward_commands": 0,
+  "sector": "cluster_01_sector001_macro",
+  "position_m": [
+    250000,
+    10000,
+    0
+  ],
+  "game_callbacks_median_hz": 9.75,
+  "metric_samples": 119
+}

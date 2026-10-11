@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_Universe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Setup">
+   <conditions><event_ui_triggered screen="'X4LAN_Universe'" control="'Setup'"/></conditions>
+   <actions>
+    <!-- W01 must not enumerate or remove the existing co-op fixtures. -->
+    <do_all exact="2" counter="$i">
+     <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$ships.{$i}"/>
+     <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$targets.{$i}"/>
+    </do_all>
+    <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$donor"/>
+    <raise_lua_event name="'X4LAN_Universe.Ready'"/>
+   </actions>
+  </cue>
+ </cues>
+</mdscript>

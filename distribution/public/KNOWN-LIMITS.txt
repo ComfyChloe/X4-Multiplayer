@@ -1,0 +1,35 @@
+PUBLIC TEST 01 - KNOWN LIMITS
+
+This is an experimental two-player prototype. It mirrors selected entities
+between two independent games; it does not make the whole X4 universe multiplayer.
+
+Shared: two original ships, two targets, two assigned containers, Alpha/Beta's
+six supported wares, one player faction/treasury and Cooperative Trial.
+Not shared: general NPC economy/universe, arbitrary markets/containers, normal
+cargo magnets, construction, ordinary mission chains/plots, session save/load,
+walking avatars or spacesuit weapons. No dedicated headless universe simulation.
+
+Travel drive, highways, passengers and real long sessions need further testing.
+Local replicas can use different dock pads. An occupied cockpit cannot be taken.
+Destroyed ships and cargo are not replaced. Station respawn searches accessible
+non-hostile stations in the CURRENT sector and may wait if none is available.
+Friendly fire is intentionally enabled. Run destruction checks after trading.
+
+Thirty-second timeout and automatic reconnect require the same relay and both
+game instances. Restarting either requires both fresh worlds. Native uncertain
+trades cannot be rolled back safely; never resubmit one as a new transaction.
+Use no SETA, and avoid pausing the host game during a test.
+
+Only Steam game build 23660954 is accepted. Test-profile mods/DLC must match.
+The portable runtimes and launchers target x86-64 only. Native Linux needs glibc;
+the Linux package is not a Proton/Windows package. Windows targets Windows 11.
+
+Existing automated and native Linux/synthetic-peer evidence does not establish
+a complete Windows/Linux two-machine playtest. Windows server compatibility and
+Windows host game behaviour have distinct evidence; read RELEASE-CHECKS.txt.
+The old laptop's performance issue is unresolved. Relay CPU and Lua callback
+rates must not be presented as measured rendering FPS or proof of an FPS fix.
+
+The test binaries/scripts are not code-signed by this project. Preserve complete
+archives and verify the published package hashes. Public downloads contain no
+private session credentials, previous conversation, normal saves or game assets.

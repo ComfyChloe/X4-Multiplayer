@@ -1,0 +1,44 @@
+{
+  "captured_at_utc": "2026-10-09T21:19:56.419905+00:00",
+  "game": "X4 9.00 (611726)",
+  "steam_build": 23660954,
+  "scenario": "custom_creative",
+  "profile": "45841",
+  "autosave": "false",
+  "test_save_file_count": 0,
+  "automated_tests_passed": 23,
+  "real_x4_instances": 1,
+  "synthetic_peers": 1,
+  "position_probe_error_m": [
+    0.001,
+    0.001,
+    0.0,
+    0.002
+  ],
+  "drift_samples": 217,
+  "max_reported_drift_m": 0.002,
+  "rotation_samples": 47,
+  "max_reported_angle_error_degrees": 0.0,
+  "log_precision_note": "Errors logged to 3 decimal places; zero is a rounded value. Drift is NOT LAN latency or shared-physics accuracy.",
+  "first_proxy_game_time_s": 3.03,
+  "last_proxy_measurement_game_time_s": 253.81,
+  "measurement_span_game_time_s": 250.78,
+  "proxy_creation_events": 4,
+  "stopped_errors": [],
+  "user_confirmed": [
+    "visible moving proxy",
+    "12-second peer interruption: disappeared, returned, exactly one proxy"
+  ],
+  "relay_restart": "reconnected in the same X4 process; local transmitted position unchanged",
+  "unverified": [
+    "two real X4 instances",
+    "Windows runtime",
+    "two LAN computers",
+    "shared physics, combat, AI, economy, save/load"
+  ],
+  "cleanup": {
+    "test_services_stopped": true,
+    "test_game_closed": true,
+    "extension_removed_from_game_directory": true
+  }
+}

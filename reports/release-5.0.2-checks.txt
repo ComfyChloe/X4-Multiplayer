@@ -1,0 +1,29 @@
+X4 LAN Lab 5.0.2 - Windows OneDrive launcher fix
+10 October 2026
+
+Passed tests/test_windows_profiles.ps1 with PowerShell 7 on Linux:
+- Actual embedded C# declarations compile; all 16 CLOUD tags and the legacy
+  OneDrive tag accepted. Symlink, junction, unknown and name-surrogate tags denied.
+- Full Start-TestGame path with simulated cloud folder/config metadata reaches
+  the simulated Steam launch, keeps profile 45841 and the creative sandbox,
+  applies 1080p Low settings and backs up the previous configuration exactly.
+- Links, unknown metadata and failed metadata reads stop the launch before
+  configuration writes. A linked temporary configuration is rejected.
+- Existing saves block startup and remain unchanged.
+- In-place Windows updater preserves pairing IDs, session.json, host IP and mod
+  configuration, updates version labels/checksums and backs up changed files.
+- Reapplying the update, rollback after a simulated write-stage failure, refusing
+  a running game/newer package/Linux package, and an uninstalled legacy v5 package.
+
+These checks use simulated reparse metadata and game/Steam calls. The Win32
+metadata API itself and OneDrive hydration were NOT exercised on this Linux host.
+A live Windows 11 + OneDrive retry remains necessary. No X4 profiles or saves were
+used for these checks. This is a launcher fix, not a network/performance fix.
+
+AUTOMATED-TESTS.txt retains the previous v5 gameplay regression output (80 tests).
+Gameplay, native networking libraries, relay and trade execution are unchanged.
+
+Windows API references used for the classification and read-only handle query:
+https://learn.microsoft.com/en-us/windows/win32/api/winbase/ns-winbase-file_attribute_tag_info
+https://learn.microsoft.com/en-us/windows/win32/api/winbase/nf-winbase-getfileinformationbyhandleex
+https://learn.microsoft.com/en-us/openspecs/windows_protocols/ms-fscc/c8e77b37-3909-4fe6-a4ea-2b9d423b1ee4

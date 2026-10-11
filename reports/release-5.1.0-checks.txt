@@ -1,0 +1,73 @@
+X4 LAN Lab 5.1.0 — release checks
+10 October 2026 | X4 9.00 (611726), Steam build 23660954
+
+Scope
+This is an experimental matched Linux-host / Windows-guest release. Native
+lifecycle tests ran one Linux X4 instance at a time, with a synthetic network
+counterpart. They are not a completed two-computer Windows/Linux playtest.
+
+Verified
+- 94 automated Python, local UDP and LuaJIT regression tests passed. Coverage
+  includes authenticated reconnect, expired leases, lost resume acknowledgements,
+  repeated socket failures during resume, unacknowledged initial handshakes,
+  one-way and two-way interruption, monotonic sequences, world identity,
+  transaction deduplication/uncertain orders, walking packets and suit generations.
+- A native Linux X4 host survived a scripted lethal ship attack: emergency suit
+  ejection, a subsequent scripted suit attack and station respawn completed.
+  The final game view remained playable on LAN Trading Station Alpha. Native
+  apply_attackstrength was used; this is not a live player-projectile test.
+- Native Linux X4 acting as guest entered the remote ship, returned to its own
+  ship, received authoritative ship-death and suit-death updates, and respawned
+  at Alpha. The final diagnostic reported gameover=0. Network traffic continued.
+- The guest lost both directions of network traffic for 45 seconds while the
+  actual relay remained running. The client logged automatic reconnect after
+  the 30-second timeout and resumed the same lease. The synthetic host remained
+  connected. Evidence: lifecycle-5.1.0-guest.json and the corresponding game log.
+- Separate ship balances are retained on proxy destruction. Wrecks are excluded
+  from cargo/trade operations and cargo readback.
+- PowerShell installer regression checks passed under PowerShell on Linux:
+  OneDrive markers, link protection, saved-profile protection, config backups,
+  1920x1080 exclusive fullscreen settings and existing updater regressions.
+  Windows metadata was simulated; this is not native Windows execution.
+
+Save protection and disabled experiment
+All seven existing saves retained both SHA-256 and modification time. No save
+was created in test profile 45841. Steam refreshed the timestamp of its cloud
+metadata file; its contents are identical. The previously installed mod was
+restored byte-for-byte after the test; only test-profile graphics remain updated.
+The walking-placement experiment did not produce a correctly placed visible
+figure. It is disabled in both release configurations. The disabled Lua gate
+is covered by the automated tests; no walking pose or actor setup is produced.
+The experimental source remains available for later development.
+
+Packaging and schema — passed
+All four MD scripts (lifecycle, walking experiment, bubble, trade) validate against
+the X4 9.00 schema. Both package archives passed paired-key/role checks, version
+labels, every manifest checksum, exact ZIP contents and CRC, native platform
+libraries, UI dependencies, disabled walking avatars, absence of development
+harnesses/installation state and English versioned instructions.
+See PACKAGE-CHECKS.txt beside the archives for the verification result.
+
+Practical limits
+- Both complete client packages and the Linux relay must be replaced together.
+  The historical Windows-only 5.0.2 updater does not install this release.
+- Relay or game restarts require fresh test worlds on both computers. Reconnect
+  supports interruptions in an existing relay/game session, not saved sessions.
+- A standard suit has one hull point. Combat hits are treated as lethal while
+  its native hull is protected until teleportation finishes. Spacesuit weapons
+  are not replicated. Use the surviving player ship for a suit-combat playtest.
+- Respawn chooses the nearest accessible non-hostile station in the current
+  sector. Shared stations are the tested case. Destroyed ships and cargo remain
+  destroyed; there is no replacement ship, repair or save/load persistence.
+- Walking figures remain invisible. The room-placement experiment is disabled
+  in release packages; its protocol tests do not establish visual correctness.
+  Spacesuit replicas remain enabled. Visiting a remote ship keeps networking
+  alive; staying aboard during flight is experimental. No cockpit-control handoff.
+- Native guest boarding used a scripted teleport into the same ship context.
+  Walking through its door in a real two-player session remains a playtest check.
+- The normal trade-menu and cargo-container code retains its earlier controlled
+  Linux test coverage; this release is not a new full two-player trade run.
+- General performance, combat timing, repeated destruction under heavy load,
+  ZeroTier latency and native Windows lifecycle behavior remain to be tested.
+- Bubble bounds are +/-50 km per axis from (0, 10 km, 0) in Argon Prime: a
+  100 km cube. The surrounding universe is independent on each computer.

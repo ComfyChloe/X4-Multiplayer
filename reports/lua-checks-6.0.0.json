@@ -1,0 +1,17 @@
+{
+  "files_compiled": 11,
+  "runtime": "LuaJIT 2.1",
+  "files": [
+    "bubble_game.lua",
+    "client.lua",
+    "config.lua",
+    "coop_game.lua",
+    "game.lua",
+    "life_game.lua",
+    "quest_game.lua",
+    "trade_game.lua",
+    "trade_protocol.lua",
+    "transport.lua",
+    "walk_game.lua"
+  ]
+}

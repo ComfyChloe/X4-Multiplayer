@@ -1,0 +1,41 @@
+{
+  "synthetic_host": true,
+  "guest_states": [
+    {
+      "mode": "ship",
+      "dead": "0",
+      "generation": "0",
+      "at": 0.0
+    },
+    {
+      "mode": "foot",
+      "dead": "0",
+      "generation": "0",
+      "at": 8.75
+    },
+    {
+      "mode": "ship",
+      "dead": "0",
+      "generation": "0",
+      "at": 22.11
+    },
+    {
+      "mode": "suit",
+      "dead": "1",
+      "generation": "1",
+      "at": 40.19
+    },
+    {
+      "mode": "foot",
+      "dead": "1",
+      "generation": "1",
+      "at": 50.62
+    }
+  ],
+  "connected_slots": [
+    "p1",
+    "p2"
+  ],
+  "resume_preserved_lease": true,
+  "outage_seconds": 45
+}

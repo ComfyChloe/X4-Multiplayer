@@ -1,0 +1,58 @@
+CURRENT DEVELOPMENT HANDOFF - 11 OCTOBER 2026
+
+7.0.0 INTERNAL W01 adds an original NPC scene transport and engine adapter.
+The user requires a shared universe. W01 is progress, not completion of that goal.
+Ordinary jettisoned Energy Cells and the normal cargo magnet STILL NEED WORK.
+Do not substitute the legacy 6-COLLECT-CONTAINER action for that requirement.
+
+User choices:
+- Work internally unless a public package is explicitly requested.
+- Keep this project separate from Neresco's projects; write original code.
+- Documentation, packages and interfaces are English; chat with the user in German.
+- Use https://github.com/Lith7ium/X4-Multiplayer as the private shared repository.
+- The other development computer runs Fedora and already has a project folder.
+- On the current PC, native tests in a fresh isolated world were authorized and
+  the user wants the new internal installation retained for their next test.
+  Preserve normal saves. This does not authorize arbitrary game/profile deletion.
+
+IMPLEMENTED
+- x4lan/universe.py: authenticated host-only sector baselines, monotonic epoch /
+  revision, bounded selective ACK/retry, atomic commit and sequenced NPC motion.
+- ui/universe_protocol.lua: matching original Lua protocol, tested against Python.
+- ui/universe_game.lua + md/x4lan_universe.xml: incremental host faction scans,
+  stable session object IDs, protected co-op/player objects, guest replicas and
+  current-sector NPC suppression. Observe mode is also available.
+- Relay interest management waits for a fresh capture on sector changes so an
+  old cached sector cannot deadlock the guest's monotonic receiver on return.
+- Internal builder selects world1 protocol, isolated profile/UDP 45841 and replica
+  mode. Source config is inert. W01 is incompatible with the older 6.x packages.
+
+EVIDENCE
+- reports/automated-7.0.0-tests.txt: 162 passing Python/LuaJIT tests, no skips.
+- reports/world1-native-checks.json: real Linux X4 host enumeration yielded
+  124-131 NPCs; real Linux guest replay created 124 ships, read back positions
+  within 0.004 m, then confirmed all retired component IDs non-operational.
+  Each game ran against a synthetic counterpart, not two simultaneous PCs.
+- reports/world1-md-schema-checks.json: all 9 MD scripts validate against X4 9.00.
+- reports/release-7.0.0-checks.txt: honest scope, measurements and known warnings.
+- 14 mass-traffic-offset warnings remain in the guest full-sector run during
+  suppression of arriving local NPCs. No Lua error or adapter stop occurred.
+  Broader guest jobs/mission effects and endurance are not verified.
+
+NEXT WORK
+1. Run the real Windows/Linux W01 visibility/movement/sector-return test and inspect
+   both logs. Native Windows X4 calls have not been exercised on this PC.
+2. Replace experimental scene-only suppression with stronger control of competing
+   guest simulation. Complete object generations, names, equipment and interactions.
+3. Implement ordinary cargo drop and magnet collection as host-authorized,
+   deduplicated inventory/removal transactions; include both host and guest drops,
+   full holds, partial pickup, simultaneous pickup and packet loss/reconnect.
+4. Extend authority to NPC damage/combat, docking/trade, stations, production,
+   faction/mission consequences and eventually persistence. Visual NPC clones do
+   not make these shared.
+
+Read ARCHITECTURE.md and WORLD-SYNC-REQUIREMENTS.txt for the detailed constraints.
+Use DEVELOPMENT.txt for the Fedora checkout and two-computer Git workflow.
+Historical 6.0.0 reports are retained as historical evidence, not current claims.
+Do not regenerate old MD fixture files blindly: generator output must be compared
+against current profile guards and gameplay changes before replacing anything.

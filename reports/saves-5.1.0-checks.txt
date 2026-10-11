@@ -1,0 +1,1 @@
+PASS: original mod restored exactly; all 8 original save-directory files retain SHA-256; all 7 actual saves also retain modification times (Steam refreshed only its cloud metadata timestamp); no test save created. Full HD / Low settings retained only in test profile 45841.

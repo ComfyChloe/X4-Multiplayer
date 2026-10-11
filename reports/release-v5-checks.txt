@@ -1,0 +1,41 @@
+X4 LAN Lab v5 — docking / seat exit and 30-second connection timeout
+10 October 2026
+
+Observed v4 failure:
+The user reported both real players seeing each other, then a disconnect after
+docking and leaving the pilot seat. The Linux host stopped sending at about
+14:23:41 UTC while its game simulation and the Windows peer's traffic continued.
+The server removed the host five seconds later. The bubble adapter returned
+before all network work whenever no actively controlled ship was reported.
+
+Changes:
+The adapter keeps reading its original operational ship while the player is on
+foot. It continues the client, world and trade update loops, and returns to the
+same ship without creating a new client. It logs control transitions. Starting
+on foot still waits for initial piloting. Other ships, sector changes and a
+destroyed session ship remain guarded. Walking avatars are not synchronized.
+
+Server and Lua-client connection timeouts are both 30 seconds. The server console
+still warns after two seconds; motion data still become stale after 0.75 seconds.
+
+Validation:
+- Regression tests fail against the old seat-exit code and pass after the fix.
+- All 80 automated tests passed, none skipped; see AUTOMATED-TESTS.txt.
+- Each slot remained on foot for 90 simulated seconds through the real Lua client
+  and Python relay with engine API doubles. The same lease, ship pose, world
+  publication and trade frame callback continued. Returning kept the connection.
+- Unit tests verify both timeout boundaries, shorter outages and invalid replies.
+- Packaged server tested through real local UDP and pseudoterminals: two synthetic
+  players connected, a silent guest still held its slot after ten seconds and
+  expired after thirty, while the host kept sending at about 20 updates/second.
+  A duplicate start attached a viewer; closing it did not stop the owning server.
+- ZIP contents, per-file checksums, version metadata, matched package settings,
+  English interface text, XML/Lua references, shell syntax and MD/AI regeneration
+  were checked. Both packages contain the fixed adapter and client timeout.
+- Windows installer scripts and the native DLL are byte-identical to v4.
+
+Not yet verified: the corrected code in a new live Windows/Linux docking session.
+This release does not claim to fix general performance or synchronize avatars.
+For the live check, dock at Alpha, stand up / walk on the station for at least
+45 seconds, return to the same pilot seat and undock; then repeat for the other
+player. Record the server console and both diagnostic logs if anything stops.

@@ -1,0 +1,34 @@
+{
+  "steam_autocloud.vdf": {
+    "sha256_unchanged": true,
+    "mtime_unchanged": false
+  },
+  "save_010.xml.gz": {
+    "sha256_unchanged": true,
+    "mtime_unchanged": true
+  },
+  "autosave_01.xml.gz": {
+    "sha256_unchanged": true,
+    "mtime_unchanged": true
+  },
+  "autosave_02.xml.gz": {
+    "sha256_unchanged": true,
+    "mtime_unchanged": true
+  },
+  "quicksave.xml.gz": {
+    "sha256_unchanged": true,
+    "mtime_unchanged": true
+  },
+  "autosave_03.xml.gz": {
+    "sha256_unchanged": true,
+    "mtime_unchanged": true
+  },
+  "save_009.xml.gz": {
+    "sha256_unchanged": true,
+    "mtime_unchanged": true
+  },
+  "save_001.xml.gz": {
+    "sha256_unchanged": true,
+    "mtime_unchanged": true
+  }
+}

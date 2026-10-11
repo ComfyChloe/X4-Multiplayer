@@ -1,0 +1,127 @@
+Version 7.0.0 INTERNAL W01 — 11 October 2026
+
+- Add an original host NPC registry and complete sector baseline transport with
+  checksums, selective acknowledgements, retries and atomic receiver commits.
+- Mirror NPC ship macro, owner, pose and sector-view lifetime. Limit native
+  scanning and replica updates per frame; protect player ships and test fixtures.
+- Disable replica AI and suppress independent NPC ships in the current guest
+  sector only after a complete baseline. Never use a normal saved world.
+- Add world1 protocol isolation, relay NPC diagnostics and WORLD-SYNC-TEST.txt.
+- This is not complete universe synchronization. Ordinary cargo/magnet pickup,
+  NPC combat/equipment, station economy and vanilla missions remain unimplemented.
+- Keep public packages withheld. No third-party multiplayer source or binary is
+  embedded. Replace both internal packages and relay; incompatible with 6.x.
+
+Version 6.0.0 — 10 October 2026
+
+- Separate shared ship identity from player identity. The relay grants one pilot
+  at a time; taking a vacant cockpit transfers movement authority and preserves
+  ship cargo. Delayed packets from the previous pilot cannot move the ship.
+- Send sector identity and absolute positions. Remove the old Argon Prime-only,
+  +/-50 km movement boundary. The same two ships can follow each other between
+  sectors. The surrounding NPC universe is still independent.
+- Use one shared 200,000-credit treasury. Both pilots can trade in whichever
+  shared ship they control. Native host X4 still executes every shared trade.
+- Add Cooperative Trial: sell 20 Energy Cells to Beta together, then destroy both
+  LAN Targets. One shared mission state and one 25,000-credit treasury reward.
+  This is the first purpose-built co-op mission, not arbitrary vanilla quest sync.
+- Defer remote docking until the stations exist. Keep guest ships and targets
+  alive until host-confirmed destruction, allowing local damage drift to recover.
+- Coalesce unchanged remote ship/cargo writes, with periodic reconciliation. Add relay CPU/RAM, game
+  callback timing, ship authority and shared mission progress to the console.
+  No particular FPS improvement is promised; see RELEASE-CHECKS.txt for measurements.
+- Keep friendly fire, emergency ejection, suit respawn, 30-second timeouts,
+  automatic reconnect, Full HD exclusive Low graphics, save protection and the
+  OneDrive fix. Walking avatars remain disabled.
+- Incompatible gameplay update: replace both full packages and the relay and
+  start two new test worlds. Do not mix with 5.x packages.
+
+Version 5.1.0 — 10 October 2026
+
+- Automatically reconnect after a network interruption. A resumed connection
+  retains the same player identity, world and request history. Timeout remains
+  30 seconds. A restarted relay or game requires two fresh test worlds.
+- Keep networking alive when entering the other player's ship or after either
+  original player ship is destroyed. Visiting does not transfer pilot authority.
+- Add emergency ejection and station respawn, plus remote spacesuit replicas.
+- Keep walking-avatar rendering disabled: room placement is not reliable yet.
+  Walking on shared stations or boarding the other ship still keeps networking
+  alive. Remote spacesuit replicas remain enabled. Cockpit authority stays with
+  the original player; taking over the other ship is not supported.
+- Preserve separate balances when a proxy ship is destroyed; reject cargo/trade
+  actions for destroyed ships and stop querying cargo on wrecks.
+- Launch the isolated test profile in 1920x1080 exclusive fullscreen, Low graphics,
+  with a 60 FPS cap. Includes the existing OneDrive profile fix.
+- Replace both complete packages and the server for this update. This is not the
+  Windows-only 5.0.2 launcher patch. See RELEASE-CHECKS.txt for actual verification.
+
+Version 5.0.2 — 10 October 2026
+
+- Fixed the Windows launcher rejecting OneDrive Documents folders as linked
+  profiles. The guard now reads the Windows reparse tag and accepts known Cloud
+  Files / OneDrive tags. Real symlinks, junctions and unknown tags remain blocked.
+- Applied to both installation and test startup, including config.xml checks.
+- The Windows-only updater preserves session keys, host IP, pairing IDs and the
+  installed mod. The Linux host does not need a restart or reinstall for this fix.
+- Regression checks cover cloud tags, rejected links/unknown tags/metadata errors,
+  existing saves, configuration backups and update pairing preservation.
+  Native metadata reads are simulated on Linux; live Windows validation is pending.
+- No change to gameplay, networking, performance or timeout handling.
+
+Version 5.0.1 — 10 October 2026
+
+- Complete packages now combine v5 with the 1080p Low graphics launcher update.
+- Introduced MAJOR.MINOR.PATCH numbering, preserving the former v5 as 5.0.0.
+- Version appears in archive/folder names, VERSION.txt, package.json, launcher
+  output, server dashboard/status log, installation records and mod display name.
+- All version labels are stamped from the source VERSION.txt during packaging.
+- This packaging release does not claim to fix the subsequently reported timeouts.
+
+Graphics launcher update for version 5 — 10 October 2026
+
+- Test profile starts at 1920x1080 windowed using the shipped X4 9.00 Low
+  graphics settings, with a 60 FPS cap and frame generation disabled.
+- Applied during installation and before each test launch. Existing changed
+  configuration is backed up. Other profiles and saves are untouched.
+- Launcher-only update: no new session keys, server restart or mod reinstall
+  required for an existing matching v5 pair. Restart X4 to apply.
+- Graphics changes are not a verified fix for the reported repeated timeout.
+
+Version 5 — 10 October 2026
+
+- Fixed a reproducible network-loop exit when leaving the pilot seat. The adapter
+  now keeps the original operational ship as the session ship while on foot, and
+  resumes piloting that same ship without replacing the client or its connection.
+- Added control=on-foot / control=piloting log entries for live verification.
+- Increased the server's connection timeout from 5 to 30 seconds and the Lua
+  client's response timeout from 3 to 30 seconds. Missing updates are still warned
+  about after 2 seconds; movement still becomes stale after 0.75 seconds.
+- 80 automated tests passed, including the previously failing seat transition and
+  90 simulated seconds on foot for each slot through the real Lua protocol and
+  Python relay with doubled engine APIs. No live Windows/Linux retest is claimed.
+- Walking avatars and general performance fixes are outside this change.
+
+Version 4 — 10 October 2026
+
+- Added a live terminal dashboard for the Linux server, with a separate window
+  when launched outside a terminal on supported desktops.
+- Displays both player slots, IP/source port, connection status, received player
+  updates per second, last update age, host world/economy progress and pending work.
+- Keeps timestamped connect/timeout events visible and saves status snapshots to
+  logs/server-*.jsonl, plus logs/server-status.json for attached viewers.
+- Reopening the same package's running v4 server opens a status viewer instead of
+  trying to bind a second server. Other/older servers receive an explanatory error.
+- Lists ZeroTier addresses and documents remote testing through a shared network.
+- English documentation, launchers, setup/action messages, trade notices and test
+  object names. Linux package renamed from X4-LAN-Bazzite to X4-LAN-Linux.
+- Diagnostics now preserve the full game log as well as mod-filtered messages.
+
+User-reported result for v3:
+Additional Windows mods were disabled, the test mod reinstalled, and two real
+Linux/Windows games connected through ZeroTier. Performance was poor; connection
+was lost in under 30 seconds. The exact cause remains unresolved. No particular
+third-party mod is blamed without an isolated reproduction.
+
+No performance fix, longer timeout, change to the multiplayer wire protocol or
+sustained two-player gameplay result is claimed for v4. Native network libraries
+and gameplay transfer logic are unchanged apart from English labels/messages.

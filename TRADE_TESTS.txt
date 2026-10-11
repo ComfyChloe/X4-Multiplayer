@@ -1,0 +1,91 @@
+HISTORICAL EVIDENCE — versions 3 to 5, preserved for development reference.
+For the current 6.0.0 scope and verification, read reports/release-6.0.0-checks.txt.
+The limits and separate balances described below belong to earlier releases.
+New packages include the current release checks as TEST-REPORT.txt.
+
+X4 LAN Lab — evidence report, updated for v5 on 10 October 2026
+
+FIRST REAL TWO-COMPUTER SESSION — USER REPORT
+The user and a friend connected real Linux and Windows X4 games over ZeroTier.
+Additional Windows mods were disabled and the test mod reinstalled before the
+loading crash stopped. Both peers appeared in the Linux relay log and Linux
+reported remote=receiving. The user reported very poor performance and a lost
+connection in less than 30 seconds. The exact conflicting mod, performance cost
+and disconnect cause remain unresolved. This is not a passed endurance, shared
+trade or combat test. Version 4 adds visibility and English packaging, not a
+verified performance fix. Its console needs observation during the next session.
+
+V4 DOCKING / LEAVING THE SEAT — USER REPORT AND LOGS
+Both players saw each other. The user then docked and left the pilot seat / walked
+onto the station. At 14:23:41 UTC the Linux host's network traffic stopped; the
+remote Windows client continued sending. The host timed out five seconds later.
+The Linux game log continued recording world/economy states after docking, without
+a BUBBLE STOPPED error. The adapter had an early return for a zero controlled-ship
+ID, which prevents every network update while on foot. This matches the report.
+
+V5 REGRESSION CHECKS
+The seat-transition test fails against v4 and passes after keeping the original
+session ship while on foot. Both slots remain connected through 90 simulated
+seconds using the real Lua client and Python relay with engine API doubles. World
+publication and the trade frame callback continue. Returning to the same ship
+keeps the same lease. Destroyed ships, other ships and sector changes still stop.
+The server and client now time out at 30 seconds. Short interruptions preserve
+the connection; invalid replies do not renew the client. Pose freshness stays
+at 0.75 seconds. All 80 automated tests pass, none skipped. This is not a live
+Windows/Linux gameplay result. Repeat docking, walking and returning in game.
+
+CONTROLLED EARLIER GAME TESTS — ONE REAL GAME AT A TIME
+X4 9.00 (611726), Steam build 23660954, native Linux via Flatpak Steam, profile
+45841. Host and guest ran sequentially in the same installation. A synthetic
+UDP participant replaced the second game. No Windows game participated here.
+
+Native host:
+- Real collect_drop pickup: 20 energy cells per player from two containers.
+- Actual local weapons and received firing requests. Minimum target shields:
+  86.2261% and 82.4696%.
+- Original MapMenu sliders and confirmation: p1 bought 13 energy cells and sold
+  3 at Alpha. Both completed OK.
+- Synthetic p2 bought 20 energy cells, then sold 5 and bought 2 hull parts in
+  one basket. It switched from Alpha to Beta and sold 15 energy cells there.
+- Invalid price -> PRICE; excessive cargo -> CAPACITY, without stock changes.
+- Six native goods transfers with verified native credit changes.
+- Final energy-cell stocks p1/p2/Alpha/Beta: 30 / 20 / 275 / 415. Total 740,
+  including 40 collected from containers; no loss of goods.
+- Hull parts: 0 / 2 / 298 / 400, total 700.
+- Balances: 99,854 / 99,659 / 1,000,742 / 999,745 credits. Total remained exactly
+  2,200,000 credits in every published economy snapshot.
+- Received 164 complete economy snapshots and 2583 world snapshots.
+
+Native Linux guest with recorded host results:
+- Ran the actual game as p2. Synthetic p1 replayed genuine preceding host states;
+  acknowledgements were explicit test replay, not a second actual host game.
+- Opened the native six-ware menu, used real sliders and confirmed a 20-energy-cell
+  purchase, then a basket selling 5 cells and buying 2 hull parts. Both requests
+  reached the synthetic peer unchanged.
+- Actual final energy-cell stocks matched 30 / 20 / 275 / 415. Own balance 99,659
+  credits; proxy account 99,854. Both containers removed; recorded target damage
+  applied to real guest objects. Received 2518 actual guest position packets.
+- Own undocking remained effective despite deliberately stale legacy WORLD dock
+  flags. Remote corrections no longer forced the local player back into dock.
+- Two engine warnings about a destroyed UI frame occurred during automated menu
+  handling; both orders and subsequent operations continued. Visual behaviour
+  on two real machines still needs observation.
+
+AUTOMATED AND SAVE CHECKS
+The earlier market implementation passed 62 automated tests with none skipped:
+real local UDP, LuaJIT/native Linux I/O, trade hooks, fragments, deduplication,
+startup ordering and installer protections. The current 80-test v5 result is
+recorded in AUTOMATED-TESTS.txt (source: reports/automated-v5-tests.txt).
+All seven pre-existing .xml.gz saves retained SHA256, size and modification time
+at the end of the controlled tests. No test saves were created. Steam cloud
+metadata is separate. Automatic firing/dock/menu fixtures are not shipped.
+
+SHARED SCOPE AND LIMITATIONS
+Two players, two LAN trading stations, six container wares, variable quantities,
+buy/sell/mixed baskets and separate balances. Fixed station prices; host executes.
+The rest of the universe and NPC economy run independently. Additional AI traders,
+build storage, other stations, arbitrary cargo magnets, ship/sector changes,
+PvP/destruction and persistent multiplayer saves are not accepted features.
+Container pickup is the separate COLLECT-CONTAINER command. Partial native
+transactions have no safe automatic rollback. On uncertain outcomes, restart
+both test worlds and the relay before further cargo or trading actions.

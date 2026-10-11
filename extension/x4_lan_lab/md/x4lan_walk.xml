@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_Walk" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Session" namespace="this">
+  <conditions><event_ui_triggered screen="'X4LAN_Walk'" control="'Setup'"/></conditions>
+  <actions>
+   <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+   <set_value name="$objects" exact="[$arena.$ships.{1},$arena.$ships.{2},md.X4LAN_Trade.Market.$markets.{1},md.X4LAN_Trade.Market.$markets.{2}]"/>
+   <create_cue_actor cue="Session" name="$avatar">
+    <select race="race.argon" tags="tag.aipilot"/><name name="'LAN Player %s'.[3 - $arena.$localSlot]"/><owner exact="faction.player"/>
+   </create_cue_actor>
+   <set_entity_traits entity="$avatar" missionactor="true" customhandler="true"/>
+   <set_entity_role entity="$avatar" role="entityrole.passenger"/>
+   <set_entity_overrides entity="$avatar" title="'LAN Player'" icon="'captain'"/>
+   <set_value name="$visible" exact="false"/>
+   <debug_text text="'[X4LAN] WALK_READY: basic avatar for shared ships and stations'"/>
+  </actions>
+  <cues>
+   <cue name="Publish" instantiate="true" checkinterval="0.2s"><conditions><check_value value="true"/></conditions><actions>
+    <set_value name="$context" exact="0"/>
+    <do_if value="not player.occupiedship.exists and not player.spacesuit.exists">
+     <do_all exact="4" counter="$i"><do_if value="$objects.{$i}.isoperational and player.container == $objects.{$i}"><set_value name="$context" exact="$i"/></do_if></do_all>
+    </do_if>
+    <do_if value="$context gt 0">
+     <set_value name="$p" exact="player.entity.relativeposition.{player.container}"/><set_value name="$r" exact="player.entity.relativerotation.{player.container}"/>
+     <raise_lua_event name="'X4LAN_Walk.Pose'" param="'%s|%s|%s|%s|%s|%s|%s'.[$context,$p.x/1m,$p.y/1m,$p.z/1m,$r.yaw/1deg,$r.pitch/1deg,$r.roll/1deg]"/>
+    </do_if>
+    <do_else><raise_lua_event name="'X4LAN_Walk.Pose'" param="'0|0|0|0|0|0|0'"/></do_else>
+   </actions></cue>
+   <cue name="Move" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Walk'" control="'Move'"/></conditions><actions>
+    <set_value name="$v" exact="event.param3"/>
+    <do_if value="$visible"><remove_actor_from_room actor="$avatar"/><set_value name="$visible" exact="false"/></do_if>
+    <do_if value="$v.$context ge 1 and $v.$context le 4">
+     <set_value name="$object" exact="$objects.{$v.$context}"/>
+     <do_if value="$object.isoperational">
+      <add_actor_to_room actor="$avatar" object="$object" result="$visible">
+       <position object="$object" x="$v.$x * 1m" y="$v.$y * 1m" z="$v.$z * 1m"/>
+       <rotation yaw="$v.$yaw * 1deg"/>
+      </add_actor_to_room>
+     </do_if>
+    </do_if>
+   </actions></cue>
+   <cue name="Hide" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Walk'" control="'Hide'"/></conditions><actions>
+    <do_if value="$visible"><remove_actor_from_room actor="$avatar"/><set_value name="$visible" exact="false"/></do_if>
+   </actions></cue>
+  </cues>
+ </cue></cues>
+</mdscript>

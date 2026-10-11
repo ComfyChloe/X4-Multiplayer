@@ -1,0 +1,64 @@
+{
+  "date": "2026-10-10",
+  "game": "9.00 (611726)",
+  "steam_build": "23660954",
+  "actual_os": "Fedora 44 KDE, native Linux X4 via Flatpak Steam",
+  "synthetic_peer": true,
+  "simultaneous_two_game_test": false,
+  "windows_game_tested": false,
+  "automated_tests_passed": 44,
+  "host_snapshot_count": 1551,
+  "host_min_target_shield_percent": [
+    86.2261,
+    76.2087
+  ],
+  "host_commands": [
+    {
+      "slot": "p1",
+      "verb": "PICKUP",
+      "result": "OK"
+    },
+    {
+      "slot": "p2",
+      "verb": "PICKUP",
+      "result": "OK"
+    },
+    {
+      "slot": "p1",
+      "verb": "TRADE",
+      "result": "OK"
+    },
+    {
+      "slot": "p2",
+      "verb": "TRADE",
+      "result": "OK"
+    }
+  ],
+  "host_final_world": [
+    100.0,
+    100.0,
+    50.0,
+    100.0,
+    100.0,
+    50.0,
+    100.0,
+    100.0,
+    100.0,
+    100.0,
+    140.0,
+    0.0,
+    0.0,
+    1.0,
+    1.0,
+    24.0,
+    46.0
+  ],
+  "guest_received_and_applied": true,
+  "guest_min_target_shield_percent": [
+    86.2261,
+    76.2087
+  ],
+  "guest_pose_packets": 1886,
+  "guest_max_fire_counter": 30,
+  "original_save_files_verified_unchanged": 7
+}

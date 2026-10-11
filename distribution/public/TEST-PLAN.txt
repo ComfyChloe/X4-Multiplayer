@@ -1,0 +1,44 @@
+PUBLIC TEST 01 - PLAYTEST CHECKLIST
+All gameplay outcomes remain observations for the testers to report.
+
+Record both OS versions, exact game build, DLC/mod selection, Public Test version,
+network type, selected roles, GPU/CPU, graphics and start time before testing.
+Keep the server open and ensure both games use fresh public profile 45842 worlds.
+
+1. CONNECTION / MOVEMENT
+   Both console slots connected; each player's movement and rotation update on
+   the other computer. Two shared ships, one common 200,000-credit treasury.
+2. TAKEOVER / UNDOCK
+   Dock at Alpha, leave the cockpit, let the other player take the vacant seat.
+   Undock and fly. Confirm the server pilot changes and cargo stays on the ship.
+   Repeat in the opposite direction. Walking-avatar visibility is not required.
+3. DISTANCE / SECTOR CHANGE
+   Fly beyond 50 km and mutual sensor coverage. Rejoin and compare current poses.
+   Pass through the same gate, verify both shared ships in the destination, fly
+   there, then return. Record the first action that stops updates, if any.
+   Sensor visibility alone is not a network measurement. Check the console too.
+4. CARGO
+   Return within 250 m of each ship's assigned container and run
+   6-COLLECT-CONTAINER. Expect 20 Energy Cells per ship and both containers gone.
+   Repeating pickup must not create more cargo. Use the action, not cargo magnet.
+5. TRADE / SHARED MISSION
+   Each ship buys 10 Energy Cells at Alpha for 14 credits each. Wait for completion.
+   Expected: 30 cells per ship, Alpha 280, shared money 199,720.
+   Each ship sells 10 cells to Beta for 17 credits each.
+   Expected: 20 cells per ship, Beta 420, money 200,060, delivery objective 20/20.
+   Destroy both LAN Targets with ship weapons. Compare damage/deaths and mission
+   progress. Expected shared balance 225,060 with no other transactions.
+6. RECONNECT
+   With no trade pending, interrupt the guest network for 40 seconds while keeping
+   both games and relay running. Restore it. Expect automatic reconnect, retained
+   ship authority/cargo and completed mission, and no duplicate ship or reward.
+7. FRIENDLY FIRE / EJECTION / RESPAWN (LAST)
+   Near a friendly accessible station, destroy one occupied ship. Its occupant
+   should eject to a suit, without disconnect. Hit the suit from the surviving
+   ship: expect station respawn without Game Over. Then test takeover/undocking
+   of the surviving vacant ship. No replacement ship or cargo is created.
+
+After core checks succeed, separately test highways, travel drive, passengers,
+extended play and performance in comparable scenes. Record actual rendering FPS
+separately from the console's update/callback rates. Both players' logs are needed
+for a useful failure report. See TEST-REPORT-TEMPLATE.txt.

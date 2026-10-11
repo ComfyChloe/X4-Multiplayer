@@ -1,0 +1,43 @@
+{
+  "status": "PASS for W01 NPC scene milestone only",
+  "game": "9.00 (611726)",
+  "steam_build": "23660954",
+  "native_platform": "Linux",
+  "guest_counterpart": "synthetic Python authority",
+  "host_counterpart": "synthetic Python receiver",
+  "host_baseline_counts": [
+    126,
+    130,
+    131,
+    130,
+    130,
+    130,
+    127,
+    124
+  ],
+  "host_live_position_count": 124,
+  "guest_full_sector_objects": 124,
+  "guest_full_sector_samples": 14,
+  "guest_full_sector_max_position_error_m": 0.004,
+  "native_removal_confirmed": true,
+  "local_player_operational_in_all_samples": true,
+  "metrics": {
+    "host": {
+      "callbacks_hz_min": 57.4,
+      "callbacks_hz_median": 60.96,
+      "callbacks_hz_max": 61.95
+    },
+    "guest": {
+      "callbacks_hz_min": 23.11,
+      "callbacks_hz_median": 60.9,
+      "callbacks_hz_max": 62.99
+    }
+  },
+  "engine_mass_traffic_warnings": 14,
+  "limits": [
+    "Warnings remain during suppression of arriving native NPCs; broader job/mission consequences unverified.",
+    "No native Windows X4 run or simultaneous two-computer test.",
+    "No ordinary cargo, magnet pickup, NPC combat, full economy or save/load acceptance.",
+    "Brief transition interpolation error is expected; position tolerance applies to settled full-sector samples."
+  ]
+}

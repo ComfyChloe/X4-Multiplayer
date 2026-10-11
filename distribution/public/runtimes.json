@@ -1,0 +1,15 @@
+{
+  "version": "3.14.8",
+  "Linux": {
+    "file": "cpython-3.14.8-linux-x64.tar.gz",
+    "url": "https://github.com/astral-sh/python-build-standalone/releases/download/20261009/cpython-3.14.8%2B20261009-x86_64-unknown-linux-gnu-install_only_stripped.tar.gz",
+    "sha256": "ddc902fd26460f728758c67d80417c1031edf97589f1f162c4ba3aa158a35998",
+    "source": "https://github.com/astral-sh/python-build-standalone/releases/tag/20261009"
+  },
+  "Windows": {
+    "file": "python-3.14.8-embed-amd64.zip",
+    "url": "https://www.python.org/ftp/python/3.14.8/python-3.14.8-embed-amd64.zip",
+    "sha256": "a93abe456ab01bd96d7a085b3cdb6566b3063f4241360d114142fbdb07f0a310",
+    "source": "https://www.python.org/downloads/release/python-3148/"
+  }
+}

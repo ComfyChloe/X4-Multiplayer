@@ -1,0 +1,10 @@
+{
+  "two_players_connected": true,
+  "duplicate_start_attached_without_stopping_server": true,
+  "guest_timeout_with_host_still_connected": true,
+  "no_secret_in_status": true,
+  "host_updates_hz": 19.9,
+  "owning_console_stop_publishes_stopped": true,
+  "terminal_ansi_screen_enter_and_restore": true,
+  "test_transport": "real local UDP, packaged launcher, pseudoterminals and synthetic peers; not an X4 gameplay test"
+}

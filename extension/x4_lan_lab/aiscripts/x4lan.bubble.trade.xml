@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="x4lan.bubble.trade" version="1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="aiscripts.xsd">
+<params><param name="ship"/><param name="station"/><param name="request"/><param name="slot"/></params>
+<attention min="unknown"><actions>
+ <request_docking ship="$ship" container="$station" requiretrading="true" queuedresult="$queued" grantedresult="$granted"/>
+ <wait exact="3s"/>
+ <do_if value="$ship.assigneddock"><dock ship="$ship"/></do_if>
+ <wait exact="1s"/>
+ <set_value name="$result" exact="false"/>
+ <set_value name="$before" exact="$ship.cargo.{ware.energycells}.count"/>
+ <do_if value="$ship.dock and $ship.dock.container == $station">
+  <create_trade_offer name="$offer" object="$station" seller="$station" ware="ware.energycells" amount="30" price="10Cr" playeronly="true" virtual="false" virtualmoney="true"/>
+  <execute_trade tradeoffer="$offer" tradepartner="$ship" amount="30" custom="true" result="$result"/>
+ </do_if>
+ <do_if value="$result and $ship.cargo.{ware.energycells}.count == $before + 30">
+  <raise_lua_event name="'X4LAN_Bubble.Result'" param="'%s|OK'.[$request]"/>
+ </do_if>
+ <do_else><raise_lua_event name="'X4LAN_Bubble.Result'" param="'%s|REJECTED'.[$request]"/></do_else>
+ <raise_lua_event name="'X4LAN_Bubble.TradeFinished'" param="$slot"/>
+ <debug_text text="'[X4LAN] HOST_TRADE slot=%s result=%s before=%s after=%s stock=%s'.[$slot,$result,$before,$ship.cargo.{ware.energycells}.count,$station.cargo.{ware.energycells}.count]"/>
+</actions></attention></aiscript>

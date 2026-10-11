@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="x4lan.interaction.fire" version="1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="aiscripts.xsd">
+<params><param name="ship"/><param name="target"/></params>
+<attention min="visible"><actions>
+ <shoot_at object="$ship" target="$target" fixedtarget="true"/>
+ <wait exact="5s"/>
+ <stop_shooting object="$ship"/>
+ <debug_text text="'[X4LAN-TEST] PLAYER_FIRE_SCRIPT_DONE'"/>
+</actions></attention>
+</aiscript>

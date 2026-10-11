@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="x4lan.interaction.trade" version="1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="aiscripts.xsd">
+<params><param name="p1"/><param name="p2"/><param name="station"/></params>
+<attention min="unknown"><actions>
+ <wait exact="3s"/>
+ <set_value name="$ships" exact="[$p1,$p2]"/>
+ <do_all exact="2" counter="$i">
+  <set_value name="$ship" exact="$ships.{$i}"/>
+  <debug_text text="'[X4LAN-TEST] TRADE_BEFORE slot=%s docked=%s cargo=%s stock=%s'.[$i,$ship.dock,$ship.cargo.{ware.energycells}.count,$station.cargo.{ware.energycells}.count]"/>
+  <do_if value="$ship.dock">
+   <create_trade_offer name="$offer" object="$station" seller="$station" ware="ware.energycells" amount="30" price="10Cr" playeronly="true" virtual="false" virtualmoney="true"/>
+   <execute_trade tradeoffer="$offer" tradepartner="$ship" amount="30" custom="true" result="$result"/>
+   <debug_text text="'[X4LAN-TEST] TRADE_AFTER slot=%s result=%s cargo=%s stock=%s'.[$i,$result,$ship.cargo.{ware.energycells}.count,$station.cargo.{ware.energycells}.count]"/>
+  </do_if>
+ </do_all>
+ <debug_text text="'[X4LAN-TEST] TRADE_DONE'"/>
+</actions></attention>
+</aiscript>

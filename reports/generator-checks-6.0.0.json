@@ -1,0 +1,9 @@
+{
+  "reproducible": true,
+  "sha256": {
+    "outputs/x4-lan-lab/extension/x4_lan_lab/md/x4lan_bubble.xml": "5af7ef99186d8c80e88836e9f20129f0e12d1406c2112677069ff36b698fa9ba",
+    "outputs/x4-lan-lab/extension/x4_lan_lab/md/x4lan_trade.xml": "eaf10615a06b50488e1f24f8e10605e1ab368dd65a6df844b87d111827b0200e",
+    "outputs/x4-lan-lab/extension/x4_lan_lab/aiscripts/x4lan.bubble.trade.xml": "3006af46bfac0311bb214bdc869adbf97b11dd1d3d985abea0a82635c3b8f65d",
+    "outputs/x4-lan-lab/extension/x4_lan_lab/aiscripts/x4lan.market.trade.xml": "52c24c5ed14514304935f87c8933931fc34123ca177afe761792dfa36fd32a58"
+  }
+}

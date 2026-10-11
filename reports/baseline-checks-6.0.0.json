@@ -1,0 +1,10 @@
+{
+  "samples": 47,
+  "callbacks_median_hz": 15.79,
+  "callbacks_min_hz": 2.87,
+  "callbacks_max_hz": 20.18,
+  "maxgap_median_ms": 71.16,
+  "settling_seconds": 30,
+  "finish_after_seconds": 80,
+  "scope": "Fresh native creative world; LAN gameplay and networking disabled, no LAN fixtures. Same 1080p exclusive Low test profile and disabled third-party selection. UI callback timing, not measured rendering FPS."
+}
