@@ -1,0 +1,16 @@
+{
+  "date": "2026-10-11",
+  "source_commit": "05512986e025c4f7e37c3188bde78b0da0acbb9c",
+  "repository": "https://github.com/Lith7ium/X4-Multiplayer",
+  "visibility_verified": "private",
+  "verification": "Fresh authenticated clone; new .venv created by dev/bootstrap.py; dev/check.py run without prior working-tree dependencies",
+  "platform": "Bazzite Linux x86_64, Python 3.14.7",
+  "test_count": 162,
+  "failures": 0,
+  "errors": 0,
+  "skips": 0,
+  "lupa": "2.8 LuaJIT",
+  "laptop_os_user_report": "Fedora",
+  "actual_laptop_access": false,
+  "laptop_existing_folder": "Not modified; use new sibling checkout until any local changes are preserved."
+}

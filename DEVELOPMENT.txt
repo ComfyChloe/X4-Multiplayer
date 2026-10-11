@@ -5,6 +5,19 @@ Current work: internal 7.0.0 / W01 NPC scene synchronization.
 Read CONTINUE-HERE.txt before changing gameplay. Public Test 01 is withheld.
 
 FIRST CHECKOUT (Fedora, Bazzite or another Linux development machine)
+For this private repository, Git needs its own GitHub authentication. Being
+signed into Firefox alone is not sufficient. If this laptop is not configured,
+use GitHub CLI's browser flow:
+  gh auth login --hostname github.com --git-protocol https --web
+  gh auth setup-git
+On standard Fedora, install missing tools with:
+  sudo dnf install git gh python3 python3-pip
+Do not use that OS-install command on Bazzite or Fedora Atomic variants; use
+their supported package workflow. A configured SSH/PAT workflow also works.
+GitHub passwords do not authenticate HTTPS Git operations.
+References: https://cli.github.com/manual/gh_auth_login
+            https://packages.fedoraproject.org/pkgs/gh/gh/
+
 1. Keep any existing project folder unchanged until local edits are secured.
    Clone into a new sibling folder:
      git clone https://github.com/Lith7ium/X4-Multiplayer.git X4-Multiplayer-current
