@@ -1,4 +1,10 @@
-CURRENT DEVELOPMENT HANDOFF - 11 OCTOBER 2026
+CURRENT DEVELOPMENT HANDOFF - 17 OCTOBER 2026
+
+The real two-computer 7.0 playtest is still PENDING (user update, 17 October).
+INTERNET-HOSTING-ANALYSIS.txt evaluates VPN/remote relay and an unattended X4
+authority, GPU requirements, Hetzner candidates and staged feasibility tests.
+This is research only; it does not implement a server mode or change the 7.0
+candidate, installation or acceptance evidence below.
 
 7.0.0 INTERNAL W01 adds an original NPC scene transport and engine adapter.
 The user requires a shared universe. W01 is progress, not completion of that goal.

@@ -1,0 +1,389 @@
+X4 MULTIPLAYER - INTERNET AND DEDICATED SIMULATION HOST FEASIBILITY
+17 October 2026 | INTERNAL RESEARCH | Mod 7.0.0 / W01
+Source baseline: 0ca6edbea438617d3044fd1e3f12e6e431c4ae7f
+
+DECISION SUMMARY
+
+Internet connectivity and a dedicated universe simulator are separate changes.
+Private Internet play can first use an encrypted virtual LAN, with X4 still
+running on a player's computer. A rented relay/VPN host needs no GPU. Neither
+approach completes the shared universe that W01 currently only begins to mirror.
+
+The proposed unattended simulation host is a plausible research direction:
+run a full X4 process on a separate computer, make that process the world
+authority, and connect two human players as clients. It is not an implemented
+deployment option in 7.0.0. A documented, supported X4 dedicated/headless runtime
+was not established by this research. Plan around the full game executable until
+a renderer-free mode is actually demonstrated or provided by Egosoft.
+
+A powerful gaming GPU is not necessarily required for an unattended game at low
+rendering settings, but a basic server display adapter is not equivalent to a
+Vulkan-capable GPU. A modern integrated GPU is a candidate for experiments, not a
+verified minimum. The crucial risks are engine authority and simulation detail
+around remote players, followed by unattended operation and measured performance.
+
+The real two-computer 7.0 playtest remains PENDING, as confirmed by the user on
+17 October. This analysis changes no gameplay, packages, installed extensions,
+test acceptance, or public-release status. Public Test 01 remains withheld.
+
+1. WHAT EXISTS AND WHAT HAS NOT BEEN PROVED
+
+The Python relay authenticates sessions, routes selected state, arbitrates pilot
+ownership, and caches sector baselines. It does not execute X4's NPC AI, economy,
+physics or mission simulation. Those systems require the host X4 process.
+
+W01 provides NPC scene baselines and movement, with experimental suppression of
+independent guest NPCs in the guest's current sector. It does not establish
+shared ordinary cargo/magnet interactions, NPC combat, equipment, station
+production, faction changes or arbitrary missions. Moving the relay to a data
+center cannot fill in those missing systems. Clients still run full X4 processes;
+reduced client CPU/RAM consumption has not been demonstrated.
+
+Existing native evidence consists of a Linux host and a Linux guest, each tested
+against a synthetic counterpart. Host captures contained 124-131 NPCs; the guest
+replayed 124. This is not a two-human, Windows/Linux, WAN, unattended-server,
+integrated-GPU, or long-running simulation benchmark. No new runtime tests were
+performed for this document. See ARCHITECTURE.md and WORLD-SYNC-REQUIREMENTS.txt.
+
+2. ARCHITECTURE OPTIONS
+
+A. Player-hosted X4 over a private VPN
+   One player runs the authoritative X4 instance and the relay. Both peers use
+   the VPN IPv4 address. Existing ZeroTier-compatible LAN transport can be used
+   as the starting point; WireGuard is another encrypted transport option [1,2].
+   Benefits: lowest architectural change, no additional X4 host or GPU rental.
+   Costs: host must remain online; home uplink and WAN latency affect play.
+   Verdict: preferred first Internet test, after the pending local playtest.
+
+B. Rented relay/VPN hub, X4 authority remains on a player's PC
+   Both game endpoints connect to a stable server address. The relay can run
+   on a small Linux VM; X4 still runs at home. A VPN hub and an application relay
+   are separate roles, although they can share one VM.
+   Benefits: stable reachable endpoint; avoids requiring an inbound game port
+   on either home router in the hub topology, including typical CGNAT setups.
+   Costs: an extra network path and ongoing hosting; the world stops with the
+   player's X4. Restrictive networks can still block outbound UDP/VPN traffic.
+   Verdict: practical when home reachability is the problem; no GPU required.
+
+C. Unattended full X4 as dedicated world authority (the user's proposal)
+   Target topology:
+
+     Player A: X4 client <-- encrypted transport --> rented server
+     Player B: X4 client <-- encrypted transport -->   relay + X4 authority
+                                                       + authoritative save
+
+   There are three X4 processes for two human players. The server has no human
+   pilot, but the normal engine may still require an internal player/avatar and
+   graphics context. Clients render their own views; this is state replication,
+   not remote video streaming. There is no need to render one video per client.
+   Benefits: independent uptime, one persistent world, neither player must host.
+   Costs: additional game installation, graphics-capable machine, service
+   supervision, and substantial authority/client changes described below.
+   Verdict: worth an isolated prototype; not ready to rent and deploy as 7.0.
+
+D. A truly headless simulator without the normal X4 graphics runtime
+   Ideally this would remove the GPU requirement. No supported runtime or API
+   sufficient for this was verified in the official material consulted [3,4,5].
+   An external Python program cannot simply take over the engine simulation.
+   Reimplementing economy, AI, physics, missions and saves is a separate engine
+   project; disabling rendering through undocumented hooks is also a major,
+   version-sensitive experiment. Existing native UDP code provides no such mode.
+   Verdict: do not make this a prerequisite for the first Internet milestone.
+
+Multiple independent X4 authorities, one per sector, would add cross-sector
+ownership transfer and conflicting economy/mission state. That is not a simple
+way around option C's engine limitations. Keep one world authority initially.
+
+3. REQUIRED CHANGES FOR AN UNATTENDED AUTHORITY
+
+Separate authority from human identity.
+  Session, CoopSession and UniverseSession currently hard-code p1/p2; p1 owns
+  world publication and p2 owns the single guest interest request. The game
+  adapter initially requires a valid player controlling a ship. Merely parking
+  p1 on the server leaves only one remote player slot. Introduce a distinct
+  authority role, two human identities, per-client interest/baseline delivery,
+  and independent ship possession. Check MD setup, quests, HUD, death/respawn,
+  cargo, trading, launcher/configuration and diagnostics for p1 assumptions.
+
+Establish one authoritative world and control competing client simulation.
+  Extend identity/generation, spawn/removal and state replication to ordinary
+  drops, NPC equipment and damage, stations and economy. Validate player intent
+  on the authority and commit each inventory/ownership transaction once. Guest
+  visuals and local prediction cannot become a second source of truth. Current
+  sector NPC deletion is not a verified general-purpose replica mode.
+
+Resolve attention and remote-player physics before assuming feasibility.
+  The installed X4 9.00 engine schema distinguishes attention levels. In
+  libraries/common.xsd, the shoot action requires visible attention; collision
+  response actions are also attention-dependent. This is direct engine-owned
+  documentation, not evidence that our adapter can change those levels.
+
+  Consequently, keeping the server's internal observer in empty space cannot
+  be assumed to provide detailed combat, collision and docking where clients
+  are playing. Test two humans in separate sectors while the server observer
+  is elsewhere. Sector enumeration and visible replicas do not prove correct
+  simulation there. Determine whether multiple relevant regions can receive
+  adequate simulation detail through available interfaces, and at what cost.
+
+  If this fails, a same-area prototype may still be useful, but it does not meet
+  the unrestricted shared-universe requirement. Alternatives would need explicit
+  engine support or a carefully validated interaction/physics layer. Delegating
+  combat to a client also changes trust and consistency; it is not a free fix.
+
+Make game execution a recoverable service.
+  Prove automatic startup/load of an isolated server world, a graphics session
+  without an attached monitor, operation after the administrator disconnects,
+  and absence of unintended pause/focus throttling. Measure game-time progress
+  and applied state, not just an open UDP port or a live process.
+
+  Normal saves alone are insufficient: persist a consistent world/session epoch,
+  object identities and committed transaction history with the game state, or
+  explicitly rebuild them under a new epoch and reject stale client commands.
+  Add late join, resynchronization, crash recovery and backup/restore tests.
+  Today, restarting a game or relay requires fresh test worlds. Existing test
+  launchers intentionally disable autosave; they are not persistent-server tools.
+
+  Define whether the universe continues with zero connected humans. Continuous
+  economy and wars versus pause-on-empty are gameplay choices, not just uptime
+  settings. Saves and deliberate pauses need a protocol state so clients do not
+  mistake them for failure or keep submitting actions into a stopped world.
+
+4. INTERNET TRANSPORT WORK
+
+For invited internal testers, keep the current protocol inside an authenticated,
+encrypted VPN. The source sends a shared session token and bearer leases over
+plaintext UDP; Adler checks detect corruption, not malicious packet modification.
+Do not equate that with a protocol hardened for an unrestricted public UDP port.
+Use existing VPN cryptography, rather than implementing custom encryption [1,2].
+
+Beyond private tests, add per-player credentials and authority permissions,
+replay protection across epochs, bounded per-peer work/queues and rate limits,
+validated commands, and careful handling of malformed or flooding clients.
+A VPN protects transit and admission; it does not make a malicious admitted
+client's actions valid. Broader public release remains a separate decision.
+
+Native transport currently accepts numeric IPv4 only (AF_INET / inet_pton).
+An IPv4 VPN endpoint is enough for the first tests. DNS names and native IPv6,
+endpoint changes, NAT keepalives/rebinding and usable reconnect diagnostics
+require explicit work. A rented relay needs a suitable routable endpoint and
+firewall configuration; a cloud private-network address alone is not reachable
+from home. Launchers must configure both games for the remote relay instead of
+assuming it is on the host PC, and expose no local session secrets in logs.
+
+WAN quality must be measured rather than inferred from LAN success:
+- Delayed, duplicated, reordered and lost packets; different latency per player.
+- Adaptive interpolation for movement, bounded extrapolation and reconciliation.
+- Reliable ordered lifecycle/inventory operations independent of lossy movement.
+- Congestion-aware bandwidth budgets, fair priorities and baseline progress.
+- Engine-applied acknowledgements/readback where correctness matters; a transport
+  ACK currently proves receipt, not successful engine application.
+
+W01 limits illustrate why port forwarding alone is not acceptance:
+- Relay tick is 20 Hz; motion allows 12 records per tick, shared across a sector.
+  At saturation, 240 records/s divided among 124 ships is about 1.94 updates/s
+  per ship, not 20. With 500 ships it is about 0.48. These are ideal arithmetic
+  ceilings for that channel, not measured sustained rates or smoothness claims.
+- Its 768-byte packet cap gives a ceiling of about 184 kB/s (1.47 Mbit/s) for
+  240 maximum-sized motion packets/s on one leg. Actual packets vary; baselines,
+  other channels, acknowledgements, encryption and headers add traffic. This is
+  not a total server bandwidth requirement. Egress grows with interested clients.
+- Baselines use a 12-packet ACK window and 250 ms retry. At an illustrative
+  80 ms path RTT, a continuously full window implies roughly 150 acknowledged
+  packets/s before loss/processing overhead. Host-to-relay and relay-to-guest
+  transfers have separate delays. Measure actual baseline completion times.
+- 4096 objects per baseline and eight cached sectors are current bounds, not
+  evidence of scalability to the whole universe or multiple player interests.
+
+Use nearby-player/combat priorities and lower-rate distant world summaries.
+One shared universe does not require transmitting every object's pose every
+frame. It does require one authoritative outcome and correct reconciliation.
+
+5. GPU, CPU AND OPERATING SYSTEM
+
+Relay/VPN only: no GPU or X4 installation needed. A 1-2 vCPU, 2 GB RAM Linux VM
+is a reasonable two-player experiment, not a measured W01 capacity guarantee.
+The historical small 6.0 fixture relay benchmark excludes the W01 NPC stream,
+VPN and game process and cannot size a universe server.
+
+Full X4 authority: budget for a supported Vulkan GPU/driver combination, even
+without a human looking at the display. A console framebuffer, BMC/IPMI VGA or
+virtual VGA device does not by itself supply that. A virtual display/Xvfb does
+not remove graphics calls or create GPU acceleration. CPU software rendering,
+even if it starts, competes with simulation CPU and is not a proven solution.
+
+Low resolution, low detail and a restrained render rate may reduce GPU demand.
+They must not starve this mod's onUpdate-driven networking or change simulation
+speed. Test 60/30/20 FPS settings as experiments, including minimized/unfocused
+operation, and measure callbacks and simulation time. Do not assume 1 FPS or a
+hidden window is safe. A fast empty-sector idle test is insufficient.
+
+The Steam product page currently lists GTX 1060 / RX 5300 or equivalent and
+Vulkan 1.4, including Linux [3]. Egosoft's 1 July 2026 announcement describes
+the Vulkan 1.4 transition as planned for the next major update AFTER 9.00 [4].
+Our recorded native tests used X4 9.00 (611726), Steam build 23660954, with mod
+7.0.0. Keep these version numbers distinct. Pin the exact game/DLC/mod build
+and verify its real driver requirements; a current storefront requirement is
+not proof that an older pinned binary already requires the new API.
+
+A modern integrated GPU could be sufficient at reduced rendering load, but no
+integrated-GPU minimum or equivalent supported configuration has been proved.
+Check hardware Vulkan features, driver, usable/shared graphics memory and
+sustained performance together. More GPU compute cannot fix authority gaps.
+
+For the full-game prototype, start with a modern x86-64 desktop-class CPU with
+strong per-core performance, roughly 6-8 cores, 32 GB RAM and NVMe storage with
+room for the game, DLC, saves and backups. This is a conservative experimental
+starting point, not a validated minimum. Large saves, active sectors, AI and
+replication may change it substantially. Benchmark steady game-time progress,
+CPU per core, RAM, GPU/VRAM, callbacks and applied-state delay together. Server
+core count or GPU AI-TOPS alone is not a useful X4 performance prediction.
+
+Native Linux is the first candidate because existing engine probes ran there.
+Windows clients can still connect to a Linux authority. Egosoft provides official
+9.00 NoSteam executables for Windows and Linux to eligible owners [5], which may
+help unattended startup without Steam running. NoSteam is not headless; verify
+native API/build compatibility and use an appropriately licensed installation.
+
+6. HETZNER FEASIBILITY AND COST
+
+Ordinary Cloud VM [6,7]
+  Suitable candidate for the Python relay/VPN. The reviewed Cloud offering does
+  not establish an X4-capable GPU configuration; do not buy an ordinary VPS on
+  the assumption its remote console can run X4. More dedicated vCPUs do not
+  establish GPU access. For the game choose x86-64, not an ARM CAX instance.
+  Choose region by measured player-to-authority latency and jitter. Check current
+  capacity, IPv4 charges and traffic terms when configuring a trial.
+
+Dedicated AX42 with Ryzen 7 PRO 8700GE [8,9]
+  Hetzner lists 64 GB RAM and NVMe; AMD specifies a Radeon 780M in that processor.
+  This makes it an interesting integrated-GPU candidate. The CPU specification
+  alone does not guarantee the provider exposes/enables the GPU or that X4 will
+  meet our targets. Before a rental, confirm BIOS/device access and graphics
+  memory configuration, then test Vulkan and X4 with the intended drivers.
+  The reviewed product text does not guarantee this X4 use case. No tested AX42
+  result or current checkout price is claimed here.
+
+Dedicated GEX45 [10,11]
+  Explicit graphics hardware: RTX PRO 4000 Blackwell SFF, 24 GB VRAM, i5-13500,
+  64 GB RAM and 2 x 512 GB NVMe. This is a credible full-game hardware candidate,
+  subject to Linux driver and engine testing; it is not a certified X4 server.
+  The product page lists Helsinki. Measure the path from both players.
+  Hetzner's 1 September 2026 announcement quotes EUR 214/month plus EUR 209
+  one-time setup, excluding VAT. Treat these as published price references,
+  not a verified checkout quote or a reason to rent before proving the engine.
+  It is substantially more hardware and cost than a relay needs.
+
+Other GPU models
+  The GEX63 announced on 6 October 2026 costs EUR 999/month plus EUR 999 setup,
+  excluding VAT, and includes a 96 GB GPU [12]. Its AI capacity is not evidence
+  of better value for this mod. An expensive GPU server should not be the first
+  experiment when the main open questions are simulation interfaces.
+
+Operational detail [13,14]
+  Hetzner documents nomodeset in standard dedicated-server images. Graphics
+  initialization and drivers therefore need deliberate setup. GPU-server docs
+  list an HDMI emulator as an option, which can help a display-dependent setup;
+  it supplies no rendering power. GPU access and continued operation after the
+  remote desktop disconnects must be tested. A root server is self-administered.
+
+Practical assessment: Hetzner can host the relay and offers plausible hardware
+for an unattended X4 instance. It cannot supply a missing X4 multiplayer server
+mode. Validate the software locally, then compare an exposed modern iGPU with
+a GPU rental. No provider was contacted and no paid service was ordered.
+
+7. PROPOSED EXPERIMENTS AND DECISION GATES
+
+Gate 0 - Preserve the pending 7.0 acceptance test.
+  Run the existing real Windows/Linux visibility, movement and sector-return
+  playtest first. Its success would validate W01's stated scope only, not full
+  universe authority. Do not change that candidate to add hosting experiments.
+
+Gate 1 - Private WAN transport using the existing authority model.
+  Test through an encrypted overlay; add a small remote relay only if useful.
+  Suggested laboratory matrix: RTT 20/80/150 ms; jitter 0/10/30 ms; packet loss
+  0/1/3%; reordering; 5/30/60-second outages. Record actual path characteristics,
+  per-entity update age, baseline transfer time and engine application delay.
+  These are proposed test conditions, not already achieved service targets.
+
+Gate 2 - Separate server authority in an isolated internal prototype.
+  Two actual game clients plus a third unattended game, with no human occupying
+  the authority's player slot. Prove initial join, both players' ownership and
+  interaction requests. One dummy host plus one human is insufficient evidence.
+
+Gate 3 - Prove world correctness and multi-region simulation.
+  Both humans in one sector, then separate sectors; server observer elsewhere.
+  Probe attention, firing/hit outcomes, destruction, docking, cargo and economy.
+  Ordinary Energy Cell drops must be visible and collectible with the normal
+  magnet, from either client, without duplication on retries or simultaneous
+  pickup. Resolve attention limitations before calling the topology viable for
+  unrestricted play. This gate builds on unfinished shared-universe work.
+
+Gate 4 - Reduce rendering and prove service recovery.
+  Measure representative busy scenes and saves, not only an idle start. Test
+  display disconnect, focus changes, low settings, GPU alternatives and 8-24 h
+  unattended operation. Verify game-time progression, bounded memory growth,
+  pause-on-empty policy, save/reload, crashes, late join and stale-command rejection.
+
+Gate 5 - Short provider trial after the relevant local gates pass.
+  Confirm exact device access and total price before ordering. Repeat critical
+  tests on the chosen machine and network. Select the least expensive option
+  that meets measured targets. Package a server role separately from players
+  only after it works; public packages still require an explicit user request.
+
+The early gates can invalidate the unattended-host approach without paying for
+GPU hosting. The same authority and WAN work remains useful for a player-hosted
+alternative. No reliable calendar estimate for unrestricted dedicated hosting
+can be made before the attention and client-simulation gates are resolved.
+
+SOURCE MAP AND REFERENCES (consulted 17 October 2026)
+
+Repository evidence, at the baseline commit above:
+  x4lan/host.py: Session/Relay, plaintext token handshake, p1/p2, AF_INET, 20 Hz.
+  x4lan/coop.py: two-ship ownership and p1 authority assumptions.
+  x4lan/universe.py: UniverseSession, one p2 interest, bounds/window/retry/motion.
+  native/net.c: numeric IPv4 UDP transport; no simulator or graphics bypass.
+  extension/x4_lan_lab/ui/bubble_game.lua: frame, player/ship gates, onUpdate.
+  extension/x4_lan_lab/ui/universe_game.lua: enumeration, replicas, sector scope.
+  reports/world1-native-checks.json and reports/release-7.0.0-checks.txt: measured
+    evidence and limits, including synthetic counterparts.
+  ARCHITECTURE.md; WORLD-SYNC-REQUIREMENTS.txt; DEVELOPMENT.txt.
+
+Local engine-owned reference (not redistributed with this document):
+  ../../preparation/game-schemas/libraries/common.xsd, X4 9.00:
+  attentionlookup / attentionexprlookup; event_object_changed_attention;
+  shoot; disable_collision_response / enable_collision_response.
+
+External primary sources:
+[1] ZeroTier protocol: encrypted virtual Ethernet and peer discovery.
+    https://docs.zerotier.com/protocol/
+[2] WireGuard: encrypted VPN transport, not a game synchronization system.
+    https://www.wireguard.com/
+[3] Egosoft's Steam product listing: current Windows/Linux requirements.
+    https://store.steampowered.com/app/392160/X4_Foundations/
+[4] Egosoft, 1 July 2026: planned post-9.00 Vulkan 1.4 requirements change.
+    https://www.egosoft.com/news/archive/2026July_en.php
+[5] Egosoft official NoSteam downloads, including X4 9.00 Linux/Windows.
+    https://www.egosoft.com/download/x4/bonus_en.php
+[6] Hetzner Cloud product overview: shared/dedicated vCPU plans.
+    https://www.hetzner.com/cloud/
+[7] Hetzner Cloud hardware/virtualization FAQ, including ARM/x86 distinction.
+    https://docs.hetzner.com/cloud/technical-details/faq/
+[8] Hetzner AX42 hardware listing.
+    https://www.hetzner.com/dedicated-rootserver/ax42/
+[9] AMD Ryzen 7 PRO 8700GE specification, including Radeon 780M.
+    https://www.amd.com/en/products/processors/desktops/ryzen-pro/8000-series/amd-ryzen-7-pro-8700ge.html
+[10] Hetzner GEX45 hardware and location.
+    https://www.hetzner.com/dedicated-rootserver/gex45/
+[11] Hetzner GEX45 announcement, 1 September 2026, price reference excluding VAT.
+    https://www.hetzner.com/pressroom/hetzner-expands-its-gpu-portfolio-with-the-gex45/
+[12] Hetzner GEX63 announcement, 6 October 2026, price reference excluding VAT.
+    https://www.hetzner.com/pressroom/hetzner-expands-gpu-portfolio-with-new-gex63-featuring-nvidia-rtx-pro-6000-blackwell-max-q/
+[13] Hetzner dedicated-server standard images, including nomodeset.
+    https://docs.hetzner.com/robot/dedicated-server/operating-systems/standard-images/
+[14] Hetzner GPU-server configurations and add-ons, including HDMI emulator.
+    https://docs.hetzner.com/robot/dedicated-server/server-lines/gpu-server/
+
+Distinguish documented facts, code-derived constraints and proposed experiments.
+The absence of a verified headless interface is an implementation uncertainty,
+not proof that an undocumented engine modification is impossible. No code from
+another multiplayer project was used or incorporated for this analysis.
