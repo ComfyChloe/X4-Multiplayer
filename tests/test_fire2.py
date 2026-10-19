@@ -243,6 +243,40 @@ class Fire2AdapterTests(unittest.TestCase):
 
     # --- authority ---
 
+    def test_delayed_nav_reset_cannot_move_resume_boundary_backwards(self):
+        for packet_first in (False, True):
+            with self.subTest(packet_before_resumed_frame=packet_first):
+                l = self.make()
+                l.globals().packet_first = packet_first
+                l.execute('''
+                 nav2(1,50,0);fire2(1,50,1,1,0,0)
+                 paused=true;now=10.12;frames.onUpdate()
+                 paused=false;now=13
+                 if not packet_first then frames.onUpdate() end
+                 nav2(2,51,0) -- Delayed sample resets offset from -40 to -38.
+                 fire2(2,51.05,1,1,1,0);now=13.21;frames.onUpdate()
+                 assert(C.remote[2].track.offset==-38)
+                 assert(C.resumeCutoffs[2].cutoff==53 and #fires('Fire2')==0)
+                 -- Another pause with the delayed mapping cannot lower the cutoff.
+                 paused=true;now=13.25;frames.onUpdate();paused=false;now=13.3;frames.onUpdate()
+                 assert(C.resumeCutoffs[2].cutoff==53)
+                 now=13.4;nav2(3,53.4,0);fire2(3,53.4,1,1,2,0)
+                 now=13.61;frames.onUpdate()
+                 assert(#fires('Fire2')==1 and fires('Fire2')[1].primary)
+                ''')
+
+    def test_unknown_resume_mapping_waits_for_nav_baseline_then_allows_new_edges(self):
+        l = self.make()
+        l.execute('''
+         paused=true;now=10.12;frames.onUpdate();paused=false;now=13;frames.onUpdate()
+         fire2(1,50,1,1,0,0);fire2(2,50.05,1,1,1,0)
+         assert(#C.fire2[2].events==0 and #fires('Fire2')==0)
+         now=13.1;nav2(1,53,0);fire2(3,52.9,1,1,2,0);frames.onUpdate()
+         assert(C.resumeCutoffs[2].cutoff==53 and #fires('Fire2')==0)
+         now=13.3;nav2(2,53.2,0);fire2(4,53.2,1,1,3,0)
+         now=13.51;frames.onUpdate();assert(#fires('Fire2')==1)
+        ''')
+
     def test_epoch_change_clears_fire2_and_rebaselines(self):
         l = self.make()
         l.execute('''

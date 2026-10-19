@@ -41,19 +41,35 @@ local function stopFire2(i)
  if q and (q.on[1] or q.on[2]) then AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,primary=false,secondary=false}) end
  if q then q.on={false,false};q.deadline={0,0};q.events={} end
 end
--- Session pause boundary. Checked in receive and in the frame, so a resume is seen before any
--- packet of the resume frame is queued. resumeAt is local time; per entity it maps to the
--- peer's NAV2 source clock. Without a track the mapping is unknown and all history is old.
+-- Freeze source-clock boundaries before NAV2 can reset its motion offset. They
+-- belong to an authority epoch, independently of FIRE2 baselines and motion tracks.
 local function pauseBoundary(now)
  if A.paused() then c.wasPaused=true;return true end
- if c.wasPaused then c.wasPaused=false;c.resumeAt=now end
+ if c.wasPaused then
+  c.wasPaused=false;c.resumeAt=now;c.resumeCutoffs=c.resumeCutoffs or {}
+  for i=1,2 do
+   local r=c.remote[i];local old=c.resumeCutoffs[i]
+   local floor=old and old.epoch==c.epochs[i] and old.cutoff or nil
+   local cutoff=r and r.track and r.track.offset and now-r.track.offset or nil
+   c.resumeCutoffs[i]={epoch=c.epochs[i],floor=floor,
+    cutoff=cutoff and math.max(cutoff,floor or -math.huge) or nil}
+  end
+ end
  return false
 end
 local function resumeCutoff(i)
  if not c.resumeAt then return nil end
- local r=c.remote[i]
- if r and r.track and r.track.offset then return c.resumeAt-r.track.offset end
- return math.huge
+ local b=c.resumeCutoffs[i]
+ if not b or b.epoch~=c.epochs[i] then b={epoch=c.epochs[i]};c.resumeCutoffs[i]=b end
+ if not b.cutoff then
+  -- Until a source mapping exists, consume counters without playback. The
+  -- first mapped NAV2 sample is also a baseline, never a historical fire edge.
+  local r=c.remote[i];local track=r and r.track;local last=track and track.samples[#track.samples]
+  if track and track.offset and last then
+   b.cutoff=math.max(b.floor or -math.huge,c.resumeAt-track.offset,last.time)
+  end
+ end
+ return b.cutoff or math.huge
 end
 function c.stopFire()
  for i,r in pairs(c.remote) do
@@ -87,6 +103,7 @@ function c.prepare(now)
  c.lastFrame=now
 end
 function c.receive(f,now)
+ pauseBoundary(now) -- Client packets arrive before coop.frame, including NAV2.
  if f[1]=='AUTH' then
   if #f~=10 then return true end
   local revision=integer(f[4]);if not revision or revision<c.revision then return true end
