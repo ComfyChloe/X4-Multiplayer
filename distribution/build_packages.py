@@ -34,7 +34,7 @@ def build(destination: Path):
             raise RuntimeError('Record checks for this exact release before packaging: ' + str(report))
     destination.mkdir(parents=True, exist_ok=False)
     session = {'token': secrets.token_hex(16), 'build': 'world1-' + release + '-9.00-steam' + BUILD,
-               'bubble': 'world-01', 'port': 45841, 'coop': True,
+               'bubble': 'world-01', 'port': 45841, 'coop': True, 'fire2': True,
                'world_sync': True, 'world_mode': 'replica'}
     pair_id = 'lan-' + secrets.token_hex(8)
     folders = []

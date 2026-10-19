@@ -23,9 +23,11 @@ def check(folder):
             meta=json.loads(z.read(prefix+'package.json'));session=json.loads(z.read(prefix+'session.json'))
             assert meta['channel']=='internal' and meta['test_profile']=='45841'
             assert session['world_sync'] and session['world_mode']=='replica'
+            assert session['fire2'] is True
             assert session['build'].startswith('world1-') and session['port']==45841
             cfg=z.read(prefix+'extension/x4_lan_lab/ui/config.lua').decode()
             assert 'world_sync = true' in cfg and 'world_mode = "replica"' in cfg
+            assert 'fire2 = true' in cfg
             assert re.search(r'\btoken = "'+session['token']+'"',cfg)
             assert not any(n.endswith('_probe.lua') or '_probe.xml' in n or '/dev_' in n for n in names)
             for name in ('WORLD-SYNC-TEST.txt','RELEASE-CHECKS.txt','AUTOMATED-TESTS.txt'):

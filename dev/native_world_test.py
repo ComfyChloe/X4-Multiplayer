@@ -60,10 +60,16 @@ def install(slot, shared_ship=False):
                              enabled='true' if id == 'x4_lan_lab' or id.startswith('ego_dlc_') else 'false')
     ET.ElementTree(content).write(PROFILE / 'content.xml', encoding='utf-8', xml_declaration=True)
     cfg = dict(token=secrets.token_hex(16), build='world1-9.00-steam23660954', bubble='world-dev',
-               port=45843, coop=True, world_sync=True, world_mode='replica')
+               port=45843, coop=True, fire2=True, world_sync=True, world_mode='replica')
     if shared_ship:
         cfg.update(ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental', ship_weapons=6)
     (HERE / 'native-session.json').write_text(json.dumps(cfg, indent=2))
+    # copytree overlays production files; opt-in MD probes from an earlier run
+    # must not survive and silently seed/mutate a later disposable test world.
+    for probe in (SOURCE / 'dev').glob('*probe.*'):
+        subdir = {'.lua': 'ui', '.xml': 'md'}.get(probe.suffix)
+        if subdir:
+            (TARGET / subdir / probe.name).unlink(missing_ok=True)
     shutil.copytree(SOURCE / 'extension/x4_lan_lab', TARGET, dirs_exist_ok=True)
     values = dict(enabled=True, bubble_actions=True, trading=True, walking_avatars=False,
                   test_profile='45841', host='127.0.0.1', slot=slot, mode='proxy',
