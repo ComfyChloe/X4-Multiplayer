@@ -111,3 +111,22 @@ class DisplayIdentityTests(unittest.TestCase):
       assert(market and player,'delayed fixture cannot stop other identities')
      else assert(I.bound['33'] and I.bound['33'].name=='Market','queued identity binds when the fixture arrives') end
     ''')
+
+ def test_new_host_epoch_accepts_its_first_identity_after_high_old_sequence(self):
+  l=LuaRuntime(unpack_returned_tuples=True)
+  l.execute('''
+   local ffi={C={GetObjectIDCode=function() return 'LOCAL-001' end},cdef=function() end}
+   require=function() return ffi end;DebugError=function() end;RegisterEvent=function() end
+   X4LAN_CONFIG={world_sync=true,slot='p2'}
+   X4LAN_BUBBLE_API={state={},universe={latest={epoch='old'},receive=function() end,frame=function() end}}
+  ''')
+  l.execute((UI/'universe_protocol.lua').read_text());l.execute((UI/'identity_game.lua').read_text())
+  l.execute('''
+   local U=X4LAN_BUBBLE_API.universe;local I=X4LAN_BUBBLE_API.identity
+   local f={'IDENT','1','lease','old','100','P','1','OLD-001','4f6c64','1','1'}
+   U.receive(f,1);assert(I.rows.P1.seq==100)
+   U.latest.epoch='new';f[4]='new';f[5]='1';f[8]='NEW-001';f[9]='4e6577'
+   U.receive(f,2);assert(I.rows.P1.name=='New' and I.rows.P1.epoch=='new')
+   f[4]='old';f[5]='101';f[8]='OLD-001';U.receive(f,3)
+   assert(I.rows.P1.code=='NEW-001','old epoch must not overwrite the new identity')
+  ''')

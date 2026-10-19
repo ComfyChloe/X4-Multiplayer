@@ -70,8 +70,8 @@ function U.receive(f,now)
    not f[8]:match('^[A-Z0-9-]+$') or #f[8]>32 or (f[10]~='0' and f[10]~='1') or (f[11]~='0' and f[11]~='1') then return true end
  local name=decode(f[9]);if not name or name:find('[%z\1-\31\127]') then return true end
  local k=scope..id;local old=I.rows[k]
- if old and seq<=old.seq then return true end
- I.rows[k]={scope=scope,id=id,seq=seq,code=f[8],name=name,known=f[10]=='1',contact=f[11]=='1',at=now}
+ if old and old.epoch==f[4] and seq<=old.seq then return true end
+ I.rows[k]={epoch=f[4],scope=scope,id=id,seq=seq,code=f[8],name=name,known=f[10]=='1',contact=f[11]=='1',at=now}
  return true
 end
 local function sensors()
@@ -118,7 +118,7 @@ local function frame(now)
   for k,row in pairs(I.rows) do
    local r=row.scope=='N' and U.replicas[row.id] or nil
    local object=row.scope=='P' and A.coop.ships[row.id] or row.scope=='F' and fixture(row.id) or r and r.object
-   if object and C.IsComponentOperational(object) and now-row.at<2.5 then observe(object,row)
+   if U.latest and row.epoch==U.latest.epoch and object and C.IsComponentOperational(object) and now-row.at<2.5 then observe(object,row)
    elseif now-row.at>15 then I.rows[k]=nil end
   end
   for k,b in pairs(I.bound) do
