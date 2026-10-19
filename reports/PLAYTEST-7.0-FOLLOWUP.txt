@@ -1,0 +1,74 @@
+7.0 INTERNAL PLAYTEST FOLLOW-UP
+19 October 2026 | Owner report; actual two-computer playtest completed
+
+The prior handoff's pending-test status is superseded by this report. These are
+user observations, not measurements invented from the automated test suite.
+
+1. Ordinary jettisoned cargo remains invisible to the other player. The required
+   interaction is normal gameplay and the native cargo magnet.
+2. Callsigns are not synchronized. Distinguish display names from native ID codes.
+3. Host/guest damage synchronization works intermittently.
+4. Ship movement is jerky. Investigate source timestamps, velocity and orientation
+   prediction, per-object update rates, and native pose-application effects.
+5. NPC picture-in-picture videos have artifacts. LOW priority.
+6. Sector updates do not share the other player's radar perception.
+7. Weapon visuals do not reproduce correctly.
+8. Physical ship models and radar markers appear, but HUD targeting is unreliable.
+9. Replace the test ships with fully equipped X Shuttles, especially docking
+   computer assistance. Verify required DLC/macros and actual installed equipment.
+10. Shared missions worked in the playtest. Preserve this as regression coverage;
+    it does not establish synchronization of every vanilla mission.
+
+COORDINATION
+Private repository: https://github.com/Lith7ium/X4-Multiplayer
+Slack: #private-coordination-channel
+Gameplay thread:
+https://example.invalid/private-coordination-withheld
+Astra primary owns universe motion, native cargo investigation, contacts/targeting,
+gameplay integration and native Linux tests. Branch: contrib/astra-playtest7.
+Claude completes the Windows installer review, then diagnoses player damage and
+weapon replication and assesses the Shuttle/loadout/callsign changes. Agree exact
+files and wire contracts in Slack before overlapping changes. The AI Coms chat
+continues the existing Windows PR review; avoid duplicate integration/test runs.
+
+AUTHORIZATION AND TEST BOUNDARIES
+The user authorized overnight joint implementation and tests on the primary PC.
+Do not access personal documents or mail. Do not spend money. Preserve normal
+saves and the original 7.0 matched package pair. All new builds remain INTERNAL.
+ZeroTier is available on both test machines. Addresses/session keys are local
+test configuration, not repository configuration. Native tests require fresh
+isolated worlds; synthetic counterparts must be labelled as such.
+
+INITIAL ENGINEERING EVIDENCE
+21d9833 adds source-clock NPC movement, linear/angular velocity and bounded
+prediction. The Linux Python/LuaJIT suite passed 167 tests, including jitter,
+loss/stale prediction, angular wrap, teleport reset, and relay authority checks.
+Native motion/HUD effects and joint Windows/Linux acceptance are still pending.
+
+2026-10-19 NATIVE CARGO CHECKPOINT (Astra)
+- Real Linux host: native DropCargo(energycells,20) created a tracked crate;
+  committed baseline 1 contained one drop, baseline 2 removed it after the magnet
+  collected it. The receiver was synthetic, not another native X4 instance.
+- Real Linux guest: native DropCargo20 was rolled back locally and submitted
+  once to a synthetic host. The guest created a real native drop, collected20
+  with the magnet, rolled back its prediction, and reconciled to host inventory20.
+  Final baseline3 had no replicas or retired live containers. Both completion
+  datagrams were deliberately lost once; both retries preserved exactly one action.
+- Native findings: create_object(pickup macro) plus add_wares creates a visible
+  object without working magnet collection. A real drop of1 plus add_wares19
+  collects only1. Replica creation must use native drop_cargo of the full quantity.
+- CARGOREQ/CARGOEXEC/CARGODONE/CARGOREPLY bind to authenticated pilot/ship generation,
+  retain completed IDs and wait for a baseline visibility fence. CINV reconciles
+  tracked ware counts and overrides older ECON cargo rows.
+- Real host execution of guest requests, two-native-machine acceptance, capacity
+  and contested pickup scenarios still require further native checks.
+- Scope: ordinary cargo dropped by the two co-op ships. Arbitrary NPC loot,
+  multi-ware containers and unrestricted cargo categories are not yet accepted.
+  The internal donor must hold the full replica quantity; failure explicitly
+  stops the cargo adapter instead of creating a fake collectible.
+
+60f36a0 adds NAV2 for player ships using the original source-clock motion buffer
+shared with NPC UMOVE. Positions: metres; orientation: radians; time: seconds;
+velocities: metres/second and radians/second. Ownership/sector changes reset
+tracks, long gaps reset interpolation, prediction is limited to 0.35 seconds.
+23 targeted cooperative Python/LuaJIT tests passed; visual acceptance pending.

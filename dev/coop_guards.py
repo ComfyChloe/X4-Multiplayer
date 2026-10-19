@@ -34,5 +34,7 @@ def trade(xml):
  # single host player balance, never a second spendable copy on the proxy ship.
  apply=root.find(".//cue[@name='Apply']/actions")
  for node in apply.iter('do_if'):
+  if node.get('value')=='$object.isoperational':
+   node.set('value','$object.isoperational and ($j gt 2 or not @md.X4LAN_Cargo.Setup.$wares.indexof.{$ware})')
   if node.get('value')=='$account.isoperational':node.set('value','$account.isoperational and (not Market.$arena.$coop or $j gt 1)')
  return E.tostring(root,encoding='unicode')

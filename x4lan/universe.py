@@ -11,6 +11,7 @@ import zlib
 
 from .coop import CoopSession, pose
 from .host import ATOM, HEX, MAX_PACKET, sequence
+from .cargo import CargoTransactions
 
 MAX_OBJECTS = 4096
 MAX_RECORD = 512
@@ -211,8 +212,14 @@ class UniverseSession(CoopSession):
         self.delivered = None
         self.positions = {}
         self.position_cursor = 0
+        self.cargo = CargoTransactions(self)
+
+    def busy(self, entity):
+        return super().busy(entity) or self.cargo.busy(entity)
 
     def receive(self, raw, address, now):
+        if raw.startswith((b'CARGOREQ|', b'CARGODONE|', b'CINV|')):
+            return self.cargo.receive(raw, address, now)
         if not raw.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|', b'UACK|', b'UINTEREST|', b'UPOS|', b'UMOVE|')):
             return super().receive(raw, address, now)
         self.expire(now)
@@ -293,6 +300,7 @@ class UniverseSession(CoopSession):
 
     def snapshots(self, now):
         result = super().snapshots(now)
+        result.extend(self.cargo.snapshots(now))
         host, guest = self.peers.get('p1'), self.peers.get('p2')
         if not host or not guest or not self.interest or self.interest[0] != guest.lease:
             return result

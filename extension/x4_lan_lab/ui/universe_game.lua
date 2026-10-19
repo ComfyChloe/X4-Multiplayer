@@ -1,5 +1,5 @@
 -- Original INTERNAL W01 NPC replication adapter. No third-party framework.
--- Ordinary cargo, NPC combat, station economy and missions remain separate work.
+-- Native cargo uses a separate authority adapter; NPC combat remains separate work.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API;local P=X4LAN_UNIVERSE_PROTOCOL
 if not cfg or not cfg.world_sync or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
@@ -98,6 +98,9 @@ local function captured(scan)
    rows[#rows+1]={id=identity.id,row=row}
   end
  end
+ if A.cargo then for _,row in ipairs(A.cargo.rows(scan.sector)) do rows[#rows+1]=row end end
+ assert(#rows<=P.limit,'combined sector object limit exceeded')
+ u.lastScan=scan;u.cargoDirty=false
  table.sort(rows,function(a,b) return a.id<b.id end)
  local ordered={};for i,r in ipairs(rows) do ordered[i]=r.row end
  u.revision=u.revision+1;u.publish=objects;u.motionCursor=1
@@ -121,13 +124,13 @@ local function accept(b,now)
  if cfg.world_mode=='observe' then log('OBSERVED revision='..b.revision..' sector='..b.sector..' objects='..#b.rows);return end
  local wanted={};u.renderIds={};u.renderCursor=1
  for _,row in ipairs(b.rows) do
-  local entity=assert(P.record(row));assert(entity.kind=='ship','drop engine adapter is not implemented')
+  local entity=assert(P.record(row));assert(entity.kind=='ship' or A.cargo,'cargo adapter missing')
   wanted[entity.id]=entity
   u.renderIds[#u.renderIds+1]=entity.id
  end
  for id,r in pairs(u.replicas) do
   local next=wanted[id]
-  if not next or next.macro~=r.entity.macro or next.owner~=r.entity.owner or b.sector~=r.sector then
+  if not next or next.macro~=r.entity.macro or next.owner~=r.entity.owner or next.kind~=r.entity.kind or next.ware~=r.entity.ware or next.amount~=r.entity.amount or b.sector~=r.sector then
    removeReplica(r);u.replicas[id]=nil
   end
  end
@@ -181,6 +184,8 @@ local function render(now,sector)
   local r=u.replicas[ids[u.renderCursor]];u.renderCursor=u.renderCursor%#ids+1
   if r.sector==u.interest and (not r.nextApply or now>=r.nextApply) then
    r.nextApply=now+.015
+   if r.entity.kind=='drop' then A.cargo.ensure(r,sector)
+   else
    local p=r.entity.pose
    if r.track then p=M.render(r.track,now,r.modern and M.delay or .1) or p end
    local value=ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
@@ -193,6 +198,7 @@ local function render(now,sector)
    local changed=not r.applied
    if r.applied then for i=1,6 do if math.abs(p[i]-r.applied[i])>(i<=3 and .005 or .00001) then changed=true end end end
    if changed then C.SetObjectSectorPos(r.object,sector,value);r.applied=p end
+   end
   end
  end
 end
@@ -227,6 +233,7 @@ local function frame(now)
   end
   return
  end
+ if u.cargoDirty and u.lastScan and u.lastScan.name==u.wanted and (not u.sender or u.sender.done) then captured(u.lastScan) end
  if u.sender and not u.sender.done then
   for _,p in ipairs(u.sender:packets(s.client.lease,now)) do send(p) end
  elseif u.wanted and not u.scan and now>=(u.nextScan or 0) then
