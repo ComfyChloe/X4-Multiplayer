@@ -137,8 +137,8 @@
   "native_velocity_frame": "cluster-relative linear velocity in each component's rotational axes; yaw-zero test does not establish setter frame at other headings",
   "automated_tests": 234,
   "skipped_tests": 0,
-  "review_status": "Independent firing-orientation native gates passed; coordinator review pending",
-  "reviewed_acceptance": false,
+  "review_status": "Accepted bounded diagnostic evidence in PR10 review5578609727",
+  "reviewed_acceptance": true,
   "orientation_acceptance": true,
   "orientation_evidence": "Settled pre-correction poses plus native sector forward/up basis at each firing, correlated by serial, phase and birth time; component error bound 0.002.",
   "historical_b687": {
@@ -284,5 +284,7 @@
     "projectile-native-743-md-unit-and-orientation-failure-result.json": "68f9b93042282597fe6653a8857cd3b3f97df16cbb04eb6ef5071c8610329049",
     "projectile-native-743-md-unit-and-orientation-failure-stdout.txt": "484ea4e0778e7f950e5bf42f75267b3c696b48c69aab6e6b1355bec4bef0049e",
     "projectile-native-743-md-unit-and-orientation-failure.log": "b916b5a80184f89db0d9e97be093f1911f3f3ac5e84bcca5d5b32a2f35c40bb6"
-  }
+  },
+  "review_url": "https://github.com/Lith7ium/X4-Multiplayer/pull/10#pullrequestreview-5578609727",
+  "merged_main_commit": "7cfda311a50cebd6ba9db30d262743927887aeaf"
 }
