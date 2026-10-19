@@ -16,4 +16,5 @@ X4LAN_CONFIG = {
     -- Shared co-op ship for both players and both proxies (requires X4: Timelines).
     ship_macro = "ship_ter_s_xperimental_01_a_macro",
     ship_loadout = "x4lan_coop_xperimental",
+    ship_weapons = 6, -- the 7th slot is a missile launcher; the hull stores no missiles
 }

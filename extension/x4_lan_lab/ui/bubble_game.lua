@@ -123,7 +123,7 @@ local function frame()
      error('shared ship '..cfg.ship_macro..' is unavailable; enable X4: Timelines (ego_dlc_timelines) on both PCs')
     end
     s.shipRequest={own=own,proxy=proxy,sector=sector}
-    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{own=id(own),proxy=id(proxy),macro=cfg.ship_macro,loadout=cfg.ship_loadout or ''})
+    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{own=id(own),proxy=id(proxy),macro=cfg.ship_macro,loadout=cfg.ship_loadout or '',weapons=cfg.ship_weapons or -1})
     log('shared ship requested: '..cfg.ship_macro..' loadout='..tostring(cfg.ship_loadout))
    end
    if not s.shipsReady then return end

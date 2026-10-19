@@ -20,6 +20,7 @@ SHARED = '''
 X4LAN_CONFIG.bubble_actions=true
 X4LAN_CONFIG.ship_macro='ship_ter_s_xperimental_01_a_macro'
 X4LAN_CONFIG.ship_loadout='x4lan_coop_xperimental'
+X4LAN_CONFIG.ship_weapons=6
 GetComponentData=function() return 'cluster_14_sector001_macro' end
 requests,spawned={},{}
 AddUITriggeredEvent=function(screen,control,value) requests[#requests+1]={screen,control,value} end
@@ -71,6 +72,9 @@ class ShipSpecContractTests(unittest.TestCase):
         self.assertIn('token = ""', config)
         self.assertIn('ship_macro = "%s"' % build_packages.SHIP_MACRO, config)
         self.assertIn('ship_loadout = "%s"' % build_packages.SHIP_LOADOUT, config)
+        self.assertIn('ship_weapons = %d,' % build_packages.SHIP_WEAPONS, config)
+        weapons = len(self.loadout().find('macros').findall('weapon'))
+        self.assertEqual(weapons, build_packages.SHIP_WEAPONS, 'expected count must equal the loadout')
 
     def test_built_pair_configures_identical_ship_for_both_slots(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -79,6 +83,7 @@ class ShipSpecContractTests(unittest.TestCase):
             for config in configs:
                 self.assertIn('ship_macro = "%s",' % build_packages.SHIP_MACRO, config)
                 self.assertIn('ship_loadout = "%s",' % build_packages.SHIP_LOADOUT, config)
+                self.assertIn('ship_weapons = %d,' % build_packages.SHIP_WEAPONS, config)
             for folder in folders:
                 self.assertTrue((folder / 'extension/x4_lan_lab/libraries/loadouts.xml').is_file())
 
@@ -95,6 +100,10 @@ class ShipSpecContractTests(unittest.TestCase):
         text = ET.tostring(prepare, encoding='unicode')
         self.assertEqual(text.count('<apply_loadout'), 2)
         self.assertIn('ware.software_dockmk2', text)
+        # Exact configured count; an empty slot is accepted only without missile storage.
+        self.assertIn('$candidate.weapons.operational.count != $args.$weapons', text)
+        self.assertIn('$candidate.weapons.operational.count lt $candidate.weapons.numslots and $candidate.ammostorage.missile.capacity != 0', text)
+        self.assertNotIn('!= $candidate.weapons.numslots or', text)
         self.assertIn('X4LAN_Bubble.ShipsRefused', text)
         self.assertIn('X4LAN_Bubble.ShipsReady', text)
         self.assertIn('SHIP_SPEC role=', text)
@@ -125,7 +134,7 @@ class ShipSpecAdapterTests(unittest.TestCase):
                 l.execute('''
 assert(count('PrepareShips')==1 and count('%(s)s')==0)
 local p=last('PrepareShips')
-assert(p.macro=='ship_ter_s_xperimental_01_a_macro' and p.loadout=='x4lan_coop_xperimental')
+assert(p.macro=='ship_ter_s_xperimental_01_a_macro' and p.loadout=='x4lan_coop_xperimental' and p.weapons==6)
 assert(#spawned==2 and spawned[1]==spawned[2] and spawned[1]==p.macro)
 assert(p.own~=p.proxy)
 now=11;frames.onUpdate();assert(count('PrepareShips')==1 and count('%(s)s')==0)
