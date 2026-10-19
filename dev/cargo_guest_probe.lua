@@ -9,8 +9,11 @@ function A.universe.frame(now)
  if not A.cargo.ready or not A.universe.latest or not A.cargo.inventory.energycells or A.paused() then return end
  ready=ready or now
  if not dropped and now-ready>2 then
-  dropped=now;local ok=C.DropCargo(C.GetPlayerControlledShipID(),'energycells',20)
-  DebugError('[X4LAN] CARGO_GUEST_PROBE DropCargo='..tostring(ok))
+  dropped=now
+  if not X4LAN_CONFIG.cargo_probe_capacity then
+   local ok=C.DropCargo(C.GetPlayerControlledShipID(),'energycells',20)
+   DebugError('[X4LAN] CARGO_GUEST_PROBE DropCargo='..tostring(ok))
+  end
  end
  if dropped and not magnet and now-dropped>4 then
   C.SetLootMagnetActive(true);magnet=true;deadline=now+18

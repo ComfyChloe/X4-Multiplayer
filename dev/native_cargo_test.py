@@ -3,6 +3,7 @@
 Run only after native_world_test.py install --slot p2. It does not launch X4.
 The simulated host is a protocol test double, not evidence of native host physics.
 """
+import argparse
 import json
 from pathlib import Path
 import secrets
@@ -20,13 +21,14 @@ HERE=ROOT/'.local/native-world-tests'
 PROFILE=Path.home()/'.config/EgoSoft/X4/45841'
 SECTOR='cluster_14_sector001_macro'
 
-def run():
+def run(partial=False):
  cfg=json.loads((HERE/'native-session.json').read_text())
  session=UniverseSession(cfg['token'],cfg['build'],cfg['bubble'])
  relay=Relay('127.0.0.1',cfg['port'],session)
  sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);sock.connect(('127.0.0.1',cfg['port']));sock.setblocking(False)
  lease=None;nonce=secrets.token_hex(16);start=time.monotonic();next_send=next_hello=0
- seq=0;revision=1;published=0;sender=None;cargo=20;drop=False;executed={};completed=None
+ seq=0;revision=1;published=0;sender=None;cargo=1090 if partial else 20;drop=20 if partial else 0;executed={};completed=None
+ partial_at=None;freed=False
  try:
   while time.monotonic()-start<240:
    now=time.monotonic();relay.step(now)
@@ -40,16 +42,24 @@ def run():
     elif f[0]=='CARGOEXEC':
      request,verb=f[3],f[6]
      if request not in executed:
-      assert f[4]=='2' and f[8]=='energycells' and f[9]=='20',f
-      if verb=='DROP': assert cargo==20 and not drop;cargo=0;drop=True
-      else: assert verb=='PICKUP' and f[7]=='1' and drop and cargo==0;cargo=20;drop=False
-      revision+=1;executed[request]={'verb':verb,'revision':revision,'attempts':0}
+      amount=10 if partial else 20
+      assert f[4]=='2' and f[8]=='energycells' and int(f[9])==amount,f
+      if verb=='DROP': assert not partial and cargo==20 and not drop;cargo=0;drop=20
+      else:
+       assert verb=='PICKUP' and f[7]=='1' and drop>=amount and cargo==(1090 if partial else 0)
+       cargo+=amount;drop-=amount
+       if partial and partial_at is None:partial_at=now
+      revision+=1;executed[request]={'verb':verb,'amount':amount,'revision':revision,'attempts':0}
       print('Synthetic host executed',verb,'inventory',cargo,'revision',revision,flush=True)
      item=executed[request];item['attempts']+=1
      # Lose the first completion deliberately: a retry must not mutate twice.
      if item['attempts']>1:
       sock.send(f"CARGODONE|1|{lease}|{request}|OK|{item['revision']}".encode())
-      if verb=='PICKUP' and completed is None: completed=now
+      if verb=='PICKUP' and drop==0 and completed is None: completed=now
+   if partial_at and not freed and now-partial_at>5:
+    assert cargo==1100 and drop==10
+    cargo-=10;freed=True
+    print('Synthetic fixture removed 10 cells to free hold space',flush=True)
    if lease and now>=next_send:
     next_send=now+.1;seq+=1
     sock.send(f'IDLE|1|{lease}|{seq}'.encode());sock.send(f'CREW|1|{lease}|{seq}|1|1'.encode())
@@ -57,7 +67,7 @@ def run():
     sock.send(('WORLD|1|'+lease+'|'+str(seq)+'|'+'|'.join(map(str,world))).encode())
     sock.send(f'CINV|1|{lease}|{lease}|{seq}|energycells|0|{cargo}'.encode())
     if published!=revision and (not sender or sender.done):
-     rows=['1,drop,sm_gen_pickup_container_01_macro,ownerless,1000,10000,180,0,0,0,energycells,20'] if drop else []
+     rows=[f'1,drop,sm_gen_pickup_container_01_macro,ownerless,1000,10000,180,0,0,0,energycells,{drop}'] if drop else []
      sender=Sender(Baseline.create(lease,revision,SECTOR,rows));published=revision
    if sender and lease:
     for packet in sender.packets(lease,now): sock.send(packet)
@@ -65,10 +75,13 @@ def run():
    time.sleep(.005)
  finally:
   result=dict(duration=time.monotonic()-start,executed=executed,cargo=cargo,drop=drop,guest_committed=session.delivered,
-              success=len(executed)==2 and cargo==20 and not drop and session.delivered==3)
-  (HERE/'cargo-native-guest-result.json').write_text(json.dumps(result,indent=2))
-  shutil.copy2(PROFILE/'x4lan-debug.txt',HERE/'cargo-native-guest.log')
+              success=len(executed)==2 and cargo==(1100 if partial else 20) and not drop and session.delivered==3)
+  name='cargo-partial-native-guest' if partial else 'cargo-native-guest'
+  (HERE/(name+'-result.json')).write_text(json.dumps(result,indent=2))
+  shutil.copy2(PROFILE/'x4lan-debug.txt',HERE/(name+'.log'))
   sock.close();relay.close();print('Guest cargo round trip:',result['success'],flush=True)
  if not result['success']: raise SystemExit(1)
 
-if __name__=='__main__':run()
+if __name__=='__main__':
+ parser=argparse.ArgumentParser();parser.add_argument('--partial',action='store_true')
+ run(parser.parse_args().partial)

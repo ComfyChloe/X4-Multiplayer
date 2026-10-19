@@ -17,9 +17,10 @@ Read these files in order:
 5. INTERNET-HOSTING-ANALYSIS.txt when working on transport or dedicated hosting.
 
 Mod 7.0.0 is an internal NPC scene milestone. The real Windows/Linux playtest is
-still pending; additional testers do not turn this into a public release. Normal
-cargo/magnet collection, shared NPC combat, the economy and arbitrary missions
-remain unfinished. Do not start by assuming the universe is already synchronized.
+complete, with findings in reports/PLAYTEST-7.0-FOLLOWUP.txt. The follow-up
+adds native cargo/magnet transactions, motion and identity updates; its current
+acceptance status is in CONTINUE-HERE.txt. Shared general NPC combat, the economy
+and arbitrary missions remain unfinished. This remains internal development. Do not start by assuming the universe is already synchronized.
 The user has chosen to keep primary native X4 testing on their current PC.
 
 GET ACCESS AND CREATE A DEVELOPMENT ENVIRONMENT

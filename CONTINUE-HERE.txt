@@ -11,9 +11,10 @@ ACTIVE CONTRIBUTIONS (not a new accepted release)
 - Astra primary: contrib/astra-playtest7, draft PR #8. Native ordinary-cargo
   authority, NAV2/UMOVE velocity interpolation, display identity and radar contacts.
 - Claude: PR #6 fixed Shuttle specification and PR #7 FIRE2 weapon controls.
-  PR #6 native validation found weapons 6/7 despite matching hardware and dockmk2;
-  its acceptance rule/loadout is being investigated. PR #7 review found transition
-  replay and pause issues; do not declare either contribution accepted yet.
+  PR #6 was reviewed and merged in main as 9ed2c95. Native Windows and Linux
+  readbacks accepted six guns, the unused zero-capacity missile slot, matching
+  hardware and Docking Computer Mk2. Full software/thruster readback is pending.
+  PR #7 review found transition replay and pause issues; its revision is pending.
 - AI Coms coordinator reviews contributions in separate worktrees. PR #3 Windows
   installer rollback/profile handling is integrated in main (9f6a19b).
 - Coordinate native launches/installations with the primary chat. Slack gameplay
@@ -26,11 +27,20 @@ NATIVE EVIDENCE SO FAR
   -> inventory 20 and no remaining replica, including one lost completion each.
 - Real host + synthetic pilot: DROP20 and PICKUP20 both complete with duplicate
   UDP intents AND duplicate MD events; final inventory 20/no drops/no MD errors.
-- Native metadata relay recorded 152 identities. Guest native identity/targeting
-  checks are in progress; two-native-machine acceptance is still pending.
+- Native metadata relay recorded 152 identities. Real guest target-monitor
+  headers displayed shared names/codes; all 90 targetability checks passed.
+  Native UMOVE/NAV2 transforms followed the interpolation model through deliberate
+  packet loss (maximum observed errors 1.3293 m / 0.6651 m, within the 15 ms update
+  interval at the tested speeds). Two-native-machine acceptance remains pending.
+- The corrected Shuttle run repeated native guest drop/magnet collection with
+  generation-tagged container creation and lost completions: final cargo 20, no
+  remaining drop. Tested source 636136d (includes PR #6 0390e01).
 - Shaderquality0 from the old test preset crashes this Linux build compiling the
   Xperimental cockpit. Shaderquality2 is the supported engine UI option and
   passed startup; both test installers now use 2. Only profile 45841 is changed.
+- Host capacity/partial requests and guest native partial magnet collection
+  passed separately. Partial pickup now rejects callbacks from held or retired
+  native replicas and accepts an already committed completion fence.
 - Normal save bytes and actual save timestamps remain unchanged. No test saves.
 
 The original 7.0 matched test pair is preserved. The next intended package is
@@ -76,16 +86,15 @@ EVIDENCE
   Broader guest jobs/mission effects and endurance are not verified.
 
 NEXT WORK
-1. Run the real Windows/Linux W01 visibility/movement/sector-return test and inspect
-   both logs. Native Windows X4 calls have not been exercised on this PC.
-2. Replace experimental scene-only suppression with stronger control of competing
-   guest simulation. Complete object generations, names, equipment and interactions.
-3. Implement ordinary cargo drop and magnet collection as host-authorized,
-   deduplicated inventory/removal transactions; include both host and guest drops,
-   full holds, partial pickup, simultaneous pickup and packet loss/reconnect.
-4. Extend authority to NPC damage/combat, docking/trade, stations, production,
-   faction/mission consequences and eventually persistence. Visual NPC clones do
-   not make these shared.
+1. Complete PR #7 review/native weapon and damage tests; maintain the passing
+   Cooperative Trial mission and ship handoff/life-cycle behavior.
+2. Finish cargo capacity/partial/contested native checks and produce the matched
+   internal follow-up pair. Keep release evidence tied to the actual tested head.
+3. Run both native games together over the authorized ZeroTier path, including
+   ordinary cargo in both directions, identities, radar, HUD, motion and combat.
+4. Extend authority to general NPC combat, docking/trade, stations, production,
+   faction/mission consequences and eventually persistence. Scene replicas alone
+   do not establish these. Broader guest simulation control remains incomplete.
 
 Read ARCHITECTURE.md and WORLD-SYNC-REQUIREMENTS.txt for the detailed constraints.
 Use DEVELOPMENT.txt for the Fedora checkout and two-computer Git workflow.

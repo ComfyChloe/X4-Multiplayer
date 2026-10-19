@@ -77,7 +77,10 @@ function U.receive(f,now)
   if cfg.slot~='p2' or #f~=6 then return true end
   local q=g.queue[1];if not q or f[4]~=q.request or f[5]=='PENDING' then return true end
   local fence=P.integer(f[6]);if not fence then return true end
-  if q.drop>0 and g.held[q.drop] then g.held[q.drop].fence=math.max(fence,(U.latest and U.latest.revision or 0)+1) end
+  -- A baseline may overtake its completion. Its committed revision already
+  -- satisfies that fence; waiting for an invented next revision strands a
+  -- partially collected drop until unrelated world state changes.
+  if q.drop>0 and g.held[q.drop] then g.held[q.drop].fence=fence end
   table.remove(g.queue,1);log('RESULT '..q.verb..' '..f[5]..' fence='..fence)
   return true
  elseif f[1]=='CINV' then
@@ -159,10 +162,15 @@ RegisterEvent('X4LAN_Cargo.GuestDrop',function(_,payload)
 end)
 RegisterEvent('X4LAN_Cargo.GuestPickup',function(_,payload)
  if type(payload)~='string' then return end
- local f=P.split(payload,'|');local id=P.integer(f[1]);local ship=P.integer(f[2],2);local amount=P.integer(f[4],1000000)
- if #f==5 and id and ship and ship>0 and amount and f[4]==f[5] then
-  if enqueue(ship,'PICKUP',id,f[3],amount) then
-   local r=U.replicas[id]
+ local f=P.split(payload,'|');local id=P.integer(f[1]);local generation=P.integer(f[2]);local object=g.object(f[3])
+ local ship=P.integer(f[4],2);local amount=P.integer(f[6],1000000)
+ if #f==7 and id and generation and object and ship and ship>0 and amount and f[6]==f[7] then
+  local r=U.replicas[id]
+  -- Rollback can free room for another native partial collection in the same
+  -- frame. Its old replica must not enqueue another intention, including after
+  -- a newer baseline has recreated the remaining quantity under the same ID.
+  if g.held[id] or not r or r.creation~=generation or r.object~=object then return end
+  if enqueue(ship,'PICKUP',id,f[5],amount) then
    if r and r.object then
     if C.IsComponentOperational(r.object) then C.RemoveComponent(r.object) end
     U.replicaKeys[key(r.object)]=nil;r.object=nil

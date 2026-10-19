@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in disposable-world fixture. Never shipped. -->
+<mdscript name="X4LAN_CargoCapacity" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+<cues>
+ <cue name="Seed"><conditions><event_ui_triggered screen="'X4LAN_CargoCapacity'" control="'Seed'"/></conditions><actions>
+  <set_value name="$ships" exact="md.X4LAN_Bubble.Arena.$ships"/>
+  <add_cargo object="$ships.{2}" ware="ware.energycells" exact="$ships.{2}.cargo.{ware.energycells}.free - 10"/>
+  <add_cargo object="$ships.{1}" ware="ware.energycells" exact="20"/>
+  <drop_cargo object="$ships.{1}" ware="ware.energycells" exact="20" groupname="$drops"/>
+  <warp object="$drops.{1}" sector="$ships.{2}.sector"><position x="1km" y="10km" z="180m"/></warp>
+  <set_object_velocity object="$drops.{1}"><linear x="0" y="0" z="0"/></set_object_velocity>
+  <debug_text text="'[X4LAN] CAPACITY_SEED ship2=%s free=%s drop=%s'.[$ships.{2}.cargo.{ware.energycells}.count,$ships.{2}.cargo.{ware.energycells}.free,$drops.{1}.wares.{ware.energycells}.count]"/>
+ </actions></cue>
+ <cue name="Free"><conditions><event_ui_triggered screen="'X4LAN_CargoCapacity'" control="'Free'"/></conditions><actions>
+  <remove_cargo object="md.X4LAN_Bubble.Arena.$ships.{2}" ware="ware.energycells" exact="10" result="$removed"/>
+  <debug_text text="'[X4LAN] CAPACITY_FREE removed=%s'.[$removed]"/>
+ </actions></cue>
+</cues></mdscript>

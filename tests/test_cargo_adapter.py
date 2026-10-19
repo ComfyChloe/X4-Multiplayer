@@ -42,7 +42,8 @@ class CargoAdapterTests(unittest.TestCase):
 
     def test_guest_prediction_requests_retry_same_id_and_hold_drop_until_commit(self):
         l=self.make();l.execute('''
-         events['X4LAN_Cargo.GuestPickup'](nil,'77|2|energycells|20|20')
+         U.replicas[77]={creation=1,object=G.object('0x10010')}
+         events['X4LAN_Cargo.GuestPickup'](nil,'77|1|0x10010|2|energycells|20|20')
          assert(#G.queue==1 and G.held[77]);U.frame(now);local first=sent[#sent]
          now=now+.3;U.frame(now);assert(sent[#sent]==first)
          local request=G.queue[1].request
@@ -52,6 +53,25 @@ class CargoAdapterTests(unittest.TestCase):
          local r={entity={id=77,macro='crate_macro',ware='energycells',amount=20,pose={0,0,0,0,0,0}}}
          local before=#calls;G.ensure(r,22);assert(#calls==before)
          U.latest.revision=7;G.ensure(r,22);assert(calls[#calls].control=='Create' and not G.held[77])
+        ''')
+
+    def test_partial_pickup_ignores_repeated_and_retired_native_callbacks(self):
+        l=self.make();l.execute('''
+         local event=events['X4LAN_Cargo.GuestPickup']
+         U.replicas[77]={creation=1,object=G.object('0x10010')}
+         local old='77|1|0x10010|2|energycells|10|10'
+         event(nil,old);event(nil,old);assert(#G.queue==1 and G.counter==1)
+         local request=G.queue[1].request
+         U.latest.revision=7 -- The partial-quantity baseline overtakes its completion.
+         U.receive({'CARGOREPLY','1',A.state.client.lease,request,'OK','7'},now)
+         assert(G.held[77].fence==7)
+         local r={entity={id=77,kind='drop',macro='crate_macro',ware='energycells',amount=10,pose={0,0,0,0,0,0}}}
+         U.replicas[77]=r;G.creationSeq=1;G.ensure(r,22)
+         objects['65568']=true;events['X4LAN_Cargo.Created'](nil,'77|2|0x10020')
+         assert(not G.held[77] and #G.queue==0)
+         event(nil,old);assert(#G.queue==0 and G.counter==1)
+         event(nil,'77|2|0x10020|2|energycells|10|10')
+         assert(#G.queue==1 and G.counter==2)
         ''')
 
     def test_host_duplicate_execution_and_result_wait_for_new_baseline(self):

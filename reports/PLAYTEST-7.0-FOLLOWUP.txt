@@ -100,11 +100,50 @@ Native object IDs stay local; only the shared display code/name is bound.
 
 NATIVE MOTION / HUD ACCEPTANCE (real Linux guest + synthetic host)
 The actual target-monitor live header resolved to 'Shared native ship 1 (TST-001)'
-and the equivalent second ship. All90 targetability checks passed; no adapter or
-MD errors. UMOVE:202 native transform samples, maximum position difference1.3293m
-at100m/s and angle difference0.00133rad. NAV2:438 samples, maximum difference0.6651m
-at50m/s. These are within the15ms application interval. Deliberate0.9s packet-loss
+and the equivalent second ship. All 90 targetability checks passed; no adapter or
+MD errors. UMOVE: 202 native transform samples, maximum position difference 1.3293 m
+at 100 m/s and angle difference 0.00133 rad. NAV2: 717 samples, maximum difference 0.6651 m
+at 50 m/s. These are within the 15 ms application interval. Deliberate 0.9 s packet-loss
 bursts exercised bounded prediction/freeze. The empty baseline removed NPCs.
 This establishes the native transform/header paths, not the subjective visual
 feel of two live players. Shared fixture codes have separate bounded metadata
 scope tests; their two-PC native acceptance remains pending.
+
+CORRECTED SHUTTLE AND CARGO GENERATION CHECKPOINT (636136d)
+PR #6 0390e01 specifies six equipped guns. The seventh connection is a missile
+launcher on a hull with zero missile capacity; the native spec accepted exactly
+six guns on both ships. Both ships passed setup with the hardware listed above,
+Docking Computer Mk2 and working player controls. Native guest DropCargo20,
+generation-tagged creation, magnet pickup20 and delayed completion retries passed
+again: final inventory 20, baseline 3, no remaining replica. No cargo MD errors.
+This run also validates the supported shader setting with the corrected loadout.
+Previous failed startup/equipment checkpoints above are historical findings.
+
+Local evidence: shuttle-cargo-generation-native-result.json/.log, saved under
+.local/evidence-151-withheld Native motion/header evidence is recorded separately
+in native-motion-identity-result.json/.log (90 checks, 88 resolved host headers,
+202 NPC samples and 717 player samples). These files contain local test metadata
+and are excluded from Git; measured results are reported here without session keys.
+
+CARGO CAPACITY / PARTIAL COLLECTION CHECKPOINT
+The real native host, controlled by a synthetic authenticated guest, started
+with 1090/1100 Energy Cells in ship 2 and a separate 20-cell drop. Request20
+returned CAPACITY; request10 returned OK and left 10 in the drop. A full-hold
+request1 returned CAPACITY. After the test fixture explicitly removed 10 cells,
+the remaining10 were collected: final inventory1100, no drops, no cargo MD errors.
+Duplicate UDP requests did not duplicate either collection.
+
+The real native guest magnet exposed multiple partial-collection callbacks for
+one replica before host inventory arrived. The fix binds pickup callbacks to
+both native object and creation generation and permits one pending pickup for
+that instance. A baseline that already reached the completion fence now releases
+the hold immediately; it no longer waits for a nonexistent extra revision.
+The repeated native guest check passed: 20-cell replica, collect10, generation2
+replica with the remaining10, then collect10 after the synthetic fixture frees
+space. Final inventory1100, baseline3, no replicas. Each completion was lost once;
+there were exactly two successful10-cell intentions, each replayed without a
+second mutation. This is native guest physics plus a synthetic host, not a
+simultaneous two-native-machine test. Focused LuaJIT regression covers duplicate
+and late retired-instance callbacks plus a baseline overtaking its completion.
+Evidence: cargo-capacity-native-result.json/.log and
+cargo-partial-native-guest-result.json/.log under .local/evidence-151-withheld
