@@ -316,9 +316,22 @@ function c.frame(now)
       r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector);AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
      end
     elseif now>=(r.nextApply or 0) then
-     r.nextApply=now+.015
+     -- There are only two cooperative ships. Correct their native controller
+     -- drift on every render frame, including frame rates above 60 FPS.
+     r.nextApply=now
      local changed=not r.applied
      if r.applied then for n=1,6 do if math.abs(p[n]-r.applied[n])>(n<=3 and .01 or .0001) then changed=true end end end
+     if not changed then
+      -- The native controller/physics can move or turn a ship even when its
+      -- received pose stays constant. Compare the actual engine pose before
+      -- skipping a correction; the cached requested pose is not a readback.
+      local actual=C.GetObjectPositionInSector(ship)
+      local current={actual.x,actual.y,actual.z,actual.yaw,actual.pitch,actual.roll}
+      for n=1,6 do
+       local delta=current[n]-p[n]
+       if math.abs(n<=3 and delta or M.angle(delta))>(n<=3 and .01 or .0001) then changed=true;break end
+      end
+     end
      if changed then C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));r.applied=p end
     end
    end

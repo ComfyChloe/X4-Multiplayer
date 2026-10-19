@@ -15,7 +15,8 @@ class CoopAdapterTests(unittest.TestCase):
    api.GetContextByClass=function(object) return sectors[object] or 22 end
    GetComponentData=function(object) return tonumber(object)==23 and 'cluster_01_sector001_macro' or 'cluster_14_sector001_macro' end
    api.SetObjectSectorPos=function(object,sector,p)
-    writes[#writes+1]={object=object,sector=sector,x=p.x,y=p.y,z=p.z};positions[object]=p
+    writes[#writes+1]={object=object,sector=sector,x=p.x,y=p.y,z=p.z}
+    positions[object]={x=p.x,y=p.y,z=p.z,yaw=p.yaw*math.pi/180,pitch=p.pitch*math.pi/180,roll=p.roll*math.pi/180}
    end
   ''')
   for file in ('bubble_game.lua','motion.lua','coop_game.lua','life_game.lua'):l.execute((UI/file).read_text())
@@ -140,4 +141,49 @@ class CoopAdapterTests(unittest.TestCase):
    local n=#writes;now=12;frames.onUpdate();assert(#writes==n and positions[42].x>1000)
    f[7]='2';f[17]='49';c.receive(f,now);assert(c.remote[2].seq==1)
    auth(2,'p1',1,'p1','p1',2,'0');assert(c.remote[2]==nil)
+  """)
+
+ def stationary_remote(self):
+  l=self.make();l.execute("""
+   local c=X4LAN_BUBBLE_API.coop;c.sectors.cluster_14_sector001_macro=22
+   c.receive({'NAV2','1',client.lease,string.rep('b',32),'2','1','1','cluster_14_sector001_macro',
+    '1000','10000','0','0','0','0','0','0','50','0','0','0','0','0','0'},now)
+   now=10.2;frames.onUpdate()
+  """);return l
+
+ def test_unchanged_remote_pose_repairs_actual_engine_translation_and_rotation(self):
+  l=self.stationary_remote();l.execute("""
+   local n=#writes
+   positions[42].x=1020;positions[42].yaw=.5;positions[42].pitch=-.2
+   now=10.4;frames.onUpdate()
+   assert(#writes==n+1 and positions[42].x==1000 and positions[42].yaw==0 and positions[42].pitch==0)
+   now=10.6;frames.onUpdate();assert(#writes==n+1) -- no correction if the actual pose agrees
+  """)
+
+ def test_drift_repair_respects_pause_docking_and_local_authority(self):
+  l=self.stationary_remote();l.execute("""
+   local n=#writes;positions[42].yaw=.5
+   paused=true;now=10.4;frames.onUpdate();assert(#writes==n and positions[42].yaw==.5)
+   paused=false;now=10.6;frames.onUpdate();assert(#writes==n+1 and positions[42].yaw==0)
+   events['X4LAN_Coop.Docks'](nil,'0|1');positions[42].yaw=.6
+   now=10.8;frames.onUpdate();assert(#writes==n+1 and positions[42].yaw==.6)
+   events['X4LAN_Coop.Docks'](nil,'0|0');auth(2,'p1',1,'p1','p1',2,'0')
+   now=11;frames.onUpdate();assert(#writes==n+1 and positions[42].yaw==.6)
+  """)
+
+ def test_equivalent_wrapped_engine_angle_does_not_cause_pose_correction(self):
+  l=self.stationary_remote();l.execute("""
+   local c=X4LAN_BUBBLE_API.coop
+   c.receive({'NAV2','1',client.lease,string.rep('b',32),'2','1','2','cluster_14_sector001_macro',
+    '1000','10000','0',tostring(math.pi),'0','0','0','0','50.2','0','0','0','0','0','0'},now)
+   now=10.6;frames.onUpdate();local n=#writes
+   positions[42].yaw=-math.pi;now=10.8;frames.onUpdate();assert(#writes==n)
+   positions[42].yaw=-math.pi+.2;now=11;frames.onUpdate();assert(#writes==n+1)
+  """)
+
+ def test_remote_drift_is_corrected_on_the_next_render_frame_above_60_fps(self):
+  l=self.stationary_remote();l.execute("""
+   local n=#writes;positions[42].yaw=.005
+   now=10.208;frames.onUpdate()
+   assert(#writes==n+1 and positions[42].yaw==0)
   """)

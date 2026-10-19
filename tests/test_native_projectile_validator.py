@@ -1,6 +1,8 @@
 """Reject incomplete or invalid native trajectory evidence."""
 import unittest
+from pathlib import Path
 from dev.native_projectile_test import analyze
+from test_game_adapter import MOCK, LuaRuntime
 
 
 class ProjectileValidatorTests(unittest.TestCase):
@@ -65,3 +67,30 @@ class ProjectileValidatorTests(unittest.TestCase):
         self.assertFalse(analyze(log)['measurement_complete'])
         log=self.fixture().replace('gameTime=106.01','gameTime=106.51')
         self.assertFalse(analyze(log)['measurement_complete'])
+
+    @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')
+    def test_production_orientation_mode_does_not_secretly_correct_tested_poses(self):
+        source=(Path(__file__).resolve().parents[1]/'dev/projectile_probe.lua').read_text()
+        for hold in (False,True):
+            lua=LuaRuntime(unpack_returned_tuples=True);lua.execute(MOCK)
+            lua.globals().X4LAN_CONFIG.projectile_probe_hold_orientation=hold
+            lua.execute('''
+              X4LAN_CONFIG.test_profile='45841';X4LAN_CONFIG.projectile_probe=true
+              positions[42]={x=1000,y=10000,z=-2000,yaw=0,pitch=0,roll=0}
+              GetCurTime=function() return now end
+              X4LAN_BUBBLE_API={coop={ready=true,ships={[2]=42},remote={[2]={track={samples={{time=506,velocity={0}}}}}}},
+                state={client={lease='test'}},universe={frame=function() end},paused=function() return false end}
+            ''')
+            lua.execute(source)
+            lua.execute('''
+              local A=X4LAN_BUBBLE_API
+              A.universe.frame(1);events['X4LAN_ProjectileProbe.Ready']()
+              for _,t in ipairs({506,518,530}) do
+                A.coop.remote[2].track.samples[1].time=t;now=t;A.universe.frame(t)
+              end
+            ''')
+            self.assertEqual(lua.eval('#writes'),3 if hold else 0)
+            lua.execute('''
+              local A=X4LAN_BUBBLE_API;A.coop.remote[2].track.samples[1].time=542;now=542;A.universe.frame(542)
+            ''')
+            self.assertEqual(lua.eval('#writes'),4 if hold else 1)

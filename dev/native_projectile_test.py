@@ -27,6 +27,7 @@ SECTOR = 'cluster_14_sector001_macro'
 
 def analyze(log):
     rows = []; malformed = 0
+    orientation = re.search(r'PROJECTILE_PROBE orientation_control=(all|native_only)',log)
     ship_rows = []; readbacks = {}
     for line in log.splitlines():
         if 'PROJECTILE_PROBE ship phase=' in line:
@@ -72,6 +73,7 @@ def analyze(log):
               ('projectileprobe' in line.lower().replace('_','') and any(v in line.lower() for v in ('error:', 'error in', 'failed', 'not found')))
               or 'PROJECTILE_PROBE' in line and 'unknown' in line]
     result = dict(phases=phases, samples=rows, errors=errors, malformed_readbacks=malformed,
+                  orientation_control=orientation.group(1) if orientation else 'unrecorded',
                   projectile_samples_complete=all(p['valid'] for p in phases.values()) and not errors and malformed == 0
                   and len({r['sample'] for r in rows}) == len(rows),
                   two_native_acceptance=False, damage_or_aim_acceptance=False)
