@@ -172,7 +172,7 @@ class Fire2AdapterTests(unittest.TestCase):
          frames.onUpdate();assert(#fires('Fire2')==0,'edge waits for the motion playback delay')
          now=10.21;frames.onUpdate()
          local f=fires('Fire2');assert(#f==1 and f[1].primary==true and f[1].secondary==false)
-         assert(groups[42][1]==2 and #groupWrites==1)
+         assert(f[1].primaryGroup==2 and f[1].secondaryGroup==1,'MD selects groups after stopping old credit')
          now=10.6;fire2(3,50.6,2,1,1,0);frames.onUpdate()
          f=fires('Fire2');assert(f[#f].primary==false,'trigger released after its deadline')
         ''')
@@ -185,6 +185,49 @@ class Fire2AdapterTests(unittest.TestCase):
          now=10.75;frames.onUpdate();f=fires('Fire2');assert(f[#f].secondary==false,'silence stops fire')
          local q=C.fire2[2];q.at=now;q.events={{time=40,trigger=1,group=1}};frames.onUpdate()
          assert(#q.events==0 and q.deadline[1]==0,'old queued edge dropped, never fired late')
+        ''')
+
+    def test_playback_grants_counter_deltas_including_split_volleys_once(self):
+        l = self.make()
+        l.execute('''
+         nav2(1,50,0);fire2(1,50,1,1,0,0)
+         now=10.05;nav2(2,50.05,4);fire2(2,50.05,1,1,4,0)
+         now=10.21;frames.onUpdate();local f=fires('Fire2')
+         assert(#f==1 and f[1].primaryShots==4 and f[1].secondaryShots==0 and f[1].epoch==1)
+         now=10.25;nav2(3,50.25,6);fire2(3,50.25,1,1,6,0)
+         now=10.41;frames.onUpdate();f=fires('Fire2')
+         assert(#f==2 and f[2].primary and f[2].primaryShots==2,'grant even while already on')
+         fire2(3,50.25,1,1,6,0);fire2(4,50.41,1,1,6,0)
+         now=10.5;frames.onUpdate();assert(#fires('Fire2')==2,'no duplicate grant')
+         now=10.9;frames.onUpdate();f=fires('Fire2')
+         assert(#f==3 and not f[3].primary and f[3].primaryShots==0,'timeout cancels, never grants')
+        ''')
+
+    def test_group_switch_cancels_old_credit_and_leaves_other_trigger_alone(self):
+        l = self.make()
+        l.execute('''
+         nav2(1,50,0);fire2(1,50,1,1,0,0)
+         now=10.05;nav2(2,50.05,12);fire2(2,50.05,1,1,6,6)
+         now=10.21;frames.onUpdate()
+         now=10.25;nav2(3,50.25,12);fire2(3,50.25,2,1,6,6)
+         now=10.41;frames.onUpdate();local f=fires('Fire2');local v=f[#f]
+         assert(v.primaryGroup==2 and v.resetPrimary and not v.primary and v.primaryShots==0)
+         assert(v.secondary and not v.resetSecondary and v.secondaryShots==0)
+         now=10.42;nav2(4,50.42,14);fire2(4,50.42,2,1,8,6)
+         now=10.58;frames.onUpdate();v=fires('Fire2')[#fires('Fire2')]
+         assert(v.primary and v.primaryShots==2 and not v.secondary,'expired other trigger stays stopped')
+        ''')
+
+    def test_pending_budget_is_bounded_and_old_credit_expires_during_continuous_input(self):
+        l = self.make()
+        l.execute('''
+         nav2(1,50,0);fire2(1,50,1,1,0,0)
+         now=10.05;nav2(2,50.05,10000);fire2(2,50.05,1,1,10000,0)
+         now=10.21;frames.onUpdate();local f=fires('Fire2')
+         assert(f[1].primaryShots==256,'large counter jumps are bounded')
+         now=10.4;nav2(3,50.4,10001);fire2(3,50.4,1,1,10001,0)
+         now=10.57;frames.onUpdate();f=fires('Fire2');local v=f[#f]
+         assert(v.resetPrimary and v.primaryShots==1,'expired credit is cancelled before new grant')
         ''')
 
     # --- pause ---

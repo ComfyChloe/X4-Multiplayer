@@ -4,6 +4,7 @@ Install the shared-ship host with fire2=true first. Two six-weapon tap counters
 and a sustained burst are sent on the NAV2 clock. WORLD records native shots
 and damage. Synthetic source counters do not prove real guest trigger capture.
 """
+import argparse
 import json
 from pathlib import Path
 import secrets
@@ -21,7 +22,7 @@ HERE = ROOT / '.local/native-world-tests'
 SECTOR = 'cluster_14_sector001_macro'
 
 
-def run():
+def run(echo_source=False):
     cfg = json.loads((HERE / 'native-session.json').read_text())
     assert cfg.get('fire2') is True
     session = UniverseSession(cfg['token'], cfg['build'], cfg['bubble'])
@@ -35,6 +36,7 @@ def run():
     seq = next_hello = next_send = 0
     receiver = Receiver()
     history, evidence, captured = [], [], []
+    identities = set()
     previous_shots = 0
     try:
         while time.monotonic() - start < 240:
@@ -55,6 +57,8 @@ def run():
                         native_at = now
                     values = list(map(float, f[5:]))
                     history.append(dict(time=round(now-native_at, 4), values=values))
+                elif f[0] == 'IDENT':
+                    identities.add((f[5], f[6]))
                 elif f[0] == 'FIRE2' and f[4] == '1' and native_at:
                     captured.append(dict(time=round(now-native_at, 4), primary=int(f[10]), secondary=int(f[11])))
                 elif f[0] in ('UBEGIN', 'UOBJECT', 'UCOMMIT') and lease:
@@ -65,9 +69,13 @@ def run():
                 next_send = now + .05
                 seq += 1
                 elapsed = now-native_at if native_at else 0
-                shots = (6 if elapsed >= 5 else 0) + (6 if elapsed >= 10 else 0)
+                shots = (4 if elapsed >= 5 else 0) + (2 if elapsed >= 5.10 else 0) + (6 if elapsed >= 10 else 0)
                 if elapsed >= 14:
                     shots += 6 * min(13, 1 + int((elapsed-14) / .25))
+                secondary = 0
+                if echo_source:
+                    shots = captured[-1]['primary'] if captured else 0
+                    secondary = captured[-1]['secondary'] if captured else 0
                 source = 500 + now-start
                 if shots != previous_shots:
                     evidence.append(dict(time=round(elapsed, 4), primary=shots))
@@ -75,7 +83,7 @@ def run():
                 packets = [f'IDLE|1|{lease}|{seq}', f'CREW|1|{lease}|{seq}|2|2',
                            f'UINTEREST|1|{lease}|{seq}|{SECTOR}',
                            f'NAV2|1|{lease}|2|1|{seq}|{SECTOR}|1000|10000|0|0|0|0|0|{shots}|{source:.6f}|0|0|0|0|0|0',
-                           f'FIRE2|1|{lease}|2|1|{seq}|{source:.6f}|1|1|{shots}|0']
+                           f'FIRE2|1|{lease}|2|1|{seq}|{source:.6f}|1|1|{shots}|{secondary}']
                 for packet in packets:
                     sock.send(packet.encode())
             if native_at and now-native_at > 27:
@@ -86,7 +94,8 @@ def run():
             samples = [row for row in history if row['time'] <= t]
             return samples[-1]['values'][16] if samples else None
         readings = {str(t): at(t) for t in (4, 8, 13, 20, 26)}
-        result = dict(source='synthetic FIRE2 pilot, real Linux host projectile simulation',
+        result = dict(source='native local capture echoed to a synthetic peer' if echo_source else 'synthetic FIRE2 pilot, real Linux host projectile simulation',
+                      identities=sorted(identities),
                       sent=evidence, native_shot_readings=readings, history=history,
                       native_source_capture=captured[-1] if captured else None,
                       native_local_shots=history[-1]['values'][15] if history else None)
@@ -96,14 +105,21 @@ def run():
             result['tap2_native_shots'] = readings['13'] - readings['8']
             result['sustained_native_shots'] = readings['20'] - readings['13']
             result['shots_after_stop'] = readings['26'] - readings['20']
-        (HERE / 'fire2-native-host-result.json').write_text(json.dumps(result, indent=2))
-        shutil.copy2(Path.home()/'.config/EgoSoft/X4/45841/x4lan-debug.txt', HERE/'fire2-native-host.log')
+        result['cadence_pass'] = result['completed'] and (
+            (readings['26'] == result['native_local_shots'] == 6) if echo_source else
+            (result['tap1_native_shots'] == 6 and result['tap2_native_shots'] == 6 and result['sustained_native_shots'] == 78 and result['shots_after_stop'] == 0))
+        result['source_capture_pass'] = bool(captured and captured[-1]['primary'] == result['native_local_shots'] == 6 and captured[-1]['secondary'] == 0)
+        prefix = 'fire2-native-echo' if echo_source else 'fire2-native-host'
+        (HERE / (prefix+'-result.json')).write_text(json.dumps(result, indent=2))
+        shutil.copy2(Path.home()/'.config/EgoSoft/X4/45841/x4lan-debug.txt', HERE/(prefix+'.log'))
         sock.close()
         relay.close()
         print(json.dumps({k: v for k, v in result.items() if k not in ('history', 'sent')}), flush=True)
-    if not result['completed']:
+    if not result['cadence_pass'] or not result['source_capture_pass']:
         raise SystemExit(1)
 
 
 if __name__ == '__main__':
-    run()
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--echo-source',action='store_true')
+    run(parser.parse_args().echo_source)

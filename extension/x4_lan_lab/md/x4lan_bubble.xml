@@ -45,11 +45,21 @@
 <cues>
  <cue name="Shots1" instantiate="true"><conditions><event_weapon_fired group="$weapons1" /></conditions><actions>
   <set_value name="$shots.{1}" operation="add" exact="1" />
-  <do_if value="$coop"><do_if value="player.occupiedship == $ships.{1}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="'1|%s'.[if $ships.{1}.primaryweapons.{$ships.{1}.activeweapongroup.primary}.indexof.{event.object} gt 0 then 'p' else 's']" /></do_if></do_if><do_elseif value="$localSlot == 1"><raise_lua_event name="'X4LAN_Bubble.Fire'" /></do_elseif>
+  <do_if value="$coop and @$fireManaged.{1}">
+   <set_value name="$fireTrigger" exact="if $ships.{1}.primaryweapons.{$ships.{1}.activeweapongroup.primary}.list.indexof.{event.object} gt 0 then 1 else 2"/>
+   <set_value name="$fireRemaining.{1}.{$fireTrigger}" operation="subtract" exact="1"/>
+   <do_if value="$fireRemaining.{1}.{$fireTrigger} le 0"><stop_shooting object="$ships.{1}" primary="$fireTrigger == 1" secondary="$fireTrigger == 2"/></do_if>
+  </do_if>
+  <do_if value="$coop"><do_if value="player.occupiedship == $ships.{1}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="'1|%s'.[if $ships.{1}.primaryweapons.{$ships.{1}.activeweapongroup.primary}.list.indexof.{event.object} gt 0 then 'p' else 's']" /></do_if></do_if><do_elseif value="$localSlot == 1"><raise_lua_event name="'X4LAN_Bubble.Fire'" /></do_elseif>
  </actions></cue>
  <cue name="Shots2" instantiate="true"><conditions><event_weapon_fired group="$weapons2" /></conditions><actions>
   <set_value name="$shots.{2}" operation="add" exact="1" />
-  <do_if value="$coop"><do_if value="player.occupiedship == $ships.{2}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="'2|%s'.[if $ships.{2}.primaryweapons.{$ships.{2}.activeweapongroup.primary}.indexof.{event.object} gt 0 then 'p' else 's']" /></do_if></do_if><do_elseif value="$localSlot == 2"><raise_lua_event name="'X4LAN_Bubble.Fire'" /></do_elseif>
+  <do_if value="$coop and @$fireManaged.{2}">
+   <set_value name="$fireTrigger" exact="if $ships.{2}.primaryweapons.{$ships.{2}.activeweapongroup.primary}.list.indexof.{event.object} gt 0 then 1 else 2"/>
+   <set_value name="$fireRemaining.{2}.{$fireTrigger}" operation="subtract" exact="1"/>
+   <do_if value="$fireRemaining.{2}.{$fireTrigger} le 0"><stop_shooting object="$ships.{2}" primary="$fireTrigger == 1" secondary="$fireTrigger == 2"/></do_if>
+  </do_if>
+  <do_if value="$coop"><do_if value="player.occupiedship == $ships.{2}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="'2|%s'.[if $ships.{2}.primaryweapons.{$ships.{2}.activeweapongroup.primary}.list.indexof.{event.object} gt 0 then 'p' else 's']" /></do_if></do_if><do_elseif value="$localSlot == 2"><raise_lua_event name="'X4LAN_Bubble.Fire'" /></do_elseif>
  </actions></cue>
  <cue name="FireOn" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOn'" /></conditions><actions><shoot object="$proxy" /></actions></cue>
  <cue name="FireOff" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOff'" /></conditions><actions><stop_shooting object="$proxy" /></actions></cue>

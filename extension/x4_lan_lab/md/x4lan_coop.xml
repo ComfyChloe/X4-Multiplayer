@@ -6,6 +6,10 @@
    <actions>
     <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
     <set_value name="$arena.$coop" exact="true"/>
+    <set_value name="$arena.$fireRemaining" exact="[[0,0],[0,0]]"/>
+    <set_value name="$arena.$fireManaged" exact="[false,false]"/>
+    <set_value name="$arena.$fireGroup" exact="[[0,0],[0,0]]"/>
+    <set_value name="$arena.$fireEpoch" exact="[0,0]"/>
     <do_all exact="2" counter="$i"><set_known object="$arena.$ships.{$i}" known="true"/></do_all>
     <!-- Guest collisions or delayed shots must not permanently remove a target
          before the authoritative host reports its destruction. -->
@@ -30,12 +34,43 @@
      <set_value name="$ship" exact="$arena.$ships.{event.param3.$ship}"/>
      <do_if value="$ship.isoperational"><do_if value="event.param3.$on"><shoot object="$ship"/></do_if><do_else><stop_shooting object="$ship"/></do_else></do_if>
     </actions></cue>
-    <!-- FIRE2: Lua has already selected the mirrored active groups; mirror both triggers. -->
+    <!-- FIRE2 grants finite native shot counts. Weapon events stop each trigger at zero. -->
     <cue name="Fire2" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'Fire2'"/></conditions><actions>
      <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$arena.$ships.{$v.$ship}"/>
      <do_if value="$ship.isoperational">
-      <stop_shooting object="$ship"/>
-      <do_if value="$v.$primary or $v.$secondary"><shoot object="$ship" primary="$v.$primary" secondary="$v.$secondary"/></do_if>
+      <do_if value="$arena.$fireEpoch.{$v.$ship} != $v.$epoch">
+       <stop_shooting object="$ship"/>
+       <set_value name="$arena.$fireRemaining.{$v.$ship}" exact="[0,0]"/>
+       <set_value name="$arena.$fireEpoch.{$v.$ship}" exact="$v.$epoch"/>
+      </do_if>
+      <set_value name="$arena.$fireManaged.{$v.$ship}" exact="$v.$primary or $v.$secondary"/>
+      <do_all exact="2" counter="$trigger">
+       <set_value name="$group" exact="if $trigger == 1 then $v.$primaryGroup else $v.$secondaryGroup"/>
+       <do_if value="$arena.$fireGroup.{$v.$ship}.{$trigger} != $group">
+        <stop_shooting object="$ship" primary="$trigger == 1" secondary="$trigger == 2"/>
+        <set_value name="$arena.$fireRemaining.{$v.$ship}.{$trigger}" exact="0"/>
+        <set_value name="$arena.$fireGroup.{$v.$ship}.{$trigger}" exact="$group"/>
+        <!-- C API/wire groups are 1..4; native MD groups are 0..3. -->
+        <activate_weapongroup object="$ship" weapongroup="$group - 1" primary="$trigger == 1"/>
+       </do_if>
+       <do_elseif value="if $trigger == 1 then @$v.$resetPrimary else @$v.$resetSecondary">
+        <stop_shooting object="$ship" primary="$trigger == 1" secondary="$trigger == 2"/>
+        <do_if value="$arena.$fireRemaining.{$v.$ship}.{$trigger} gt 0"><set_value name="$arena.$fireRemaining.{$v.$ship}.{$trigger}" exact="0"/></do_if>
+       </do_elseif>
+       <set_value name="$before" exact="$arena.$fireRemaining.{$v.$ship}.{$trigger}"/>
+       <do_if value="if $trigger == 1 then $v.$primary else $v.$secondary">
+        <set_value name="$arena.$fireRemaining.{$v.$ship}.{$trigger}" exact="[256, $before + (if $trigger == 1 then $v.$primaryShots else $v.$secondaryShots)].min"/>
+        <do_if value="$before le 0 and $arena.$fireRemaining.{$v.$ship}.{$trigger} gt 0">
+         <shoot object="$ship" primary="$trigger == 1" secondary="$trigger == 2"/>
+        </do_if>
+       </do_if>
+       <do_else>
+        <stop_shooting object="$ship" primary="$trigger == 1" secondary="$trigger == 2"/>
+        <!-- Retain overrun debt if simultaneous barrels fired before the stop.
+             Later counter fragments must not authorize those same shots again. -->
+        <do_if value="$arena.$fireRemaining.{$v.$ship}.{$trigger} gt 0"><set_value name="$arena.$fireRemaining.{$v.$ship}.{$trigger}" exact="0"/></do_if>
+       </do_else>
+      </do_all>
      </do_if>
     </actions></cue>
     <cue name="LeaveControls" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'LeaveControls'"/></conditions><actions>

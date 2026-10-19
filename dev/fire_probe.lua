@@ -7,10 +7,10 @@ function A.universe.frame(now)
  if not A.coop.ready or not A.state.client or not A.state.client.lease or A.paused() then return end
  started=started or now
  if not on and now-started>=5 then
-  on=now;AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=1,primary=true,secondary=false})
+  on=now;AddUITriggeredEvent('X4LAN_FireProbe','Tap',true)
   DebugError('[X4LAN] FIRE_PROBE primary tap started')
  elseif on and not off and now-on>=.05 then
-  off=now;AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=1,primary=false,secondary=false})
+  off=now;AddUITriggeredEvent('X4LAN_FireProbe','Tap',false)
   DebugError('[X4LAN] FIRE_PROBE primary tap stopped')
  end
  if now>=(nextLog or 0) and now-started<=25 then

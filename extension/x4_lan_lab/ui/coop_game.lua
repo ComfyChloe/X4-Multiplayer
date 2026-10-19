@@ -38,8 +38,8 @@ end
 local function send(p) if s.client and s.client.lease then s.transport:send(p) end end
 local function stopFire2(i)
  local q=c.fire2[i]
- if q and (q.on[1] or q.on[2]) then AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,primary=false,secondary=false}) end
- if q then q.on={false,false};q.deadline={0,0};q.events={} end
+ if q and (q.on[1] or q.on[2]) then AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,epoch=q.epoch,primary=false,secondary=false,primaryShots=0,secondaryShots=0,primaryGroup=q.groups[1],secondaryGroup=q.groups[2]}) end
+ if q then q.on={false,false};q.deadline={0,0};q.budgetUntil={0,0};q.events={} end
 end
 -- Freeze source-clock boundaries before NAV2 can reset its motion offset. They
 -- belong to an authority epoch, independently of FIRE2 baselines and motion tracks.
@@ -159,7 +159,7 @@ function c.receive(f,now)
   local q=c.fire2[entity]
   if not q or q.epoch~=epoch then
    -- Baseline: adopt the counters without replaying them.
-   c.fire2[entity]={epoch=epoch,seq=seq,time=time,shots=shots,groups=groups,at=now,events={},on={false,false},deadline={0,0}}
+   c.fire2[entity]={epoch=epoch,seq=seq,time=time,shots=shots,groups=groups,at=now,events={},on={false,false},deadline={0,0},budgetUntil={0,0},group={groups[1],groups[2]}}
    return true
   end
   if seq<=q.seq or time<=q.time or shots[1]<q.shots[1] or shots[2]<q.shots[2] then return true end
@@ -167,7 +167,7 @@ function c.receive(f,now)
   local paused=pauseBoundary(now);local cutoff=resumeCutoff(entity)
   if not paused and not (cutoff and time<=cutoff) then
    for k=1,2 do
-    if shots[k]>q.shots[k] then q.events[#q.events+1]={time=time,trigger=k,group=groups[k]} end
+    if shots[k]>q.shots[k] or groups[k]~=q.groups[k] then q.events[#q.events+1]={time=time,trigger=k,group=groups[k],count=math.min(256,shots[k]-q.shots[k])} end
    end
   end
   while #q.events>32 do table.remove(q.events,1) end
@@ -215,25 +215,37 @@ local function fire2Frame(i,r,ship,now)
  end
  local target=(r and r.track and r.track.offset) and now-r.track.offset-M.delay or math.huge
  local cutoff=resumeCutoff(i)
- local keep={}
+ local keep={};local grant={0,0};local reset={false,false};local changed=false
+ q.budgetUntil=q.budgetUntil or {0,0};q.group=q.group or {q.groups[1],q.groups[2]}
+ for k=1,2 do
+  if q.budgetUntil[k]>0 and now>=q.budgetUntil[k] then
+   reset[k]=true;q.budgetUntil[k]=0;q.deadline[k]=0;changed=true
+  end
+ end
  for _,e in ipairs(q.events) do
   if cutoff and e.time<=cutoff then
    -- Pre-resume history is never played, even if it was queued before the cutoff existed.
   elseif e.time<=target then
-   -- A queued edge older than the motion window is dropped, never fired late.
-   if target-e.time<=M.stale then q.deadline[e.trigger]=now+.35;q.group=q.group or {};q.group[e.trigger]=e.group end
+   if target-e.time<=M.stale then
+    local k=e.trigger
+    if q.group[k]~=e.group then
+     -- Never spend earlier-group credit on a later group, even within one frame.
+     grant[k]=0;reset[k]=true;q.deadline[k]=0;q.budgetUntil[k]=0;q.group[k]=e.group;changed=true
+    end
+    if e.count>0 then
+     if q.budgetUntil[k]==0 then q.budgetUntil[k]=now+.35 end
+     q.deadline[k]=q.budgetUntil[k];grant[k]=math.min(256,grant[k]+e.count)
+    end
+   end
   else keep[#keep+1]=e end
  end
  q.events=keep
  local on={q.deadline[1]>now,q.deadline[2]>now}
- local group=q.group or {}
- for k=1,2 do
-  if on[k] and group[k] and getGroup and setGroup and getGroup(ship,k==1)~=group[k] then
-   setGroup(ship,k==1,group[k])
-  end
- end
- if on[1]~=q.on[1] or on[2]~=q.on[2] then
-  q.on=on;AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,primary=on[1],secondary=on[2]})
+ if changed or on[1]~=q.on[1] or on[2]~=q.on[2] or grant[1]>0 or grant[2]>0 then
+  -- MD stops the old group before activating a new one, in the same action block.
+  q.on=on;AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,epoch=q.epoch,primary=on[1],secondary=on[2],
+   primaryShots=grant[1],secondaryShots=grant[2],primaryGroup=q.group[1],secondaryGroup=q.group[2],
+   resetPrimary=reset[1],resetSecondary=reset[2]})
  end
 end
 local function publishMetrics(now)
