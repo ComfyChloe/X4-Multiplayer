@@ -29,31 +29,31 @@ INTEGRATED WORK AND EVIDENCE
 - Ordinary co-op cargo uses real full-quantity native drops and magnet pickup,
   authenticated/deduplicated host transactions, inventory reconciliation and
   generation-aware callbacks. Native host/guest paths passed separately, including
-  lost completions, duplicate requests, capacity limits and partial10+10 pickup.
+  lost completions, duplicate requests, capacity limits and partial 10+10 pickup.
 - NAV2/UMOVE share source time, linear/angular velocity, interpolation and bounded
   prediction. Native transform/HUD checks passed through deliberate packet gaps.
 - Shared player/NPC/fixture display identities and radar observations are bound
-  to local engine objects. Native guest P1/P2 and F1-F4 each produced61 matching
-  name/code/live headers after initial metadata arrival. All310 selections of
+  to local engine objects. Native guest P1/P2 and F1-F4 each produced 61 matching
+  name/code/live headers after initial metadata arrival. All 310 selections of
   five selectable objects were targetable; own-ship self-selection is unavailable.
   Late trade readiness and new host identity epochs have focused regressions.
-- Claude's Shuttle PR #6 and FIRE2 history through6069cbb are integrated with the
+- Claude's Shuttle PR #6 and FIRE2 history through 6069cbb are integrated with the
   primary's pause-boundary, native classification and finite-budget corrections.
-  Native tap6 ->6, sustained78 ->78, real source capture/echo6 ->6, disjoint dual
+  Native tap 6 -> 6, sustained 78 -> 78, real source capture/echo 6 -> 6, disjoint dual
   triggers and unequal/staggered exhaustion passed. Custom group membership is
   not transmitted; the dual fixture explicitly configured both ships identically.
-- Native guest health replay passed63 exact eight-field readbacks, including27
-  nonconstant recorded host states. A deliberate local42/5 perturbation recovered
-  to unchanged host65/45 in0.83s. The validator rejects plateau-only evidence.
+- Native guest health replay passed 63 exact eight-field readbacks, including 27
+  nonconstant recorded host states. A deliberate local 42/5 perturbation recovered
+  to unchanged host 65/45 in 0.83 s. The validator rejects plateau-only evidence.
   This proves receiver convergence, not native hit/aim equivalence.
 - Both Xperimental Shuttles have six guns, matching hardware, all six software
   modules, Mk3 combat thrusters and Docking Computer Mk2 (Timelines required).
   Native Windows hardware/docking and installer fixtures passed as reported by
   Claude; expanded software/thruster readback was performed on Linux only.
-- Linux225 Python/LuaJIT tests passed without skips; all15 production/opt-in MD
+- Linux 225 Python/LuaJIT tests passed without skips; all 15 production/opt-in MD
   scripts validate against the installed X4 9.00 schema. Independent review and
   matched package inventories/digests passed. The clean packaged Linux game/server
-  startup smoke passed:116/117-object baselines and123 identities reached a
+  startup smoke passed: 116/117-object baselines and 123 identities reached a
   synthetic peer, including both players and all four fixtures; no MD errors.
 
 Details and actual limits:
@@ -78,7 +78,7 @@ NEXT WORK
    docking/trading, stations/production, faction/mission consequences and saves.
    Arbitrary NPC loot, multi-ware crates and unrestricted cargo are not accepted.
    Shared mission success does not prove arbitrary vanilla mission synchronization.
-4. NPC PiP artifacts remain a low-priority open item. Supported shaderquality2
+4. NPC PiP artifacts remain a low-priority open item. Supported shaderquality 2
    fixes the measured Shuttle cockpit startup crash; it is not a PiP fix claim.
 
 WORKFLOW AND USER CHOICES
