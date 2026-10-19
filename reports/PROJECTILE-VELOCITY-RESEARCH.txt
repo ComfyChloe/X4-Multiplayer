@@ -1,37 +1,40 @@
 PROJECTILE VELOCITY RESEARCH - INTERNAL, 20 OCTOBER 2026
 
 STATUS
-The observed metrics are from b687bb2, on unchanged production tree
-e199daee (the internal 7.1 production source). This is a diagnostic result,
-not a production fix or simultaneous Windows/Linux gameplay acceptance.
-Review found the original orientation gate read angles AFTER the diagnostic
-corrected them. Its historical measurement_complete=true is not reviewed
-acceptance. Independent pre-correction and per-shot orientation gates are pending.
+The current controlled measurement is from 00d05e0 on unchanged production tree
+e199daee (the internal 7.1 production source). Independent pre-correction and
+per-shot orientation gates passed. Coordinator evidence review is pending.
+This is a diagnostic result, not a production fix or simultaneous Windows/Linux
+gameplay acceptance. Earlier b687 metrics remain historical observations: its
+validator used post-correction angles, which did not independently prove the
+firing direction. Original raw artifacts and historical values are unchanged.
 The owner requested a renewed Claude availability check after midnight. No reply
 was received by 00:15 CEST, so primary continued with the authorized solo test.
 Claude's damage_probe.* scope was preserved. No public package was prepared.
 
 MEASURED RESULT
-Same Xperimental Shuttle, six weapons, identical sector orientation, 24 native
-shots. All four controls had 56 position intervals and six correlated native
-velocity/trajectory readbacks. Ship speeds derived from sector positions were
-0, 100.000, 100.001 and 99.993 m/s respectively. Native speeds were 0, 0, 100,
-100 m/s. Median projectile lateral velocities (sector X) were:
-- Stationary: -1.086 m/s.
-- Production pose-driven motion at 100 m/s: 0.343 m/s.
-- Pose-driven motion with explicit native 100 m/s: 100.132 m/s.
-- Native translation with orientation correction: 101.866 m/s.
+Same Xperimental Shuttle and six weapons, 24 native shots. The four controls
+had 56/56/56/55 position intervals and six correlated native velocity/trajectory
+readbacks each. Position-derived sector speeds were 0, 100.000, 99.999 and
+100.000 m/s. Native speeds were 0, 0, 100, 100 m/s. Median projectile lateral
+velocities (sector X) were:
+- Stationary: 1.055 m/s.
+- Production pose-driven motion at 100 m/s: 1.558 m/s.
+- Pose-driven motion with explicit native 100 m/s: 99.549 m/s.
+- Native translation with orientation correction: 100.787 m/s.
 Forward projectile velocity was approximately 2300 m/s in every case.
-The historical validator accepted four controls and 24 trajectories, subject
-to the orientation gap above;
-no MD/probe errors or malformed readbacks were found. Normal save bytes and
-actual save timestamps were unchanged. Game and test relay closed afterward.
+All four controls and 24 trajectories passed the updated validator, with no
+MD/probe errors or malformed readbacks. Maximum pre-correction angle in the
+settled firing window was 0.001029 rad; maximum native per-shot forward/up basis
+component error was 0.00103457 (limit 0.002). Serial, phase, birth time and sample
+start/end/delta time correlations passed. Normal saves were preserved and the
+native game and relay closed afterward.
 
-These observations indicate that current pose-driven motion does not give this ship
-its corresponding native velocity, and its bullets omit the lateral motion
-that is present with native velocity. Reviewed acceptance requires the new
-independent orientation gate. Weapon spread means these medians are
-not an exact trajectory-equivalence claim. General aiming/hits remain untested.
+These observations show that pose-driven motion does not give this ship its
+corresponding native velocity. Its bullets omit the lateral motion observed
+with native velocity. The independent direction bounds are much smaller than
+the approximately 100 m/s lateral difference. Weapon spread means these medians
+are not exact trajectory equivalence. General aiming/hits remain untested.
 
 CONTROL AND API LIMITS
 The diagnostic explicitly holds orientation at zero in EVERY case, preserving
@@ -71,9 +74,10 @@ NEXT IMPLEMENTATION / REVIEW BOUNDARIES
 EVIDENCE
 reports/projectile-velocity-native-checks.json contains exact source/tree IDs,
 control metrics, artifact hashes and both failed runs. Local raw files are under
-.local/evidence-195-withheld,c084,743}-* and are not shipped.
-232 Linux Python/LuaJIT checks passed without skips. MD structure passed the
+.local/evidence-194-withheld,b687,c084,743}-* and are not shipped.
+234 Linux Python/LuaJIT checks passed without skips. MD structure passed the
 installed X4 9.00 schema; the final expression-only change preserved that schema
 structure and removed unsupported arithmetic. Negative validator cases reject
 missing controls/readbacks, zero/nonfinite displacement, duplicate serials and
-rotating comparison ships. The matched internal 7.1 archives remain unchanged.
+rotating comparison ships, post-correction-only angle evidence and mismatched
+shot phases/times. The matched internal 7.1 archives remain unchanged.
