@@ -1,9 +1,8 @@
 CURRENT HANDOFF — INTERNAL 7.1.1 PREPARATION, 20 OCTOBER 2026
 
-The real two-computer 7.0 playtest drove the overnight follow-up. PRs8-12 are
-integrated. PR13's native linear-velocity lifecycle evidence is independently
-accepted; its final report delta is awaiting integration. This delivery branch
-prepares version 7.1.1. It is not full-universe or two-native acceptance.
+The real two-computer 7.0 playtest drove the overnight follow-up. PRs8-13 are
+integrated through main eb59d68. PR13's native linear-velocity lifecycle
+evidence is independently accepted. This delivery branch prepares version 7.1.1. It is not full-universe or two-native acceptance.
 No new public release was requested or prepared.
 
 DELIVERY STATE — BUILD/INSTALL PENDING
