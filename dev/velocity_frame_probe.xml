@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in native setter-frame measurement in a disposable world. -->
+<mdscript name="X4LAN_VelocityFrame" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Observe" namespace="this">
+  <conditions><event_ui_triggered screen="'X4LAN_VelocityFrame'" control="'Setup'"/></conditions>
+  <actions>
+   <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{2}"/>
+   <set_value name="$sector" exact="$ship.sector"/>
+   <raise_lua_event name="'X4LAN_VelocityFrame.Ready'"/>
+  </actions>
+  <cues>
+   <cue name="Set" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_VelocityFrame'" control="'Set'"/></conditions><actions>
+    <set_object_velocity object="$ship" constantvel="true"><linear x="event.param3.$x" y="event.param3.$y" z="event.param3.$z"/><angular x="0" y="0" z="0"/></set_object_velocity>
+    <set_value name="$rotation" exact="$ship.relativerotation.{$sector}"/>
+    <debug_text text="'[X4LAN] VELOCITY_FRAME set=%s gameTime=%s forwardX=%s forwardY=%s forwardZ=%s upX=%s upY=%s upZ=%s'.[event.param3.$phase,player.age,$rotation.forward.x,$rotation.forward.y,$rotation.forward.z,$rotation.up.x,$rotation.up.y,$rotation.up.z]"/>
+   </actions></cue>
+   <cue name="Sample" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_VelocityFrame'" control="'Sample'"/></conditions><actions>
+    <set_value name="$position" exact="$ship.relativeposition.{$sector}"/>
+    <set_value name="$rotation" exact="$ship.relativerotation.{$sector}"/>
+    <set_value name="$parentrotation" exact="$ship.parent.relativerotation.{$sector}"/>
+    <set_value name="$sectorrotation" exact="$sector.relativerotation.{$sector.cluster}"/>
+    <debug_text text="'[X4LAN] VELOCITY_FRAME sample=%s gameTime=%s x=%s y=%s z=%s vx=%s vy=%s vz=%s rx=%s ry=%s rz=%s ux=%s uy=%s uz=%s fx=%s fy=%s fz=%s pfx=%s pfy=%s pfz=%s pux=%s puy=%s puz=%s sfx=%s sfy=%s sfz=%s sux=%s suy=%s suz=%s'.[event.param3,player.age,$position.x,$position.y,$position.z,$ship.velocity.x,$ship.velocity.y,$ship.velocity.z,$rotation.right.x,$rotation.right.y,$rotation.right.z,$rotation.up.x,$rotation.up.y,$rotation.up.z,$rotation.forward.x,$rotation.forward.y,$rotation.forward.z,$parentrotation.forward.x,$parentrotation.forward.y,$parentrotation.forward.z,$parentrotation.up.x,$parentrotation.up.y,$parentrotation.up.z,$sectorrotation.forward.x,$sectorrotation.forward.y,$sectorrotation.forward.z,$sectorrotation.up.x,$sectorrotation.up.y,$sectorrotation.up.z]"/>
+   </actions></cue>
+  </cues>
+ </cue></cues>
+</mdscript>

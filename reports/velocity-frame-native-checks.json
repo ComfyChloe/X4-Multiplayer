@@ -1,0 +1,317 @@
+{
+  "source_commit": "23c38527be10bdcb6bbbac97ce80f9933927379c",
+  "scope": "Native setter-coordinate diagnostic; no production velocity implementation",
+  "measurement_complete": true,
+  "input_vector": [
+    100,
+    40,
+    -25
+  ],
+  "orientations_degrees": [
+    [
+      0,
+      0,
+      0
+    ],
+    [
+      90,
+      0,
+      0
+    ],
+    [
+      180,
+      0,
+      0
+    ],
+    [
+      0,
+      45,
+      0
+    ],
+    [
+      0,
+      0,
+      45
+    ],
+    [
+      35,
+      20,
+      -15
+    ]
+  ],
+  "phases": {
+    "1": {
+      "samples": 26,
+      "position_intervals": 25,
+      "valid": true,
+      "position_velocity": [
+        99.9999999999996,
+        39.999999999994095,
+        -24.999999999999815
+      ],
+      "native_velocity_in_sector": [
+        100.0,
+        40.0,
+        -25.0
+      ],
+      "component_velocity": [
+        100.0,
+        40.0,
+        -25.0
+      ],
+      "sector_input_error": 5.9046101341664325e-12,
+      "body_input_error": 5.9046101341664325e-12,
+      "native_vs_position_error": 5.9046101341664325e-12,
+      "heading_verified": true,
+      "basis_norm_error": 0.0,
+      "basis_dot_error": 0.0,
+      "basis_drift": 0.0,
+      "settled_samples": true,
+      "ordered_samples": true,
+      "parent_basis": {
+        "pfx": 0.0,
+        "pfy": 0.0,
+        "pfz": 1.0,
+        "pux": 0.0,
+        "puy": 1.0,
+        "puz": 0.0,
+        "sfx": 0.0,
+        "sfy": 0.0,
+        "sfz": 1.0,
+        "sux": 0.0,
+        "suy": 1.0,
+        "suz": 0.0
+      }
+    },
+    "2": {
+      "samples": 26,
+      "position_intervals": 25,
+      "valid": true,
+      "position_velocity": [
+        100.00475059382404,
+        39.99999999999337,
+        -25.0
+      ],
+      "native_velocity_in_sector": [
+        99.999998907215,
+        40.0,
+        -25.00000437114
+      ],
+      "component_velocity": [
+        25.0,
+        40.0,
+        100.0
+      ],
+      "sector_input_error": 0.004750593824041971,
+      "body_input_error": 125.00475496496404,
+      "native_vs_position_error": 0.004751686609040462,
+      "heading_verified": true,
+      "basis_norm_error": 1.9984014443252818e-15,
+      "basis_dot_error": 0.0,
+      "basis_drift": 0.0,
+      "settled_samples": true,
+      "ordered_samples": true,
+      "parent_basis": {
+        "pfx": 0.0,
+        "pfy": 0.0,
+        "pfz": 1.0,
+        "pux": 0.0,
+        "puy": 1.0,
+        "puz": 0.0,
+        "sfx": 0.0,
+        "sfy": 0.0,
+        "sfz": 1.0,
+        "sux": 0.0,
+        "suy": 1.0,
+        "suz": 0.0
+      }
+    },
+    "3": {
+      "samples": 26,
+      "position_intervals": 25,
+      "valid": true,
+      "position_velocity": [
+        99.99530295913786,
+        40.00000000000349,
+        -25.00234192037442
+      ],
+      "native_velocity_in_sector": [
+        99.99999781443,
+        40.0,
+        -25.00000874228
+      ],
+      "component_velocity": [
+        -100.0,
+        40.0,
+        25.0
+      ],
+      "sector_input_error": 0.004697040862140511,
+      "body_input_error": 199.99530077356786,
+      "native_vs_position_error": 0.004694855292143529,
+      "heading_verified": true,
+      "basis_norm_error": 7.549516567451064e-15,
+      "basis_dot_error": 0.0,
+      "basis_drift": 0.0,
+      "settled_samples": true,
+      "ordered_samples": true,
+      "parent_basis": {
+        "pfx": 0.0,
+        "pfy": 0.0,
+        "pfz": 1.0,
+        "pux": 0.0,
+        "puy": 1.0,
+        "puz": 0.0,
+        "sfx": 0.0,
+        "sfy": 0.0,
+        "sfz": 1.0,
+        "sux": 0.0,
+        "suy": 1.0,
+        "suz": 0.0
+      }
+    },
+    "4": {
+      "samples": 26,
+      "position_intervals": 25,
+      "valid": true,
+      "position_velocity": [
+        100.00957854405985,
+        40.0000000000035,
+        -25.000000000000473
+      ],
+      "native_velocity_in_sector": [
+        100.0,
+        39.99998232950001,
+        -24.9999801171
+      ],
+      "component_velocity": [
+        100.0,
+        45.9619,
+        10.6066
+      ],
+      "sector_input_error": 0.009578544059849037,
+      "body_input_error": 29.3933950000035,
+      "native_vs_position_error": 0.009578544059849037,
+      "heading_verified": true,
+      "basis_norm_error": 6.188980001819999e-07,
+      "basis_dot_error": 0.0,
+      "basis_drift": 0.0,
+      "settled_samples": true,
+      "ordered_samples": true,
+      "parent_basis": {
+        "pfx": 0.0,
+        "pfy": 0.0,
+        "pfz": 1.0,
+        "pux": 0.0,
+        "puy": 1.0,
+        "puz": 0.0,
+        "sfx": 0.0,
+        "sfy": 0.0,
+        "sfz": 1.0,
+        "sux": 0.0,
+        "suy": 1.0,
+        "suz": 0.0
+      }
+    },
+    "5": {
+      "samples": 26,
+      "position_intervals": 25,
+      "valid": true,
+      "position_velocity": [
+        99.99060150375989,
+        40.000000000001876,
+        -25.000000000000444
+      ],
+      "native_velocity_in_sector": [
+        99.99999117910002,
+        39.99998232950001,
+        -25.0
+      ],
+      "component_velocity": [
+        42.4264,
+        98.9949,
+        -25.0
+      ],
+      "sector_input_error": 0.009398496240109466,
+      "body_input_error": 82.42642000000188,
+      "native_vs_position_error": 0.00938967534013102,
+      "heading_verified": true,
+      "basis_norm_error": 6.188980001819999e-07,
+      "basis_dot_error": 0.0,
+      "basis_drift": 0.0,
+      "settled_samples": true,
+      "ordered_samples": true,
+      "parent_basis": {
+        "pfx": 0.0,
+        "pfy": 0.0,
+        "pfz": 1.0,
+        "pux": 0.0,
+        "puy": 1.0,
+        "puz": 0.0,
+        "sfx": 0.0,
+        "sfy": 0.0,
+        "sfz": 1.0,
+        "sux": 0.0,
+        "suy": 1.0,
+        "suz": 0.0
+      }
+    },
+    "6": {
+      "samples": 26,
+      "position_intervals": 25,
+      "valid": true,
+      "position_velocity": [
+        100.00000000000394,
+        40.000000000003006,
+        -24.999999999999595
+      ],
+      "native_velocity_in_sector": [
+        100.00001938652998,
+        39.999969759605,
+        -25.00003925458
+      ],
+      "component_velocity": [
+        99.4387,
+        -0.789115,
+        48.3356
+      ],
+      "sector_input_error": 3.936406756110955e-12,
+      "body_input_error": 61.7849950000004,
+      "native_vs_position_error": 3.925458040399121e-05,
+      "heading_verified": true,
+      "basis_norm_error": 8.488430001118985e-07,
+      "basis_dot_error": 5.776800000301119e-07,
+      "basis_drift": 0.0,
+      "settled_samples": true,
+      "ordered_samples": true,
+      "parent_basis": {
+        "pfx": 0.0,
+        "pfy": 0.0,
+        "pfz": 1.0,
+        "pux": 0.0,
+        "puy": 1.0,
+        "puz": 0.0,
+        "sfx": 0.0,
+        "sfy": 0.0,
+        "sfz": 1.0,
+        "sux": 0.0,
+        "suy": 1.0,
+        "suz": 0.0
+      }
+    }
+  },
+  "input_matches_sector_vector": true,
+  "input_matches_component_vector": false,
+  "coordinate_limit": "Parent and sector/cluster bases are reported; coincident axes do not distinguish those reference frames.",
+  "two_native_acceptance": false,
+  "review_status": "Pending independent source and artifact review",
+  "errors": [],
+  "malformed_readbacks": 0,
+  "artifact_sha256": {
+    ".local/native-world-tests/velocity-frame-native-23c3852.log": "28bfec675bfc5087b673cfa4456623503e254206365192b5e27eb13d6b6b7e9e",
+    ".local/native-world-tests/velocity-frame-native-23c3852-result.json": "1a576723cca94b17245a584d3fac7ea9bb6837e6410a965cf8ab3fe095a97110",
+    ".local/native-world-tests/velocity-frame-native-23c3852-stdout.txt": "738dcf57b9c490b5f21b9ee555ebd262ecdeb56142056b7b6369e969be07abab",
+    ".local/native-world-tests/velocity-frame-native-23c3852-installed-hashes.json": "4c10585dc9824de7dd1c6aff52fb1e8b0968ab6952b9e604330db3fbe155c457",
+    ".local/native-world-tests/velocity-frame-schema.json": "13d92edc39c9b6a4d55fdde272c914fc5af42fc78b8eae8b1264941ce7ed6c00",
+    ".local/native-world-tests/velocity-frame-unit-check.log": "5fa1bfb3d3b1db804ba2199083ef2a7b194e356eaa2c8b8905801d8d3b1a8998"
+  }
+}
