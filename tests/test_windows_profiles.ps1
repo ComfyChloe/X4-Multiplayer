@@ -158,7 +158,119 @@ try {
     Update-WindowsLauncher $PackageRoot $payload
     Check (!(Test-Path -LiteralPath $stateFile)) 'Update invented an installation record'
     Check ((Get-Content -Raw -LiteralPath $pkgFile | ConvertFrom-Json).version -eq '5.0.2') 'Legacy v5 update failed'
+
+    # IPv4 input is validated as text; .NET Framework Parse would read 010 as octal.
+    Check ((Assert-IPv4 '192.0.2.109') -eq '192.0.2.109') 'Valid LAN address refused'
+    Check ((Assert-IPv4 '127.0.0.1' $true) -eq '127.0.0.1') 'Host loopback refused'
+    foreach ($bad in @('192.168.010.5','192.168.08.5','256.1.1.1','1.2.3',' 1.2.3.4',('19' + [char]0x0662 + '.168.1.5'))) {
+        Must-Fail { Assert-IPv4 $bad } '*without leading zeros*'
+    }
+    Must-Fail { Assert-IPv4 '127.0.0.1' } '*not localhost*'
+    Must-Fail { Assert-IPv4 '0.0.0.0' $true } '*not localhost*'
+    Must-Fail { Assert-IPv4 '255.255.255.255' } '*broadcast*'
+    Must-Fail { Assert-IPv4 '224.0.0.1' } '*multicast*'
+
+    # Host entry contract: internal placeholder or the public launcher's concrete host.
+    $placeholder = "X4LAN_CONFIG = {`n    host = `"SET_HOST_IP_DURING_INSTALL`",`n    port = 45841,`n}`n"
+    Check ((Set-ConfigHost $placeholder '192.168.1.25') -ceq $placeholder.Replace('SET_HOST_IP_DURING_INSTALL','192.168.1.25')) 'Placeholder not replaced'
+    Check ((Set-ConfigHost 'host = "127.0.0.1"' '127.0.0.1') -ceq 'host = "127.0.0.1"') 'Public concrete host changed'
+    Check ((Set-ConfigHost "    host = `"10.0.0.2`",`r`n" '10.0.0.2') -ceq "    host = `"10.0.0.2`",`r`n") 'CRLF concrete host changed'
+    Must-Fail { Set-ConfigHost 'host = "10.0.0.2"' '10.0.0.3' } '*configured for host 10.0.0.2*'
+    Must-Fail { Set-ConfigHost 'port = 45841' '10.0.0.3' } '*exactly one host entry*'
+    Must-Fail { Set-ConfigHost ("host = `"SET_HOST_IP_DURING_INSTALL`",`nhost = `"SET_HOST_IP_DURING_INSTALL`",`n") '10.0.0.3' } '*exactly one host entry*'
+
+    # Installer integrity with injected failures, using temporary fixtures only.
+    $PackageRoot = Join-Path $fixture 'Install package with spaces'
+    $GamePath = Join-Path $fixture 'Steam Library/steamapps/common/X4 Foundations'
+    $ServerIP = '192.168.1.25'
+    $installDocuments = Join-Path $fixture 'Install Documents'
+    function Get-DocumentsFolder { return $installDocuments }
+    function Get-SteamRoot { return (Join-Path $fixture 'Steam') }
+    $sourceMod = Join-Path $PackageRoot 'extension/x4_lan_lab'
+    New-Item -ItemType Directory -Path (Join-Path $sourceMod 'ui'), $GamePath -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $sourceMod 'content.xml'), '<content id="x4_lan_lab" />', $Utf8)
+    $sourceLua = Join-Path $sourceMod 'ui/config.lua'
+    [IO.File]::WriteAllText($sourceLua, $placeholder, $Utf8)
+    @{steam_build='23660954';channel='internal';slot='p2';package_id='fixture-install-p2'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'package.json')
+    $installProfile = Join-Path $installDocuments ('Egosoft/X4/' + $ProfileId)
+    New-Item -ItemType Directory -Path $installProfile -Force | Out-Null
+    $installConfig = Join-Path $installProfile 'config.xml'
+    $priorConfig = '<root><language>49</language><autosave>true</autosave><playername>Zo' + [char]0x00EB + '</playername></root>'
+    [IO.File]::WriteAllText($installConfig, $priorConfig, $Utf8)
+    $installState = Join-Path $PackageRoot 'installation.json'
+    [IO.File]::WriteAllText($installState, 'previous installation evidence', $Utf8)
+    $extensionsDir = Join-Path $GamePath 'extensions'
+    $installedMod = Join-Path $extensionsDir 'x4_lan_lab'
+    function Assert-NotInstalled([string]$Label) {
+        Check (!(Test-Path -LiteralPath $extensionsDir)) ($Label + ': extensions folder or staging left behind')
+        Check ([IO.File]::ReadAllText($installConfig) -ceq $priorConfig) ($Label + ': profile config not restored exactly')
+        Check (!(Test-Path -LiteralPath (Join-Path $installProfile 'config.x4lan.tmp'))) ($Label + ': temporary config left behind')
+        Check ([IO.File]::ReadAllText($installState) -ceq 'previous installation evidence') ($Label + ': previous state not preserved')
+        Check (!(Test-Path -LiteralPath ($installState + '.tmp'))) ($Label + ': temporary state left behind')
+    }
+    [IO.File]::WriteAllText($sourceLua, 'port = 45841', $Utf8)
+    Must-Fail { Install-Package } '*exactly one host entry*'
+    Assert-NotInstalled 'Missing host entry'
+    [IO.File]::WriteAllText($sourceLua, $placeholder, $Utf8)
+
+    $realCopy = ${function:Copy-ModTree}
+    $realPublish = ${function:Publish-StagedMod}
+    $realState = ${function:Write-InstallationState}
+    ${function:Copy-ModTree} = { param($Source, $Destination)
+        New-Item -ItemType Directory -Path $Destination | Out-Null
+        [IO.File]::WriteAllText((Join-Path $Destination 'partial.txt'), 'partial copy', $Utf8)
+        throw 'Injected copy failure' }
+    Must-Fail { Install-Package } '*Injected copy failure*'
+    Assert-NotInstalled 'Partial copy'
+    ${function:Copy-ModTree} = $realCopy
+    ${function:Publish-StagedMod} = { param($Staging, $Target) throw 'Injected publish failure' }
+    Must-Fail { Install-Package } '*Injected publish failure*'
+    Assert-NotInstalled 'Failure after profile replacement'
+    ${function:Publish-StagedMod} = $realPublish
+    ${function:Write-InstallationState} = { param($Path, $Text)
+        [IO.File]::WriteAllText($Path, $Text, $Utf8)
+        throw 'Injected state failure' }
+    Must-Fail { Install-Package } '*Injected state failure*'
+    Assert-NotInstalled 'Failure after state write'
+    ${function:Write-InstallationState} = $realState
+
+    Install-Package # Retry after the injected failures.
+    Check ((Get-Content -Raw -LiteralPath (Join-Path $installedMod '.x4lan-package-id')) -ceq 'fixture-install-p2') 'Retry did not install the owned mod'
+    Check ((Get-Content -Raw -LiteralPath (Join-Path $installedMod 'ui/config.lua')).Contains('host = "192.168.1.25",')) 'Retry did not configure the host'
+    Check (@(Get-ChildItem -LiteralPath $extensionsDir -Force).Count -eq 1) 'Staging folder left beside the mod'
+    $installed = Get-Content -Raw -LiteralPath $installState | ConvertFrom-Json
+    Check ($installed.server -eq '192.168.1.25' -and $installed.package_id -eq 'fixture-install-p2') 'Retry state wrong'
+    [xml]$configured = [IO.File]::ReadAllText($installConfig, $Utf8)
+    Check ($configured.root.autosave -eq 'false' -and $configured.root.uisafemode -eq 'false' -and $configured.root.language -eq '49') 'Retry profile settings wrong'
+    Check ($configured.root.playername -ceq ('Zo' + [char]0x00EB)) 'BOM-less UTF-8 config value corrupted'
+    $configBackups = @(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'backups') -Recurse -Filter config.xml | Where-Object { [IO.File]::ReadAllText($_.FullName) -ceq $priorConfig })
+    Check ($configBackups.Count -ge 1) 'Prior profile config not backed up exactly'
+
+    # Start: a missing safeguard node gives the intended message, not a StrictMode error.
+    $launchesBefore = $script:launchCount
+    [IO.File]::WriteAllText($installConfig, '<root><uisafemode>false</uisafemode></root>', $Utf8)
+    Must-Fail { Start-TestGame } '*must keep autosave=false*'
+    Check ($script:launchCount -eq $launchesBefore) 'Unsafe config launched'
+    [IO.File]::WriteAllText($installConfig, $configured.OuterXml, $Utf8)
+
+    # Removal archive: same volume beside the package, otherwise outside extensions\.
+    Check (Test-SameVolume 'C:\Games\X4' 'c:\Packages\x') 'Same volume not recognised'
+    Check (!(Test-SameVolume 'D:\SteamLibrary\X4' 'C:\Packages\x')) 'Different volumes treated as same'
+    $realSameVolume = ${function:Test-SameVolume}
+    ${function:Test-SameVolume} = { param($First, $Second) $false }
+    Remove-Package
+    ${function:Test-SameVolume} = $realSameVolume
+    Check (!(Test-Path -LiteralPath $installedMod)) 'Cross-volume removal left the mod installed'
+    $gameArchive = @(Get-ChildItem -LiteralPath (Join-Path $GamePath 'x4lan-backups') -Directory -Filter 'removed-mod-*')
+    Check ($gameArchive.Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $gameArchive[0].FullName '.x4lan-package-id'))) 'Cross-volume archive missing in the game folder'
+    Check (@(Get-ChildItem -LiteralPath $extensionsDir -Force).Count -eq 0) 'Archive placed inside the scanned extensions folder'
+    Install-Package
+    Remove-Package
+    $packageArchive = @(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'backups') -Directory -Filter 'removed-mod-*')
+    Check ($packageArchive.Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $packageArchive[0].FullName '.x4lan-package-id'))) 'Same-volume archive missing beside the package'
+
     Write-Host 'PASS: cloud tag classification; OneDrive start; links/unknowns/errors blocked; config backup; saved-profile protection; isolated launch; paired updater, backups, checksums, rollback and version guards; uninstalled legacy v5 update.'
+    Write-Host 'PASS: IPv4 text validation; host entry contract; install staging, exact rollback and retry after injected failures; UTF-8 profile config; missing safeguard node; removal archive across volumes.'
     Write-Host 'Native Windows metadata reads were simulated. This is not a live Windows/OneDrive test.'
 } finally {
     if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture -Recurse -Force }
