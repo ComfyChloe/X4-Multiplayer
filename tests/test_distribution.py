@@ -46,6 +46,8 @@ class DistributionTests(unittest.TestCase):
    original=home/'.var/app/com.valvesoftware.Steam/.config/EgoSoft/X4/70000001/save/main.xml.gz';original.parent.mkdir(parents=True);original.write_bytes(b'original');before=original.stat().st_mtime_ns
    with patch.object(setup,'ROOT',package),patch.object(Path,'home',return_value=home),patch.object(setup,'ensure_closed'),patch.object(setup.shutil,'which',return_value='/mock/flatpak'):
     setup.install(SimpleNamespace(game=str(game),steam_kind='flatpak'))
+    fresh=ET.parse(home/'.var/app/com.valvesoftware.Steam/.config/EgoSoft/X4/45841/config.xml').getroot()
+    self.assertEqual(fresh.findtext('texturequality'),'high');self.assertEqual(fresh.findtext('autosave'),'false')
     with self.assertRaises(RuntimeError):setup.install(SimpleNamespace(game=str(game),steam_kind='flatpak'))
     with patch.object(setup.subprocess,'run') as run:
      setup.start();self.assertIn('45841',run.call_args.args[0]);self.assertIn('custom_creative',run.call_args.args[0])

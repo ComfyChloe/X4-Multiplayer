@@ -8,12 +8,12 @@ Platform: Linux-7.2.9-ogc3.1.fc44.x86_64-x86_64-with-glibc2.43
 
 Includes motion derivatives/freeze/reset, per-frame pose correction, native-velocity
 lifecycle events, connection teardown/reconnect, and validation of native evidence.
-The existing installer profile test also verifies High textures, shaderquality 2,
-backups and preservation of normal saves. Windows installer source is unchanged;
+The installer tests verify High textures for both a fresh profile and an existing
+profile, shaderquality 2, backups and preservation of normal saves. Windows installer source is unchanged;
 these Linux tests do not establish new native Windows gameplay acceptance.
 
-Raw local check log SHA-256: 29615e0bda15781d5f2042af1b383979a887f7376b7764d1cf5820e4151a914d
-Executable-source manifest SHA-256: 7fda090675f4e54833613a3672308864ce82506632eea39b32b67ff5dae940fa
+Raw local check log SHA-256: 8ce9fc9ed400d769162ad15415b8db5c91cce4ac56d963bb7c80260322426dbb
+Executable-source manifest SHA-256: 90f392667c200f07637918e79c05abb78c3194213947d0823c1de12e5ce1f43f
 Manifest: .local/evidence-162-withheld
 The delivery SOURCE-CHECKPOINT.json identifies the reviewed packaging commit.
 
