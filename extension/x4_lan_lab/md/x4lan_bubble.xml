@@ -4,12 +4,12 @@
 <conditions><event_ui_triggered screen="'X4LAN_Bubble'" /><check_value value="event.param2 == 'SetupHost' or event.param2 == 'SetupGuest'" /></conditions>
 <actions>
  <set_value name="$economy" exact="false" /><set_value name="$coop" exact="false" /><set_value name="$dead" exact="[false,false]" /><set_value name="$remoteBalance" exact="100000Cr" /><set_value name="$host" exact="event.param2 == 'SetupHost'" />
- <set_value name="$local" exact="player.ship" /><set_value name="$proxy" exact="event.param3" />
+ <set_value name="$local" exact="if md.X4LAN_Bubble.PrepareShips.$own? then md.X4LAN_Bubble.PrepareShips.$own else player.ship" /><set_value name="$proxy" exact="event.param3" />
  <do_if value="$host"><set_value name="$ships" exact="[$local,$proxy]" /><set_value name="$localSlot" exact="1" /></do_if>
  <do_else><set_value name="$ships" exact="[$proxy,$local]" /><set_value name="$localSlot" exact="2" /></do_else>
  <set_value name="$targets" exact="[]" /><set_value name="$drops" exact="[]" />
  <set_value name="$shots" exact="[0,0]" /><set_value name="$busy" exact="false" /><set_value name="$docking" exact="[false,false]" />
- <apply_loadout object="$proxy" loadout="$local.loadout" />
+ <do_if value="not md.X4LAN_Bubble.PrepareShips.$own?"><apply_loadout object="$proxy" loadout="$local.loadout" /></do_if>
  <get_loadout loadout="'x4ep1_gamestart_trade_mercury'" macro="macro.ship_arg_m_trans_container_01_a_macro" result="$targetLoadout" />
  <do_all exact="2" counter="$i">
   <set_value name="$ship" exact="$ships.{$i}" />
@@ -120,4 +120,38 @@
  <cue name="Readback" instantiate="true" checkinterval="5s"><conditions><check_value value="true" /></conditions><actions>
   <debug_text text="'[X4LAN] WORLD_READBACK host=%s cargo1=%s cargo2=%s stock=%s target1_shield=%s target2_shield=%s shots1=%s shots2=%s drops1=%s drops2=%s dock1=%s dock2=%s'.[$host,(if $ships.{1}.isoperational and not $dead.{1} then $ships.{1}.cargo.{ware.energycells}.count else 0),(if $ships.{2}.isoperational and not $dead.{2} then $ships.{2}.cargo.{ware.energycells}.count else 0),$station.cargo.{ware.energycells}.count,@$targets.{1}.shieldpercentage,@$targets.{2}.shieldpercentage,$shots.{1},$shots.{2},if $drops.{1}.exists then 1 else 0,if $drops.{2}.exists then 1 else 0,if $ships.{1}.isoperational and $ships.{1}.dock then 1 else 0,if $ships.{2}.isoperational and $ships.{2}.dock then 1 else 0]" />
  </actions></cue>
-</cues></cue></cues></mdscript>
+</cues></cue>
+
+<cue name="PrepareShips" namespace="this">
+<conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'PrepareShips'" /></conditions>
+<actions>
+ <set_value name="$args" exact="event.param3" /><set_value name="$candidate" exact="$args.$own" /><set_value name="$peer" exact="$args.$proxy" />
+ <set_value name="$refusal" exact="''" />
+ <do_if value="not $candidate.exists or not $peer.exists or $candidate.macro != $peer.macro or $candidate.macro.id != $args.$macro"><set_value name="$refusal" exact="'macro'" /></do_if>
+ <do_else>
+  <get_loadout loadout="$args.$loadout" macro="$candidate.macro" result="$loadout" />
+  <do_if value="not $loadout"><set_value name="$refusal" exact="'loadout'" /></do_if>
+  <do_else>
+   <apply_loadout object="$candidate" loadout="$loadout" /><apply_loadout object="$peer" loadout="$loadout" />
+   <do_if value="$candidate.software.dock != ware.software_dockmk2 or $peer.software.dock != ware.software_dockmk2 or $candidate.weapons.operational.count != $candidate.weapons.numslots or $candidate.weapons.operational.count != $peer.weapons.operational.count or $candidate.shields.operational.count == 0 or $candidate.shields.operational.count != $peer.shields.operational.count or $candidate.engines.operational.count == 0 or $candidate.engines.operational.count != $peer.engines.operational.count or $candidate.maxhull != $peer.maxhull or $candidate.maxshield != $peer.maxshield"><set_value name="$refusal" exact="'equipment'" /></do_if>
+  </do_else>
+ </do_else>
+ <do_all exact="2" counter="$i">
+  <set_value name="$ship" exact="if $i == 1 then $candidate else $peer" />
+  <debug_text text="'[X4LAN] SHIP_SPEC role=%s macro=%s idcode=%s maxhull=%s maxshield=%s weapons=%s/%s shields=%s engines=%s dock=%s cargo=%s maxspeed=%s'.[if $i == 1 then 'local' else 'proxy',@$ship.macro.id,@$ship.idcode,@$ship.maxhull,@$ship.maxshield,@$ship.weapons.operational.count,@$ship.weapons.numslots,@$ship.shields.operational.count,@$ship.engines.operational.count,@$ship.software.dock,@$ship.cargo.capacity.all,@$ship.maxspeed]" />
+ </do_all>
+ <do_if value="$refusal != ''">
+  <debug_text text="'[X4LAN] SHIP_SPEC_REFUSED reason=%s macro=%s loadout=%s'.[$refusal,$args.$macro,$args.$loadout]" />
+  <do_if value="$candidate.exists"><destroy_object object="$candidate" explosion="false" /></do_if>
+  <do_if value="$peer.exists"><destroy_object object="$peer" explosion="false" /></do_if>
+  <remove_value name="$candidate" />
+  <raise_lua_event name="'X4LAN_Bubble.ShipsRefused'" param="$refusal" />
+ </do_if>
+ <do_else>
+  <set_value name="$own" exact="$candidate" />
+  <teleport_player object="$own" instant="true" force="true" />
+  <raise_lua_event name="'X4LAN_Bubble.ShipsReady'" />
+ </do_else>
+</actions>
+</cue>
+</cues></mdscript>
