@@ -1,0 +1,76 @@
+{
+  "version": "7.1.0",
+  "channel": "internal",
+  "packaged_source": "f2b37b1887d51e2b7e40e12155cc435a8825b33d",
+  "merged_main_commit": "fd5230bb4a1d344396389ffbc42740aa55fc6035",
+  "source_tree_identical_to_merge": true,
+  "archives": {
+    "X4-LAN-7.1.0-Linux.zip": "97ab39c80eb60633ba5e803574f7fcad9dbff49a0435be6c2ffbc5123e3a627b",
+    "X4-LAN-7.1.0-Windows11.zip": "d38dd34eafcc9d2f59ae56ea025507ca9c6cb674005edbd784223e7476d34613"
+  },
+  "pair_inventory_and_digest_check": "PASS",
+  "installed_extension_exactly_matches_linux_package": true,
+  "test_probes_absent": true,
+  "native_startup": {
+    "source_commit": "f2b37b1",
+    "package_version": "7.1.0",
+    "native_host_startup": true,
+    "packaged_server_used": true,
+    "probe_free": true,
+    "md_adapter_errors": [],
+    "two_native_acceptance": false
+  },
+  "network_smoke": {
+    "source_commit": "f2b37b1",
+    "packaged_relay_and_receiver": true,
+    "native_host_plus_synthetic_peer": true,
+    "baselines": [
+      {
+        "revision": 1,
+        "objects": 116
+      },
+      {
+        "revision": 2,
+        "objects": 117
+      }
+    ],
+    "world_snapshots": 355,
+    "identity_count": 123,
+    "player_and_fixture_scopes": [
+      [
+        "F",
+        "1"
+      ],
+      [
+        "F",
+        "2"
+      ],
+      [
+        "F",
+        "3"
+      ],
+      [
+        "F",
+        "4"
+      ],
+      [
+        "P",
+        "1"
+      ],
+      [
+        "P",
+        "2"
+      ]
+    ],
+    "success": true
+  },
+  "save_preservation": {
+    "all_file_bytes_unchanged": true,
+    "actual_save_timestamps_unchanged": true,
+    "no_test_saves": true,
+    "steam_metadata_timestamp_changed": true
+  },
+  "original_7_0_packages": "unchanged",
+  "two_native_acceptance": false,
+  "native_game_and_test_server": "closed after validation"
+}

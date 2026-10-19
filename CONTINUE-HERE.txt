@@ -1,122 +1,103 @@
-CURRENT DEVELOPMENT HANDOFF - 19 OCTOBER 2026, OVERNIGHT FOLLOW-UP
+CURRENT HANDOFF - INTERNAL 7.1.0 CANDIDATE, 19 OCTOBER 2026
 
-The real two-computer 7.0 playtest is COMPLETE. The user reported ten findings:
-ordinary dropped cargo invisible; differing callsigns; intermittent damage;
-jerky movement; NPC PiP artifacts (low priority); missing shared radar contacts;
-wrong weapon visuals; unreliable HUD targeting; requested fully equipped
-Xperimental Shuttles with docking assistance; shared mission success.
-See reports/PLAYTEST-7.0-FOLLOWUP.txt and GitHub issue #4 for exact scope/evidence.
+The completed real two-computer 7.0 playtest drove the overnight follow-up.
+The reviewed changes are integrated in main at fd5230b (PR #8). This is an
+internal candidate for the next playtest, not full-universe or two-native
+acceptance. No new public release was requested or prepared.
 
-ACTIVE CONTRIBUTIONS (not a new accepted release)
-- Astra primary: contrib/astra-playtest7, draft PR #8. Native ordinary-cargo
-  authority, NAV2/UMOVE velocity interpolation, display identity and radar contacts.
-- Claude: PR #6 fixed Shuttle specification and PR #7 FIRE2 weapon controls.
-  PR #6 was reviewed and merged in main as 9ed2c95. Native Windows and Linux
-  readbacks accepted six guns, the unused zero-capacity missile slot, matching
-  hardware and Docking Computer Mk2. A later Linux probe verified all six
-  software entries and the Mk3 combat thruster on both ships.
-  PR #7 source6069cbb is integrated in the working branch with primary-owned
-  corrections402f0fe/23166c2. Independent review passed218 Linux checks. Later
-  native calibration exposed invalid MD membership lookup and excess salvos;
-  correction4f1075c adds finite shot budgets and proper native classification.
-  Current Linux suite:225 PASS/no skips. Native receiver tap6 ->6, sustained78 ->78;
-  native local capture6 ->remote6 (actual split2+4) passed at6f6be02. Custom group
-  membership/overlap, aiming and two-native gameplay remain unaccepted.
-  Identity6bbfb53 fixes late trade fixture lookup; native publishing now includes
-  all four fixtures without stopping. 2cdb75c scopes identity sequences to host
-  epochs. Native guest health replay passed63 exact readbacks and0.83s local drift
-  correction; corrected759a5e0 validator matched27 recorded nonconstant states.
-  Native dual and unequal/staggered trigger tests also passed. Native P1/P2 and
-  F1-F4 display validation passed:61 matching name/code/live headers per object,
-  310 successful targetability checks; own-ship selection correctly unavailable.
-  See reports/release-7.1.0-checks.txt and native-7.1.0-checks.json. Candidate
-  packaging/review is the remaining delivery step; joint gameplay remains pending.
-- AI Coms coordinator reviews contributions in separate worktrees. PR #3 Windows
-  installer rollback/profile handling is integrated in main (9f6a19b).
-- Coordinate native launches/installations with the primary chat. Slack gameplay
-  thread: https://example.invalid/private-coordination-withheld
+DELIVERY ON THE PRIMARY PC
+One matched Linux-host / Windows-client pair is in:
+Desktop/X4 Online/Internal Tests/7.1.0-2026-10-19
+- X4-LAN-7.1.0-Linux.zip
+- X4-LAN-7.1.0-Windows11.zip
+- INSTALL.html, NEXT-TEST.txt, RELEASE-CHECKS.txt
+- SOURCE-CHECKPOINT.json and DELIVERY-CHECKS.json identify source/archives/checks.
+The packaged source is f2b37b1; its full Git tree equals the fd5230b merge tree.
+The original 7.0 pair is preserved. Do not rebuild it or mix versions/pairs.
 
-NATIVE EVIDENCE SO FAR
-- Real host + synthetic guest: freely dropped 20 cells appear in a world baseline
-  and disappear after the ordinary magnet collects them.
-- Real guest + synthetic host: DropCargo20 -> native replica -> magnet pickup20
-  -> inventory 20 and no remaining replica, including one lost completion each.
-- Real host + synthetic pilot: DROP20 and PICKUP20 both complete with duplicate
-  UDP intents AND duplicate MD events; final inventory 20/no drops/no MD errors.
-- Native metadata relay recorded 152 identities. Real guest target-monitor
-  headers displayed shared names/codes; all 90 targetability checks passed.
-  Native UMOVE/NAV2 transforms followed the interpolation model through deliberate
-  packet loss (maximum observed errors 1.3293 m / 0.6651 m, within the 15 ms update
-  interval at the tested speeds). Two-native-machine acceptance remains pending.
-- The corrected Shuttle run repeated native guest drop/magnet collection with
-  generation-tagged container creation and lost completions: final cargo 20, no
-  remaining drop. Tested source 636136d (includes PR #6 0390e01).
-- Shaderquality0 from the old test preset crashes this Linux build compiling the
-  Xperimental cockpit. Shaderquality2 is the supported engine UI option and
-  passed startup; both test installers now use 2. Only profile 45841 is changed.
-- Host capacity/partial requests and guest native partial magnet collection
-  passed separately. Partial pickup now rejects callbacks from held or retired
-  native replicas and accepts an already committed completion fence.
-- Normal save bytes and actual save timestamps remain unchanged. No test saves.
+The clean Linux 7.1.0 artifact is installed in the current X4 extension folder.
+Every installed file matches the package; no development probes remain.
+The prior instrumented extension is preserved under the primary worktree's
+.local/evidence-164-withheld The isolated game and
+packaged test server were closed after validation. Use the new Linux folder's
+2-START-SERVER.sh and 3-START-X4-TEST.sh for the next fresh test world.
+Normal save bytes and actual save timestamps were unchanged; no test saves.
+Generated private packages contain their matched session credentials. Source,
+Git, shared reports and public downloads must not contain live session secrets.
 
-The original 7.0 matched test pair is preserved. The next intended package is
-INTERNAL 7.1.0, subject to current checks; no new public release was requested.
-Full shared-universe authority remains incomplete: do not treat NPC scene
-replicas as proof of arbitrary NPC combat, inventory, missions or station economy.
-Cargo support currently covers ordinary cargo from the two co-op ships; arbitrary
-NPC loot, multi-ware containers and unrestricted cargo categories remain unproven.
-The research-only INTERNET-HOSTING-ANALYSIS.txt is still separate from LAN work.
+INTEGRATED WORK AND EVIDENCE
+- Ordinary co-op cargo uses real full-quantity native drops and magnet pickup,
+  authenticated/deduplicated host transactions, inventory reconciliation and
+  generation-aware callbacks. Native host/guest paths passed separately, including
+  lost completions, duplicate requests, capacity limits and partial10+10 pickup.
+- NAV2/UMOVE share source time, linear/angular velocity, interpolation and bounded
+  prediction. Native transform/HUD checks passed through deliberate packet gaps.
+- Shared player/NPC/fixture display identities and radar observations are bound
+  to local engine objects. Native guest P1/P2 and F1-F4 each produced61 matching
+  name/code/live headers after initial metadata arrival. All310 selections of
+  five selectable objects were targetable; own-ship self-selection is unavailable.
+  Late trade readiness and new host identity epochs have focused regressions.
+- Claude's Shuttle PR #6 and FIRE2 history through6069cbb are integrated with the
+  primary's pause-boundary, native classification and finite-budget corrections.
+  Native tap6 ->6, sustained78 ->78, real source capture/echo6 ->6, disjoint dual
+  triggers and unequal/staggered exhaustion passed. Custom group membership is
+  not transmitted; the dual fixture explicitly configured both ships identically.
+- Native guest health replay passed63 exact eight-field readbacks, including27
+  nonconstant recorded host states. A deliberate local42/5 perturbation recovered
+  to unchanged host65/45 in0.83s. The validator rejects plateau-only evidence.
+  This proves receiver convergence, not native hit/aim equivalence.
+- Both Xperimental Shuttles have six guns, matching hardware, all six software
+  modules, Mk3 combat thrusters and Docking Computer Mk2 (Timelines required).
+  Native Windows hardware/docking and installer fixtures passed as reported by
+  Claude; expanded software/thruster readback was performed on Linux only.
+- Linux225 Python/LuaJIT tests passed without skips; all15 production/opt-in MD
+  scripts validate against the installed X4 9.00 schema. Independent review and
+  matched package inventories/digests passed. The clean packaged Linux game/server
+  startup smoke passed:116/117-object baselines and123 identities reached a
+  synthetic peer, including both players and all four fixtures; no MD errors.
 
-User choices:
-- Work internally unless a public package is explicitly requested.
-- Keep this project separate from Neresco's projects; write original code.
-- Documentation, packages and interfaces are English; chat with the user in German.
-- Use https://github.com/Lith7ium/X4-Multiplayer as the private shared repository.
-- The other development computer runs Fedora and already has a project folder.
-- On the current PC, native tests in a fresh isolated world were authorized and
-  the user wants the new internal installation retained for their next test.
-  Preserve normal saves. This does not authorize arbitrary game/profile deletion.
-
-IMPLEMENTED
-- x4lan/universe.py: authenticated host-only sector baselines, monotonic epoch /
-  revision, bounded selective ACK/retry, atomic commit and sequenced NPC motion.
-- ui/universe_protocol.lua: matching original Lua protocol, tested against Python.
-- ui/universe_game.lua + md/x4lan_universe.xml: incremental host faction scans,
-  stable session object IDs, protected co-op/player objects, guest replicas and
-  current-sector NPC suppression. Observe mode is also available.
-- Relay interest management waits for a fresh capture on sector changes so an
-  old cached sector cannot deadlock the guest's monotonic receiver on return.
-- Internal builder selects world1 protocol, isolated profile/UDP 45841 and replica
-  mode. Source config is inert. W01 is incompatible with the older 6.x packages.
-
-EVIDENCE
-- reports/automated-7.0.0-tests.txt: 162 passing Python/LuaJIT tests, no skips.
-- reports/world1-native-checks.json: real Linux X4 host enumeration yielded
-  124-131 NPCs; real Linux guest replay created 124 ships, read back positions
-  within 0.004 m, then confirmed all retired component IDs non-operational.
-  Each game ran against a synthetic counterpart, not two simultaneous PCs.
-- reports/world1-md-schema-checks.json: all 9 MD scripts validate against X4 9.00.
-- reports/release-7.0.0-checks.txt: honest scope, measurements and known warnings.
-- 14 mass-traffic-offset warnings remain in the guest full-sector run during
-  suppression of arriving local NPCs. No Lua error or adapter stop occurred.
-  Broader guest jobs/mission effects and endurance are not verified.
+Details and actual limits:
+reports/release-7.1.0-checks.txt
+reports/native-7.1.0-checks.json
+reports/package-7.1.0-checks.json
+reports/PLAYTEST-7.0-FOLLOWUP.txt
+Earlier failed probes are retained as failed evidence, not acceptance.
 
 NEXT WORK
-1. Complete the reviewed internal candidate delivery, then the simultaneous
-   Windows/Linux combat playtest. Default firing and separate native guest health
-   convergence checks passed; aiming and actual shared hit behavior remain open.
-   Maintain the passing Cooperative Trial and ship handoff/life-cycle behavior.
-2. Capacity/partial native checks passed separately. Finish contested two-native
-   collection and produce the matched
-   internal follow-up pair. Keep release evidence tied to the actual tested head.
-3. Run both native games together over the authorized ZeroTier path, including
-   ordinary cargo in both directions, identities, radar, HUD, motion and combat.
-4. Extend authority to general NPC combat, docking/trade, stations, production,
-   faction/mission consequences and eventually persistence. Scene replicas alone
-   do not establish these. Broader guest simulation control remains incomplete.
+1. Run the simultaneous Windows/Linux playtest from WORLD-SYNC-TEST.txt: ordinary
+   cargo in both directions, contested/partial pickup, names/codes, radar/HUD,
+   motion, combat and the previously successful Cooperative Trial mission.
+   No joint READY or two-native run occurred during this follow-up. Claude's
+   latest availability request was unanswered; do not infer that he is online.
+2. Measure and address off-axis aiming/projectile inheritance and actual shared
+   hit behavior. Default shot cadence and snapshot repair do not establish these.
+   Claude reserved dev/damage_probe.* and Windows testing; coordinate before
+   overlapping that scope. Do not merge an old standalone FIRE2 implementation
+   over the corrected integrated source.
+3. Extend authority beyond scene replicas: general NPC combat/equipment/loot,
+   docking/trading, stations/production, faction/mission consequences and saves.
+   Arbitrary NPC loot, multi-ware crates and unrestricted cargo are not accepted.
+   Shared mission success does not prove arbitrary vanilla mission synchronization.
+4. NPC PiP artifacts remain a low-priority open item. Supported shaderquality2
+   fixes the measured Shuttle cockpit startup crash; it is not a PiP fix claim.
 
-Read ARCHITECTURE.md and WORLD-SYNC-REQUIREMENTS.txt for the detailed constraints.
-Use DEVELOPMENT.txt for the Fedora checkout and two-computer Git workflow.
-Historical 6.0.0 reports are retained as historical evidence, not current claims.
-Do not regenerate old MD fixture files blindly: generator output must be compared
-against current profile guards and gameplay changes before replacing anything.
+WORKFLOW AND USER CHOICES
+- Default to internal work; public packages require an explicit request.
+- Write original code and keep this project separate from Neresco's projects.
+- Documentation/interfaces are English; speak German with the user.
+- Private repository: https://github.com/Lith7ium/X4-Multiplayer
+- The other development computer runs Fedora and already has a project folder.
+  Preserve local changes/history; follow DEVELOPMENT.txt for synchronization.
+- Native tests on this PC were authorized only with fresh isolated worlds/profile
+  45841 and autosave disabled. Never load or alter normal saves. Keep the new
+  internal installation for the user's next test. Other machines need their
+  owner's authorization. No personal documents, mail or spending.
+- Each agent uses its own worktree/branch. Coordinate shared protocols and native
+  launches; worktrees do not isolate the game installation or relay port.
+- Slack gameplay thread:
+  https://example.invalid/private-coordination-withheld
+  The AI Coms coordinator reviewed source/evidence and did not launch native X4.
+
+Read AGENTS.md, CONTRIBUTING.txt, DEVELOPMENT.txt, ARCHITECTURE.md and
+WORLD-SYNC-REQUIREMENTS.txt. Do not regenerate historical MD fixture scripts
+blindly. INTERNET-HOSTING-ANALYSIS.txt remains research separate from LAN work.
