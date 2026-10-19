@@ -1,7 +1,7 @@
 CURRENT HANDOFF — INTERNAL 7.1.1 DELIVERED, 20 OCTOBER 2026
 
-The real two-computer 7.0 playtest drove the overnight follow-up. PRs8-13 are
-integrated through main eb59d68. PR13's native linear-velocity lifecycle
+The real two-computer 7.0 playtest drove the overnight follow-up. PRs8-14 are
+integrated through main 320a775. PR13's native linear-velocity lifecycle
 evidence is independently accepted. Internal 7.1.1 is built, installed cleanly
 and startup-tested. It is not full-universe or two-native acceptance.
 No new public release was requested or prepared.
@@ -42,6 +42,15 @@ AFTER-MIDNIGHT FINDINGS
   in one reference phase (.00224463). No projectile/aim/hit acceptance is claimed;
   residual between-frame rotation needs further measurement before an angular
   override is considered. Production currently changes linear velocity only.
+- Follow-up source4699e65 records 2932 pre/post frames, 2932 native basis samples
+  and 24 correlated shots. Reanalysis with the corrected engine-prefix parser
+  efc9b5c passes observation coverage; 268 tests pass. First three phases show
+  nonzero pre-frame rotation despite zero post-frame angles. This repeat passes
+  the original projectile gate, but does not invalidate the prior failure or
+  establish a production fix. reports/ANGULAR-OBSERVATION.txt distinguishes the
+  measured between-frame drift from its still-unproven engine cause. No native
+  angular getter or production angular override is claimed. Clean 7.1.1 was
+  restored exactly after the diagnostic; native game/relay are closed.
 - Two Low-texture startup shader failures are preserved separately. High textures
   completed the lifecycle and projectile runs on this Linux PC; the new Linux
   installer prepares that isolated-profile workaround. Windows defaults remain
