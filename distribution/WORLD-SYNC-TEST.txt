@@ -1,9 +1,9 @@
-W01 / 7.0.0 - INTERNAL NPC SCENE TEST
-11 October 2026 | X4 9.00 Steam build 23660954
+INTERNAL FOLLOW-UP - WORLD / CARGO / MOTION TEST
+19 October 2026 | X4 9.00 Steam build 23660954
 
 This is an engineering milestone towards a shared universe. It is not a public
-release or a complete multiplayer universe. Use both matching 7.0.0 packages and
-the new server. Older 6.x builds cannot join the world1 protocol.
+release or a complete multiplayer universe. Use both packages from this exact
+release folder and its relay. The original 7.0 pair remains a separate test build.
 
 WHAT CHANGED
 The host enumerates actual NPC ships in the guest's current sector. Each receives
@@ -25,31 +25,52 @@ elsewhere. Leaving a sector removes its local replicas, not its host objects.
 TEST SEQUENCE
 1. Close both games and stop the previous relay. Install the matching pair.
    Use isolated profile 45841, matching official DLC and no other third-party
-   mods. Start the Linux server, then fresh creative worlds on both computers.
+   mods. Enable X4: Timelines on both for the shared Shuttle. Start the Linux
+   server, then fresh creative worlds on both computers.
 2. Stay in Argon Prime for at least 30 seconds. Watch the console's NPC scene:
    host revision, ship count and guest committed revision should advance.
 3. Compare identifiable nearby NPC ship types, owners, positions and motion.
    Host ships should appear on the guest. Duplicate independent NPCs should
-   disappear after synchronization. Names and equipment are not mirrored yet.
+   disappear after synchronization. Compare the host names and displayed ID codes
+   in the HUD target monitor and map. General NPC equipment is not mirrored.
+   Ship radar observations are shared around either co-op ship; this is not
+   complete galaxy discovery or shared visibility of every station/object.
 4. Let traffic arrive and leave. Check that ships appear/disappear consistently.
 5. Move the guest to another sector; wait for its committed baseline. Return to
    Argon Prime. Confirm that old-sector replicas do not accumulate.
 6. Briefly interrupt the connection while keeping both games and relay running.
    Reconnect and check recovery. Restarting a game/relay requires two new worlds.
-7. Run 4-DIAGNOSTICS on both computers and retain the server logs. Report the
+7. Buy 20 Energy Cells from Alpha with one shared ship. Use the ordinary cargo
+   menu to jettison them, then let the other player see/select the drop and collect
+   it with the normal magnet. Compare both inventories and disappearance. Repeat
+   in the opposite direction. Wait several reconciliation cycles after each step.
+8. Test a nearly full hold: only the available space may be filled and the rest
+   must remain collectible. Free space and collect the remainder. Both players
+   competing for one drop must not duplicate its contents. Note that controlled
+   Linux host/guest edge checks do not replace this two-native-game acceptance.
+9. Compare stationary, rotating and moving shared ships, NPCs and HUD selection.
+   Brief packet loss should permit bounded prediction, then freeze without endless
+   drift. Record the sector, speed and delay if movement still looks jerky.
+10. Complete the Cooperative Trial trade/combat regression in INSTALL.html. Test
+    individual taps and sustained fire with different weapon groups; compare
+    damage on both games after firing stops. Complete this before ship destruction.
+11. Run 4-DIAGNOSTICS on both computers and retain the server logs. Report the
    sector, ship type, time, host/guest revisions and what differed visually.
 
 DO NOT USE THIS TEST TO CLAIM THESE WORK:
-- Ordinary jettisoned cargo and the normal cargo magnet: still not implemented.
+- Arbitrary NPC loot, multi-ware containers and unrestricted cargo categories
+  are not established by the co-op ship cargo path.
 - NPC damage, weapons, boarding, ownership transfer, docking or cargo: not shared.
   Guest-side damage may be replaced when the host still has the ship.
-- NPC names, equipment, pilots, orders and engine effects: not replicated.
+- General NPC equipment, pilots, orders and engine effects are not replicated.
+  Shared display names/codes do not turn local engine IDs into network IDs.
 - Station construction, production, general trading, faction changes, the full
   economy, vanilla missions and save/load: not synchronized.
 - Guest-created player ships outside the original two-ship fixture: not shared.
 
 The old Alpha/Beta trade and test-container action remain fixture-only tests.
-The separate 6-COLLECT-CONTAINER action does not fix ordinary cargo pickup.
+Use the native magnet for freely jettisoned cargo; the numbered action only
+handles the two original fixture containers.
 Avoid boarding NPC replicas, SETA and combat with NPCs during W01 scene checks.
 The adapter stops instead of deleting a replica occupied by the local player.
 

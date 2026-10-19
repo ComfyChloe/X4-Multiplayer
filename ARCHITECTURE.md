@@ -1,9 +1,10 @@
-# Internal W01 architecture — 7.0.0
+# Internal architecture — 7.0 playtest follow-up
 
 The new scene transport and engine adapter are original code. Public Test 01 is
 withheld until the broader [shared-universe requirements](WORLD-SYNC-REQUIREMENTS.txt)
-are met. W01 synchronizes NPC scene visibility and motion, not NPC interactions,
-ordinary cargo or the full economy.
+are met. The follow-up synchronizes NPC scene visibility/motion and adds ordinary
+co-op cargo transactions plus shared display identity. General NPC interactions
+and the full economy remain incomplete.
 
 ## W01 NPC sector scenes
 
@@ -28,14 +29,19 @@ repeat engine effects. The host lease is the session epoch. A fresh host require
 a fresh relay and guest world. Relays cache at most eight sectors; each baseline
 is limited to 4096 objects. An overflowing enumeration never publishes a prefix.
 
-`UPOS` carries lossy, sequenced motion only for known committed IDs. Host and
-relay each send at most 12 such records per tick. The guest interpolates and
-updates at most 24 replicas per frame with a fair cursor; stale motion freezes
-until a newer baseline or pose arrives. Rates are shared across a sector, so this
-is not a promise of 20 updates/s for every ship. Baseline motion recovers after
-lost pose packets. Transport receipt and engine application are separate: engine
-changes wait for an unpaused frame; a transport acknowledgement alone is not an
-engine success report.
+`UMOVE` carries host epoch, object ID, sequence, sector, source time, pose and
+linear/angular velocity for known committed IDs. Units are seconds, metres and
+radians. Legacy `UPOS` remains readable. Host and relay each budget 32 motion
+records per tick. The guest visits at most 128 replicas per frame and applies
+changed transforms no faster than every 15 ms. Rates are shared across a sector;
+there is no promise of 20 updates/s per ship in a dense scene.
+
+The common `motion.lua` buffer estimates clock offset from the minimum observed
+arrival minus source time, interpolates with a 150 ms delay, predicts for at most
+350 ms and then freezes. Long gaps, discontinuities and ownership changes reset
+tracks. Velocity and time are finite/bounded; orientation follows the shortest
+angular arc. Baselines recover lost motion. Engine changes wait for an unpaused
+frame; transport acknowledgement alone is not engine success.
 
 Guest replica mode removes independent NPCs only in its current sector and only
 following a complete, recent baseline. It creates host macro/owner replicas via
@@ -47,10 +53,59 @@ The adapter does not yet suppress independent stations, production, missions or
 all consequences of the guest simulation. Observe mode receives baselines and
 logs counts without changing game objects.
 
-The protocol accepts reserved drop records, but the native drop adapter is not
-implemented and rejects them. No ordinary cargo pickup fix is claimed. Next work
-must establish cargo transactions, equipment/damage/ownership authority, station
-state, native object generation hooks and stronger guest simulation control.
+## Native ordinary cargo
+
+`cargo.py`, `cargo_game.lua` and `x4lan_cargo.xml` implement ordinary drops from
+the two shared ships. Host X4 owns inventories and container lifetime. Baseline
+drop records contain one ware/quantity and use the common world ID allocator.
+The host keeps native dropped objects in the registry until collected/removed.
+
+Guest native drop/collection is observed after the engine prediction. MD rolls
+that local inventory change back immediately; Lua submits an intention:
+
+`CARGOREQ|1|lease|requestID|hostEpoch|ship|pilotEpoch|DROP/PICKUP|dropID|ware|amount`
+
+The relay authenticates pilot ownership/epoch and blocks conflicting handoff or
+trade. IDs are retained (bounded at 8192, never evicted into reuse). Host execution
+is retried every 250 ms using `CARGOEXEC`; both Lua and MD deduplicate before any
+mutation. MD checks live ships, ware, cargo, capacity and pickup distance/sector.
+`CARGODONE` and `CARGOREPLY` carry outcome plus the committed baseline fence.
+An accepted mutation waits for a new baseline; a non-mutating stale epoch uses
+the existing revision. A baseline that overtakes completion already satisfies
+its fence. Host loss yields UNCERTAIN and never replay into a replacement host.
+
+Native guest containers must be actual full-quantity `drop_cargo` results from
+the fixture donor. Generic pickup objects and adding quantity after a one-unit
+drop do not produce correct magnet behavior. Donor capacity failure stops the
+adapter explicitly. Asynchronous creation callbacks carry a local generation;
+late/duplicate callbacks cannot adopt or remove the wrong instance. Pickup
+callbacks bind network ID, generation and exact native object. One pending
+pickup per instance prevents repeated partial-magnet events from adding another
+intention. The host's remaining quantity is then recreated with a new generation.
+
+Host-only `CINV|1|lease|hostEpoch|sequence|ware|count1|count2` updates reconcile
+tracked wares and override the older ECON cargo rows. Non-OK outcomes show a
+throttled notice; uncertain results require ending the test, not fresh-ID retry.
+Controlled native host and guest checks cover drop/magnet, duplicate intentions,
+lost completion, capacity and partial quantity. Two-native acceptance remains
+separate. Arbitrary NPC loot, multi-ware crates and all cargo categories are open.
+
+## Display identity and shared ship observations
+
+`IDENT|1|lease|hostEpoch|sequence|scope|id|code|UTF8nameHex|known|contact` is
+host-authenticated, bounded and sequenced. Scopes separate P (co-op ships 1/2),
+N (committed universe IDs) and F (targets 1/2, markets 3/4). Names and displayed
+codes come from the host. Native component IDs remain local. A narrow LuaJIT
+`ffi.C.GetObjectIDCode` lookup wrapper supplies shared display codes while keeping
+all other C functions/native fallback intact; X4 has no `debug` library, so the
+wrapper uses ordinary `getmetatable`. Native target-monitor headers verify the
+actual display path, not just a mocked getter.
+
+Radar flags describe host-visible ships within either shared ship's radar range,
+and expire locally after 2.5 seconds without a fresh observation. This is not
+complete galaxy discovery or synchronization of every station/object type.
+Full equipment/damage/ownership authority, station state, native generation hooks
+and stronger guest simulation control remain separate work.
 
 ## Existing two-ship cooperative fixture
 
@@ -72,15 +127,16 @@ package metadata prevent accidentally joining another release pair.
 when a player walks, dies, changes sectors or takes the other ship. `CREW` reports
 controlled/occupied ship IDs. The relay grants exclusive pilot ownership; an epoch
 increases on handoff and rejects delayed updates from the previous owner. Pending
-native trades block handoff. Empty ships retain their movement authority until
+native trades and cargo transactions block handoff. Empty ships retain their movement authority until
 another pilot takes the controls. Stale movement stops after 0.75 seconds.
 
-`NAV` carries ship ID, authority epoch, sequence, sector macro, absolute pose,
-shared-market dock ID and shot counter. The 50 km starting bubble was removed.
+`NAV2` carries ship ID, authority epoch, sequence, sector macro, absolute pose,
+shared-market dock ID, shot counter, source time and linear/angular velocity.
+Legacy `NAV` remains readable. The 50 km starting bubble was removed.
 Coordinates are bounded at 50,000,000 m per axis as corruption protection. Sector
 components are resolved locally through MD; existing ships are warped between
-sectors instead of recreated. Interpolation uses a 100 ms buffer. Engine pose
-writes are limited to 20 Hz and skipped for unchanged poses. Dock transitions use
+sectors instead of recreated. NAV2 uses the same motion buffer as UMOVE and
+applies changed poses no faster than every 15 ms. Dock transitions use
 native docking actions; a remote undock also leaves the dock's coordinate frame.
 
 The same native player faction owns both ships. Remote player figures on foot are
@@ -110,9 +166,10 @@ when balances/cargo have not changed, but
 periodic reconciliation still corrects local drift. Health refreshes at least
 once a second and cargo/balances every two seconds.
 
-Pickup uses the existing action launcher and maps the authenticated player's
-current controlled ship to its matching test container. Arbitrary cargo magnets,
-NPC traders, other stations and wider universe economy remain independent.
+The legacy pickup action maps the authenticated player's controlled ship to its
+original fixture container. Ordinary freely jettisoned co-op cargo uses the native
+magnet transaction path described above. NPC traders, other stations and the
+wider universe economy remain independent.
 
 ## First shared mission
 
