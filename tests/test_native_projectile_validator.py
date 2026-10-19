@@ -14,7 +14,7 @@ class ProjectileValidatorTests(unittest.TestCase):
                 controls.append(f'PROJECTILE_PROBE readback={serial} shipVx={configured} shipVy=0 shipVz=0 shipSpeed={configured} bulletVx=0 bulletVy=0 bulletVz=4000')
             for i in range(15):
                 x=0 if phase=='stationary' else i*20
-                controls.append(f'PROJECTILE_PROBE ship phase={phase} gameTime={i*.2} x={x} y=10000 z=-2000 engineSpeed={configured}')
+                controls.append(f'PROJECTILE_PROBE ship phase={phase} gameTime={i*.2} x={x} y=10000 z=-2000 engineSpeed={configured} yaw=0 pitch=0 roll=0')
         return '\n'.join(controls+rows)
 
     def test_complete_measurements_report_deltas_without_gameplay_acceptance(self):
@@ -50,3 +50,6 @@ class ProjectileValidatorTests(unittest.TestCase):
     def test_missing_native_readbacks_cannot_be_replaced_by_configured_values(self):
         rows=[r for r in self.fixture().splitlines() if 'readback=' not in r]
         self.assertFalse(analyze('\n'.join(rows))['measurement_complete'])
+
+    def test_rotating_control_is_not_an_equivalent_firing_direction(self):
+        self.assertFalse(analyze(self.fixture().replace('yaw=0','yaw=0.2'))['measurement_complete'])

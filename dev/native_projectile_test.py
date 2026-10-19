@@ -32,7 +32,7 @@ def analyze(log):
         if 'PROJECTILE_PROBE ship phase=' in line:
             values = dict(re.findall(r'(\w+)=([^\s]+)', line))
             try:
-                ship_rows.append(dict(phase=values['phase'], **{k:float(values[k]) for k in ('gameTime','x','y','z','engineSpeed')}))
+                ship_rows.append(dict(phase=values['phase'], **{k:float(values[k]) for k in ('gameTime','x','y','z','engineSpeed','yaw','pitch','roll')}))
             except (KeyError,ValueError): malformed += 1
         if 'PROJECTILE_PROBE readback=' in line:
             values = dict(re.findall(r'(\w+)=([^\s]+)', line))
@@ -85,7 +85,9 @@ def analyze(log):
             control['native_component_velocity'] = [statistics.median(r[k] for r in native) for k in ('shipVx','shipVy','shipVz')]
             control['native_speed'] = statistics.median(r['shipSpeed'] for r in native)
             expected = 0 if phase=='stationary' else 100
-            control['valid'] = abs(v[0]-expected)<8 and abs(v[1])<2 and abs(v[2])<2
+            control['max_orientation_error'] = max(abs(r[k]) for r in points for k in ('yaw','pitch','roll'))
+            control['valid'] = (abs(v[0]-expected)<8 and abs(v[1])<2 and abs(v[2])<2
+                                and control['max_orientation_error']<.01)
             # A pose-driven ship may itself acquire native velocity; measure it
             # instead of baking the hypothesis that its physical velocity is zero
             # into acceptance. The other controls require their intended state.
