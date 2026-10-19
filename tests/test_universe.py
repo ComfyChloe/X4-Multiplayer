@@ -174,6 +174,24 @@ class UniverseRelayTests(unittest.TestCase):
     def test_world_build_is_separate(self):
         with self.assertRaises(ValueError): UniverseSession(TOKEN,'test','test')
 
+    def test_velocity_motion_validates_authority_clock_bounds_and_removal(self):
+        self.publish(Baseline.create(self.a,1,SECTOR,[row()]))
+        self.s.receive(f'UINTEREST|1|{self.b}|1|{SECTOR}'.encode(),P2,.2)
+        def packet(lease,seq=1,time='10',vx='100'):
+            return f'UMOVE|1|{lease}|{self.a}|1|{seq}|{SECTOR}|{time}|10|0|0|0|0|0|{vx}|0|0|0|0|0'.encode()
+        for p,addr in [(packet(self.b),P2),(packet(self.a),FOREIGN),
+                       (packet(self.a,vx='nan'),P1),(packet(self.a,time='inf'),P1),
+                       (packet(self.a,vx='100001'),P1)]:
+            self.s.receive(p,addr,.2)
+        self.assertFalse(self.s.positions)
+        self.s.receive(packet(self.a),P1,.2)
+        forwarded=[p for a,p in self.s.snapshots(.3) if a==P2 and p.startswith(b'UMOVE')]
+        self.assertEqual(forwarded,[packet(self.b)])
+        self.s.receive(packet(self.a,2,time='9'),P1,.4)
+        self.assertEqual(self.s.positions[1][0],1)
+        self.publish(Baseline.create(self.a,2,SECTOR,[]))
+        self.assertFalse(self.s.positions)
+
 
 @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')
 class UniverseLuaTests(unittest.TestCase):

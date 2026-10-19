@@ -15,6 +15,7 @@ from .host import ATOM, HEX, MAX_PACKET, sequence
 MAX_OBJECTS = 4096
 MAX_RECORD = 512
 WINDOW = 12
+MOTION_BUDGET = 32
 RETRY = .25
 STAGE_TIMEOUT = 15
 
@@ -212,7 +213,7 @@ class UniverseSession(CoopSession):
         self.position_cursor = 0
 
     def receive(self, raw, address, now):
-        if not raw.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|', b'UACK|', b'UINTEREST|', b'UPOS|')):
+        if not raw.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|', b'UACK|', b'UINTEREST|', b'UPOS|', b'UMOVE|')):
             return super().receive(raw, address, now)
         self.expire(now)
         if len(raw) > MAX_PACKET:
@@ -251,16 +252,28 @@ class UniverseSession(CoopSession):
                 return []
             if self.universe_epoch and self.universe_epoch != peer.lease:
                 return []  # A fresh host game needs a new relay and fresh guest.
-            if f[0] == 'UPOS' and len(f) == 13:
+            if (f[0] == 'UPOS' and len(f) == 13) or (f[0] == 'UMOVE' and len(f) == 20):
                 entity, seq = sequence(f[4]), sequence(f[5]); sector = atom(f[6], True)
-                pose(f[7:])
+                if f[0] == 'UPOS':
+                    pose(f[7:])
+                else:
+                    sample_time = float(f[7])
+                    if not math.isfinite(sample_time) or not 0 <= sample_time <= 1e12:
+                        return []
+                    pose(f[8:14])
+                    velocity = [float(v) for v in f[14:20]]
+                    if not all(math.isfinite(v) and abs(v) <= (100000 if i < 3 else math.tau)
+                               for i, v in enumerate(velocity)):
+                        return []
                 baseline = self.sectors.get(sector)
                 if not baseline or entity not in self.entity_ids.get(sector, set()):
                     return []
                 old = self.positions.get(entity)
                 if old and seq <= old[0]:
                     return []
-                self.positions[entity] = (seq, now, sector, f[3:])
+                if old and f[0] == old[4] == 'UMOVE' and sample_time <= float(old[3][4]):
+                    return []
+                self.positions[entity] = (seq, now, sector, f[3:], f[0])
                 return []
             ack, committed = self.universe.receive(f, now)
             if ack is None:
@@ -296,8 +309,9 @@ class UniverseSession(CoopSession):
         # Independent, lossy motion cannot create entities or commit a baseline.
         live = [v for v in self.positions.values() if v[2] == sector and now - v[1] < .75]
         if live:
-            for i in range(min(WINDOW, len(live))):
-                fields = live[(self.position_cursor + i) % len(live)][3]
-                result.append((guest.address, ('UPOS|1|' + guest.lease + '|' + '|'.join(fields)).encode()))
-            self.position_cursor = (self.position_cursor + WINDOW) % len(live)
+            for i in range(min(MOTION_BUDGET, len(live))):
+                entry = live[(self.position_cursor + i) % len(live)]
+                fields, kind = entry[3], entry[4]
+                result.append((guest.address, (kind+'|1|' + guest.lease + '|' + '|'.join(fields)).encode()))
+            self.position_cursor = (self.position_cursor + MOTION_BUDGET) % len(live)
         return result
