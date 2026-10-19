@@ -162,6 +162,9 @@ try {
     # IPv4 input is validated as text; .NET Framework Parse would read 010 as octal.
     Check ((Assert-IPv4 '192.0.2.109') -eq '192.0.2.109') 'Valid LAN address refused'
     Check ((Assert-IPv4 '127.0.0.1' $true) -eq '127.0.0.1') 'Host loopback refused'
+    # Without the subnet mask .0/.255 can be valid unicast hosts (e.g. in a /16).
+    Check ((Assert-IPv4 '10.0.0.255') -eq '10.0.0.255') 'Valid .255 unicast host refused'
+    Check ((Assert-IPv4 '10.0.1.0') -eq '10.0.1.0') 'Valid .0 unicast host refused'
     foreach ($bad in @('192.168.010.5','192.168.08.5','256.1.1.1','1.2.3',' 1.2.3.4',('19' + [char]0x0662 + '.168.1.5'))) {
         Must-Fail { Assert-IPv4 $bad } '*without leading zeros*'
     }
@@ -206,8 +209,12 @@ try {
         Check ([IO.File]::ReadAllText($installConfig) -ceq $priorConfig) ($Label + ': profile config not restored exactly')
         Check (!(Test-Path -LiteralPath (Join-Path $installProfile 'config.x4lan.tmp'))) ($Label + ': temporary config left behind')
         Check ([IO.File]::ReadAllText($installState) -ceq 'previous installation evidence') ($Label + ': previous state not preserved')
-        Check (!(Test-Path -LiteralPath ($installState + '.tmp'))) ($Label + ': temporary state left behind')
+        Check (@(Get-ChildItem -LiteralPath $PackageRoot -Filter 'installation.json.*.tmp' -Force).Count -eq 0) ($Label + ': temporary state left behind')
+        Check ([IO.File]::ReadAllText($stateSentinel) -ceq 'unrelated state temp') ($Label + ': pre-existing state temp changed')
     }
+    # A pre-existing fixed-name temp file is not owned by any install attempt.
+    $stateSentinel = $installState + '.tmp'
+    [IO.File]::WriteAllText($stateSentinel, 'unrelated state temp', $Utf8)
     [IO.File]::WriteAllText($sourceLua, 'port = 45841', $Utf8)
     Must-Fail { Install-Package } '*exactly one host entry*'
     Assert-NotInstalled 'Missing host entry'
@@ -245,6 +252,8 @@ try {
     Check ($configured.root.playername -ceq ('Zo' + [char]0x00EB)) 'BOM-less UTF-8 config value corrupted'
     $configBackups = @(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'backups') -Recurse -Filter config.xml | Where-Object { [IO.File]::ReadAllText($_.FullName) -ceq $priorConfig })
     Check ($configBackups.Count -ge 1) 'Prior profile config not backed up exactly'
+    Check ([IO.File]::ReadAllText($stateSentinel) -ceq 'unrelated state temp') 'Successful retry changed the pre-existing state temp'
+    Check (@(Get-ChildItem -LiteralPath $PackageRoot -Filter 'installation.json.*.tmp' -Force).Count -eq 0) 'Successful retry left a temporary state file'
 
     # Start: a missing safeguard node gives the intended message, not a StrictMode error.
     $launchesBefore = $script:launchCount
@@ -269,8 +278,31 @@ try {
     $packageArchive = @(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'backups') -Directory -Filter 'removed-mod-*')
     Check ($packageArchive.Count -eq 1 -and (Test-Path -LiteralPath (Join-Path $packageArchive[0].FullName '.x4lan-package-id'))) 'Same-volume archive missing beside the package'
 
+    # Prior absence: a failed first install leaves no profile config or state at all.
+    $PackageRoot = Join-Path $fixture 'Fresh package'
+    $GamePath = Join-Path $fixture 'Fresh Game'
+    $installDocuments = Join-Path $fixture 'Fresh Documents'
+    New-Item -ItemType Directory -Path (Join-Path $PackageRoot 'extension/x4_lan_lab/ui'), $GamePath -Force | Out-Null
+    [IO.File]::WriteAllText((Join-Path $PackageRoot 'extension/x4_lan_lab/ui/config.lua'), $placeholder, $Utf8)
+    @{steam_build='23660954';channel='internal';slot='p2';package_id='fixture-fresh-p2'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'package.json')
+    $freshProfile = Join-Path $installDocuments ('Egosoft/X4/' + $ProfileId)
+    $freshState = Join-Path $PackageRoot 'installation.json'
+    foreach ($inject in @('publish','state')) {
+        if ($inject -eq 'publish') { ${function:Publish-StagedMod} = { param($Staging, $Target) throw 'Injected publish failure' } }
+        else { ${function:Write-InstallationState} = { param($Path, $Text) [IO.File]::WriteAllText($Path, $Text, $Utf8); throw 'Injected state failure' } }
+        Must-Fail { Install-Package } '*Injected*'
+        ${function:Publish-StagedMod} = $realPublish
+        ${function:Write-InstallationState} = $realState
+        Check (!(Test-Path -LiteralPath (Join-Path $freshProfile 'config.xml'))) ('Absent config not restored after ' + $inject + ' failure')
+        Check (!(Test-Path -LiteralPath $freshProfile)) ('Created profile folder left after ' + $inject + ' failure')
+        Check (!(Test-Path -LiteralPath $freshState)) ('Absent state not restored after ' + $inject + ' failure')
+        Check (!(Test-Path -LiteralPath (Join-Path $GamePath 'extensions'))) ('Mod left after ' + $inject + ' failure')
+    }
+    Install-Package
+    Check ((Get-Content -Raw -LiteralPath $freshState | ConvertFrom-Json).package_id -eq 'fixture-fresh-p2') 'Fresh retry did not install'
+
     Write-Host 'PASS: cloud tag classification; OneDrive start; links/unknowns/errors blocked; config backup; saved-profile protection; isolated launch; paired updater, backups, checksums, rollback and version guards; uninstalled legacy v5 update.'
-    Write-Host 'PASS: IPv4 text validation; host entry contract; install staging, exact rollback and retry after injected failures; UTF-8 profile config; missing safeguard node; removal archive across volumes.'
+    Write-Host 'PASS: IPv4 text validation; host entry contract; install staging, exact rollback and retry after injected failures (prior config/state present and absent, pre-existing state temp preserved); UTF-8 profile config; missing safeguard node; removal archive across volumes.'
     Write-Host 'Native Windows metadata reads were simulated. This is not a live Windows/OneDrive test.'
 } finally {
     if (Test-Path -LiteralPath $fixture) { Remove-Item -LiteralPath $fixture -Recurse -Force }

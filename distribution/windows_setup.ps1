@@ -103,9 +103,15 @@ function Test-SameVolume([string]$First, [string]$Second) {
 function Copy-ModTree([string]$Source, [string]$Destination) { Copy-Item -LiteralPath $Source -Destination $Destination -Recurse }
 function Publish-StagedMod([string]$Staging, [string]$Target) { Move-Item -LiteralPath $Staging -Destination $Target }
 function Write-InstallationState([string]$Path, [string]$Text) {
-    $temp = $Path + '.tmp'
-    [IO.File]::WriteAllText($temp, $Text, $Utf8)
-    Move-Item -LiteralPath $temp -Destination $Path -Force
+    # A unique temporary name per attempt: never reuse or delete a file this
+    # attempt did not create.
+    $temp = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        [IO.File]::WriteAllText($temp, $Text, $Utf8)
+        Move-Item -LiteralPath $temp -Destination $Path -Force
+    } finally {
+        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
+    }
 }
 function Initialize-ProfileMetadata {
     if ('X4Lan.ProfileMetadata' -as [type]) { return }
@@ -269,7 +275,6 @@ function Install-Package {
             { if (!$tempConfigExisted -and (Test-Path -LiteralPath $tempConfig)) { Remove-Item -LiteralPath $tempConfig -Force } },
             { if ($configReplaced) { if ($configExisted) { [IO.File]::Copy($backupConfig, $configPath, $true) } else { Remove-Item -LiteralPath $configPath -Force } } },
             { if ($profileCreated -and (Test-Path -LiteralPath $profile) -and !(Get-ChildItem -LiteralPath $profile -Force)) { Remove-Item -LiteralPath $profile -Force } },
-            { if (Test-Path -LiteralPath ($statePath + '.tmp')) { Remove-Item -LiteralPath ($statePath + '.tmp') -Force } },
             { if ($null -ne $previousState) { [IO.File]::WriteAllBytes($statePath, $previousState) } elseif (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath -Force } }
         )
         foreach ($step in $steps) {
