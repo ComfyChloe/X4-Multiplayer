@@ -13,4 +13,7 @@ X4LAN_CONFIG = {
     slot = "p1",
     mode = "telemetry", -- "proxy" attempts experimental spawn/move calls.
     proxy_macro = "ship_arg_s_scout_01_a_macro",
+    -- Shared co-op ship for both players and both proxies (requires X4: Timelines).
+    ship_macro = "ship_ter_s_xperimental_01_a_macro",
+    ship_loadout = "x4lan_coop_xperimental",
 }

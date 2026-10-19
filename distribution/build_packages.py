@@ -5,6 +5,8 @@ import argparse, hashlib, json, re, secrets, shutil, zipfile
 SOURCE = Path(__file__).resolve().parents[1]
 DIST = SOURCE / 'distribution'
 BUILD = '23660954'
+SHIP_MACRO = 'ship_ter_s_xperimental_01_a_macro'  # Xperimental Shuttle, X4: Timelines
+SHIP_LOADOUT = 'x4lan_coop_xperimental'  # extension/x4_lan_lab/libraries/loadouts.xml
 
 def version():
     value = (SOURCE / 'VERSION.txt').read_text().strip()
@@ -53,7 +55,9 @@ def build(destination: Path):
         (extension / 'native' / ('x4lan_net_64.dll' if slot == 'p1' else 'x4lan_net.so')).unlink()
         cfg = {'enabled': True, 'interaction_test': False, 'bubble_actions': True, 'trading': True, 'walking_avatars': False,
                'test_profile': '45841', 'host': '127.0.0.1' if slot == 'p1' else 'SET_HOST_IP_DURING_INSTALL',
-               **session, 'slot': slot, 'mode': 'proxy', 'proxy_macro': 'ship_arg_s_scout_01_a_macro'}
+               **session, 'slot': slot, 'mode': 'proxy', 'proxy_macro': 'ship_arg_s_scout_01_a_macro',
+               # One shared ship spec for both players and proxies (requires X4: Timelines).
+               'ship_macro': SHIP_MACRO, 'ship_loadout': SHIP_LOADOUT}
         write(extension / 'ui/config.lua', '-- Paired test package. Configure with the installer.\nX4LAN_CONFIG = {\n' +
               ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n')
         for name in ['INSTALL.html', 'README.txt', 'CHANGELOG.txt']:
