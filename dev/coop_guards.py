@@ -6,7 +6,16 @@ def bubble(xml):
  setup.insert(0,E.Element('set_value',name='$coop',exact='false'))
  for i in (1,2):
   a=root.find(f".//cue[@name='Shots{i}']/actions");legacy=a.find('do_if');legacy.tag='do_elseif'
-  a.insert(1,E.fromstring(f'''<do_if value="$coop"><do_if value="player.occupiedship == $ships.{{{i}}}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="{i}"/></do_if></do_if>'''))
+  # FIRE2 needs the trigger: 'p' if the weapon is in the active primary group, else 's'.
+  s=f'$ships.{{{i}}}'
+  trigger=f"if {s}.primaryweapons.{{{s}.activeweapongroup.primary}}.list.indexof.{{event.object}} gt 0 then 'p' else 's'"
+  a.insert(1,E.fromstring(f'''<do_if value="$coop"><do_if value="player.occupiedship == {s}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="'{i}|%s'.[{trigger}]"/></do_if></do_if>'''))
+  quota=f"""<do_if value="$coop and @$fireManaged.{{{i}}}">
+   <set_value name="$fireTrigger" exact="if {s}.primaryweapons.{{{s}.activeweapongroup.primary}}.list.indexof.{{event.object}} gt 0 then 1 else 2"/>
+   <set_value name="$fireRemaining.{{{i}}}.{{$fireTrigger}}" operation="subtract" exact="1"/>
+   <do_if value="$fireRemaining.{{{i}}}.{{$fireTrigger}} le 0"><stop_shooting object="{s}" primary="$fireTrigger == 1" secondary="$fireTrigger == 2"/></do_if>
+  </do_if>"""
+  a.insert(1,E.fromstring(quota))
  # Guest targets are held at 1% hull. Only a host death snapshot releases the
  # guard and destroys the replica; local damage may otherwise be reconciled.
  target=next(n for n in root.find(".//cue[@name='Apply']/actions").iter('do_if')
@@ -34,5 +43,7 @@ def trade(xml):
  # single host player balance, never a second spendable copy on the proxy ship.
  apply=root.find(".//cue[@name='Apply']/actions")
  for node in apply.iter('do_if'):
+  if node.get('value')=='$object.isoperational':
+   node.set('value','$object.isoperational and ($j gt 2 or not @md.X4LAN_Cargo.Setup.$wares.indexof.{$ware})')
   if node.get('value')=='$account.isoperational':node.set('value','$account.isoperational and (not Market.$arena.$coop or $j gt 1)')
  return E.tostring(root,encoding='unicode')

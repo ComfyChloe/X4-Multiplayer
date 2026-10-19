@@ -1,0 +1,243 @@
+7.0 INTERNAL PLAYTEST FOLLOW-UP
+19 October 2026 | Owner report; actual two-computer playtest completed
+
+The prior handoff's pending-test status is superseded by this report. These are
+user observations, not measurements invented from the automated test suite.
+
+1. Ordinary jettisoned cargo remains invisible to the other player. The required
+   interaction is normal gameplay and the native cargo magnet.
+2. Callsigns are not synchronized. Distinguish display names from native ID codes.
+3. Host/guest damage synchronization works intermittently.
+4. Ship movement is jerky. Investigate source timestamps, velocity and orientation
+   prediction, per-object update rates, and native pose-application effects.
+5. NPC picture-in-picture videos have artifacts. LOW priority.
+6. Sector updates do not share the other player's radar perception.
+7. Weapon visuals do not reproduce correctly.
+8. Physical ship models and radar markers appear, but HUD targeting is unreliable.
+9. Replace the test ships with fully equipped X Shuttles, especially docking
+   computer assistance. Verify required DLC/macros and actual installed equipment.
+10. Shared missions worked in the playtest. Preserve this as regression coverage;
+    it does not establish synchronization of every vanilla mission.
+
+COORDINATION
+Private repository: https://github.com/Lith7ium/X4-Multiplayer
+Slack: #private-coordination-channel
+Gameplay thread:
+https://example.invalid/private-coordination-withheld
+Astra primary owns universe motion, native cargo investigation, contacts/targeting,
+gameplay integration and native Linux tests. Branch: contrib/astra-playtest7.
+Claude completes the Windows installer review, then diagnoses player damage and
+weapon replication and assesses the Shuttle/loadout/callsign changes. Agree exact
+files and wire contracts in Slack before overlapping changes. The AI Coms chat
+continues the existing Windows PR review; avoid duplicate integration/test runs.
+
+AUTHORIZATION AND TEST BOUNDARIES
+The user authorized overnight joint implementation and tests on the primary PC.
+Do not access personal documents or mail. Do not spend money. Preserve normal
+saves and the original 7.0 matched package pair. All new builds remain INTERNAL.
+ZeroTier is available on both test machines. Addresses/session keys are local
+test configuration, not repository configuration. Native tests require fresh
+isolated worlds; synthetic counterparts must be labelled as such.
+
+INITIAL ENGINEERING EVIDENCE
+21d9833 adds source-clock NPC movement, linear/angular velocity and bounded
+prediction. The Linux Python/LuaJIT suite passed 167 tests, including jitter,
+loss/stale prediction, angular wrap, teleport reset, and relay authority checks.
+Native motion/HUD effects and joint Windows/Linux acceptance are still pending.
+
+2026-10-19 NATIVE CARGO CHECKPOINT (Astra)
+- Real Linux host: native DropCargo(energycells,20) created a tracked crate;
+  committed baseline 1 contained one drop, baseline 2 removed it after the magnet
+  collected it. The receiver was synthetic, not another native X4 instance.
+- Real Linux guest: native DropCargo20 was rolled back locally and submitted
+  once to a synthetic host. The guest created a real native drop, collected 20
+  with the magnet, rolled back its prediction, and reconciled to host inventory 20.
+  Final baseline 3 had no replicas or retired live containers. Both completion
+  datagrams were deliberately lost once; both retries preserved exactly one action.
+- Native findings: create_object(pickup macro) plus add_wares creates a visible
+  object without working magnet collection. A real drop of 1 plus add_wares19
+  collects only 1. Replica creation must use native drop_cargo of the full quantity.
+- CARGOREQ/CARGOEXEC/CARGODONE/CARGOREPLY bind to authenticated pilot/ship generation,
+  retain completed IDs and wait for a baseline visibility fence. CINV reconciles
+  tracked ware counts and overrides older ECON cargo rows.
+- Real host execution of guest requests, two-native-machine acceptance, capacity
+  and contested pickup scenarios still require further native checks.
+- Scope: ordinary cargo dropped by the two co-op ships. Arbitrary NPC loot,
+  multi-ware containers and unrestricted cargo categories are not yet accepted.
+  The internal donor must hold the full replica quantity; failure explicitly
+  stops the cargo adapter instead of creating a fake collectible.
+
+60f36a0 adds NAV2 for player ships using the original source-clock motion buffer
+shared with NPC UMOVE. Positions: metres; orientation: radians; time: seconds;
+velocities: metres/second and radians/second. Ownership/sector changes reset
+tracks, long gaps reset interpolation, prediction is limited to 0.35 seconds.
+23 targeted cooperative Python/LuaJIT tests passed; visual acceptance pending.
+
+NATIVE HOST AUTHORITY CHECKPOINT
+After correcting MD dynamic string keys to use a '$' prefix, the real host
+completed DROP20 and PICKUP20 from a synthetic authenticated pilot. Both UDP
+intents and MD Order events were deliberately duplicated. All four MD outcomes
+were OK; final inventory 20, zero drops, no cargo MD errors, and 152 validated
+identity records received. Ordinary host/guest paths have separate native tests;
+a simultaneous two-native-PC test is still required.
+
+SHUTTLE / GRAPHICS CHECKPOINT
+The old isolated graphics preset forced unsupported shaderquality 0. With the
+new Shuttle assets, Linux X4 aborted on xu_cockpit before world startup. The
+engine UI only supports shaderquality 2; using 2 passed startup. Both installers
+now use 2, only in the disposable test profile. Native SHIP_SPEC then measured
+both ships: hull 4580, shield 4800, weapons 6/7, one shield, two engines,
+Docking Computer Mk2, cargo 1100, maxspeed 649.789. PR6 refused this as equipment
+mismatch; Claude is investigating the seventh slot. No accepted Shuttle claim.
+
+IDENTITY / HUD CHECKPOINT
+X4 omits Lua's debug library; the narrow ffi.C lookup wrapper now uses ordinary
+getmetatable. Real guest codes became TST-001/TST-002, names matched, known/radar
+were true, and SetSofttarget/IsTargetable succeeded repeatedly. Resolving the
+actual target-monitor live header and shared fixture display remains in progress.
+IDENT scopes: P co-op ships 1/2, N universe IDs, F fixture targets 1/2 and markets 3/4.
+Native object IDs stay local; only the shared display code/name is bound.
+
+NATIVE MOTION / HUD ACCEPTANCE (real Linux guest + synthetic host)
+The actual target-monitor live header resolved to 'Shared native ship 1 (TST-001)'
+and the equivalent second ship. All 90 targetability checks passed; no adapter or
+MD errors. UMOVE: 202 native transform samples, maximum position difference 1.3293 m
+at 100 m/s and angle difference 0.00133 rad. NAV2: 717 samples, maximum difference 0.6651 m
+at 50 m/s. These are within the 15 ms application interval. Deliberate 0.9 s packet-loss
+bursts exercised bounded prediction/freeze. The empty baseline removed NPCs.
+This establishes the native transform/header paths, not the subjective visual
+feel of two live players. Shared fixture codes have separate bounded metadata
+scope tests; their two-PC native acceptance remains pending.
+
+CORRECTED SHUTTLE AND CARGO GENERATION CHECKPOINT (636136d)
+PR #6 0390e01 specifies six equipped guns. The seventh connection is a missile
+launcher on a hull with zero missile capacity; the native spec accepted exactly
+six guns on both ships. Both ships passed setup with the hardware listed above,
+Docking Computer Mk2 and working player controls. Native guest DropCargo20,
+generation-tagged creation, magnet pickup20 and delayed completion retries passed
+again: final inventory 20, baseline 3, no remaining replica. No cargo MD errors.
+This run also validates the supported shader setting with the corrected loadout.
+Previous failed startup/equipment checkpoints above are historical findings.
+
+Local evidence: shuttle-cargo-generation-native-result.json/.log, saved under
+.local/evidence-151-withheld Native motion/header evidence is recorded separately
+in native-motion-identity-result.json/.log (90 checks, 88 resolved host headers,
+202 NPC samples and 717 player samples). These files contain local test metadata
+and are excluded from Git; measured results are reported here without session keys.
+
+CARGO CAPACITY / PARTIAL COLLECTION CHECKPOINT
+The real native host, controlled by a synthetic authenticated guest, started
+with 1090/1100 Energy Cells in ship 2 and a separate 20-cell drop. Request20
+returned CAPACITY; request10 returned OK and left 10 in the drop. A full-hold
+request1 returned CAPACITY. After the test fixture explicitly removed 10 cells,
+the remaining10 were collected: final inventory1100, no drops, no cargo MD errors.
+Duplicate UDP requests did not duplicate either collection.
+
+The real native guest magnet exposed multiple partial-collection callbacks for
+one replica before host inventory arrived. The fix binds pickup callbacks to
+both native object and creation generation and permits one pending pickup for
+that instance. A baseline that already reached the completion fence now releases
+the hold immediately; it no longer waits for a nonexistent extra revision.
+The repeated native guest check passed: 20-cell replica, collect10, generation2
+replica with the remaining10, then collect10 after the synthetic fixture frees
+space. Final inventory1100, baseline3, no replicas. Each completion was lost once;
+there were exactly two successful10-cell intentions, each replayed without a
+second mutation. This is native guest physics plus a synthetic host, not a
+simultaneous two-native-machine test. Focused LuaJIT regression covers duplicate
+and late retired-instance callbacks plus a baseline overtaking its completion.
+Evidence: cargo-capacity-native-result.json/.log and
+cargo-partial-native-guest-result.json/.log under .local/evidence-151-withheld
+
+COMPLETE SHUTTLE EQUIPMENT READBACK (native Linux, db7eef9 production)
+The read-only equipment probe measured both ships with all six requested
+software entries: dockmk2, flightassistmk1, scannerlongrangemk2, scannerobjectmk2,
+targetmk1 and trademk1 (each with the software_ prefix), plus
+thruster_gen_s_combat_01_mk3_macro. Both checks returned success=true. This closes
+the Linux software/thruster readback gap left by the MD getter returning null.
+Native host DROP20/PICKUP20 with duplicate MD events also passed again. Windows
+hardware/docking readback and shader/profile fixtures passed as reported by
+Claude; the expanded software/thruster readback was performed on Linux only.
+
+Cargo review follow-up: a stale pilot epoch changes nothing on the host and now
+returns the existing baseline revision, avoiding a fabricated future fence.
+Non-OK outcomes display a throttled notice, including explicit instructions not
+to repeat an uncertain transfer. No automatic fresh-ID retry was added. Focused
+constant-revision/duplicate-reply tests pass; Linux suite now198 PASS/no skips.
+
+NATIVE FIRING / IDENTITY CORRECTIONS (23166c2 -> 6f6be02)
+The first native firing run failed despite passing Lua protocol tests. A source
+primary tap of six shots was classified as secondary because the MD membership
+lookup omitted `.list`. The continuous350ms remote pulse produced24 shots for
+one6-shot tap (twice), and180 for78 sustained source shots. Failed evidence is
+retained as fire2-native-host-before-fix-result.json/.log.
+
+4f1075c grants finite native shot budgets from existing FIRE2 counter deltas.
+Weapon-fired callbacks consume the budget; negative overrun debt prevents split
+counter packets from replaying an already emitted salvo. Credits have bounded
+count/lifetime and are cancelled at group, pause, stale or authority boundaries.
+The corrected receiver measured split4+2 ->6, tap6 ->6, sustained78 ->78 and no
+shots after stop. The independent local source probe initially failed because
+it did not reset the player fire controller; that probe-only omission was fixed
+at6f6be02. The fresh native echo then captured PRIMARY6/SECONDARY0 and replayed
+exactly6 remote shots from real split2+4 counter updates. No MD/property errors
+occurred in that echo run. These checks used identical default groups, one native
+Linux world and a synthetic relay peer, not simultaneous native Windows/Linux.
+Custom membership/overlap and off-axis projectile equivalence remain open.
+Evidence: fire2-native-host-4f1075c-result.json/.log (receiver pass, local probe
+failure explicitly retained), fire2-native-echo-result.json/.log (capture/echo pass).
+
+The same native logs exposed an identity adapter stop: trade markets live in
+A.trade.state.markets, not A.trade.markets. 6bbfb53 corrects this and tolerates
+late trade/state/fixture initialization. Host+guest Lua regressions pass. Native
+4f1075c publishing produced both player identities, all four fixture identities
+and122 NPC identities without stopping. Current full Linux suite222 PASS/no skips.
+All14 production/opt-in MD files at4f1075c validated against the installed schema.
+
+NATIVE SECONDARY / HEALTH CONVERGENCE (00fc83b)
+The opt-in dual fixture explicitly configured both Shuttles with disjoint three
+primary and three secondary weapons. Native primary tap3 replayed3, secondary
+tap3 replayed3, and simultaneous3+3 replayed6. Final native source and receiver
+counters were primary6/secondary6, total12, after-stop0; no MD errors. This covers
+independent trigger classification/playback, not transferring user group edits.
+Evidence: fire2-native-dual-result.json/.log.
+
+The native guest replayed the recorded real-host health trace and then explicit
+synthetic states for both ships and both fixture targets. All63 readbacks of
+eight health fields matched exactly. A deliberate local ship1 hull/shield change
+from65/45 to42/5 was corrected to65/45 in0.83s by an unchanged host snapshot.
+The real trace varies only target2 shield; other health transitions are synthetic.
+No native hit/aim or simultaneous two-PC convergence claim follows from this.
+Evidence: health-replay-native-guest-result.json/.log, input trace SHA-256 and
+1-based WORLD field mapping included. The first run's unscheduled perturbation
+is preserved as before-drift-fix and does not count as drift acceptance.
+
+2cdb75c scopes identity sequence comparisons/application to the host epoch so a
+new host's first identity is not rejected behind an old high sequence. New/old
+epoch regression passes; full Linux suite223 PASS/no skips. All15 MD/probe scripts
+at00fc83b validate against the installed schema. Raw evidence stays in.local;
+reports/native-7.1.0-checks.json records sanitized metrics and artifact hashes.
+
+UNEQUAL TRIGGER / EVIDENCE VALIDATOR FOLLOW-UP (759a5e0)
+Synthetic3P/9S,9P/3S and staggered3P then9S each produced12 native shots with
+identical disjoint fixture memberships. Final primary15/secondary21,total36,
+after-stop0. The per-weapon native event timeline confirms the longer trigger
+continues after the shorter trigger exhausts, without another positive grant.
+Evidence: fire2-native-unequal-result.json/.log.
+
+The health validator now requires eight-field readbacks matching nonconstant
+recorded trace states; a plateau-only log with successful drift recovery is a
+negative regression. Short malformed readbacks also fail. Revalidation of the
+preserved00fc83b native evidence passes63 rows,27 recorded nonconstant matches,
+zero error and actual drift recovery. The original results/log are preserved;
+health-replay-native-guest-validated-result.json records validator source and
+original result hash. Current full suite225 PASS/no skips.
+
+NATIVE PLAYER / FIXTURE DISPLAY (759a5e0)
+A real Linux guest received synthetic host identities for P1/P2 and F1-F4.
+Each object had62 samples and61 correct code/name/live target-monitor headers
+after initial metadata arrival. All310 selections of the five selectable objects
+were targetable; own-ship P2 correctly cannot self-select. The opt-in probe's
+placeholder expansion now handles a mission-icon prefix on F4; this was a probe
+formatting limitation, not a production identity failure. No MD/property lookup
+or identity-stop errors. Evidence: identity-fixture-native-result.json/.log.
+Normal save bytes and actual save timestamps remain unchanged; no test saves.

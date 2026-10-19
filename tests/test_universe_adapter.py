@@ -50,7 +50,7 @@ class UniverseAdapterTests(unittest.TestCase):
           api.SetObjectSectorPos=function(id,sector,p) positions[id]=p;writes[#writes+1]={id=id,sector=sector,pose=p} end
           api.ActivateObject=function(id,on) activated[#activated+1]={id=id,on=on} end
         ''')
-        for name in ('bubble_game.lua','coop_game.lua','universe_protocol.lua','universe_game.lua'):
+        for name in ('bubble_game.lua','motion.lua','coop_game.lua','universe_protocol.lua','universe_game.lua'):
             l.execute((UI/name).read_text())
         l.execute('''
           events['X4LAN.Loaded']();now=10;frames.onUpdate()

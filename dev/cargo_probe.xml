@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Unshipped isolated-world probe of native jettison and magnet event ordering. -->
+<mdscript name="X4LAN_CargoProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Setup" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_CargoProbe'" control="'Start'"/></conditions>
+   <actions>
+    <set_value name="$ship" exact="player.ship"/>
+    <add_cargo object="$ship" ware="ware.energycells" exact="20"/>
+    <raise_lua_event name="'X4LAN_CargoProbe.Ready'"/>
+    <raise_lua_event name="'X4LAN_CargoProbe.Table'" param="table[$id=7,$object=$ship,$ware='energycells',$amount=20]"/>
+    <debug_text text="'[X4LAN] CARGO_PROBE start cargo=%s'.[$ship.cargo.{ware.energycells}.count]"/>
+   </actions>
+   <cues>
+    <cue name="Dropped" instantiate="true">
+     <conditions><event_object_dropped_objects object="$ship"/></conditions>
+     <actions>
+      <do_for_each name="$drop" in="event.param">
+       <debug_text text="'[X4LAN] CARGO_PROBE drop=%s macro=%s warecount=%s energy=%s sector=%s'.[$drop,$drop.macro.id,$drop.wares.count,$drop.wares.{ware.energycells}.count,$drop.sector.macro.id]"/>
+       <raise_lua_event name="'X4LAN_CargoProbe.Drop'" param="$drop"/>
+       <raise_lua_event name="'X4LAN_CargoProbe.Table'" param="table[$id=8,$object=$drop,$ware='energycells',$amount=$drop.wares.{ware.energycells}.count]"/>
+       <warp object="$drop" sector="$ship.sector"><position object="$ship" x="0m" y="0m" z="180m"/></warp>
+       <set_object_velocity object="$drop"><linear x="0" y="0" z="0"/></set_object_velocity>
+      </do_for_each>
+     </actions>
+    </cue>
+    <cue name="Collected" instantiate="true">
+     <conditions><event_object_collected_ware object="$ship"/></conditions>
+     <actions>
+      <debug_text text="'[X4LAN] CARGO_PROBE collected=%s amount=%s object=%s exists=%s cargo=%s'.[event.param.id,event.param2,event.param3,event.param3.exists,$ship.cargo.{event.param}.count]"/>
+      <raise_lua_event name="'X4LAN_CargoProbe.Collected'" param="event.param3"/>
+     </actions>
+    </cue>
+    <cue name="PlayerCollected" instantiate="true">
+     <conditions><event_player_collected_ware/></conditions>
+     <actions><debug_text text="'[X4LAN] CARGO_PROBE player_collected=%s amount=%s object=%s exists=%s'.[event.param.id,event.param2,event.param3,event.param3.exists]"/></actions>
+    </cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>

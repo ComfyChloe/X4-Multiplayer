@@ -91,7 +91,7 @@
    <set_value name="$r" exact="$args.$rows.{$i}" /><set_value name="$ware" exact="Market.$wares.{$r.$index}" />
    <set_value name="$objects" exact="[Market.$ships.{1},Market.$ships.{2},Market.$markets.{1},Market.$markets.{2}]" />
    <do_all exact="4" counter="$j">
-    <set_value name="$object" exact="$objects.{$j}" /><do_if value="$object.isoperational"><set_value name="$delta" exact="$r.$cargo.{$j} - $object.cargo.{$ware}.count" />
+    <set_value name="$object" exact="$objects.{$j}" /><do_if value="$object.isoperational and ($j gt 2 or not @md.X4LAN_Cargo.Setup.$wares.indexof.{$ware})"><set_value name="$delta" exact="$r.$cargo.{$j} - $object.cargo.{$ware}.count" />
     <do_if value="$delta gt 0"><add_cargo object="$object" ware="$ware" exact="$delta" /></do_if>
     <do_elseif value="$delta lt 0"><remove_cargo object="$object" ware="$ware" exact="-$delta" /></do_elseif>
    </do_if></do_all>

@@ -33,8 +33,8 @@ def build(destination: Path):
         if not report.is_file():
             raise RuntimeError('Record checks for this exact release before packaging: ' + str(report))
     destination.mkdir(parents=True, exist_ok=False)
-    session = {'token': secrets.token_hex(16), 'build': 'world1-9.00-steam' + BUILD,
-               'bubble': 'world-01', 'port': 45841, 'coop': True,
+    session = {'token': secrets.token_hex(16), 'build': 'world1-' + release + '-9.00-steam' + BUILD,
+               'bubble': 'world-01', 'port': 45841, 'coop': True, 'fire2': True,
                'world_sync': True, 'world_mode': 'replica'}
     pair_id = 'lan-' + secrets.token_hex(8)
     folders = []
@@ -73,7 +73,7 @@ def build(destination: Path):
         if slot == 'p1':
             shutil.copy2(DIST / 'linux_setup.py', root / 'setup.py')
             (root / 'x4lan').mkdir()
-            for file in ['__init__.py', 'host.py', 'bubble.py', 'economy.py', 'coop.py', 'quests.py', 'monitor.py', 'universe.py']:
+            for file in ['__init__.py', 'host.py', 'bubble.py', 'economy.py', 'coop.py', 'quests.py', 'monitor.py', 'universe.py', 'cargo.py', 'identity.py']:
                 shutil.copy2(SOURCE / 'x4lan' / file, root / 'x4lan' / file)
             shutil.copy2(DIST / 'action.py', root / 'action.py')
             actions = {'1-INSTALL': 'setup.py install', '2-START-SERVER': 'setup.py server',

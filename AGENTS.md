@@ -30,7 +30,7 @@
   not share chat context or lock files. Coordinate Python/Lua protocol changes.
 - Deliver concurrent contributions through reviewed PRs to `main`. The project
   owner or designated integrator combines changes and prepares matched packages.
-  Preserve the pending 7.0 test pair; do not silently rebuild or replace it.
+  Preserve the original 7.0 test pair; do not silently rebuild or replace it.
 - Coordinate native tests on the primary PC. A Git worktree does not isolate an
   X4 installation, Steam profile or relay port. Record actual evidence and pending
   checks. Keep branch progress in its task/PR and integrated state in the handoff.

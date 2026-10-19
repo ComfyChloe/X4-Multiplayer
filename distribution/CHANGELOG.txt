@@ -1,3 +1,26 @@
+Version 7.1.0 INTERNAL follow-up — 19 October 2026
+
+- Share ordinary cargo jettisoned from the two co-op ships and native magnet
+  pickup through host-authorized, deduplicated inventory transactions. Handle
+  lost completions, partial quantities and late native container callbacks.
+- Add source time and linear/angular velocity to NPC and player motion, with
+  interpolation and bounded prediction during packet loss.
+- Share host display names/ID codes, fixture identities and expiring ship radar
+  observations. Improve known-object setup and avoid repeated AI activation.
+- Give both players matching Xperimental Shuttles, six guns, combat thrusters
+  and all six software modules including Docking Computer Mk2 (Timelines required).
+- Select FIRE2 explicitly for matching packages: active primary/secondary groups
+  and finite native shot budgets. Correct primary/secondary capture and excess
+  salvos; suppress old fire after pause/epoch changes.
+  Custom weapon group membership and precise projectile equivalence are not
+  established; consult RELEASE-CHECKS.txt for measured firing/damage behavior.
+- Use the supported shader setting for the Shuttle cockpit. Include reviewed
+  Windows profile/installer rollback corrections and English follow-up checks.
+- Include the new relay modules and exact mod version in compatibility labels.
+  Preserve the original 7.0 pair. New packages remain internal; no public release.
+- General NPC combat/equipment/loot, station economy, arbitrary vanilla missions
+  and persistent sessions remain incomplete.
+
 Version 7.0.0 INTERNAL W01 — 11 October 2026
 
 - Add an original host NPC registry and complete sector baseline transport with

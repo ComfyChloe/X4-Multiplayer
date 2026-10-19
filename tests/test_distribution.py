@@ -20,7 +20,7 @@ class DistributionTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);p=root/'45841';p.mkdir();(p/'config.xml').write_text('<root><language>49</language><autosave>true</autosave></root>');(root/'save.xml.gz').write_bytes(b'original');before=(p/'config.xml').read_bytes()
    setup.configure_profile(p,root/'backup')
-   tree=ET.parse(p/'config.xml').getroot();self.assertEqual(tree.findtext('autosave'),'false');self.assertEqual(tree.findtext('uisafemode'),'false');self.assertEqual(tree.findtext('language'),'49');self.assertEqual((root/'backup/config.xml').read_bytes(),before);self.assertEqual((root/'save.xml.gz').read_bytes(),b'original')
+   tree=ET.parse(p/'config.xml').getroot();self.assertEqual(tree.findtext('shaderquality'),'2');self.assertEqual(tree.findtext('autosave'),'false');self.assertEqual(tree.findtext('uisafemode'),'false');self.assertEqual(tree.findtext('language'),'49');self.assertEqual((root/'backup/config.xml').read_bytes(),before);self.assertEqual((root/'save.xml.gz').read_bytes(),b'original')
  def test_existing_test_save_and_symlink_refused_before_change(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);p=root/'45841';(p/'save').mkdir(parents=True);s=p/'save/slot.xml.gz';s.write_bytes(b'preserve')

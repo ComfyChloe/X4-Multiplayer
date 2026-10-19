@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in source calibration, independent of the production remote shot budget. -->
+<mdscript name="X4LAN_FireProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+ <cue name="ConfigureDual" namespace="this"><conditions><event_ui_triggered screen="'X4LAN_FireProbe'" control="'ConfigureDual'"/></conditions><actions>
+  <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+  <do_all exact="2" counter="$i">
+   <set_value name="$ship" exact="$arena.$ships.{$i}"/>
+   <stop_shooting object="$ship"/>
+   <do_all exact="$ship.weapons.operational.count" counter="$j">
+    <set_value name="$weapon" exact="$ship.weapons.operational.list.{$j}"/>
+    <remove_weapon_from_all_weapongroups weapon="$weapon"/>
+    <add_weapon_to_weapongroup weapon="$weapon" weapongroup="0" primary="$j le 3"/>
+   </do_all>
+   <activate_weapongroup object="$ship" weapongroup="0" primary="true"/>
+   <activate_weapongroup object="$ship" weapongroup="0" primary="false"/>
+  </do_all>
+  <set_value name="$primary" exact="0"/><set_value name="$secondary" exact="0"/>
+  <add_to_group groupname="$weapons" list="$arena.$ships.{2}.weapons.operational.list"/>
+ </actions><cues><cue name="RemoteShot" instantiate="true"><conditions><event_weapon_fired group="$weapons"/></conditions><actions>
+  <do_if value="$arena.$ships.{2}.primaryweapons.{$arena.$ships.{2}.activeweapongroup.primary}.list.indexof.{event.object} gt 0"><set_value name="$primary" operation="add" exact="1"/></do_if>
+  <do_else><set_value name="$secondary" operation="add" exact="1"/></do_else>
+  <debug_text text="'[X4LAN] FIRE_PROBE remote primary=%s secondary=%s'.[$primary,$secondary]"/>
+ </actions></cue></cues></cue>
+ <cue name="Tap" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_FireProbe'" control="'Tap'"/></conditions><actions>
+  <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{1}"/>
+  <do_if value="event.param3.$primary or event.param3.$secondary"><stop_shooting object="$ship"/><shoot object="$ship" primary="event.param3.$primary" secondary="event.param3.$secondary"/></do_if>
+  <do_else><stop_shooting object="$ship"/></do_else>
+ </actions></cue></cues>
+</mdscript>

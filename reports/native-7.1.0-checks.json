@@ -1,0 +1,169 @@
+{
+  "channel": "internal",
+  "game": "X4 9.00 (611726), Steam23660954",
+  "native_platform": "Linux",
+  "scope": "One native isolated world per run, synthetic authenticated counterpart. No joint two-native acceptance.",
+  "firing_receiver": {
+    "source": "4f1075c",
+    "tap_split_4_2": 6.0,
+    "tap_6": 6.0,
+    "sustained_78": 78.0,
+    "after_stop": 0.0,
+    "pass": true,
+    "source_probe_pass": false,
+    "source_probe_note": "Probe-only controller setup error; excluded from source-capture acceptance.",
+    "artifacts": {
+      "-result.json": "07705aab06097e732fe4349d6d9e12fe087c7ede96c6604a4cb4e6ab699cb49c",
+      ".log": "a97354618117e1ab97ec59655ceadccf83f84cf4138c28a764a747c03239cc21"
+    }
+  },
+  "native_source_echo": {
+    "source": "6f6be02",
+    "source_primary": 6,
+    "source_secondary": 0,
+    "native_source_shots": 6.0,
+    "native_receiver_shots": 6.0,
+    "actual_primary_counter_changes": [
+      2,
+      6
+    ],
+    "pass": true,
+    "artifacts": {
+      "-result.json": "551d27c88795c625489cef135987d895c09318dea9204ec61f07ef1dcc907a87",
+      ".log": "d41ffcbc9400c4fecdd3f3233c3ee0ac120dcc7cdbe27ad75bb8e3c162aa2f86"
+    }
+  },
+  "dual_trigger": {
+    "source": "00fc83b",
+    "fixture": "Both ships explicitly configured with identical disjoint three-primary/three-secondary memberships; no membership replication claim.",
+    "tap_primary_3": 3.0,
+    "tap_secondary_3": 3.0,
+    "simultaneous_3_3": 6.0,
+    "remote_primary_secondary": [
+      6,
+      6
+    ],
+    "after_stop": 0.0,
+    "pass": true,
+    "artifacts": {
+      "-result.json": "f1b53810db01b9968e48e5cf5e740b9695b6892a053470f504fdecd7bcaf27ce",
+      ".log": "9ba36fe01639982e5e490cd1d19f767989d502e56fd421a84ef464847f97512e"
+    }
+  },
+  "health_replay": {
+    "source": "00fc83b",
+    "input_trace": "fire2-native-host-4f1075c-result.json",
+    "input_sha256": "07705aab06097e732fe4349d6d9e12fe087c7ede96c6604a4cb4e6ab699cb49c",
+    "one_based_world_health_fields": {
+      "ship1": [
+        1,
+        2
+      ],
+      "ship2": [
+        4,
+        5
+      ],
+      "target1": [
+        7,
+        8
+      ],
+      "target2": [
+        9,
+        10
+      ]
+    },
+    "readbacks": 63,
+    "max_error_percentage_points": 0.0,
+    "local_drift_recovered": true,
+    "drift_fixture": "Ship1 hull/shield65/45 -> local42/5 -> authoritative65/45",
+    "observed_recovery_seconds": 0.83,
+    "pass": true,
+    "artifacts": {
+      "-result.json": "b5b14c2ffa59f1cfa1a1dcd9a8ac70334cf14afb19284c9c04805fb7f4eae63d",
+      ".log": "0269871c8f0352619e291e1cc9b0025736c5c4b308cc163345a63033d8713b7d"
+    },
+    "recorded_nonconstant_trace_readbacks": 27,
+    "validator_source": "759a5e0",
+    "validation_artifact_sha256": "7d7c97f79e5057bd376700522c31b51b97249f00e55675cbd02ed48b6d3d447e"
+  },
+  "md_schema": {
+    "source": "00fc83b",
+    "files": 15,
+    "pass": true
+  },
+  "unequal_triggers": {
+    "source": "759a5e0",
+    "input": "Synthetic3P/9S,9P/3S,staggered3P then9S; identical opt-in fixture groups.",
+    "native_total_checkpoints": {
+      "4": 0.0,
+      "8": 12.0,
+      "13": 24.0,
+      "20": 36.0,
+      "26": 36.0
+    },
+    "native_primary_secondary": [
+      15,
+      21
+    ],
+    "independent_exhaustion_pass": true,
+    "after_stop": 0.0,
+    "pass": true,
+    "artifacts": {
+      "-result.json": "e8a104e93d59a61d9c2b9594b953303eda90d0c0142ae8a8aa4174c0de5abb45",
+      ".log": "3a8035a7aea200088191ecd5202e7c26edeaa44b8ddcec937d05a26ebb7aa773"
+    }
+  },
+  "player_fixture_display": {
+    "source": "759a5e0",
+    "objects": {
+      "F1": {
+        "samples": 62,
+        "matching_code_name_header": 61,
+        "selected": 62,
+        "targetable_when_selected": true
+      },
+      "F2": {
+        "samples": 62,
+        "matching_code_name_header": 61,
+        "selected": 62,
+        "targetable_when_selected": true
+      },
+      "F3": {
+        "samples": 62,
+        "matching_code_name_header": 61,
+        "selected": 62,
+        "targetable_when_selected": true
+      },
+      "F4": {
+        "samples": 62,
+        "matching_code_name_header": 61,
+        "selected": 62,
+        "targetable_when_selected": true
+      },
+      "P1": {
+        "samples": 62,
+        "matching_code_name_header": 61,
+        "selected": 62,
+        "targetable_when_selected": true
+      },
+      "P2": {
+        "samples": 62,
+        "matching_code_name_header": 61,
+        "selected": 0,
+        "targetable_when_selected": true
+      }
+    },
+    "own_ship_self_selection_expected": false,
+    "pass": true,
+    "artifacts": {
+      "-result.json": "325d7604644410af10a24815a2095ce572382fce23af8424c98a2704b810447c",
+      ".log": "ba9653d1af54a37448748138df33307ccddc6fbd4620dab8a735c48797116906"
+    }
+  },
+  "save_preservation": {
+    "all_file_bytes_unchanged": true,
+    "actual_save_timestamps_unchanged": true,
+    "no_test_saves": true,
+    "steam_metadata_timestamp_changed": true
+  }
+}

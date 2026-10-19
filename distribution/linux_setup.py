@@ -19,7 +19,7 @@ PROFILE = '45841'
 TEST_SETTINGS = {
     'autosave': 'false', 'uisafemode': 'false',
     'res_width': '1920', 'res_height': '1080', 'fullscreen': 'true', 'borderless': 'false',
-    'gfxquality': '1', 'shaderquality': '0', 'shadows': '1', 'softshadows': 'false',
+    'gfxquality': '1', 'shaderquality': '2', 'shadows': '1', 'softshadows': 'false',
     'ssao': '0', 'glow': '0', 'uiglow': '0', 'uiglowintensity': '0.75',
     'lodfactor': '0.15', 'effectdistance': '0.15', 'distortion': 'false',
     'disableradar': 'false', 'radarquality': '0', 'ssr': 'false', 'ssrquality': 'low',

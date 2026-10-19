@@ -8,10 +8,22 @@
     <do_all exact="2" counter="$i">
      <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$ships.{$i}"/>
      <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$targets.{$i}"/>
+     <raise_lua_event name="'X4LAN_Universe.Target%s'.[$i]" param="md.X4LAN_Bubble.Arena.$targets.{$i}"/>
     </do_all>
     <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$donor"/>
     <raise_lua_event name="'X4LAN_Universe.Ready'"/>
    </actions>
+  </cue>
+  <cue name="Describe" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_Universe'" control="'Describe'"/></conditions>
+   <actions><do_if value="event.param3.$object.isoperational">
+    <set_object_name object="event.param3.$object" name="event.param3.$name"/>
+    <set_object_radar_visible object="event.param3.$object" visible="true"/>
+   </do_if></actions>
+  </cue>
+  <cue name="Known" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_Universe'" control="'Known'"/></conditions>
+   <actions><do_if value="event.param3.isoperational"><set_known object="event.param3" known="true"/></do_if></actions>
   </cue>
  </cues>
 </mdscript>

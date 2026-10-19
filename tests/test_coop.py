@@ -102,3 +102,15 @@ class CoopTests(unittest.TestCase):
   self.s.receive(good.replace(b'|2|12|',b'|1|12|'),P1,.3)
   self.s.receive(good.replace(b'|2|12|',b'|3|nan|'),P1,.4)
   self.assertEqual(self.s.game_metrics[self.a],old)
+
+ def test_velocity_navigation_checks_source_clock_and_preserves_wire_fields(self):
+  def packet(seq=1,time='10',vx='100',epoch=1):
+   return f'NAV2|1|{self.a}|1|{epoch}|{seq}|sector_macro|1000|0|0|0|0|0|0|3|{time}|{vx}|0|0|0|0|0'.encode()
+  self.s.receive(packet(),FOREIGN,.1);self.assertFalse(self.s.navigation)
+  self.s.receive(packet(),P1,.2)
+  rows=[p for a,p in self.s.snapshots(.3) if a==P2 and p.startswith(b'NAV2|')]
+  self.assertEqual(len(rows),1);self.assertTrue(rows[0].endswith(b'|10|100|0|0|0|0|0'))
+  old=self.s.navigation[1].copy()
+  for bad in (packet(2,'9'),packet(2,'nan'),packet(2,'11','100001'),packet(2,'11','100',2)):
+   self.s.receive(bad,P1,.4);self.assertEqual(self.s.navigation[1],old)
+  self.s.receive(packet(2,'11'),P1,.5);self.assertEqual(self.s.navigation[1]['seq'],2)
