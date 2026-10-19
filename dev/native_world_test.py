@@ -62,7 +62,7 @@ def install(slot, shared_ship=False):
     cfg = dict(token=secrets.token_hex(16), build='world1-9.00-steam23660954', bubble='world-dev',
                port=45843, coop=True, world_sync=True, world_mode='replica')
     if shared_ship:
-        cfg.update(ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental')
+        cfg.update(ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental', ship_weapons=6)
     (HERE / 'native-session.json').write_text(json.dumps(cfg, indent=2))
     shutil.copytree(SOURCE / 'extension/x4_lan_lab', TARGET, dirs_exist_ok=True)
     values = dict(enabled=True, bubble_actions=True, trading=True, walking_avatars=False,
