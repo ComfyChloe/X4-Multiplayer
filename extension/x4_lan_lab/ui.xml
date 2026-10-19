@@ -17,5 +17,6 @@
     <file name="ui/trade_game.lua" />
     <file name="ui/quest_game.lua" />
     <file name="ui/cargo_game.lua" />
+    <file name="ui/identity_game.lua" />
   </environment>
 </addon>
