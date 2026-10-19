@@ -41,6 +41,20 @@ local function stopFire2(i)
  if q and (q.on[1] or q.on[2]) then AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,primary=false,secondary=false}) end
  if q then q.on={false,false};q.deadline={0,0};q.events={} end
 end
+-- Session pause boundary. Checked in receive and in the frame, so a resume is seen before any
+-- packet of the resume frame is queued. resumeAt is local time; per entity it maps to the
+-- peer's NAV2 source clock. Without a track the mapping is unknown and all history is old.
+local function pauseBoundary(now)
+ if A.paused() then c.wasPaused=true;return true end
+ if c.wasPaused then c.wasPaused=false;c.resumeAt=now end
+ return false
+end
+local function resumeCutoff(i)
+ if not c.resumeAt then return nil end
+ local r=c.remote[i]
+ if r and r.track and r.track.offset then return c.resumeAt-r.track.offset end
+ return math.huge
+end
 function c.stopFire()
  for i,r in pairs(c.remote) do
   if r.firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
@@ -132,7 +146,8 @@ function c.receive(f,now)
   end
   if seq<=q.seq or time<=q.time or shots[1]<q.shots[1] or shots[2]<q.shots[2] then return true end
   -- Paused or pre-resume history (source time at or before the cutoff) is adopted, never played.
-  if not A.paused() and not (q.cutoff and time<=q.cutoff) then
+  local paused=pauseBoundary(now);local cutoff=resumeCutoff(entity)
+  if not paused and not (cutoff and time<=cutoff) then
    for k=1,2 do
     if shots[k]>q.shots[k] then q.events[#q.events+1]={time=time,trigger=k,group=groups[k]} end
    end
@@ -181,9 +196,12 @@ local function fire2Frame(i,r,ship,now)
   stopFire2(i);return
  end
  local target=(r and r.track and r.track.offset) and now-r.track.offset-M.delay or math.huge
+ local cutoff=resumeCutoff(i)
  local keep={}
  for _,e in ipairs(q.events) do
-  if e.time<=target then
+  if cutoff and e.time<=cutoff then
+   -- Pre-resume history is never played, even if it was queued before the cutoff existed.
+  elseif e.time<=target then
    -- A queued edge older than the motion window is dropped, never fired late.
    if target-e.time<=M.stale then q.deadline[e.trigger]=now+.35;q.group=q.group or {};q.group[e.trigger]=e.group end
   else keep[#keep+1]=e end
@@ -218,20 +236,10 @@ function c.frame(now)
   send('CREW|1|'..s.client.lease..'|'..c.crewSeq..'|'..controlled..'|'..aboard)
  end
  publishMetrics(now)
- if A.paused() then
+ if pauseBoundary(now) then
   -- FIRE2 never resumes from pre-pause history: stop active fire and drop queued edges.
   for i in pairs(c.fire2) do stopFire2(i) end
-  c.wasPaused=true
   return
- end
- if c.wasPaused then
-  -- Resume cutoff on the NAV2 source clock: the peer's source time that corresponds to now.
-  -- Frames sent at or before it (still in flight, or sent during the pause) never play.
-  c.wasPaused=false
-  for i,q in pairs(c.fire2) do
-   local r=c.remote[i]
-   q.cutoff=(r and r.track and r.track.offset) and now-r.track.offset or q.time
-  end
  end
  if now>=(c.nextNav or 0) then
   c.nextNav=now+.05

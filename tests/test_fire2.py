@@ -217,6 +217,30 @@ class Fire2AdapterTests(unittest.TestCase):
          local f=fires('Fire2');assert(#f==1 and f[1].primary==true,'subsequent fresh edge plays')
         ''')
 
+    def test_resume_frame_packet_received_before_frame_never_fires(self):
+        l = self.make()
+        l.execute('''
+         nav2(1,50,0);fire2(1,50,1,1,0,0)
+         paused=true;now=10.12;frames.onUpdate()
+         -- Resume: the client receives the delayed pre-pause packet before coop.frame runs.
+         paused=false;now=10.21;fire2(2,50.05,1,1,1,0);frames.onUpdate();now=10.5;frames.onUpdate()
+         assert(#fires('Fire2')==0,'pre-pause edge received in the resume frame must not fire')
+         now=10.6;nav2(2,50.6,0);fire2(3,50.6,1,1,2,0);now=10.8;frames.onUpdate()
+         assert(#fires('Fire2')==1,'subsequent fresh edge plays')
+        ''')
+
+    def test_baseline_created_after_resume_never_replays_old_edges(self):
+        l = self.make()
+        l.execute('''
+         nav2(1,50,0)
+         paused=true;now=10.12;frames.onUpdate();paused=false;now=10.21;frames.onUpdate()
+         -- The first FIRE2 ever seen arrives after resume, followed by more pre-pause history.
+         fire2(1,49.9,1,1,0,0);fire2(2,50.05,1,1,1,0);now=10.5;frames.onUpdate()
+         assert(#fires('Fire2')==0,'old edges after a post-resume baseline must not fire')
+         now=10.6;nav2(2,50.6,0);fire2(3,50.6,1,1,2,0);now=10.8;frames.onUpdate()
+         assert(#fires('Fire2')==1,'fresh edge plays')
+        ''')
+
     # --- authority ---
 
     def test_epoch_change_clears_fire2_and_rebaselines(self):
