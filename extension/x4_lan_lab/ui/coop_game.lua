@@ -1,7 +1,12 @@
 -- Cooperative navigation: stable ship identities, sector-aware poses, one pilot per ship.
+-- NAV2 appends source time (seconds) and velocity (m/s, rad/s) to NAV fields.
+-- Source clocks need no wall-clock synchronization. Authority/sector transitions reset
+-- tracks; motion.lua also resets after pauses or discontinuities and bounds prediction.
+-- The shot counter remains the sole fire trigger until a separately negotiated FIRE2.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
 if not cfg or not cfg.coop or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
+local M=assert(X4LAN_MOTION,'motion buffer missing')
 local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0}}
 A.coop=c
 local function log(v) DebugError('[X4LAN] '..v) end
@@ -55,14 +60,15 @@ function c.receive(f,now)
   for i=1,2 do
    if c.epochs[i]~=epochs[i] or c.owners[i]~=owners[i] then
     if c.remote[i] and c.remote[i].firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
-    c.remote[i]=nil;c.seq[i]=0;c.shots[i]=0
+    c.remote[i]=nil;c.seq[i]=0;c.shots[i]=0;c.motion=c.motion or {};c.motion[i]=nil
     log('ship '..i..' movement authority='..owners[i]..'; epoch='..epochs[i])
    end
   end
   c.owners,c.epochs,c.pilots,c.revision=owners,epochs,pilots,revision
   return true
- elseif f[1]=='NAV' then
-  if #f~=16 then return true end
+ elseif f[1]=='NAV' or f[1]=='NAV2' then
+  local modern=f[1]=='NAV2'
+  if #f~=(modern and 23 or 16) then return true end
   local entity,epoch,seq=integer(f[5],2),integer(f[6]),integer(f[7]);local name=f[8]
   if not entity or entity<1 or not epoch or not seq or not name:match('^[%w_.-]+_macro$') or #name>96 then return true end
   if c.owners[entity]==cfg.slot or c.epochs[entity]~=epoch then return true end
@@ -73,6 +79,12 @@ function c.receive(f,now)
   if not r or r.sector~=name then
    r={samples={},fire=fire,sector=name};c.remote[entity]=r
   end
+  if modern then
+   local velocity={};for i=1,6 do velocity[i]=tonumber(f[17+i]) end
+   local track=r.track or {}
+   if not M.push(track,tonumber(f[17]),p,velocity,now) then return true end
+   r.track=track
+  else r.track=nil end
   r.seq,r.at,r.dock=seq,now,dock
   if fire>r.fire then r.fireDeadline=now+.35 end;r.fire=fire
   r.samples[#r.samples+1]={time=now,pose=p};while #r.samples>5 do table.remove(r.samples,1) end
@@ -97,7 +109,9 @@ function c.receive(f,now)
  return false
 end
 local function render(r,now)
- if not r or now-r.at>.75 or #r.samples==0 then return nil end
+ if not r or #r.samples==0 then return nil end
+ if r.track then return M.render(r.track,now) end
+ if now-r.at>.75 then return nil end
  local target=now-.1;local a,b=r.samples[1],r.samples[#r.samples]
  for i=2,#r.samples do if r.samples[i].time>=target then b=r.samples[i];break end;a=r.samples[i] end
  local t=b.time>a.time and math.max(0,math.min(1,(target-a.time)/(b.time-a.time))) or 0;local p={}
@@ -135,9 +149,14 @@ function c.frame(now)
     if sector~=0 then
      local name=GetComponentData(A.id(sector),'macro');c.sectors[name]=sector
      local p=C.GetObjectPositionInSector(ship);c.seq[i]=c.seq[i]+1
-     local fields={'NAV','1',s.client.lease,tostring(i),tostring(c.epochs[i]),tostring(c.seq[i]),name}
+     local fields={'NAV2','1',s.client.lease,tostring(i),tostring(c.epochs[i]),tostring(c.seq[i]),name}
      for _,value in ipairs({p.x,p.y,p.z,p.yaw,p.pitch,p.roll}) do fields[#fields+1]=string.format('%.9g',value) end
-     fields[#fields+1]=tostring(c.docks[i]);fields[#fields+1]=tostring(c.shots[i]);send(table.concat(fields,'|'))
+     fields[#fields+1]=tostring(c.docks[i]);fields[#fields+1]=tostring(c.shots[i])
+     local values={p.x,p.y,p.z,p.yaw,p.pitch,p.roll};c.motion=c.motion or {}
+     local velocity=M.velocity(c.motion[i],values,now);c.motion[i]={time=now,pose=values}
+     fields[#fields+1]=string.format('%.6f',now)
+     for _,v in ipairs(velocity) do fields[#fields+1]=string.format('%.9g',v) end
+     send(table.concat(fields,'|'))
     end
    end
   end
@@ -159,7 +178,7 @@ function c.frame(now)
       r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector);AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
      end
     elseif now>=(r.nextApply or 0) then
-     r.nextApply=now+.05
+     r.nextApply=now+.015
      local changed=not r.applied
      if r.applied then for n=1,6 do if math.abs(p[n]-r.applied[n])>(n<=3 and .01 or .0001) then changed=true end end end
      if changed then C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));r.applied=p end

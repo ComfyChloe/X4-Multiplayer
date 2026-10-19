@@ -18,7 +18,7 @@ class CoopAdapterTests(unittest.TestCase):
     writes[#writes+1]={object=object,sector=sector,x=p.x,y=p.y,z=p.z};positions[object]=p
    end
   ''')
-  for file in ('bubble_game.lua','coop_game.lua','life_game.lua'):l.execute((UI/file).read_text())
+  for file in ('bubble_game.lua','motion.lua','coop_game.lua','life_game.lua'):l.execute((UI/file).read_text())
   l.execute('''events['X4LAN.Loaded']();now=10;frames.onUpdate();events['X4LAN_Bubble.Ready']();frames.onUpdate();events['X4LAN_Coop.Ready']()
    function auth(rev,o1,e1,p1,o2,e2,p2)
     client:receiveExtension({'AUTH','1',client.lease,tostring(rev),o1,tostring(e1),p1,o2,tostring(e2),p2},now)
@@ -129,3 +129,15 @@ class CoopAdapterTests(unittest.TestCase):
    world(2,10.5);assert(countRequest('Apply')==1)
    world(3,11.1);assert(countRequest('Apply')==2)
   ''')
+
+ def test_modern_navigation_predicts_during_loss_and_freezes_without_snapback(self):
+  l=self.make();l.execute("""
+   local c=X4LAN_BUBBLE_API.coop;c.sectors.cluster_14_sector001_macro=22
+   local f={'NAV2','1',client.lease,string.rep('b',32),'2','1','1','cluster_14_sector001_macro',
+    '1000','10000','0','0','0','0','0','0','50','100','0','0','0','0','0'}
+   c.receive(f,now);now=10.4;frames.onUpdate();assert(math.abs(positions[42].x-1025)<.01)
+   now=11;frames.onUpdate();assert(math.abs(positions[42].x-1035)<.01)
+   local n=#writes;now=12;frames.onUpdate();assert(#writes==n and positions[42].x>1000)
+   f[7]='2';f[17]='49';c.receive(f,now);assert(c.remote[2].seq==1)
+   auth(2,'p1',1,'p1','p1',2,'0');assert(c.remote[2]==nil)
+  """)

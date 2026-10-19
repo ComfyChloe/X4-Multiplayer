@@ -62,7 +62,7 @@ class CoopSession(EconomySession):
         except UnicodeError: return []
         if len(f) < 3 or f[1] != '1': return []
         kind = f[0]
-        if kind not in ('CREW', 'NAV', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
+        if kind not in ('CREW', 'NAV', 'NAV2', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
             # Legacy movement/fire/dock frames must never override cooperative authority.
             if kind in ('STATE', 'FIRE', 'DOCKSTATE', 'BODY', 'ORDER'): return []
             old_leases = {s: p.lease for s, p in self.peers.items()}
@@ -110,7 +110,7 @@ class CoopSession(EconomySession):
                 if old[1:] != (granted, aboard): self.authority_revision += 1
                 if controlled and not granted:
                     return [f'PILOT_DENIED|1|{peer.lease}|{seq}|{controlled}'.encode()]
-            elif kind == 'NAV' and len(f) == 15:
+            elif (kind == 'NAV' and len(f) == 15) or (kind == 'NAV2' and len(f) == 22):
                 entity, epoch, seq = integer(f[3], 2), sequence(f[4]), sequence(f[5])
                 if entity not in (1, 2) or self.owners[entity] != slot or epoch != self.epochs[entity]: return []
                 if not ATOM.fullmatch(f[6]) or not f[6].endswith('_macro'): return []
@@ -118,7 +118,14 @@ class CoopSession(EconomySession):
                 old = self.navigation.get(entity)
                 if old and old['lease'] == peer.lease and seq <= old['seq']: return []
                 if self.dead(entity): return []
-                self.navigation[entity] = dict(lease=peer.lease, seq=seq, at=now, fields=f[3:])
+                if kind == 'NAV2':
+                    source_time = float(f[15])
+                    velocity = [float(v) for v in f[16:22]]
+                    if not math.isfinite(source_time) or not 0 <= source_time <= 1e12: return []
+                    if not all(math.isfinite(v) and abs(v) <= (100000 if i < 3 else math.tau)
+                               for i,v in enumerate(velocity)): return []
+                    if old and old.get('kind') == 'NAV2' and source_time <= float(old['fields'][12]): return []
+                self.navigation[entity] = dict(lease=peer.lease, seq=seq, at=now, fields=f[3:], kind=kind)
             elif kind == 'BODY2' and len(f) == 14:
                 seq, mode, dead, gen = sequence(f[3]), f[4], integer(f[5], 1), sequence(f[6])
                 if mode not in ('ship', 'foot', 'suit') or (mode == 'suit' and not gen): return []
@@ -175,7 +182,7 @@ class CoopSession(EconomySession):
             result.append((peer.address, ('AUTH|1|' + peer.lease + '|' + '|'.join(authority)).encode()))
             for entity, nav in self.navigation.items():
                 if self.owners[entity] == slot or now - nav['at'] > .75 or self.dead(entity): continue
-                result.append((peer.address, ('NAV|1|' + peer.lease + '|' + nav['lease'] + '|' + '|'.join(nav['fields'])).encode()))
+                result.append((peer.address, (nav.get('kind','NAV')+'|1|' + peer.lease + '|' + nav['lease'] + '|' + '|'.join(nav['fields'])).encode()))
             other = self.peers.get('p2' if slot == 'p1' else 'p1')
             if other and other.lease in self.bodies and other.lease in self.body_sectors:
                 b = self.bodies[other.lease]
