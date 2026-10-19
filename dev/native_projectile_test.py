@@ -12,6 +12,7 @@ import secrets
 import shutil
 import socket
 import statistics
+import subprocess
 import sys
 import time
 
@@ -26,7 +27,20 @@ SECTOR = 'cluster_14_sector001_macro'
 
 def analyze(log):
     rows = []; malformed = 0
+    ship_rows = []; readbacks = {}
     for line in log.splitlines():
+        if 'PROJECTILE_PROBE ship phase=' in line:
+            values = dict(re.findall(r'(\w+)=([^\s]+)', line))
+            try:
+                ship_rows.append(dict(phase=values['phase'], **{k:float(values[k]) for k in ('gameTime','x','y','z','engineSpeed')}))
+            except (KeyError,ValueError): malformed += 1
+        if 'PROJECTILE_PROBE readback=' in line:
+            values = dict(re.findall(r'(\w+)=([^\s]+)', line))
+            try:
+                serial = int(values['readback'])
+                if serial in readbacks: malformed += 1
+                readbacks[serial] = {k:float(values[k]) for k in ('shipVx','shipVy','shipVz','shipSpeed','bulletVx','bulletVy','bulletVz')}
+            except (KeyError,ValueError): malformed += 1
         if 'PROJECTILE_PROBE sample=' not in line:
             continue
         values = dict(re.findall(r'(\w+)=([^\s]+)', line))
@@ -52,9 +66,37 @@ def analyze(log):
               ('projectileprobe' in line.lower().replace('_','') and any(v in line.lower() for v in ('error:', 'error in', 'failed', 'not found')))
               or 'PROJECTILE_PROBE' in line and 'unknown' in line]
     result = dict(phases=phases, samples=rows, errors=errors, malformed_readbacks=malformed,
-                  measurement_complete=all(p['valid'] for p in phases.values()) and not errors and malformed == 0
+                  projectile_samples_complete=all(p['valid'] for p in phases.values()) and not errors and malformed == 0
                   and len({r['sample'] for r in rows}) == len(rows),
                   two_native_acceptance=False, damage_or_aim_acceptance=False)
+    controls = {}
+    for phase in phases:
+        points = [r for r in ship_rows if r['phase']==phase]
+        velocities = [[(b[k]-a[k])/(b['gameTime']-a['gameTime']) for k in ('x','y','z')]
+                      for a,b in zip(points,points[1:]) if .05 <= b['gameTime']-a['gameTime'] <= .5]
+        native = [readbacks.get(int(r['sample'])) if math.isfinite(r['sample']) else None
+                  for r in rows if r['phase']==phase]
+        complete = len(velocities)>=10 and len(native)==6 and all(
+            r and all(math.isfinite(v) for v in r.values()) for r in native)
+        control = dict(position_intervals=len(velocities), native_readbacks=sum(r is not None for r in native), valid=False)
+        if complete:
+            v = [statistics.median(r[i] for r in velocities) for i in range(3)]
+            control['position_derived_sector_velocity'] = v
+            control['native_component_velocity'] = [statistics.median(r[k] for r in native) for k in ('shipVx','shipVy','shipVz')]
+            control['native_speed'] = statistics.median(r['shipSpeed'] for r in native)
+            expected = 0 if phase=='stationary' else 100
+            control['valid'] = abs(v[0]-expected)<8 and abs(v[1])<2 and abs(v[2])<2
+            # A pose-driven ship may itself acquire native velocity; measure it
+            # instead of baking the hypothesis that its physical velocity is zero
+            # into acceptance. The other controls require their intended state.
+            if phase!='rendered':
+                nv=control['native_component_velocity']
+                control['valid'] &= abs(nv[0]-expected)<2 and abs(nv[1])<2 and abs(nv[2])<2
+        controls[phase]=control
+    result['controls']=controls
+    result['native_readbacks']=readbacks
+    result['controls_complete']=all(v['valid'] for v in controls.values())
+    result['measurement_complete']=result['projectile_samples_complete'] and result['controls_complete']
     if result['measurement_complete']:
         stationary, rendered, physical = (phases[p]['median_velocity'][0] for p in ('stationary','rendered','physical'))
         result['rendered_lateral_delta'] = rendered-stationary
@@ -110,12 +152,14 @@ def run():
         log_path = Path.home()/'.config/EgoSoft/X4/45841/x4lan-debug.txt'
         log = log_path.read_text(errors='replace') if log_path.exists() else ''
         result = analyze(log)
-        result.update(source='synthetic NAV2/FIRE2 pilot; real native host projectiles', history=history)
+        result.update(source='synthetic NAV2/FIRE2 pilot; real native host projectiles', history=history,
+                      source_commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=ROOT,text=True).strip(),
+                      production_tree=subprocess.check_output(['git','rev-parse','HEAD:extension/x4_lan_lab'],cwd=ROOT,text=True).strip())
         result['native_remote_shots'] = history[-1]['values'][16] if history else None
         result['measurement_complete'] &= result['native_remote_shots'] == 24
         if log_path.exists(): shutil.copy2(log_path, HERE/'projectile-native-host.log')
         (HERE/'projectile-native-host-result.json').write_text(json.dumps(result,indent=2))
-        print(json.dumps({k:v for k,v in result.items() if k not in ('history','samples')},indent=2),flush=True)
+        print(json.dumps({k:v for k,v in result.items() if k not in ('history','samples','native_readbacks')},indent=2),flush=True)
     if not result['measurement_complete']: raise SystemExit(1)
 
 
