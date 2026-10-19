@@ -25,7 +25,10 @@ end)
 function A.universe.frame(now)
  frame(now)
  if not A.coop.ready or not A.state.client or not A.state.client.lease or A.paused() then return end
- if not setup then setup=true;AddUITriggeredEvent('X4LAN_ProjectileProbe','Setup') end
+ if not setup then
+  setup=true;AddUITriggeredEvent('X4LAN_ProjectileProbe','Setup')
+  DebugError('[X4LAN] PROJECTILE_PROBE orientation_control='..(cfg.projectile_probe_hold_orientation==false and 'native_only' or 'all'))
+ end
  local r=A.coop.remote[2]
  local samples=r and r.track and r.track.samples
  local sample=samples and samples[#samples]
@@ -39,12 +42,14 @@ function A.universe.frame(now)
  local desired=(phase=='physical' or phase=='native') and 100 or 0
  if phase=='native' then r.nextApply=math.huge
  elseif r.nextApply==math.huge then r.nextApply=0 end
- -- Hold orientation in every comparison without changing actual native position.
- -- The engine turned even the stationary proxy when production skipped an
- -- unchanged pose; that distinct observation is retained in the failed first runs.
- local ship=A.coop.ships[2];local actual=C.GetObjectPositionInSector(ship)
- local sector=C.GetContextByClass(ship,'sector',false)
- C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',{x=actual.x,y=actual.y,z=actual.z,yaw=0,pitch=0,roll=0}))
+ -- Baseline experiment holds every orientation. Post-fix validation disables
+ -- this for all cases using production poses; only the independent native
+ -- translation control (whose production pose application is disabled) retains it.
+ if cfg.projectile_probe_hold_orientation~=false or phase=='native' then
+  local ship=A.coop.ships[2];local actual=C.GetObjectPositionInSector(ship)
+  local sector=C.GetContextByClass(ship,'sector',false)
+  C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',{x=actual.x,y=actual.y,z=actual.z,yaw=0,pitch=0,roll=0}))
+ end
  if desired~=requested or changed then
   requested=desired;AddUITriggeredEvent('X4LAN_ProjectileProbe','Velocity',desired)
  end
