@@ -10,8 +10,18 @@ local frame=A.universe.frame;local nextLog=0
 function A.universe.frame(now)
  frame(now)
  if now<nextLog or not A.universe.latest then return end;nextLog=now+1
- for id,r in pairs(A.universe.replicas) do
-  if id<=2 and r.object and C.IsComponentOperational(r.object) then
+ local candidates={}
+ for id,r in pairs(A.universe.replicas) do if id<=2 then candidates[id]=r end end
+ if X4LAN_CONFIG.identity_probe_fixtures then
+  for i=1,2 do
+   candidates['P'..i]={object=A.coop.ships[i]}
+   candidates['F'..i]={object=A.identity.fixtures[i]}
+   local trade=A.trade and A.trade.state;local market=trade and trade.markets and trade.markets[i]
+   candidates['F'..(i+2)]={object=market and ConvertIDTo64Bit(A.id(market))}
+  end
+ end
+ for id,r in pairs(candidates) do
+  if r.object and C.IsComponentOperational(r.object) then
    local code=ffi.string(C.GetObjectIDCode(r.object))
    local known,visible,name=GetComponentData(A.id(r.object),'isknown','isradarvisible','name')
    local selected=C.SetSofttarget(r.object,'')

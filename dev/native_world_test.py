@@ -90,7 +90,7 @@ def install(slot, shared_ship=False):
     print('Installed W01 native probe for', slot, 'in isolated profile 45841; original backed up.')
 
 
-def peer(slot, duration, replay=False, config=None, baselines=8, motion=False):
+def peer(slot, duration, replay=False, config=None, baselines=8, motion=False, fixtures=False):
     from x4lan.host import Relay
     from x4lan.universe import UniverseSession, Receiver, Baseline, Sender
     cfg = json.loads((config or HERE / 'native-session.json').read_text())
@@ -154,6 +154,12 @@ def peer(slot, duration, replay=False, config=None, baselines=8, motion=False):
                                 entity = int(row.split(',')[0])
                                 name = ('Shared native ship '+str(entity)).encode().hex()
                                 sock.send(f'IDENT|1|{lease}|{lease}|{seq}|N|{entity}|TST-00{entity}|{name}|1|1'.encode())
+                        if fixtures and sender:
+                            for scope,count in (('P',2),('F',4)):
+                                for entity in range(1,count+1):
+                                    name=('Shared fixture '+scope+str(entity)).encode().hex()
+                                    code=scope+'XT-00'+str(entity)
+                                    sock.send(f'IDENT|1|{lease}|{lease}|{seq}|{scope}|{entity}|{code}|{name}|1|1'.encode())
                         if new_phase == 'move':
                             if motion:
                                 # Deliberate 0.9s loss bursts test bounded prediction/freeze.
@@ -188,6 +194,7 @@ if __name__ == '__main__':
     parser.add_argument('action', choices=['install','launch','peer','check-saves'])
     parser.add_argument('--slot', choices=['p1','p2'], default='p1')
     parser.add_argument('--duration', type=int, default=600)
+    parser.add_argument('--fixtures',action='store_true',help='Exercise player/fixture display identities on a native guest.')
     parser.add_argument('--motion', action='store_true', help='Exercise UMOVE/NAV2 with velocity and loss bursts.')
     parser.add_argument('--shared-ship', action='store_true', help='Verify the matched Timelines shuttle loadout.')
     parser.add_argument('--replay', action='store_true', help='Also replay the recorded complete native host sector.')
@@ -202,7 +209,7 @@ if __name__ == '__main__':
     elif args.action == 'launch':
         setup.ensure_closed()
         subprocess.run(['steam'] + setup.GAME_ARGS, check=True)
-    elif args.action == 'peer': peer(args.slot, args.duration,args.replay,args.config,args.baselines,args.motion)
+    elif args.action == 'peer': peer(args.slot, args.duration,args.replay,args.config,args.baselines,args.motion,args.fixtures)
     else:
         before=json.loads((HERE/'native-before/saves.json').read_text())
         after=saves(); assert before.keys() == after.keys(), 'Save file inventory changed during native test'
