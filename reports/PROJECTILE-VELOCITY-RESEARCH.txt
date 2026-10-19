@@ -1,0 +1,74 @@
+PROJECTILE VELOCITY RESEARCH - INTERNAL, 20 OCTOBER 2026
+
+STATUS
+The first complete measurement is from b687bb2, on unchanged production tree
+e199daee (the internal 7.1 production source). This is a diagnostic result,
+not a production fix or simultaneous Windows/Linux gameplay acceptance.
+The owner requested a renewed Claude availability check after midnight. No reply
+was received by 00:15 CEST, so primary continued with the authorized solo test.
+Claude's damage_probe.* scope was preserved. No public package was prepared.
+
+MEASURED RESULT
+Same Xperimental Shuttle, six weapons, identical sector orientation, 24 native
+shots. All four controls had 56 position intervals and six correlated native
+velocity/trajectory readbacks. Ship speeds derived from sector positions were
+0, 100.000, 100.001 and 99.993 m/s respectively. Native speeds were 0, 0, 100,
+100 m/s. Median projectile lateral velocities (sector X) were:
+- Stationary: -1.086 m/s.
+- Production pose-driven motion at 100 m/s: 0.343 m/s.
+- Pose-driven motion with explicit native 100 m/s: 100.132 m/s.
+- Native translation with orientation correction: 101.866 m/s.
+Forward projectile velocity was approximately 2300 m/s in every case.
+The four measured controls and all 24 trajectories passed strict validation;
+no MD/probe errors or malformed readbacks were found. Normal save bytes and
+actual save timestamps were unchanged. Game and test relay closed afterward.
+
+This establishes that the current pose-driven motion does not give this ship
+its corresponding native velocity, and its bullets omit the lateral motion
+that is present with native velocity. Weapon spread means these medians are
+not an exact trajectory-equivalence claim. General aiming/hits remain untested.
+
+CONTROL AND API LIMITS
+The diagnostic explicitly holds orientation at zero in EVERY case, preserving
+actual position. The native-translation case suppresses production network
+position application, but still corrects orientation. It is not uncontrolled
+flight. The synthetic pilot sends NAV2/FIRE2; a real Linux engine fires bullets.
+Native MD .velocity is cluster-relative but expressed in component-local
+rotational axes. Trajectories use sector-relative positions. The setter's frame
+at nonzero headings and differently oriented parent spaces needs its own test.
+The UI speed display is a separate value, not used as native speed acceptance.
+
+FAILED PROBES RETAINED
+c084ccd: Lua GetObjectPositionInSector(bullet ID) produced zeros. Native velocity
+readbacks were usable, but trajectories were invalid and orientation was not
+recorded. Failed result and full raw log retained; no acceptance from this run.
+743c4d1: MD component.relativeposition.{sector} produced actual displacement,
+but direct typed metre/second division produced 144 script errors. Computation
+was moved to Python. Unchanged stationary poses also drifted in orientation:
+maximum recorded angular component deviation was 0.589047 rad. The native
+translation control reached 0.627419 rad despite a one-shot angular reset.
+The corrected fixture holds orientation explicitly. These observations motivate
+an independent stationary-pose regression; they do not prove a production fix.
+
+NEXT IMPLEMENTATION / REVIEW BOUNDARIES
+1. Compare the remote ship's actual engine pose with the requested rendered pose,
+   including when successive requested poses are identical. Measure stationary
+   orientation without the diagnostic's orientation correction after any fix.
+2. Establish native velocity setter coordinates at nonzero heading. Any production
+   velocity update must follow the rendered trajectory, stop at bounded prediction
+   freeze, and handle pauses, ownership changes, docking, death and reconnect.
+   No new wire protocol is proposed; native angular rates are not interchangeable
+   with the Euler-angle rates currently transmitted in NAV2.
+3. Off-axis aiming, weapon-group membership, actual shared hits and general NPC
+   combat require separate evidence and authority design. Do not infer them from
+   correct default cadence, health repair or this velocity experiment.
+
+EVIDENCE
+reports/projectile-velocity-native-checks.json contains exact source/tree IDs,
+control metrics, artifact hashes and both failed runs. Local raw files are under
+.local/evidence-195-withheld,c084,743}-* and are not shipped.
+232 Linux Python/LuaJIT checks passed without skips. MD structure passed the
+installed X4 9.00 schema; the final expression-only change preserved that schema
+structure and removed unsupported arithmetic. Negative validator cases reject
+missing controls/readbacks, zero/nonfinite displacement, duplicate serials and
+rotating comparison ships. The matched internal 7.1 archives remain unchanged.
