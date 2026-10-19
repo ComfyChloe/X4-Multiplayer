@@ -180,3 +180,10 @@ class CoopAdapterTests(unittest.TestCase):
    positions[42].yaw=-math.pi;now=10.8;frames.onUpdate();assert(#writes==n)
    positions[42].yaw=-math.pi+.2;now=11;frames.onUpdate();assert(#writes==n+1)
   """)
+
+ def test_remote_drift_is_corrected_on_the_next_render_frame_above_60_fps(self):
+  l=self.stationary_remote();l.execute("""
+   local n=#writes;positions[42].yaw=.005
+   now=10.208;frames.onUpdate()
+   assert(#writes==n+1 and positions[42].yaw==0)
+  """)

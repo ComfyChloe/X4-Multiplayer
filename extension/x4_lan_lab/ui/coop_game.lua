@@ -316,7 +316,9 @@ function c.frame(now)
       r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector);AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
      end
     elseif now>=(r.nextApply or 0) then
-     r.nextApply=now+.015
+     -- There are only two cooperative ships. Correct their native controller
+     -- drift on every render frame, including frame rates above 60 FPS.
+     r.nextApply=now
      local changed=not r.applied
      if r.applied then for n=1,6 do if math.abs(p[n]-r.applied[n])>(n<=3 and .01 or .0001) then changed=true end end end
      if not changed then
