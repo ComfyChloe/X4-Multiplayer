@@ -23,8 +23,9 @@ HERE = ROOT / '.local/native-world-tests'
 SECTOR = 'cluster_14_sector001_macro'
 
 
-def run(echo_source=False, dual_trigger=False):
-    echo_source = echo_source or dual_trigger
+def run(echo_source=False, dual_trigger=False, unequal=False):
+    dual_trigger = dual_trigger or unequal
+    echo_source = (echo_source or dual_trigger) and not unequal
     cfg = json.loads((HERE / 'native-session.json').read_text())
     assert cfg.get('fire2') is True
     session = UniverseSession(cfg['token'], cfg['build'], cfg['bubble'])
@@ -78,13 +79,16 @@ def run(echo_source=False, dual_trigger=False):
                 if echo_source:
                     shots = captured[-1]['primary'] if captured else 0
                     secondary = captured[-1]['secondary'] if captured else 0
+                if unequal:
+                    shots = (3 if elapsed>=5 else 0)+(9 if elapsed>=10 else 0)+(3 if elapsed>=15 else 0)
+                    secondary = (9 if elapsed>=5 else 0)+(3 if elapsed>=10 else 0)+(9 if elapsed>=15.05 else 0)
                 source = 500 + now-start
                 if (shots,secondary) != previous_shots:
                     evidence.append(dict(time=round(elapsed, 4), primary=shots,secondary=secondary))
                     previous_shots = (shots,secondary)
                 packets = [f'IDLE|1|{lease}|{seq}', f'CREW|1|{lease}|{seq}|2|2',
                            f'UINTEREST|1|{lease}|{seq}|{SECTOR}',
-                           f'NAV2|1|{lease}|2|1|{seq}|{SECTOR}|1000|10000|0|0|0|0|0|{shots}|{source:.6f}|0|0|0|0|0|0',
+                           f'NAV2|1|{lease}|2|1|{seq}|{SECTOR}|1000|10000|0|0|0|0|0|{shots+secondary}|{source:.6f}|0|0|0|0|0|0',
                            f'FIRE2|1|{lease}|2|1|{seq}|{source:.6f}|1|1|{shots}|{secondary}']
                 for packet in packets:
                     sock.send(packet.encode())
@@ -120,12 +124,21 @@ def run(echo_source=False, dual_trigger=False):
             result['remote_trigger_capture'] = tuple(map(int,remote[-1])) if remote else None
             result['source_capture_pass'] = (capture_at(8),capture_at(13),capture_at(20)) == ((3,0),(3,3),(6,6))
             result['cadence_pass'] = (readings['8'],readings['13'],readings['20'],readings['26']) == (3,6,12,12) and result['remote_trigger_capture'] == (6,6)
-        prefix = 'fire2-native-dual' if dual_trigger else 'fire2-native-echo' if echo_source else 'fire2-native-host'
+        if unequal:
+            timeline = [dict(time=float(t),primary=int(p),secondary=int(s)) for t,p,s in re.findall(
+                r'\[Scripts\]\s+([0-9.]+).*FIRE_PROBE remote primary=(\d+) secondary=(\d+)',log)]
+            result['remote_trigger_timeline'] = timeline
+            first_secondary_continues = any(r['primary']==3 and 3<r['secondary']<9 for r in timeline)
+            second_primary_continues = any(r['secondary']==12 and 6<r['primary']<12 for r in timeline)
+            result['independent_exhaustion_pass'] = first_secondary_continues and second_primary_continues
+            result['source_capture_pass'] = result['native_local_shots']==0 and captured[-1]['primary']==captured[-1]['secondary']==0
+            result['cadence_pass'] = (readings['8'],readings['13'],readings['20'],readings['26']) == (12,24,36,36) and result['remote_trigger_capture'] == (15,21) and result['independent_exhaustion_pass']
+        prefix = 'fire2-native-unequal' if unequal else 'fire2-native-dual'  if dual_trigger else 'fire2-native-echo' if echo_source else 'fire2-native-host'
         (HERE / (prefix+'-result.json')).write_text(json.dumps(result, indent=2))
         shutil.copy2(Path.home()/'.config/EgoSoft/X4/45841/x4lan-debug.txt', HERE/(prefix+'.log'))
         sock.close()
         relay.close()
-        print(json.dumps({k: v for k, v in result.items() if k not in ('history', 'sent', 'identities', 'native_source_captures')}), flush=True)
+        print(json.dumps({k: v for k, v in result.items() if k not in ('history', 'sent', 'identities', 'native_source_captures', 'remote_trigger_timeline')}), flush=True)
     if not result['cadence_pass'] or not result['source_capture_pass']:
         raise SystemExit(1)
 
@@ -134,5 +147,6 @@ if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--echo-source',action='store_true')
     parser.add_argument('--dual-trigger',action='store_true')
+    parser.add_argument('--unequal',action='store_true',help='Synthetic 3P/9S,9P/3S and staggered3P then9S on identically configured fixture groups.')
     args=parser.parse_args()
-    run(args.echo_source,args.dual_trigger)
+    run(args.echo_source,args.dual_trigger,args.unequal)

@@ -2,7 +2,7 @@
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not A or not A.coop or cfg.test_profile~='45841' or cfg.slot~='p1' or not cfg.fire_probe then return end
 local frame=A.universe.frame;local started,on,nextLog;local step=1
-local plan=cfg.fire_probe_dual and {{5,true,false},{10,false,true},{15,true,true}} or {{5,true,false}}
+local plan=cfg.fire_probe_unequal and {} or cfg.fire_probe_dual and {{5,true,false},{10,false,true},{15,true,true}} or {{5,true,false}}
 function A.universe.frame(now)
  frame(now)
  if not A.coop.ready or not A.state.client or not A.state.client.lease or A.paused() then return end

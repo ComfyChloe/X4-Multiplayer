@@ -29,7 +29,7 @@ function A.universe.frame(now)
    local targetable=target.messageID~=0 and C.IsTargetable(target.messageID)
    local ok,details=pcall(GetTargetMonitorDetails,A.id(r.object),'',false)
    local header=ok and details and details.header and details.header.text or 'unavailable'
-   local placeholder=header:match('^%$(%w+)%$$')
+   local placeholder=header:match('%$(%w+)%$')
    if placeholder then
     local live,value=pcall(GetLiveData,placeholder,A.id(r.object),'')
     if live then header=value end
