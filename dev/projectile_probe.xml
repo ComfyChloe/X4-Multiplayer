@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in trajectory measurement in a disposable world; never shipped. -->
+<mdscript name="X4LAN_ProjectileProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Observe" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_ProjectileProbe'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{2}"/>
+    <add_to_group groupname="$weapons" list="$ship.weapons.operational.list"/>
+    <raise_lua_event name="'X4LAN_ProjectileProbe.Ready'"/>
+   </actions>
+   <cues>
+    <cue name="Projectile" instantiate="true">
+     <conditions><event_weapon_fired group="$weapons"/></conditions>
+     <actions><raise_lua_event name="'X4LAN_ProjectileProbe.Projectile'" param="event.param"/></actions>
+    </cue>
+    <cue name="Velocity" instantiate="true">
+     <conditions><event_ui_triggered screen="'X4LAN_ProjectileProbe'" control="'Velocity'"/></conditions>
+     <actions>
+      <set_object_velocity object="$ship" constantvel="true"><linear x="event.param3" y="0" z="0"/></set_object_velocity>
+      <raise_lua_event name="'X4LAN_ProjectileProbe.Velocity'" param="event.param3"/>
+     </actions>
+    </cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>
