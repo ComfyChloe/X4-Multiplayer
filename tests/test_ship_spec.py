@@ -25,8 +25,10 @@ requests,spawned={},{}
 AddUITriggeredEvent=function(screen,control,value) requests[#requests+1]={screen,control,value} end
 api.SpawnObjectAtPos2=function(macro,sector,p,owner)
  assert(owner=='player');spawned[#spawned+1]=macro
- if unavailable then return 0 end
- local n=60+#spawned;positions[n]=p;return n
+ if unavailable or (failSecond and #spawned==2) then return 0 end
+ local n=60+#spawned;positions[n]=p
+ if inertSecond and #spawned==2 then positions[n]=nil end
+ return n
 end
 X4LAN_TRANSPORT={open=function() return {close=function() closeCount=closeCount+1 end,send=function() end} end}
 X4LAN_CLIENT={new=function()
@@ -140,6 +142,19 @@ frames.onUpdate();assert(count('%(s)s')==1 and #spawned==2)
 local s=X4LAN_BUBBLE_API.state
 assert(s.failed and count('PrepareShips')==0 and count('SetupHost')==0)
 assert(#spawned==1 and spawned[1]=='ship_ter_s_xperimental_01_a_macro')
+assert(logged('ego_dlc_timelines'))
+''')
+
+    def test_partial_spawn_removes_only_new_ships_and_keeps_original(self):
+        for flag in ('failSecond', 'inertSecond'):
+            with self.subTest(flag=flag):
+                l = self.make(flag + '=true')
+                l.execute('''
+local s=X4LAN_BUBBLE_API.state
+assert(s.failed and count('PrepareShips')==0 and count('SetupHost')==0)
+assert(#spawned==2 and #removed==1 and removed[1]==61 and positions[61]==nil)
+assert(positions[11]~=nil, 'original ship must stay')
+for _,id in ipairs(removed) do assert(id~=11) end
 assert(logged('ego_dlc_timelines'))
 ''')
 

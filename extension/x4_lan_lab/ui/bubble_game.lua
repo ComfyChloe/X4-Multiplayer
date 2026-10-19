@@ -17,6 +17,7 @@ bool IsComponentOperational(UniverseID);
 const char* GetSaveFolderPath(void);
 UniverseID SpawnObjectAtPos2(const char*,UniverseID,UIPosRot,const char*);
 void SetObjectSectorPos(UniverseID,UniverseID,UIPosRot);
+void RemoveComponent(UniverseID);
 ]]
 local function log(s) DebugError('[X4LAN] '..tostring(s)) end
 local s={loaded=false,ready=false,fire=0,worldRevision=0,commands={},dock={0,0},lastLog=-math.huge}
@@ -115,6 +116,10 @@ local function frame()
     local own=C.SpawnObjectAtPos2(cfg.ship_macro,sector,ffi.new('UIPosRot',{x=-x,y=10000,z=0}),'player')
     local proxy=own~=0 and C.SpawnObjectAtPos2(cfg.ship_macro,sector,ffi.new('UIPosRot',{x=x,y=10000,z=0}),'player') or 0
     if own==0 or proxy==0 or not C.IsComponentOperational(own) or not C.IsComponentOperational(proxy) then
+     -- Remove only the ships spawned here; the player's original ship is never touched.
+     for _,object in ipairs({own,proxy}) do
+      if object~=0 and object~=ship and C.IsComponentOperational(object) then C.RemoveComponent(object) end
+     end
      error('shared ship '..cfg.ship_macro..' is unavailable; enable X4: Timelines (ego_dlc_timelines) on both PCs')
     end
     s.shipRequest={own=own,proxy=proxy,sector=sector}
