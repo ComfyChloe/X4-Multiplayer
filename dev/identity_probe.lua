@@ -2,7 +2,10 @@
 local A=X4LAN_BUBBLE_API
 if not A or not A.identity or X4LAN_CONFIG.test_profile~='45841' or X4LAN_CONFIG.slot~='p2' then return end
 local ffi=require('ffi');local C=ffi.C
-ffi.cdef[[bool SetSofttarget(UniverseID,const char*const);bool IsTargetable(uint32_t);]]
+if not pcall(ffi.typeof,'SofttargetDetails2') then
+ ffi.cdef[[typedef struct {UniverseID softtargetID;const char* softtargetConnectionName;uint32_t messageID;} SofttargetDetails2;]]
+end
+ffi.cdef[[SofttargetDetails2 GetSofttarget2();bool SetSofttarget(UniverseID,const char*const);bool IsTargetable(uint32_t);]]
 local frame=A.universe.frame;local nextLog=0
 function A.universe.frame(now)
  frame(now)
@@ -16,6 +19,10 @@ function A.universe.frame(now)
    local targetable=target.messageID~=0 and C.IsTargetable(target.messageID)
    local ok,details=pcall(GetTargetMonitorDetails,A.id(r.object),'',false)
    local header=ok and details and details.header and details.header.text or 'unavailable'
+   if header=='$containerheader$' then
+    local live,value=pcall(GetLiveData,'containerheader',A.id(r.object),'')
+    if live then header=value end
+   end
    DebugError(string.format('[X4LAN] IDENTITY_PROBE id=%s code=%s name=%s known=%s radar=%s selected=%s target=%s targetable=%s header=%s',
     id,code,tostring(name),tostring(known),tostring(visible),tostring(selected),tostring(target.softtargetID),tostring(targetable),tostring(header)))
   end

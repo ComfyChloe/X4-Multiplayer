@@ -55,7 +55,7 @@ def run():
    if done_at and now-done_at>8:break
    time.sleep(.005)
  finally:
-  result=dict(completed=completed,inventory=inventory,baseline_revision=baseline.revision if baseline else None,
+  result=dict(completed=completed,inventory=inventory,identities_received=len(s.identities.rows),baseline_revision=baseline.revision if baseline else None,
               drops=[r for r in baseline.rows if ',drop,' in r] if baseline else None)
   native_log=(Path.home()/'.config/EgoSoft/X4/45841/x4lan-debug.txt').read_text()
   result['md_errors']='Error in MD cue md.X4LAN_Cargo' in native_log

@@ -74,7 +74,7 @@ try {
     Check ($script:launchCount -eq 1) 'OneDrive did not reach Steam launch'
     Check ($script:launchArgs -contains '45841' -and $script:launchArgs -contains 'custom_creative') 'Isolated launch arguments changed'
     [xml]$after = Get-Content -Raw -LiteralPath $configPath
-    Check ($after.root.res_width -eq '1920' -and $after.root.res_height -eq '1080' -and $after.root.texturequality -eq 'low') 'Cloud config not set to 1080p Low'
+    Check ($after.root.res_width -eq '1920' -and $after.root.res_height -eq '1080' -and $after.root.texturequality -eq 'low' -and $after.root.shaderquality -eq '2') 'Cloud config not set to 1080p Low'
     Check ($after.root.fullscreen -eq 'true' -and $after.root.borderless -eq 'false') 'Exclusive fullscreen was not selected'
     Check ($after.root.language -eq '49' -and $after.root.autosave -eq 'false') 'Unrelated settings/safeguards changed'
     $backedUp = @(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'backups') -Recurse -Filter config.xml)
