@@ -2,12 +2,22 @@
 -- NAV2 appends source time (seconds) and velocity (m/s, rad/s) to NAV fields.
 -- Source clocks need no wall-clock synchronization. Authority/sector transitions reset
 -- tracks; motion.lua also resets after pauses or discontinuities and bounds prediction.
--- The shot counter remains the sole fire trigger until a separately negotiated FIRE2.
+-- FIRE2 (entity|epoch|seq|sourceTime|primaryGroup|secondaryGroup|primaryShots|secondaryShots)
+-- mirrors the active weapon groups (C API numbering 1-4) and per-trigger shot counters,
+-- played back on the NAV2 source clock. The first FIRE2 of an owner epoch is a baseline:
+-- it never replays earlier shots and ends the NAV shot-counter path for that epoch.
+-- Without FIRE2 (older peers) the NAV/NAV2 shot counter remains the fire trigger.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
 if not cfg or not cfg.coop or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
+pcall(ffi.cdef,[[uint32_t GetDefensibleActiveWeaponGroup(UniverseID,bool);
+void SetDefensibleActiveWeaponGroup(UniverseID,bool,uint32_t);]])
+-- Without the weapon-group API FIRE2 is neither sent nor applied (shot-counter fallback).
+local function api(name) local ok,f=pcall(function() return C[name] end);return ok and f or nil end
+local getGroup,setGroup=api('GetDefensibleActiveWeaponGroup'),api('SetDefensibleActiveWeaponGroup')
 local M=assert(X4LAN_MOTION,'motion buffer missing')
-local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0}}
+local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0},
+ fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}}}
 A.coop=c
 local function log(v) DebugError('[X4LAN] '..v) end
 local function integer(v,limit)
@@ -17,11 +27,17 @@ local function numeric(v,bound)
  local n=tonumber(v);if not n or n~=n or math.abs(n)>bound then return nil end;return n
 end
 local function send(p) if s.client and s.client.lease then s.transport:send(p) end end
+local function stopFire2(i)
+ local q=c.fire2[i]
+ if q and (q.on[1] or q.on[2]) then AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,primary=false,secondary=false}) end
+ if q then q.on={false,false};q.deadline={0,0};q.events={} end
+end
 function c.stopFire()
  for i,r in pairs(c.remote) do
   if r.firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
   r.firing=false;r.fireDeadline=0
  end
+ for i in pairs(c.fire2) do stopFire2(i) end
 end
 function c.entity(object)
  for i=1,2 do if c.ships[i] and object==c.ships[i] then return i end end
@@ -60,6 +76,7 @@ function c.receive(f,now)
   for i=1,2 do
    if c.epochs[i]~=epochs[i] or c.owners[i]~=owners[i] then
     if c.remote[i] and c.remote[i].firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
+    stopFire2(i);c.fire2[i]=nil;c.fire2Seq[i]=0;c.triggerShots[i]={0,0}
     c.remote[i]=nil;c.seq[i]=0;c.shots[i]=0;c.motion=c.motion or {};c.motion[i]=nil
     log('ship '..i..' movement authority='..owners[i]..'; epoch='..epochs[i])
    end
@@ -86,8 +103,34 @@ function c.receive(f,now)
    r.track=track
   else r.track=nil end
   r.seq,r.at,r.dock=seq,now,dock
-  if fire>r.fire then r.fireDeadline=now+.35 end;r.fire=fire
+  -- Once FIRE2 is selected for this owner epoch, the NAV counter never triggers fire.
+  local q=c.fire2[entity]
+  if fire>r.fire and not (q and q.epoch==epoch) then r.fireDeadline=now+.35 end;r.fire=fire
   r.samples[#r.samples+1]={time=now,pose=p};while #r.samples>5 do table.remove(r.samples,1) end
+  return true
+ elseif f[1]=='FIRE2' then
+  if #f~=12 then return true end
+  local entity,epoch,seq=integer(f[5],2),integer(f[6]),integer(f[7])
+  local time=numeric(f[8],1e12);local groups={integer(f[9],4),integer(f[10],4)};local shots={integer(f[11]),integer(f[12])}
+  if not entity or entity<1 or not epoch or not seq or not time or time<0 then return true end
+  if not groups[1] or groups[1]<1 or not groups[2] or groups[2]<1 or not shots[1] or not shots[2] then return true end
+  if c.owners[entity]==cfg.slot or c.epochs[entity]~=epoch then return true end
+  local q=c.fire2[entity]
+  if not q or q.epoch~=epoch then
+   -- Baseline: adopt the counters without replaying them, and end NAV-driven fire now
+   -- so no shot already shown through NAV can be shown again.
+   local r=c.remote[entity]
+   if r and r.firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=entity,on=false}) end
+   if r then r.firing=false;r.fireDeadline=0 end
+   c.fire2[entity]={epoch=epoch,seq=seq,time=time,shots=shots,groups=groups,at=now,events={},on={false,false},deadline={0,0}}
+   return true
+  end
+  if seq<=q.seq or time<=q.time or shots[1]<q.shots[1] or shots[2]<q.shots[2] then return true end
+  for k=1,2 do
+   if shots[k]>q.shots[k] then q.events[#q.events+1]={time=time,trigger=k,group=groups[k]} end
+  end
+  while #q.events>32 do table.remove(q.events,1) end
+  q.seq,q.time,q.shots,q.groups,q.at=seq,time,shots,groups,now
   return true
  elseif f[1]=='PILOT_DENIED' then
   local seq=#f==5 and integer(f[4]) or nil
@@ -120,6 +163,34 @@ local function render(r,now)
   else p[i]=a.pose[i]+((b.pose[i]-a.pose[i]+math.pi)%(2*math.pi)-math.pi)*t end
  end
  return p
+end
+-- Play FIRE2 trigger evidence back at the same source time as the rendered NAV2 pose.
+local function fire2Frame(i,r,ship,now)
+ local q=c.fire2[i]
+ if not q then return end
+ if now-q.at>.35 or c.owners[i]==cfg.slot or not C.IsComponentOperational(ship) then
+  -- Freshness: stop even if motion keeps rendering a frozen prediction.
+  stopFire2(i);return
+ end
+ local target=(r and r.track and r.track.offset) and now-r.track.offset-M.delay or math.huge
+ local keep={}
+ for _,e in ipairs(q.events) do
+  if e.time<=target then
+   -- A queued edge older than the motion window is dropped, never fired late.
+   if target-e.time<=M.stale then q.deadline[e.trigger]=now+.35;q.group=q.group or {};q.group[e.trigger]=e.group end
+  else keep[#keep+1]=e end
+ end
+ q.events=keep
+ local on={q.deadline[1]>now,q.deadline[2]>now}
+ local group=q.group or {}
+ for k=1,2 do
+  if on[k] and group[k] and getGroup and setGroup and getGroup(ship,k==1)~=group[k] then
+   setGroup(ship,k==1,group[k])
+  end
+ end
+ if on[1]~=q.on[1] or on[2]~=q.on[2] then
+  q.on=on;AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,primary=on[1],secondary=on[2]})
+ end
 end
 local function publishMetrics(now)
  if now>=(c.nextMetric or 0) then
@@ -157,12 +228,19 @@ function c.frame(now)
      fields[#fields+1]=string.format('%.6f',now)
      for _,v in ipairs(velocity) do fields[#fields+1]=string.format('%.9g',v) end
      send(table.concat(fields,'|'))
+     -- FIRE2 shares NAV2's source time; a group outside 1-4 is never encoded.
+     local primary,secondary=getGroup and getGroup(ship,true) or 0,getGroup and getGroup(ship,false) or 0
+     if primary>=1 and primary<=4 and secondary>=1 and secondary<=4 then
+      c.fire2Seq[i]=c.fire2Seq[i]+1;local shots=c.triggerShots[i]
+      send(string.format('FIRE2|1|%s|%d|%d|%d|%.6f|%d|%d|%d|%d',s.client.lease,i,c.epochs[i],c.fire2Seq[i],now,primary,secondary,shots[1],shots[2]))
+     end
     end
    end
   end
  end
  for i=1,2 do
   local r=c.remote[i];local ship=c.ships[i];local p=render(r,now)
+  fire2Frame(i,r,ship,now)
   if r and r.firing and (not p or now>(r.fireDeadline or 0)) then r.firing=false;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
   if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) then
    if (r.fireDeadline or 0)>now and not r.firing then r.firing=true;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=true}) end
@@ -191,6 +269,11 @@ RegisterEvent('X4LAN_Coop.Ready',function() c.ready=true;log('cooperative naviga
 RegisterEvent('X4LAN_Coop.Docks',function(_,payload)
  local a,b=payload:match('^(%d)|(%d)$');if a and tonumber(a)<=2 and tonumber(b)<=2 then c.docks={tonumber(a),tonumber(b)} end
 end)
-RegisterEvent('X4LAN_Coop.Shot',function(_,entity)
- local i=tonumber(entity);if i and c.owners[i]==cfg.slot then c.shots[i]=c.shots[i]+1 end
+RegisterEvent('X4LAN_Coop.Shot',function(_,payload)
+ -- Payload 'n' (legacy) or 'n|p' / 'n|s': the shot came from the active primary or secondary group.
+ local entity,trigger=tostring(payload):match('^([12])|?([ps]?)$');local i=tonumber(entity)
+ if i and c.owners[i]==cfg.slot then
+  c.shots[i]=c.shots[i]+1
+  local k=trigger=='s' and 2 or 1;c.triggerShots[i][k]=c.triggerShots[i][k]+1
+ end
 end)

@@ -6,7 +6,10 @@ def bubble(xml):
  setup.insert(0,E.Element('set_value',name='$coop',exact='false'))
  for i in (1,2):
   a=root.find(f".//cue[@name='Shots{i}']/actions");legacy=a.find('do_if');legacy.tag='do_elseif'
-  a.insert(1,E.fromstring(f'''<do_if value="$coop"><do_if value="player.occupiedship == $ships.{{{i}}}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="{i}"/></do_if></do_if>'''))
+  # FIRE2 needs the trigger: 'p' if the weapon is in the active primary group, else 's'.
+  s=f'$ships.{{{i}}}'
+  trigger=f"if {s}.primaryweapons.{{{s}.activeweapongroup.primary}}.indexof.{{event.object}} gt 0 then 'p' else 's'"
+  a.insert(1,E.fromstring(f'''<do_if value="$coop"><do_if value="player.occupiedship == {s}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="'{i}|%s'.[{trigger}]"/></do_if></do_if>'''))
  # Guest targets are held at 1% hull. Only a host death snapshot releases the
  # guard and destroys the replica; local damage may otherwise be reconciled.
  target=next(n for n in root.find(".//cue[@name='Apply']/actions").iter('do_if')

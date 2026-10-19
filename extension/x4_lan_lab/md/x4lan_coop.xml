@@ -30,6 +30,14 @@
      <set_value name="$ship" exact="$arena.$ships.{event.param3.$ship}"/>
      <do_if value="$ship.isoperational"><do_if value="event.param3.$on"><shoot object="$ship"/></do_if><do_else><stop_shooting object="$ship"/></do_else></do_if>
     </actions></cue>
+    <!-- FIRE2: Lua has already selected the mirrored active groups; mirror both triggers. -->
+    <cue name="Fire2" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'Fire2'"/></conditions><actions>
+     <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$arena.$ships.{$v.$ship}"/>
+     <do_if value="$ship.isoperational">
+      <stop_shooting object="$ship"/>
+      <do_if value="$v.$primary or $v.$secondary"><shoot object="$ship" primary="$v.$primary" secondary="$v.$secondary"/></do_if>
+     </do_if>
+    </actions></cue>
     <cue name="LeaveControls" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'LeaveControls'"/></conditions><actions>
      <set_value name="$ship" exact="$arena.$ships.{event.param3}"/>
      <do_if value="$ship.isoperational and player.occupiedship == $ship">
