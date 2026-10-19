@@ -1,0 +1,53 @@
+COOPERATIVE NATIVE VELOCITY — INTERNAL VALIDATION
+
+Production/native source: d5caf04e5b976af46c7e0fa7061ea23429df8a85
+X4 9.00 (611726), Linux. One native host and a synthetic UDP pilot; fresh
+isolated profile45841 world, no normal saves loaded or changed.
+
+The cooperative renderer now supplies the derivative of its displayed linear
+motion to the native engine. It returns zero before the first sample and at
+the bounded prediction horizon. Changes, including freeze zero, bypass the
+renewal timer. No native angular velocity is inferred from Euler derivatives.
+Generation/session/epoch/sequence fences, expiry, current ship/sector/parent,
+docking and pilot checks prevent stale native updates. A watchdog releases
+abandoned overrides. Network teardown invalidates the old motion tracks.
+Support is restricted to an actual free ship in an aligned zone/sector/cluster
+hierarchy. Other parent spaces fail closed pending further frame evidence.
+
+Native lifecycle PASS: 17 settled samples in each of 12 phases. Initial motion
+and resumed motion at yaw90 follow (100,40,-25)m/s. Maximum pose differences
+are1.853/1.876m, including native integration between the Lua pose write and MD
+readback; median displacement velocity errors are .004471/.002361m/s. Native
+body velocity transformed through the independently observed sector basis
+matches the rendered derivative within .000004372m/s. Packet-loss freeze
+reports native speed0 and unchanged settled position.
+
+The injected adapter pause, watchdog silence and explicit revocation release
+the override and report native speed0. Watchdog release is measured .0534s
+after expiry. Each of six negative-command cases has25 native readbacks:
+old generation/old fence, stale sequence, wrong session, wrong epoch, expired
+command and wrong parent. No case reactivated an invalid override. An actual
+local pilot takeover followed by native throttle reaches565.875m/s with the
+override released. Real pause through the engine menu is not covered by the
+adapter-pause injection, which deliberately leaves the world clock running.
+
+262 Linux automated tests pass with LuaJIT and no skips. Production/probe MD
+schemas pass. No native velocity/MD errors or malformed measurements. Source
+and installation hashes were fixed throughout the successful run; game and
+relay were closed afterward. Immutable metrics, artifacts and hashes are in
+native-velocity-lifecycle-checks.json.
+
+Startup comparison, recorded separately from velocity behavior:
+- Low textures + shaderquality2 failed before any probe setup: exit1119,
+  p1/high/multimat.frag.glsl texture overload at line59.
+- Quarantining only the isolated pipeline cache also failed before setup:
+  p1/high/eye_cornea.frag.glsl texture overload at line131.
+- Changing only isolated texturequality low to high then completed this run.
+The original config/cache and all failures are preserved. The verified
+multimat catalog MD5 does not establish integrity of the different eye shader.
+This is a measured local workaround; no general root cause or minimum working
+texture level is claimed. Packages and installers remain unchanged.
+
+This evidence is not a two-native gameplay test and does not establish shared
+hits, player aim, NPC combat/economy, arbitrary mission sharing or full-universe
+authority. A separate projectile experiment will check inherited velocity.

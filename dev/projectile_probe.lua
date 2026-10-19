@@ -40,7 +40,11 @@ function A.universe.frame(now)
   previousPhase=phase;AddUITriggeredEvent('X4LAN_ProjectileProbe','Phase',phase)
  end
  local desired=(phase=='physical' or phase=='native') and 100 or 0
- if phase=='native' then r.nextApply=math.huge
+ if phase=='native' then
+  -- Release the production override before installing the independent native
+  -- reference velocity below. Its next-frame cleanup must not erase the control.
+  if changed and A.coop.stopVelocity then A.coop.stopVelocity(false) end
+  r.nextApply=math.huge
  elseif r.nextApply==math.huge then r.nextApply=0 end
  -- Baseline experiment holds every orientation. Post-fix validation disables
  -- this for all cases using production poses; only the independent native
