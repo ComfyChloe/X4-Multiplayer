@@ -2,7 +2,7 @@
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not A or not A.universe or not cfg.world_sync then return end
 local ffi=require('ffi');local C=ffi.C;local U=A.universe;local P=X4LAN_UNIVERSE_PROTOCOL;local s=A.state
-local g={drops={},queue={},held={},executed={},inventory={},inventorySeq=0,counter=0};A.cargo=g
+local g={drops={},queue={},held={},executed={},inventory={},inventorySeq=0,counter=0,creationSeq=0};A.cargo=g
 local function log(v) DebugError('[X4LAN] CARGO '..v) end
 local function key(v) return tostring(v):gsub('ULL$','') end
 local function send(v) if s.client and s.client.lease then s.transport:send(v) end end
@@ -51,9 +51,10 @@ function g.ensure(r,sector)
  end
  if r.object and C.IsComponentOperational(r.object) then return end
  if r.creating then return end
- r.creating=true
+ g.creationSeq=g.creationSeq+1;assert(g.creationSeq<=2147483647,'cargo creation generation exhausted')
+ r.creating=g.creationSeq
  local e=r.entity;local p=e.pose
- event('Create',{id=id,macro=e.macro,ware=e.ware,amount=e.amount,sector=A.id(sector),
+ event('Create',{id=id,generation=r.creating,macro=e.macro,ware=e.ware,amount=e.amount,sector=A.id(sector),
   x=p[1],y=p[2],z=p[3],yaw=p[4],pitch=p[5],roll=p[6]})
 end
 local receive=U.receive
@@ -137,11 +138,18 @@ RegisterEvent('X4LAN_Cargo.HostDrop',function(_,payload)
 end)
 RegisterEvent('X4LAN_Cargo.Created',function(_,payload)
  if type(payload)~='string' then return end
- local f=P.split(payload,'|');local id=P.integer(f[1]);local object=g.object(f[2]);local r=id and U.replicas[id]
- if not object then return end
- if not r or r.entity.kind~='drop' or g.held[id] then C.RemoveComponent(object);return end
- r.object=object;r.creating=nil;U.replicaKeys[key(object)]=true
- log('CREATED id='..id..' object='..key(object))
+ local f=P.split(payload,'|');local id=P.integer(f[1]);local generation=P.integer(f[2]);local object=g.object(f[3])
+ local r=id and U.replicas[id]
+ if #f~=3 or not generation or not object then return end
+ -- A duplicate callback for the adopted handle must not delete that live replica.
+ if r and r.creation==generation and r.object==object then return end
+ if not r or r.entity.kind~='drop' or r.creating~=generation or g.held[id] then
+  if C.IsComponentOperational(object) then C.RemoveComponent(object) end
+  if r and r.creating==generation then r.creating=nil end
+  return
+ end
+ r.object=object;r.creation=generation;r.creating=nil;U.replicaKeys[key(object)]=true
+ log('CREATED id='..id..' generation='..generation..' object='..key(object))
 end)
 RegisterEvent('X4LAN_Cargo.GuestDrop',function(_,payload)
  if type(payload)~='string' then return end
@@ -175,6 +183,9 @@ RegisterEvent('X4LAN_Cargo.Result',function(_,payload)
 end)
 
 RegisterEvent('X4LAN_Cargo.CreateFailed',function(_,payload)
- g.failed=true;log('STOPPED native donor cannot create cargo: '..tostring(payload))
+ if type(payload)~='string' then return end
+ local f=P.split(payload,'|');local id=P.integer(f[1]);local generation=P.integer(f[2]);local r=id and U.replicas[id]
+ if #f~=4 or not r or not generation or r.creating~=generation then return end
+ r.creating=nil;g.failed=true;log('STOPPED native donor cannot create cargo: '..payload)
  AddUITriggeredEvent('X4LAN_Trade','Notice','Cargo replication stopped: the native container could not be created. Please end this internal test and collect diagnostics.')
 end)

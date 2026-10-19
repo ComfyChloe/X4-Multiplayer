@@ -80,11 +80,11 @@
     <set_object_velocity object="$drop"><linear x="0" y="0" z="0"/></set_object_velocity>
    <set_drop_persistence object="$drop" persistent="true"/><set_known object="$drop" known="true"/>
    <set_value name="Setup.$replicas.{$drop}" exact="$a.$id"/>
-   <raise_lua_event name="'X4LAN_Cargo.Created'" param="'%s|%s'.[$a.$id,$drop]"/>
+   <raise_lua_event name="'X4LAN_Cargo.Created'" param="'%s|%s|%s'.[$a.$id,$a.$generation,$drop]"/>
    </do_if>
    <do_else>
     <remove_cargo object="$donor" ware="$ware" exact="$added"/>
-    <raise_lua_event name="'X4LAN_Cargo.CreateFailed'" param="'%s|%s|%s'.[$a.$id,$ware.id,$a.$amount]"/>
+    <raise_lua_event name="'X4LAN_Cargo.CreateFailed'" param="'%s|%s|%s|%s'.[$a.$id,$a.$generation,$ware.id,$a.$amount]"/>
    </do_else>
   </actions>
  </cue>

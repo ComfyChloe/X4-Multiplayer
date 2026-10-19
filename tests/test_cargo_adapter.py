@@ -10,7 +10,15 @@ class CargoAdapterTests(unittest.TestCase):
     def make(self,slot='p2'):
         l=LuaRuntime(unpack_returned_tuples=True)
         l.execute('''
-         events={};calls={};sent={};now=10
+         events={};calls={};sent={};now=10;objects={};removed={}
+         local realRequire=require;local realffi=require('ffi')
+         local function key(v) return tostring(v):gsub('ULL$','') end
+         local api={IsComponentOperational=function(v) return objects[key(v)]~=nil end,
+          RemoveComponent=function(v) removed[#removed+1]=key(v);objects[key(v)]=nil end}
+         require=function(name)
+          if name=='ffi' then return setmetatable({C=api},{__index=realffi}) end
+          return realRequire(name)
+         end
          RegisterEvent=function(k,f) events[k]=f end
          AddUITriggeredEvent=function(s,c,a) calls[#calls+1]={control=c,args=a} end
          DebugError=function() end;GetCurRealTime=function() return now end
@@ -63,3 +71,31 @@ class CargoAdapterTests(unittest.TestCase):
          U.receive(f,now);f[5]='6';U.receive(f,now);assert(#calls==before)
          f[4]=string.rep('c',32);f[5]='8';U.receive(f,now);assert(#calls==before)
         ''')
+
+    def test_replaced_creation_discards_stale_handle_in_either_completion_order(self):
+        for reverse in (False, True):
+            l=self.make();l.globals().reverse=reverse
+            l.execute("""
+             local function record(amount) return {entity={id=77,kind='drop',macro='crate_macro',ware='energycells',amount=amount,pose={0,0,0,0,0,0}}} end
+             local first=record(20);U.replicas[77]=first;G.ensure(first,22);assert(first.creating==1)
+             local second=record(10);U.replicas[77]=second;G.ensure(second,22);assert(second.creating==2)
+             objects['65568']=true;objects['65552']=true
+             local callback=events['X4LAN_Cargo.Created']
+             if reverse then callback(nil,'77|2|0x10010');callback(nil,'77|1|0x10020')
+             else callback(nil,'77|1|0x10020');callback(nil,'77|2|0x10010') end
+             assert(objects['65552'] and not objects['65568'] and #removed==1)
+             assert(tostring(second.object)=='65552ULL' and U.replicaKeys['65552'] and not U.replicaKeys['65568'])
+             callback(nil,'77|2|0x10010');assert(#removed==1 and objects['65552'])
+            """)
+
+    def test_removed_record_discards_late_creation_and_stale_failure(self):
+        l=self.make();l.execute("""
+         local r={entity={id=77,kind='drop',macro='crate_macro',ware='energycells',amount=20,pose={0,0,0,0,0,0}}}
+         U.replicas[77]=r;G.ensure(r,22);U.replicas[77]=nil;objects['65568']=true
+         events['X4LAN_Cargo.Created'](nil,'77|1|0x10020')
+         events['X4LAN_Cargo.CreateFailed'](nil,'77|1|energycells|20')
+         assert(not objects['65568'] and #removed==1 and not G.failed)
+         local fresh={entity=r.entity};U.replicas[77]=fresh;G.ensure(fresh,22)
+         events['X4LAN_Cargo.CreateFailed'](nil,'77|1|energycells|20');assert(not G.failed)
+         events['X4LAN_Cargo.CreateFailed'](nil,'77|2|energycells|20');assert(G.failed)
+        """)
