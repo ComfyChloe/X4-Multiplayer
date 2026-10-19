@@ -3,6 +3,7 @@
 No game launch; install p2 with dev/health_probe.xml in the disposable profile.
 This is receiver evidence, not simultaneous two-native combat acceptance.
 """
+import hashlib
 import json
 from pathlib import Path
 import re
@@ -24,7 +25,9 @@ SECTOR = 'cluster_14_sector001_macro'
 
 def run():
     cfg = json.loads((HERE/'native-session.json').read_text())
-    recorded = json.loads((HERE/'fire2-native-host-4f1075c-result.json').read_text())['history']
+    trace = HERE/'fire2-native-host-4f1075c-result.json'
+    trace_bytes = trace.read_bytes()
+    recorded = json.loads(trace_bytes)['history']
     assert recorded and any(r['values'][9] < 100 for r in recorded)
     session = UniverseSession(cfg['token'], cfg['build'], cfg['bubble'])
     relay = Relay('127.0.0.1', cfg['port'], session)
@@ -72,6 +75,8 @@ def run():
         perturb = log.find('HEALTH_PROBE perturb actual=42,5')
         recovered = perturb >= 0 and bool(re.search(r'HEALTH_PROBE expected=65,45,.* actual=65,45[,.]',log[perturb:]))
         result = dict(source='recorded real-host health trace plus synthetic plateau; native Linux guest',
+                      input_trace=trace.name, input_sha256=hashlib.sha256(trace_bytes).hexdigest(),
+                      health_fields={'ship1':[1,2],'ship2':[4,5],'target1':[7,8],'target2':[9,10]},
                       samples=len(rows), max_error=max((r['max_error'] for r in rows),default=None),
                       replayed_damage=any(r['expected'][7]<99 for r in rows),
                       local_drift_recovered=recovered, readbacks=rows)

@@ -6,6 +6,7 @@ and damage. Synthetic source counters do not prove real guest trigger capture.
 """
 import argparse
 import json
+import re
 from pathlib import Path
 import secrets
 import shutil
@@ -22,7 +23,8 @@ HERE = ROOT / '.local/native-world-tests'
 SECTOR = 'cluster_14_sector001_macro'
 
 
-def run(echo_source=False):
+def run(echo_source=False, dual_trigger=False):
+    echo_source = echo_source or dual_trigger
     cfg = json.loads((HERE / 'native-session.json').read_text())
     assert cfg.get('fire2') is True
     session = UniverseSession(cfg['token'], cfg['build'], cfg['bubble'])
@@ -37,7 +39,7 @@ def run(echo_source=False):
     receiver = Receiver()
     history, evidence, captured = [], [], []
     identities = set()
-    previous_shots = 0
+    previous_shots = (0,0)
     try:
         while time.monotonic() - start < 240:
             now = time.monotonic()
@@ -77,9 +79,9 @@ def run(echo_source=False):
                     shots = captured[-1]['primary'] if captured else 0
                     secondary = captured[-1]['secondary'] if captured else 0
                 source = 500 + now-start
-                if shots != previous_shots:
-                    evidence.append(dict(time=round(elapsed, 4), primary=shots))
-                    previous_shots = shots
+                if (shots,secondary) != previous_shots:
+                    evidence.append(dict(time=round(elapsed, 4), primary=shots,secondary=secondary))
+                    previous_shots = (shots,secondary)
                 packets = [f'IDLE|1|{lease}|{seq}', f'CREW|1|{lease}|{seq}|2|2',
                            f'UINTEREST|1|{lease}|{seq}|{SECTOR}',
                            f'NAV2|1|{lease}|2|1|{seq}|{SECTOR}|1000|10000|0|0|0|0|0|{shots}|{source:.6f}|0|0|0|0|0|0',
@@ -96,7 +98,7 @@ def run(echo_source=False):
         readings = {str(t): at(t) for t in (4, 8, 13, 20, 26)}
         result = dict(source='native local capture echoed to a synthetic peer' if echo_source else 'synthetic FIRE2 pilot, real Linux host projectile simulation',
                       identities=sorted(identities),
-                      sent=evidence, native_shot_readings=readings, history=history,
+                      sent=evidence, native_shot_readings=readings, history=history, native_source_captures=captured,
                       native_source_capture=captured[-1] if captured else None,
                       native_local_shots=history[-1]['values'][15] if history else None)
         result['completed'] = all(v is not None for v in readings.values())
@@ -109,12 +111,21 @@ def run(echo_source=False):
             (readings['26'] == result['native_local_shots'] == 6) if echo_source else
             (result['tap1_native_shots'] == 6 and result['tap2_native_shots'] == 6 and result['sustained_native_shots'] == 78 and result['shots_after_stop'] == 0))
         result['source_capture_pass'] = bool(captured and captured[-1]['primary'] == result['native_local_shots'] == 6 and captured[-1]['secondary'] == 0)
-        prefix = 'fire2-native-echo' if echo_source else 'fire2-native-host'
+        if dual_trigger:
+            def capture_at(t):
+                before = [r for r in captured if r['time'] <= t]
+                return (before[-1]['primary'],before[-1]['secondary']) if before else None
+            log = (Path.home()/'.config/EgoSoft/X4/45841/x4lan-debug.txt').read_text(errors='replace')
+            remote = re.findall(r'FIRE_PROBE remote primary=(\d+) secondary=(\d+)',log)
+            result['remote_trigger_capture'] = tuple(map(int,remote[-1])) if remote else None
+            result['source_capture_pass'] = (capture_at(8),capture_at(13),capture_at(20)) == ((3,0),(3,3),(6,6))
+            result['cadence_pass'] = (readings['8'],readings['13'],readings['20'],readings['26']) == (3,6,12,12) and result['remote_trigger_capture'] == (6,6)
+        prefix = 'fire2-native-dual' if dual_trigger else 'fire2-native-echo' if echo_source else 'fire2-native-host'
         (HERE / (prefix+'-result.json')).write_text(json.dumps(result, indent=2))
         shutil.copy2(Path.home()/'.config/EgoSoft/X4/45841/x4lan-debug.txt', HERE/(prefix+'.log'))
         sock.close()
         relay.close()
-        print(json.dumps({k: v for k, v in result.items() if k not in ('history', 'sent')}), flush=True)
+        print(json.dumps({k: v for k, v in result.items() if k not in ('history', 'sent', 'identities', 'native_source_captures')}), flush=True)
     if not result['cadence_pass'] or not result['source_capture_pass']:
         raise SystemExit(1)
 
@@ -122,4 +133,6 @@ def run(echo_source=False):
 if __name__ == '__main__':
     parser=argparse.ArgumentParser()
     parser.add_argument('--echo-source',action='store_true')
-    run(parser.parse_args().echo_source)
+    parser.add_argument('--dual-trigger',action='store_true')
+    args=parser.parse_args()
+    run(args.echo_source,args.dual_trigger)
