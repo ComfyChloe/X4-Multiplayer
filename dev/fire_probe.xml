@@ -3,7 +3,7 @@
 <mdscript name="X4LAN_FireProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
  <cues><cue name="Tap" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_FireProbe'" control="'Tap'"/></conditions><actions>
   <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{1}"/>
-  <do_if value="event.param3"><shoot object="$ship" primary="true" secondary="false"/></do_if>
+  <do_if value="event.param3"><stop_shooting object="$ship"/><shoot object="$ship" primary="true" secondary="false"/></do_if>
   <do_else><stop_shooting object="$ship"/></do_else>
  </actions></cue></cues>
 </mdscript>
