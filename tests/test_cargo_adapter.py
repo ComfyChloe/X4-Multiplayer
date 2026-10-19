@@ -92,6 +92,34 @@ class CargoAdapterTests(unittest.TestCase):
          f[4]=string.rep('c',32);f[5]='8';U.receive(f,now);assert(#calls==before)
         ''')
 
+    def test_stale_authority_uses_existing_revision_without_requesting_a_baseline(self):
+        host=self.make('p1');host.execute('''
+         A.coop.epochs[2]=2;local before=#calls
+         U.receive({'CARGOEXEC','1',A.state.client.lease,string.rep('d',32),'2','1','PICKUP','77','energycells','10','p2'},now)
+         assert(#calls==before and not U.cargoDirty)
+         assert(sent[#sent]:find('|STALE|4',1,true))
+        ''')
+        guest=self.make();guest.execute('''
+         local r={creation=1,object=G.object('0x10010'),entity={id=77,kind='drop',macro='crate_macro',ware='energycells',amount=10,pose={0,0,0,0,0,0}}}
+         U.replicas[77]=r
+         events['X4LAN_Cargo.GuestPickup'](nil,'77|1|0x10010|2|energycells|10|10')
+         local f={'CARGOREPLY','1',A.state.client.lease,G.queue[1].request,'STALE','4'}
+         U.receive(f,now);assert(#G.queue==0 and G.held[77].fence==4 and calls[#calls].control=='Notice')
+         local before=#calls;U.receive(f,now);assert(#calls==before)
+         G.ensure(r,22);assert(calls[#calls].control=='Create' and not G.held[77])
+         assert(U.latest.revision==4) -- No unrelated revision bump is needed.
+        ''')
+
+    def test_uncertain_outcome_notifies_once_without_replaying_a_new_intention(self):
+        l=self.make();l.execute('''
+         events['X4LAN_Cargo.GuestDrop'](nil,'2|energycells|10|10')
+         local f={'CARGOREPLY','1',A.state.client.lease,G.queue[1].request,'UNCERTAIN','0'}
+         U.receive(f,now);local before=#calls
+         assert(calls[before].control=='Notice' and calls[before].args:find('do not repeat',1,true))
+         U.receive(f,now);now=now+10;U.frame(now)
+         assert(#calls==before and #G.queue==0 and G.counter==1 and #sent==0)
+        ''')
+
     def test_replaced_creation_discards_stale_handle_in_either_completion_order(self):
         for reverse in (False, True):
             l=self.make();l.globals().reverse=reverse

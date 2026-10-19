@@ -7,6 +7,12 @@ local function log(v) DebugError('[X4LAN] CARGO '..v) end
 local function key(v) return tostring(v):gsub('ULL$','') end
 local function send(v) if s.client and s.client.lease then s.transport:send(v) end end
 local function event(name,args) AddUITriggeredEvent('X4LAN_Cargo',name,args) end
+local notices={
+ BUSY='Cargo transfer was not applied because the ship is busy. Try again when it is free.',
+ CAPACITY='Cargo pickup was not applied: the host ship has no room for this amount.',
+ STALE='Cargo transfer was not applied because control of the ship changed.',
+ REJECTED='Cargo transfer was rejected by the host.',
+ UNCERTAIN='Cargo outcome is uncertain. End this internal test and collect diagnostics; do not repeat the transfer.'}
 -- MD scalar object strings are hexadecimal. Do not round 64-bit IDs through doubles.
 function g.object(text)
  if type(text)~='string' or not text:match('^0x[%da-fA-F]+$') or #text>18 then return nil end
@@ -69,19 +75,27 @@ function U.receive(f,now)
   local ship,epoch,id,amount=P.integer(f[5],2),P.integer(f[6]),P.integer(f[8]),P.integer(f[10],1000000)
   if not ship or ship<1 or not epoch or not id or not amount or amount<1 or not P.atom(f[9]) or
     (f[7]~='DROP' and f[7]~='PICKUP') then return true end
-  if A.coop.epochs[ship]~=epoch or A.coop.owners[ship]~=f[11] then finish(req,'STALE',U.revision+1);return true end
+  -- No engine mutation occurred, so the existing committed baseline suffices.
+  if A.coop.epochs[ship]~=epoch or A.coop.owners[ship]~=f[11] then finish(req,'STALE',U.revision);return true end
   g.executed[req]={status='PENDING'}
   event('Order',{request=req,ship=ship,verb=f[7],drop=id,ware=f[9],amount=amount})
   return true
  elseif f[1]=='CARGOREPLY' then
   if cfg.slot~='p2' or #f~=6 then return true end
   local q=g.queue[1];if not q or f[4]~=q.request or f[5]=='PENDING' then return true end
+  if f[5]~='OK' and not notices[f[5]] then return true end
   local fence=P.integer(f[6]);if not fence then return true end
   -- A baseline may overtake its completion. Its committed revision already
   -- satisfies that fence; waiting for an invented next revision strands a
   -- partially collected drop until unrelated world state changes.
   if q.drop>0 and g.held[q.drop] then g.held[q.drop].fence=fence end
   table.remove(g.queue,1);log('RESULT '..q.verb..' '..f[5]..' fence='..fence)
+  if notices[f[5]] then
+   g.lastNotice=g.lastNotice or {}
+   if now>=(g.lastNotice[f[5]] or -math.huge)+5 then
+    g.lastNotice[f[5]]=now;AddUITriggeredEvent('X4LAN_Trade','Notice',notices[f[5]])
+   end
+  end
   return true
  elseif f[1]=='CINV' then
   if cfg.slot~='p2' or #f~=8 or not U.latest or f[4]~=U.latest.epoch or not P.atom(f[6]) then return true end

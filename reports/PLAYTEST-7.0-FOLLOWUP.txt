@@ -147,3 +147,19 @@ simultaneous two-native-machine test. Focused LuaJIT regression covers duplicate
 and late retired-instance callbacks plus a baseline overtaking its completion.
 Evidence: cargo-capacity-native-result.json/.log and
 cargo-partial-native-guest-result.json/.log under .local/evidence-151-withheld
+
+COMPLETE SHUTTLE EQUIPMENT READBACK (native Linux, db7eef9 production)
+The read-only equipment probe measured both ships with all six requested
+software entries: dockmk2, flightassistmk1, scannerlongrangemk2, scannerobjectmk2,
+targetmk1 and trademk1 (each with the software_ prefix), plus
+thruster_gen_s_combat_01_mk3_macro. Both checks returned success=true. This closes
+the Linux software/thruster readback gap left by the MD getter returning null.
+Native host DROP20/PICKUP20 with duplicate MD events also passed again. Windows
+hardware/docking readback and shader/profile fixtures passed as reported by
+Claude; the expanded software/thruster readback was performed on Linux only.
+
+Cargo review follow-up: a stale pilot epoch changes nothing on the host and now
+returns the existing baseline revision, avoiding a fabricated future fence.
+Non-OK outcomes display a throttled notice, including explicit instructions not
+to repeat an uncertain transfer. No automatic fresh-ID retry was added. Focused
+constant-revision/duplicate-reply tests pass; Linux suite now198 PASS/no skips.

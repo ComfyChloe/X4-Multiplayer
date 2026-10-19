@@ -13,7 +13,8 @@ ACTIVE CONTRIBUTIONS (not a new accepted release)
 - Claude: PR #6 fixed Shuttle specification and PR #7 FIRE2 weapon controls.
   PR #6 was reviewed and merged in main as 9ed2c95. Native Windows and Linux
   readbacks accepted six guns, the unused zero-capacity missile slot, matching
-  hardware and Docking Computer Mk2. Full software/thruster readback is pending.
+  hardware and Docking Computer Mk2. A later Linux probe verified all six
+  software entries and the Mk3 combat thruster on both ships.
   PR #7 review found transition replay and pause issues; its revision is pending.
 - AI Coms coordinator reviews contributions in separate worktrees. PR #3 Windows
   installer rollback/profile handling is integrated in main (9f6a19b).
