@@ -61,11 +61,13 @@ class Fire2RelayTests(unittest.TestCase):
 
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
 class Fire2AdapterTests(unittest.TestCase):
-    def make(self, groups_api=True):
+    def make(self, groups_api=True, fire2=None):
         l = LuaRuntime(unpack_returned_tuples=True)
         l.execute(MOCK + EXTRA)
         l.globals().X4LAN_CONFIG.slot = 'p1'
         l.globals().X4LAN_CONFIG.coop = True
+        if fire2 is not None:
+            l.execute('X4LAN_CONFIG.fire2=%s' % ('true' if fire2 else 'false'))
         l.execute('noGroups=%s' % ('false' if groups_api else 'true'))
         l.execute('''
          sectors={[11]=22,[42]=22};ConvertIDTo64Bit=function(v) return tonumber(v) end
@@ -197,6 +199,32 @@ class Fire2AdapterTests(unittest.TestCase):
          now=10.05;nav2(2,50.05,1);frames.onUpdate();assert(C.remote[2].firing,'NAV fallback active')
          local n=#sent;now=11;frames.onUpdate()
          for i=n+1,#sent do assert(not sent[i]:find('^FIRE2|')) end
+        ''')
+
+    def test_fire2_flag_disables_nav_fire_from_startup(self):
+        l = self.make(fire2=True)
+        l.execute('''
+         C.sectors.cluster_14_sector001_macro=22
+         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate()
+         assert(#fires('Fire')==0 and not C.remote[2].firing,'no NAV fire before any FIRE2')
+         fire2(1,50.05,1,1,1,0);now=10.1;fire2(2,50.1,1,1,2,0);now=10.3;frames.onUpdate()
+         local f=fires('Fire2');assert(#f==1 and f[1].primary==true)
+         auth(2,2);nav2(1,60,0,2);nav2(2,60.05,1,2);frames.onUpdate();assert(#fires('Fire')==0,'still no NAV fire in a new epoch')
+        ''')
+
+    def test_fire2_flag_without_api_logs_and_keeps_nav(self):
+        l = self.make(groups_api=False, fire2=True)
+        l.execute('''
+         local found=false;for _,v in ipairs(logs) do if v:find('FIRE2_UNAVAILABLE',1,true) then found=true end end;assert(found)
+         C.sectors.cluster_14_sector001_macro=22
+         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate();assert(C.remote[2].firing)
+        ''')
+
+    def test_fire2_false_keeps_adaptive_selection(self):
+        l = self.make(fire2=False)
+        l.execute('''
+         C.sectors.cluster_14_sector001_macro=22
+         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate();assert(C.remote[2].firing)
         ''')
 
     def test_epoch_change_clears_fire2_and_restores_nav_fallback(self):

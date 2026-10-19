@@ -20,6 +20,11 @@ void SetDefensibleActiveWeaponGroup(UniverseID,bool,uint32_t);]])
 -- are ignored, so no epoch is latched and the NAV shot-counter path stays in use.
 local function api(name) local ok,f=pcall(function() return C[name] end);return ok and f or nil end
 local getGroup,setGroup=api('GetDefensibleActiveWeaponGroup'),api('SetDefensibleActiveWeaponGroup')
+-- Config contract: fire2=true (boolean) selects FIRE2 from startup and disables the NAV
+-- shot-counter fallback entirely; absent or false keeps the adaptive per-epoch selection.
+-- fire2=true without the weapon-group API is logged and falls back to the NAV path.
+local fire2Only=cfg.fire2==true and getGroup~=nil and setGroup~=nil
+if cfg.fire2==true and not fire2Only then DebugError('[X4LAN] FIRE2_UNAVAILABLE: weapon-group API missing; using NAV shot counter') end
 local M=assert(X4LAN_MOTION,'motion buffer missing')
 local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0},
  fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}}}
@@ -109,8 +114,9 @@ function c.receive(f,now)
   else r.track=nil end
   r.seq,r.at,r.dock=seq,now,dock
   -- Once FIRE2 is selected for this owner epoch, the NAV counter never triggers fire.
+  -- With cfg.fire2==true (matched packages), it never does: no transition can replay a shot.
   local q=c.fire2[entity]
-  if fire>r.fire and not (q and q.epoch==epoch) then r.fireDeadline=now+.35 end;r.fire=fire
+  if fire>r.fire and not fire2Only and not (q and q.epoch==epoch) then r.fireDeadline=now+.35 end;r.fire=fire
   r.samples[#r.samples+1]={time=now,pose=p};while #r.samples>5 do table.remove(r.samples,1) end
   return true
  elseif f[1]=='FIRE2' then
