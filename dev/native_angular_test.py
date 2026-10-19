@@ -26,7 +26,9 @@ def analyze(log):
     for line in log.splitlines():
         if 'ANGULAR_PROBE' not in line:
             continue
-        values = dict(re.findall(r'(\w+)=([^\s]+)', line))
+        # Native DebugError lines begin with [=ERROR=]. That engine prefix is
+        # not a diagnostic field (ERROR=]) and must not enter numeric parsing.
+        values = dict(re.findall(r'(\w+)=([^\s]+)', line.split('ANGULAR_PROBE', 1)[1]))
         kind = next((k for k in ('shot', 'native', 'frame') if k in values), None)
         if kind is None:
             malformed += 1

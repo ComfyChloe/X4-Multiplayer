@@ -54,6 +54,10 @@ class AngularValidatorTests(unittest.TestCase):
     def test_native_readback_latency_is_checked(self):
         self.assertFalse(analyze(self.fixture().replace('time=105.01 ', 'time=106.0 '))['observation_complete'])
 
+    def test_native_engine_log_prefix_is_not_a_numeric_field(self):
+        log = self.fixture().replace('ANGULAR_PROBE frame=', '[=ERROR=] 17.34 [X4LAN] ANGULAR_PROBE frame=')
+        self.assertTrue(analyze(log)['observation_complete'])
+
     @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
     def test_observer_reads_before_and_after_real_adapter_without_extra_pose_writes(self):
         lua = LuaRuntime(unpack_returned_tuples=True)
