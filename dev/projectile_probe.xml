@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in trajectory measurement in a disposable world; never shipped. -->
+<mdscript name="X4LAN_ProjectileProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Observe" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_ProjectileProbe'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{2}"/>
+    <set_value name="$serial" exact="0"/>
+    <set_value name="$phase" exact="'stationary'"/><set_value name="$configuredVx" exact="0"/>
+    <add_to_group groupname="$weapons" list="$ship.weapons.operational.list"/>
+    <raise_lua_event name="'X4LAN_ProjectileProbe.Ready'"/>
+   </actions>
+   <cues>
+    <cue name="Projectile" instantiate="true" namespace="this">
+     <conditions><event_weapon_fired group="Observe.$weapons"/></conditions>
+     <actions>
+      <set_value name="Observe.$serial" operation="add" exact="1"/>
+      <set_value name="$serial" exact="Observe.$serial"/>
+      <set_value name="$ship" exact="Observe.$ship"/><set_value name="$sector" exact="$ship.sector"/>
+      <set_value name="$phase" exact="Observe.$phase"/><set_value name="$configuredVx" exact="Observe.$configuredVx"/>
+      <set_value name="$bullet" exact="event.param"/>
+      <set_value name="$time" exact="player.age"/>
+      <set_value name="$origin" exact="$bullet.relativeposition.{$sector}"/>
+      <set_value name="$rotation" exact="$ship.relativerotation.{$sector}"/>
+      <!-- Engine .velocity is relative to the cluster, expressed in each
+           component's own rotation. It is not the sector-space NAV2 vector. -->
+      <debug_text text="'[X4LAN] PROJECTILE_PROBE readback=%s phase=%s gameTime=%s shipVx=%s shipVy=%s shipVz=%s shipSpeed=%s bulletVx=%s bulletVy=%s bulletVz=%s forwardX=%s forwardY=%s forwardZ=%s upX=%s upY=%s upZ=%s'.[$serial,$phase,$time,$ship.velocity.x,$ship.velocity.y,$ship.velocity.z,$ship.speed,event.param.velocity.x,event.param.velocity.y,event.param.velocity.z,$rotation.forward.x,$rotation.forward.y,$rotation.forward.z,$rotation.up.x,$rotation.up.y,$rotation.up.z]"/>
+      <debug_text text="'[X4LAN] PROJECTILE_PROBE born=%s phase=%s configuredVx=%s x=%s y=%s z=%s gameTime=%s'.[$serial,$phase,$configuredVx,$origin.x,$origin.y,$origin.z,$time]"/>
+     </actions>
+     <cues><cue name="Trajectory"><delay exact="200ms"/><actions>
+      <do_if value="$bullet.exists">
+       <set_value name="$dt" exact="player.age - $time"/>
+       <set_value name="$position" exact="$bullet.relativeposition.{$sector}"/>
+       <set_value name="$dx" exact="$position.x - $origin.x"/><set_value name="$dy" exact="$position.y - $origin.y"/><set_value name="$dz" exact="$position.z - $origin.z"/>
+       <debug_text text="'[X4LAN] PROJECTILE_PROBE sample=%s phase=%s configuredVx=%s startTime=%s endTime=%s dt=%s dx=%s dy=%s dz=%s'.[$serial,$phase,$configuredVx,$time,player.age,$dt,$dx,$dy,$dz]"/>
+      </do_if>
+      <do_else><debug_text text="'[X4LAN] PROJECTILE_PROBE failed=retired_before_sample serial=%s'.[$serial]"/></do_else>
+     </actions></cue></cues>
+    </cue>
+    <cue name="Velocity" instantiate="true">
+     <conditions><event_ui_triggered screen="'X4LAN_ProjectileProbe'" control="'Velocity'"/></conditions>
+     <actions>
+      <set_object_velocity object="$ship" constantvel="true"><linear x="event.param3" y="0" z="0"/><angular x="0" y="0" z="0"/></set_object_velocity>
+      <set_value name="$configuredVx" exact="event.param3"/>
+      <raise_lua_event name="'X4LAN_ProjectileProbe.Velocity'" param="event.param3"/>
+     </actions>
+    </cue>
+    <cue name="Phase" instantiate="true">
+     <conditions><event_ui_triggered screen="'X4LAN_ProjectileProbe'" control="'Phase'"/></conditions>
+     <actions><set_value name="$phase" exact="event.param3"/></actions>
+    </cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>
