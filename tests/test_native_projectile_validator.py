@@ -80,6 +80,7 @@ class ProjectileValidatorTests(unittest.TestCase):
               GetCurTime=function() return now end
               X4LAN_BUBBLE_API={coop={ready=true,ships={[2]=42},remote={[2]={track={samples={{time=506,velocity={0}}}}}}},
                 state={client={lease='test'}},universe={frame=function() end},paused=function() return false end}
+              velocityStops=0;X4LAN_BUBBLE_API.coop.stopVelocity=function(discard) assert(discard==false);velocityStops=velocityStops+1 end
             ''')
             lua.execute(source)
             lua.execute('''
@@ -90,7 +91,9 @@ class ProjectileValidatorTests(unittest.TestCase):
               end
             ''')
             self.assertEqual(lua.eval('#writes'),3 if hold else 0)
+            self.assertEqual(lua.eval('velocityStops'),0)
             lua.execute('''
               local A=X4LAN_BUBBLE_API;A.coop.remote[2].track.samples[1].time=542;now=542;A.universe.frame(542)
             ''')
             self.assertEqual(lua.eval('#writes'),4 if hold else 1)
+            self.assertEqual(lua.eval('velocityStops'),1)

@@ -117,7 +117,7 @@ class CoopAdapterTests(unittest.TestCase):
    now=10.1;frames.onUpdate();assert(countRequest('Fire')==1)
    client.update=function() error('transport unavailable') end
    now=10.2;frames.onUpdate();assert(countRequest('Fire')==2)
-   assert(not X4LAN_BUBBLE_API.coop.remote[2].firing)
+   assert(X4LAN_BUBBLE_API.coop.remote[2]==nil)
   ''')
  def test_health_reconciles_periodically_even_when_host_snapshot_is_unchanged(self):
   l=self.make('p2');l.execute('''
@@ -186,4 +186,70 @@ class CoopAdapterTests(unittest.TestCase):
    local n=#writes;positions[42].yaw=.005
    now=10.208;frames.onUpdate()
    assert(#writes==n+1 and positions[42].yaw==0)
+  """)
+
+ def moving_remote(self):
+  l=self.make();l.execute("""
+   local c=X4LAN_BUBBLE_API.coop;c.sectors.cluster_14_sector001_macro=22
+   function lastRequest(name)
+    for i=#requests,1,-1 do if requests[i][2]==name then return requests[i][3] end end
+   end
+   function movingNav(seq,time,x)
+    c.receive({'NAV2','1',client.lease,string.rep('b',32),'2','1',tostring(seq),'cluster_14_sector001_macro',
+     tostring(x),'10000','0','0','0','0','0','0',tostring(time),'100','0','0','0','0','0'},now)
+   end
+   movingNav(1,50,1000);now=10.4;frames.onUpdate()
+   assert(lastRequest('Velocity').x==100 and lastRequest('VelocityFence').enabled)
+  """);return l
+
+ def test_freeze_zero_bypasses_native_velocity_renewal_timer(self):
+  l=self.moving_remote();l.execute("""
+   now=10.4999;frames.onUpdate();local n=countRequest('Velocity')
+   now=10.5001;frames.onUpdate()
+   assert(countRequest('Velocity')==n+1 and lastRequest('Velocity').x==0)
+   assert(lastRequest('Velocity').expires==now+.3)
+  """)
+
+ def test_pause_revokes_once_before_return_and_resume_uses_new_generation(self):
+  l=self.moving_remote();l.execute("""
+   local old=lastRequest('Velocity');paused=true;now=10.41;frames.onUpdate()
+   local revoke=lastRequest('VelocityFence');assert(not revoke.enabled and revoke.generation>old.generation)
+   local n=countRequest('VelocityFence');now=10.42;frames.onUpdate();assert(countRequest('VelocityFence')==n)
+   paused=false;now=11;frames.onUpdate()
+   assert(lastRequest('Velocity').generation>revoke.generation and lastRequest('Velocity').x==0)
+  """)
+
+ def test_authority_and_actual_local_control_revoke_without_zero_lock(self):
+  for boundary in ("auth(2,'p1',1,'p1','p1',2,'p1')",'controlled=42;frames.onUpdate()'):
+   l=self.moving_remote();l.execute(boundary+"""
+    assert(not lastRequest('VelocityFence').enabled and X4LAN_BUBBLE_API.coop.velocity[2]==nil)
+    local n=countRequest('Velocity');now=10.45;frames.onUpdate();assert(countRequest('Velocity')==n)
+   """)
+
+ def test_dock_death_missing_pose_and_missing_lease_release(self):
+  for boundary in ("events['X4LAN_Coop.Docks'](nil,'0|1')",'positions[42]=nil;frames.onUpdate()',
+                   'X4LAN_BUBBLE_API.coop.remote[2]=nil;frames.onUpdate()',
+                   'X4LAN_BUBBLE_API.state.client.lease=nil;X4LAN_BUBBLE_API.coop.frame(now)'):
+   l=self.moving_remote();l.execute(boundary+"""
+    assert(not lastRequest('VelocityFence').enabled and X4LAN_BUBBLE_API.coop.velocity[2]==nil)
+   """)
+
+ def test_connection_error_discards_old_track_and_fences_reconnect(self):
+  l=self.moving_remote();l.execute("""
+   local old=lastRequest('Velocity');client.update=function() error('transport unavailable') end
+   now=10.41;frames.onUpdate();local revoke=lastRequest('VelocityFence')
+   assert(not revoke.enabled and revoke.generation>old.generation and X4LAN_BUBBLE_API.coop.remote[2]==nil)
+   now=12;frames.onUpdate();local n=countRequest('Velocity');frames.onUpdate();assert(countRequest('Velocity')==n)
+   movingNav(2,52,1200);now=12.2;frames.onUpdate()
+   assert(lastRequest('Velocity').generation>revoke.generation)
+  """)
+
+ def test_parent_and_sector_changes_revoke_previous_generation(self):
+  l=self.moving_remote();l.execute("""
+   local old=lastRequest('Velocity');local getContext=api.GetContextByClass
+   api.GetContextByClass=function(object,class) if class=='zone' then return 99 end;return getContext(object,class) end
+   now=10.41;frames.onUpdate();local fresh=lastRequest('Velocity')
+   assert(tostring(fresh.parent)=='99' and fresh.generation>old.generation)
+   nav(2,1,2,'cluster_01_sector001_macro',9000)
+   assert(not lastRequest('VelocityFence').enabled)
   """)

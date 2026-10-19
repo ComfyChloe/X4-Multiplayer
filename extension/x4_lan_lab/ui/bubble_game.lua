@@ -31,6 +31,7 @@ end
 local function closeNetwork()
  stopRemoteFire()
  if X4LAN_BUBBLE_API.coop then X4LAN_BUBBLE_API.coop.stopFire() end
+ if X4LAN_BUBBLE_API.coop and X4LAN_BUBBLE_API.coop.stopVelocity then X4LAN_BUBBLE_API.coop.stopVelocity(true) end
  if s.client and s.client.lease then
   s.resume={lease=s.client.lease,nonce=s.client.nonce,sequence=s.client.sequence,tick=s.client.tick}
   s.pendingNonce=nil

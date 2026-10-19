@@ -64,3 +64,27 @@ class MotionTests(unittest.TestCase):
           local v=M.velocity({time=1,pose=z},{1,0,0,0,0,0},2)
           assert(v[1]==0)
         ''')
+
+    def test_native_linear_velocity_follows_curve_and_stops_at_horizon(self):
+        self.lua.execute('''
+          local M=X4LAN_MOTION;local t={};local z={0,0,0,0,0,0}
+          M.push(t,0,z,{999,999,999,1,2,3},100)
+          M.push(t,.2,{20,-4,6,.1,.2,.3},{120,-30,40,1,2,3},100.2)
+          local p,v=M.render(t,100,0);assert(v[1]==0 and v[2]==0 and v[3]==0 and #v==3)
+          p,v=M.render(t,100.1,0);assert(math.abs(v[1]-100)<.00001 and v[2]==-20 and v[3]==30)
+          local nextp=M.render(t,100.10001,0)
+          for i=1,3 do assert(math.abs((nextp[i]-p[i])/.00001-v[i])<.0001) end
+          p,v=M.render(t,100.3,0);assert(v[1]==120 and v[2]==-30 and v[3]==40)
+          p,v=M.render(t,100.2+M.horizon+1e-9,0);assert(v[1]==0 and v[2]==0 and v[3]==0)
+          local frozen=p[1];p,v=M.render(t,1000,0);assert(p[1]==frozen and v[1]==0)
+        ''')
+
+    def test_discontinuity_starts_with_zero_physical_velocity(self):
+        self.lua.execute('''
+          local M=X4LAN_MOTION;local t={};local z={0,0,0,0,0,0}
+          M.push(t,0,z,{100,0,0,0,0,0},100)
+          M.push(t,.1,{20000,0,0,0,0,0},{100,0,0,0,0,0},100.1)
+          local p,v=M.render(t,100.1);assert(p[1]==20000 and v[1]==0)
+          M.push(t,2,{20100,0,0,0,0,0},{100,0,0,0,0,0},102)
+          p,v=M.render(t,102);assert(p[1]==20100 and v[1]==0)
+        ''')

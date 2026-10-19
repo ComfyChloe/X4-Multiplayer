@@ -44,6 +44,7 @@ require = function(name)
 end
 DebugError=function(msg) logs[#logs+1]=msg end
 GetCurRealTime=function() return now end
+GetCurTime=function() return now end
 GetComponentData=function(id,key) return "sector_macro" end
 ConvertStringToLuaID=function(s) return s end
 RegisterEvent=function(name,fn) events[name]=fn end
