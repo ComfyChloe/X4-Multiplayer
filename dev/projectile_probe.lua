@@ -59,7 +59,7 @@ function A.universe.frame(now)
   local p=position(A.coop.ships[2])
   local ok,details=pcall(function() return C.GetComponentDetails(A.coop.ships[2],'') end)
   local engineSpeed=ok and tonumber(details.speed) or -1
-  DebugError(string.format('[X4LAN] PROJECTILE_PROBE ship phase=%s sourceTime=%.6f gameTime=%.6f x=%.5f y=%.5f z=%.5f wantedVx=%.3f configuredVx=%.3f engineSpeed=%.3f yaw=%.6f pitch=%.6f roll=%.6f',
-   phase,sample.time,gameTime,p[1],p[2],p[3],sample.velocity[1],configuredVx,engineSpeed,p[4],p[5],p[6]))
+  DebugError(string.format('[X4LAN] PROJECTILE_PROBE ship phase=%s sourceTime=%.6f gameTime=%.6f x=%.5f y=%.5f z=%.5f wantedVx=%.3f configuredVx=%.3f engineSpeed=%.3f yaw=%.6f pitch=%.6f roll=%.6f beforeYaw=%.6f beforePitch=%.6f beforeRoll=%.6f',
+   phase,sample.time,gameTime,p[1],p[2],p[3],sample.velocity[1],configuredVx,engineSpeed,p[4],p[5],p[6],actual.yaw,actual.pitch,actual.roll))
  end
 end

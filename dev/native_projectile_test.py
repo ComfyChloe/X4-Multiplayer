@@ -33,14 +33,14 @@ def analyze(log):
         if 'PROJECTILE_PROBE ship phase=' in line:
             values = dict(re.findall(r'(\w+)=([^\s]+)', line))
             try:
-                ship_rows.append(dict(phase=values['phase'], **{k:float(values[k]) for k in ('gameTime','x','y','z','engineSpeed','yaw','pitch','roll')}))
+                ship_rows.append(dict(phase=values['phase'], **{k:float(values[k]) for k in ('sourceTime','gameTime','x','y','z','engineSpeed','yaw','pitch','roll','beforeYaw','beforePitch','beforeRoll')}))
             except (KeyError,ValueError): malformed += 1
         if 'PROJECTILE_PROBE readback=' in line:
             values = dict(re.findall(r'(\w+)=([^\s]+)', line))
             try:
                 serial = int(values['readback'])
                 if serial in readbacks: malformed += 1
-                readbacks[serial] = {k:float(values[k]) for k in ('shipVx','shipVy','shipVz','shipSpeed','bulletVx','bulletVy','bulletVz')}
+                readbacks[serial] = dict(phase=values['phase'], **{k:float(values[k]) for k in ('gameTime','shipVx','shipVy','shipVz','shipSpeed','bulletVx','bulletVy','bulletVz','forwardX','forwardY','forwardZ','upX','upY','upZ')})
             except (KeyError,ValueError): malformed += 1
         if 'PROJECTILE_PROBE sample=' not in line:
             continue
@@ -48,7 +48,7 @@ def analyze(log):
         try:
             row = dict(phase=values['phase'], **{
                 key: float(values[key]) for key in
-                ('sample', 'configuredVx', 'dt', 'dx', 'dy', 'dz')})
+                ('sample', 'configuredVx', 'startTime', 'endTime', 'dt', 'dx', 'dy', 'dz')})
             # X4 uses distinct length/time types. Log raw metre/second values;
             # derive speed here rather than relying on unsupported MD m/s division.
             for axis in ('x','y','z'):
@@ -62,6 +62,7 @@ def analyze(log):
         phases[phase] = dict(samples=len(samples),
             valid=len(samples) == 6 and all(
                 all(math.isfinite(v) for k,v in r.items() if k != 'phase')
+                and abs(r['endTime']-r['startTime']-r['dt'])<.001
                 and .18 <= r['dt'] <= .4 and 1000 < r['vz'] < 20000
                 and abs(r['vx']) < 1000
                 and abs(r['vy']) < 100 and r['configuredVx'] == native
@@ -77,14 +78,17 @@ def analyze(log):
                   and len({r['sample'] for r in rows}) == len(rows),
                   two_native_acceptance=False, damage_or_aim_acceptance=False)
     controls = {}
-    for phase in phases:
+    for phase_index,phase in enumerate(phases):
         points = [r for r in ship_rows if r['phase']==phase]
         velocities = [[(b[k]-a[k])/(b['gameTime']-a['gameTime']) for k in ('x','y','z')]
                       for a,b in zip(points,points[1:]) if .05 <= b['gameTime']-a['gameTime'] <= .5]
         native = [readbacks.get(int(r['sample'])) if math.isfinite(r['sample']) else None
                   for r in rows if r['phase']==phase]
-        complete = len(velocities)>=10 and len(native)==6 and all(
-            r and all(math.isfinite(v) for v in r.values()) for r in native)
+        settled = [r for r in points if 5 <= r['sourceTime']-500-12*phase_index <= 8]
+        phase_samples = [r for r in rows if r['phase']==phase]
+        complete = len(velocities)>=10 and len(settled)>=10 and len(native)==6 and all(
+            r and r['phase']==phase and all(math.isfinite(v) for k,v in r.items() if k!='phase')
+            and abs(r['gameTime']-sample['startTime'])<.001 for r,sample in zip(native,phase_samples))
         control = dict(position_intervals=len(velocities), native_readbacks=sum(r is not None for r in native), valid=False)
         if complete:
             v = [statistics.median(r[i] for r in velocities) for i in range(3)]
@@ -93,8 +97,13 @@ def analyze(log):
             control['native_speed'] = statistics.median(r['shipSpeed'] for r in native)
             expected = 0 if phase=='stationary' else 100
             control['max_orientation_error'] = max(abs(r[k]) for r in points for k in ('yaw','pitch','roll'))
+            control['max_pre_correction_angle_in_firing_window'] = max(abs(r[k]) for r in settled for k in ('beforeYaw','beforePitch','beforeRoll'))
+            expected_basis = dict(forwardX=0,forwardY=0,forwardZ=1,upX=0,upY=1,upZ=0)
+            control['max_native_firing_basis_error'] = max(abs(r[k]-v) for r in native for k,v in expected_basis.items())
             control['valid'] = (abs(v[0]-expected)<8 and abs(v[1])<2 and abs(v[2])<2
-                                and control['max_orientation_error']<.01)
+                                and control['max_orientation_error']<.01
+                                and control['max_pre_correction_angle_in_firing_window']<.002
+                                and control['max_native_firing_basis_error']<.002)
             # A pose-driven ship may itself acquire native velocity; measure it
             # instead of baking the hypothesis that its physical velocity is zero
             # into acceptance. The other controls require their intended state.
