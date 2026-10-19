@@ -23,7 +23,9 @@ TEST_SETTINGS = {
     'ssao': '0', 'glow': '0', 'uiglow': '0', 'uiglowintensity': '0.75',
     'lodfactor': '0.15', 'effectdistance': '0.15', 'distortion': 'false',
     'disableradar': 'false', 'radarquality': '0', 'ssr': 'false', 'ssrquality': 'low',
-    'texturequality': 'low', 'chromaticaberration': 'false', 'volumetric': '0',
+    # Low textures caused native shader compilation failures on the Linux test
+    # system; high textures completed the isolated lifecycle run (not a PiP fix).
+    'texturequality': 'high', 'chromaticaberration': 'false', 'volumetric': '0',
     'pom': 'low', 'envmapprobes': 'none', 'frameratelimit': 'true', 'frameratetarget': '60',
     'upmode': 'none', 'dlss': 'false', 'dlssmode': 'off', 'fsr3g': 'off',
 }
@@ -164,7 +166,7 @@ def start():
         raise RuntimeError('The test profile must keep autosave=false and uisafemode=false. See INSTALL.html.')
     if any((Path(state['profile'])/'save').glob('*.xml*')):raise RuntimeError('The test profile contains saves. See INSTALL.html; do not load an existing game.')
     configure_profile(Path(state['profile']),ROOT/'backups'/('graphics-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')))
-    print('Test graphics: 1920x1080 exclusive fullscreen, Low preset, 60 FPS limit.')
+    print('Test graphics: 1920x1080 exclusive fullscreen, Low settings with High textures, 60 FPS limit.')
     log=Path(state['profile'])/'x4lan-debug.txt'
     if log.exists():
         (ROOT/'logs').mkdir(exist_ok=True)

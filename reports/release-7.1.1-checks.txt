@@ -1,0 +1,80 @@
+X4 LAN LAB 7.1.1 — INTERNAL DEVELOPMENT CANDIDATE CHECKS
+20 October 2026 | X4 9.00 (611726), Steam build 23660954
+
+STATUS: INTERNAL CANDIDATE. SIMULTANEOUS TWO-NATIVE ACCEPTANCE REMAINS OPEN.
+Use one matched pair and its new relay; preserve the original 7.0 and 7.1.0
+archives. No public release was requested for this follow-up.
+
+NATIVE MOTION AND PHYSICS
+The accepted pose correction compares the actual engine pose even when the
+requested pose is unchanged. It corrects the two cooperative ships every render
+frame, including frame rates above 60 FPS. Native source 74c5182 passed the
+independent orientation controls; the earlier failed run remains recorded.
+
+The native velocity setter was measured at six orientations in source 23c3852:
+26 samples/25 displacement intervals each. It is not component-local in that
+fixture; aligned parent/sector/cluster axes cannot distinguish those spaces.
+Production therefore applies velocity only to the measured free ship/zone/
+sector/cluster topology with aligned axes, and fails closed elsewhere.
+
+Native lifecycle source d5caf04 passes all 12 phases, 17 settled samples each.
+Motion/resume at yaw90 follow (100,40,-25)m/s; maximum pose differences below
+1.876m include native integration between Lua writes and MD readback. Median
+position-derived velocity error stays below .004471m/s. Packet-loss freeze has
+zero native speed and stable position. Six invalid-command cases each have 25
+native readbacks: old generation/fence, stale sequence, wrong session, wrong
+ownership epoch, expired command and wrong parent. None reactivates an invalid
+override. Watchdog release is measured .0534s after expiry. Actual local pilot
+takeover releases the override; native throttle reaches 565.875 m/s afterward.
+The pause fixture tests the adapter branch while the engine world runs; it is
+not acceptance of real engine-menu pause/resume scheduling.
+
+PROJECTILE LIMIT — FAILED CONTROL, NOT ACCEPTANCE
+Source bcde58f records 24 actual projectiles and native 100 m/s in the rendered
+phase. A physical-reference orientation readback exceeds the unchanged gate:
+.00224463 > .002. The complete projectile experiment therefore FAILS. Observed
+inherited velocity is not accepted aim, hit or exact projectile equivalence.
+No sustained native angular override was introduced. The lifecycle PASS above
+is separate and independently reviewed.
+
+LINUX STARTUP WORKAROUND
+Two startup attempts at Low textures failed before probe setup: multimat shader
+line 59, then eye_cornea line 131 after quarantining the isolated pipeline cache.
+With the same mod/config except High textures, the full native lifecycle and
+24-shot projectile runs both reached completion. The latter still failed its
+orientation control, not startup. Linux now uses High textures in profile 45841;
+Windows retains its previously tested defaults. Both use shaderquality2.
+The original settings/cache and failures are preserved. No general root cause,
+minimum working texture setting, performance improvement or NPC PiP fix is claimed.
+
+PRIOR 7.1.0 EVIDENCE, NOT A NEW TWO-NATIVE RUN
+Ordinary shared-ship cargo/magnet host and guest paths passed separately,
+including partial/capacity cases, duplicate requests and lost completions.
+Shared identity/HUD, bounded NPC motion, finite FIRE2 cadence and native guest
+health snapshot convergence have recorded native evidence. Both Shuttles have
+six guns, all six software modules, Mk3 thrusters and Docking Computer Mk2.
+The user's Cooperative Trial success is preserved. See the source's historical
+release-7.1.0-checks.txt and native-7.1.0-checks.json for exact measurements.
+Claude previously reported Windows hardware/docking and installer fixtures;
+the new physics follow-up has been exercised natively on Linux only.
+
+AUTOMATION / DELIVERY
+AUTOMATED-TESTS.txt records this candidate's exact automated check result.
+The changed production MD script and lifecycle probe passed the installed X4
+schema. Development probes are not shipped. The delivery folder's separate
+SOURCE-CHECKPOINT.json and DELIVERY-CHECKS.json identify the final source,
+matched archive hashes, inventory verification and packaged startup/server smoke.
+A newly built pair has fresh private credentials; never mix separately built pairs.
+
+REMAINING WORK
+- Simultaneous Windows/Linux cargo, radar, identities, motion, docking, combat,
+  real menu pause, connection recovery and endurance.
+- Exact aim/projectile/hit behavior and user-customized weapon group membership.
+- General NPC combat, equipment, loot and interactions; stations/production and
+  the wider economy; arbitrary vanilla missions; complete discovery and save/load.
+- Contested pickup with two native games, arbitrary NPC loot, multi-ware crates,
+  unrestricted cargo categories and low-priority NPC PiP artifacts.
+
+Normal save bytes and actual save timestamps remain unchanged; no test saves
+were created. Native game/relay runs are coordinated by the primary developer.
+No third-party multiplayer code or engine-owned reference files are redistributed.

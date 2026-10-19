@@ -6,12 +6,13 @@ Format: MAJOR.MINOR.PATCH, for example 5.0.1.
 - PATCH: fixes, defaults, documentation and packaging improvements.
 Every published update gets a higher version, including launcher-only fixes.
 
-Current development candidate: 7.1.0 (internal playtest follow-up)
-Adds native co-op cargo, motion/identity updates and matching Xperimental Shuttles.
+Current development candidate: 7.1.1 (internal motion/physics follow-up)
+Corrects native pose drift and cooperative linear velocity with lifecycle guards.
 Read RELEASE-CHECKS.txt for acceptance status; full-universe work remains open.
 Install the new matched Linux/Windows pair, including the new Linux server.
 
 Historical mapping:
+7.1.1 = native cooperative pose/velocity fixes; Linux high-texture workaround.
 7.1.0 = internal 7.0 playtest follow-up; exact-version matched pair required.
 7.0.0 = internal W01 NPC scenes; original world1 protocol, no full-world claim.
 6.0.0 = sector-aware co-op fleet, shared treasury and Cooperative Trial.
@@ -23,7 +24,7 @@ Historical mapping:
 Earlier archives keep their original names as historical test snapshots.
 
 Where to see the version:
-- ZIP and extracted folder names: X4-LAN-7.1.0-Linux / Windows11.
+- ZIP and extracted folder names: X4-LAN-7.1.1-Linux / Windows11.
 - VERSION.txt and package.json inside each package.
 - Launcher output, server dashboard/status log and installed mod display name.
 
