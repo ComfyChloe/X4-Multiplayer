@@ -4,7 +4,7 @@ if not A or not A.universe or not cfg.world_sync then return end
 local ffi=require('ffi');local C=ffi.C;local U=A.universe;local P=X4LAN_UNIVERSE_PROTOCOL;local s=A.state
 ffi.cdef[[const char* GetObjectIDCode(UniverseID);const char* GetComponentName(UniverseID);
 void SetObjectForcedRadarVisible(UniverseID,bool);]]
-local I={bound={},rows={},seq=0,cursor=1};A.identity=I
+local I={bound={},rows={},fixtures={},seq=0,cursor=1};A.identity=I
 local function key(object) return tostring(object):gsub('ULL$','') end
 local function log(v) DebugError('[X4LAN] IDENTITY '..v) end
 local nativeCode=C.GetObjectIDCode
@@ -16,7 +16,7 @@ end
 -- lookup override reaches those callers while preserving all unrelated C lookups.
 -- Each char array remains owned by I.bound for its full native component lifetime.
 if cfg.slot=='p2' then
- local mt=debug.getmetatable(C);local lookup=mt and mt.__index
+ local mt=getmetatable(C);local lookup=type(mt)=='table' and mt.__index
  if type(lookup)=='function' then
   mt.__index=function(lib,name)
    if lib==C and name=='GetObjectIDCode' then return I.display end
@@ -44,6 +44,14 @@ local function decode(text)
  if type(text)~='string' or #text==0 or #text>320 or #text%2~=0 or text:find('[^0-9a-f]') then return nil end
  return (text:gsub('..',function(c) return string.char(tonumber(c,16)) end))
 end
+local function fixture(id)
+ if id<=2 then return I.fixtures[id] end
+ local value=A.trade and A.trade.markets[id-2]
+ return value and ConvertIDTo64Bit(A.id(value)) or nil
+end
+for i=1,2 do
+ RegisterEvent('X4LAN_Universe.Target'..i,function(_,object) I.fixtures[i]=ConvertIDTo64Bit(object) end)
+end
 local function observe(object,row)
  if not I.bind(object,row.code,row.name) then return end
  local b=I.bound[key(object)];b.at=row.at
@@ -57,7 +65,7 @@ function U.receive(f,now)
  if f[1]~='IDENT' then return receive(f,now) end
  if cfg.slot~='p2' or #f~=11 or not U.latest or f[4]~=U.latest.epoch then return true end
  local seq,id=P.integer(f[5]),P.integer(f[7]);local scope=f[6]
- if not seq or not id or id==0 or (scope~='P' and scope~='N') or (scope=='P' and id>2) or
+ if not seq or not id or id==0 or (scope~='P' and scope~='N' and scope~='F') or (scope=='P' and id>2) or (scope=='F' and id>4) or
    not f[8]:match('^[A-Z0-9-]+$') or #f[8]>32 or (f[10]~='0' and f[10]~='1') or (f[11]~='0' and f[11]~='1') then return true end
  local name=decode(f[9]);if not name or name:find('[%z\1-\31\127]') then return true end
  local k=scope..id;local old=I.rows[k]
@@ -98,6 +106,7 @@ local function frame(now)
   if now<(I.nextSend or 0) then return end;I.nextSend=now+.1
   local radars=sensors();local list={}
   for i,object in ipairs(A.coop.ships) do list[#list+1]={scope='P',id=i,object=object} end
+  for i=1,4 do local object=fixture(i);if object then list[#list+1]={scope='F',id=i,object=object} end end
   for _,e in ipairs(U.publish) do list[#list+1]={scope='N',id=e.id,object=e.object} end
   if #list==0 then return end
   I.cursor=(I.cursor-1)%#list+1
@@ -107,7 +116,7 @@ local function frame(now)
  else
   for k,row in pairs(I.rows) do
    local r=row.scope=='N' and U.replicas[row.id] or nil
-   local object=row.scope=='P' and A.coop.ships[row.id] or r and r.object
+   local object=row.scope=='P' and A.coop.ships[row.id] or row.scope=='F' and fixture(row.id) or r and r.object
    if object and C.IsComponentOperational(object) and now-row.at<2.5 then observe(object,row)
    elseif now-row.at>15 then I.rows[k]=nil end
   end

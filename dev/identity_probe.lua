@@ -19,8 +19,9 @@ function A.universe.frame(now)
    local targetable=target.messageID~=0 and C.IsTargetable(target.messageID)
    local ok,details=pcall(GetTargetMonitorDetails,A.id(r.object),'',false)
    local header=ok and details and details.header and details.header.text or 'unavailable'
-   if header=='$containerheader$' then
-    local live,value=pcall(GetLiveData,'containerheader',A.id(r.object),'')
+   local placeholder=header:match('^%$(%w+)%$$')
+   if placeholder then
+    local live,value=pcall(GetLiveData,placeholder,A.id(r.object),'')
     if live then header=value end
    end
    DebugError(string.format('[X4LAN] IDENTITY_PROBE id=%s code=%s name=%s known=%s radar=%s selected=%s target=%s targetable=%s header=%s',

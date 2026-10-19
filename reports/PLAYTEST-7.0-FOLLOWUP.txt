@@ -50,13 +50,13 @@ Native motion/HUD effects and joint Windows/Linux acceptance are still pending.
   committed baseline 1 contained one drop, baseline 2 removed it after the magnet
   collected it. The receiver was synthetic, not another native X4 instance.
 - Real Linux guest: native DropCargo20 was rolled back locally and submitted
-  once to a synthetic host. The guest created a real native drop, collected20
-  with the magnet, rolled back its prediction, and reconciled to host inventory20.
-  Final baseline3 had no replicas or retired live containers. Both completion
+  once to a synthetic host. The guest created a real native drop, collected 20
+  with the magnet, rolled back its prediction, and reconciled to host inventory 20.
+  Final baseline 3 had no replicas or retired live containers. Both completion
   datagrams were deliberately lost once; both retries preserved exactly one action.
 - Native findings: create_object(pickup macro) plus add_wares creates a visible
-  object without working magnet collection. A real drop of1 plus add_wares19
-  collects only1. Replica creation must use native drop_cargo of the full quantity.
+  object without working magnet collection. A real drop of 1 plus add_wares19
+  collects only 1. Replica creation must use native drop_cargo of the full quantity.
 - CARGOREQ/CARGOEXEC/CARGODONE/CARGOREPLY bind to authenticated pilot/ship generation,
   retain completed IDs and wait for a baseline visibility fence. CINV reconciles
   tracked ware counts and overrides older ECON cargo rows.
@@ -72,3 +72,39 @@ shared with NPC UMOVE. Positions: metres; orientation: radians; time: seconds;
 velocities: metres/second and radians/second. Ownership/sector changes reset
 tracks, long gaps reset interpolation, prediction is limited to 0.35 seconds.
 23 targeted cooperative Python/LuaJIT tests passed; visual acceptance pending.
+
+NATIVE HOST AUTHORITY CHECKPOINT
+After correcting MD dynamic string keys to use a '$' prefix, the real host
+completed DROP20 and PICKUP20 from a synthetic authenticated pilot. Both UDP
+intents and MD Order events were deliberately duplicated. All four MD outcomes
+were OK; final inventory 20, zero drops, no cargo MD errors, and 152 validated
+identity records received. Ordinary host/guest paths have separate native tests;
+a simultaneous two-native-PC test is still required.
+
+SHUTTLE / GRAPHICS CHECKPOINT
+The old isolated graphics preset forced unsupported shaderquality 0. With the
+new Shuttle assets, Linux X4 aborted on xu_cockpit before world startup. The
+engine UI only supports shaderquality 2; using 2 passed startup. Both installers
+now use 2, only in the disposable test profile. Native SHIP_SPEC then measured
+both ships: hull 4580, shield 4800, weapons 6/7, one shield, two engines,
+Docking Computer Mk2, cargo 1100, maxspeed 649.789. PR6 refused this as equipment
+mismatch; Claude is investigating the seventh slot. No accepted Shuttle claim.
+
+IDENTITY / HUD CHECKPOINT
+X4 omits Lua's debug library; the narrow ffi.C lookup wrapper now uses ordinary
+getmetatable. Real guest codes became TST-001/TST-002, names matched, known/radar
+were true, and SetSofttarget/IsTargetable succeeded repeatedly. Resolving the
+actual target-monitor live header and shared fixture display remains in progress.
+IDENT scopes: P co-op ships 1/2, N universe IDs, F fixture targets 1/2 and markets 3/4.
+Native object IDs stay local; only the shared display code/name is bound.
+
+NATIVE MOTION / HUD ACCEPTANCE (real Linux guest + synthetic host)
+The actual target-monitor live header resolved to 'Shared native ship 1 (TST-001)'
+and the equivalent second ship. All90 targetability checks passed; no adapter or
+MD errors. UMOVE:202 native transform samples, maximum position difference1.3293m
+at100m/s and angle difference0.00133rad. NAV2:438 samples, maximum difference0.6651m
+at50m/s. These are within the15ms application interval. Deliberate0.9s packet-loss
+bursts exercised bounded prediction/freeze. The empty baseline removed NPCs.
+This establishes the native transform/header paths, not the subjective visual
+feel of two live players. Shared fixture codes have separate bounded metadata
+scope tests; their two-PC native acceptance remains pending.

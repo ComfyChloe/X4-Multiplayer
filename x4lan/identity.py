@@ -26,6 +26,8 @@ class Identities:
             seq, scope, entity, code, name, known, contact = sequence(f[4]), f[5], sequence(f[6]), f[7], f[8], f[9], f[10]
             if scope == 'P':
                 if entity not in (1,2): return []
+            elif scope == 'F':
+                if entity not in (1,2,3,4): return []
             elif scope == 'N':
                 if not any(entity in ids for ids in s.entity_ids.values()): return []
             else: return []
@@ -46,7 +48,7 @@ class Identities:
         host, guest = s.peers.get('p1'), s.peers.get('p2')
         if not host or not guest: return []
         live = set().union(*s.entity_ids.values()) if s.entity_ids else set()
-        self.rows = {k:v for k,v in self.rows.items() if k[0]=='P' or k[1] in live}
+        self.rows = {k:v for k,v in self.rows.items() if k[0] in ('P','F') or k[1] in live}
         # Only forward fresh observations; the guest expires forced visibility.
         rows = [v for v in self.rows.values() if v[2][0]==host.lease and now-v[1]<2]
         result = []

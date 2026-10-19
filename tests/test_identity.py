@@ -29,6 +29,12 @@ class IdentityRelayTests(unittest.TestCase):
   for p in (self.packet(id=3),self.packet(scope='fixture'),self.packet(name='bad\nname'),self.packet().replace(b'5368617265642073686970',b'ff')):
    self.s.receive(p,P1,.1)
   self.assertFalse(self.s.identities.rows)
+ def test_fixture_scope_is_bounded_and_distinct_from_player_and_world_ids(self):
+  for scope in ('P','F'):
+   self.s.receive(self.packet(scope=scope),P1,.1)
+  self.s.receive(self.packet(scope='F',id=5),P1,.1)
+  self.assertEqual(set(self.s.identities.rows),{('P',1),('F',1)})
+  self.assertEqual(len(self.s.identities.snapshots(.2)),2)
  def test_removed_universe_identity_is_not_replayed(self):
   self.s.entity_ids={'sector_macro':{5}}
   self.s.receive(self.packet(scope='N',id=5),P1,.1)
@@ -45,6 +51,7 @@ class DisplayIdentityTests(unittest.TestCase):
    ffi.cdef[[typedef uint64_t UniverseID;
     const char* GetObjectIDCode(UniverseID) asm("strerror");
     size_t strlen(const char*);]]
+   debug=nil -- X4 does not expose the debug library.
    existingC=ffi.C;nativeCode=ffi.string(existingC.GetObjectIDCode(11))
    events={};requests={}
    RegisterEvent=function(k,f) events[k]=f end

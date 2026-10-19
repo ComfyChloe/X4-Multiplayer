@@ -8,6 +8,7 @@
     <do_all exact="2" counter="$i">
      <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$ships.{$i}"/>
      <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$targets.{$i}"/>
+     <raise_lua_event name="'X4LAN_Universe.Target%s'.[$i]" param="md.X4LAN_Bubble.Arena.$targets.{$i}"/>
     </do_all>
     <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$donor"/>
     <raise_lua_event name="'X4LAN_Universe.Ready'"/>

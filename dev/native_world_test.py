@@ -84,7 +84,7 @@ def install(slot, shared_ship=False):
     print('Installed W01 native probe for', slot, 'in isolated profile 45841; original backed up.')
 
 
-def peer(slot, duration, replay=False, config=None, baselines=8):
+def peer(slot, duration, replay=False, config=None, baselines=8, motion=False):
     from x4lan.host import Relay
     from x4lan.universe import UniverseSession, Receiver, Baseline, Sender
     cfg = json.loads((config or HERE / 'native-session.json').read_text())
@@ -134,7 +134,7 @@ def peer(slot, duration, replay=False, config=None, baselines=8):
                         if replay and elapsed >= 62: new_phase = 'full-sector' if elapsed < 90 else 'final-empty'
                         if (not sender or sender.done) and now >= next_baseline:
                             revision += 1; next_baseline = now + 2
-                            x = 1800 if new_phase == 'create' else 3800
+                            x = 1800 if new_phase == 'create' else 1800+100*(elapsed-22) if motion else 3800
                             rows = [] if new_phase in ('empty','final-empty') else replay_rows if new_phase == 'full-sector' else [
                                 f'1,ship,ship_arg_s_scout_01_a_macro,argon,{x},10000,1200,0,0,0,none,0',
                                 f'2,ship,ship_arg_m_trans_container_01_a_macro,argon,{x+800},10000,2400,0,0,0,none,0']
@@ -149,7 +149,14 @@ def peer(slot, duration, replay=False, config=None, baselines=8):
                                 name = ('Shared native ship '+str(entity)).encode().hex()
                                 sock.send(f'IDENT|1|{lease}|{lease}|{seq}|N|{entity}|TST-00{entity}|{name}|1|1'.encode())
                         if new_phase == 'move':
-                            sock.send(f'UPOS|1|{lease}|{lease}|1|{seq}|{SECTOR}|3800|10000|1200|0|0|0'.encode())
+                            if motion:
+                                # Deliberate 0.9s loss bursts test bounded prediction/freeze.
+                                if (elapsed-22)%6 < 5.1:
+                                    x=1800+100*(elapsed-22);yaw=.1*(elapsed-22)
+                                    sock.send(f'UMOVE|1|{lease}|{lease}|1|{seq}|{SECTOR}|{now:.6f}|{x:.6f}|10000|1200|{yaw:.6f}|0|0|100|0|0|.1|0|0'.encode())
+                                    sock.send(f'NAV2|1|{lease}|1|1|{seq}|{SECTOR}|{-1000+50*(elapsed-22):.6f}|10000|0|0|0|0|0|0|{now:.6f}|50|0|0|0|0|0'.encode())
+                            else:
+                                sock.send(f'UPOS|1|{lease}|{lease}|1|{seq}|{SECTOR}|3800|10000|1200|0|0|0'.encode())
                         if elapsed > (106 if replay else 62): break
             if sender and lease:
                 for packet in sender.packets(lease, now): sock.send(packet)
@@ -160,7 +167,7 @@ def peer(slot, duration, replay=False, config=None, baselines=8):
             if native_start and now-native_start > 100 and not history: break
             time.sleep(.005)
     finally:
-        report = dict(synthetic_slot=slot, duration=round(time.monotonic()-start,2), history=history,
+        report = dict(synthetic_slot=slot, motion=motion, duration=round(time.monotonic()-start,2), history=history,
                       metrics=metrics, guest_committed_revision=session.delivered,
                       known_positions=len(session.positions))
         name = 'host' if slot == 'p2' else 'guest'
@@ -175,6 +182,7 @@ if __name__ == '__main__':
     parser.add_argument('action', choices=['install','launch','peer','check-saves'])
     parser.add_argument('--slot', choices=['p1','p2'], default='p1')
     parser.add_argument('--duration', type=int, default=600)
+    parser.add_argument('--motion', action='store_true', help='Exercise UMOVE/NAV2 with velocity and loss bursts.')
     parser.add_argument('--shared-ship', action='store_true', help='Verify the matched Timelines shuttle loadout.')
     parser.add_argument('--replay', action='store_true', help='Also replay the recorded complete native host sector.')
     parser.add_argument('--config', type=Path)
@@ -188,7 +196,7 @@ if __name__ == '__main__':
     elif args.action == 'launch':
         setup.ensure_closed()
         subprocess.run(['steam'] + setup.GAME_ARGS, check=True)
-    elif args.action == 'peer': peer(args.slot, args.duration,args.replay,args.config,args.baselines)
+    elif args.action == 'peer': peer(args.slot, args.duration,args.replay,args.config,args.baselines,args.motion)
     else:
         before=json.loads((HERE/'native-before/saves.json').read_text())
         after=saves(); assert before.keys() == after.keys(), 'Save file inventory changed during native test'

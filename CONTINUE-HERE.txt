@@ -1,22 +1,45 @@
-CURRENT DEVELOPMENT HANDOFF - 19 OCTOBER 2026
+CURRENT DEVELOPMENT HANDOFF - 19 OCTOBER 2026, OVERNIGHT FOLLOW-UP
 
-The user will continue here and keep this PC as the primary X4 test machine.
-Additional testers are organized; the 7.0 playtest is still pending. A contributor
-plans to use Claude. Read CONTRIBUTING.txt for shared context, independent task
-branches/worktrees, interface coordination, PR delivery and native test handoff.
-CLAUDE.md imports AGENTS.md; .github/PULL_REQUEST_TEMPLATE.md records review
-evidence. No collaborator account or agent task has been assigned by these files.
+The real two-computer 7.0 playtest is COMPLETE. The user reported ten findings:
+ordinary dropped cargo invisible; differing callsigns; intermittent damage;
+jerky movement; NPC PiP artifacts (low priority); missing shared radar contacts;
+wrong weapon visuals; unreliable HUD targeting; requested fully equipped
+Xperimental Shuttles with docking assistance; shared mission success.
+See reports/PLAYTEST-7.0-FOLLOWUP.txt and GitHub issue #4 for exact scope/evidence.
 
-The real two-computer 7.0 playtest is still PENDING (user update, 17 October).
-INTERNET-HOSTING-ANALYSIS.txt evaluates VPN/remote relay and an unattended X4
-authority, GPU requirements, Hetzner candidates and staged feasibility tests.
-This is research only; it does not implement a server mode or change the 7.0
-candidate, installation or acceptance evidence below.
+ACTIVE CONTRIBUTIONS (not a new accepted release)
+- Astra primary: contrib/astra-playtest7, draft PR #8. Native ordinary-cargo
+  authority, NAV2/UMOVE velocity interpolation, display identity and radar contacts.
+- Claude: PR #6 fixed Shuttle specification and PR #7 FIRE2 weapon controls.
+  PR #6 native validation found weapons 6/7 despite matching hardware and dockmk2;
+  its acceptance rule/loadout is being investigated. PR #7 review found transition
+  replay and pause issues; do not declare either contribution accepted yet.
+- AI Coms coordinator reviews contributions in separate worktrees. PR #3 Windows
+  installer rollback/profile handling is integrated in main (9f6a19b).
+- Coordinate native launches/installations with the primary chat. Slack gameplay
+  thread: https://example.invalid/private-coordination-withheld
 
-7.0.0 INTERNAL W01 adds an original NPC scene transport and engine adapter.
-The user requires a shared universe. W01 is progress, not completion of that goal.
-Ordinary jettisoned Energy Cells and the normal cargo magnet STILL NEED WORK.
-Do not substitute the legacy 6-COLLECT-CONTAINER action for that requirement.
+NATIVE EVIDENCE SO FAR
+- Real host + synthetic guest: freely dropped 20 cells appear in a world baseline
+  and disappear after the ordinary magnet collects them.
+- Real guest + synthetic host: DropCargo20 -> native replica -> magnet pickup20
+  -> inventory 20 and no remaining replica, including one lost completion each.
+- Real host + synthetic pilot: DROP20 and PICKUP20 both complete with duplicate
+  UDP intents AND duplicate MD events; final inventory 20/no drops/no MD errors.
+- Native metadata relay recorded 152 identities. Guest native identity/targeting
+  checks are in progress; two-native-machine acceptance is still pending.
+- Shaderquality0 from the old test preset crashes this Linux build compiling the
+  Xperimental cockpit. Shaderquality2 is the supported engine UI option and
+  passed startup; both test installers now use 2. Only profile 45841 is changed.
+- Normal save bytes and actual save timestamps remain unchanged. No test saves.
+
+The original 7.0 matched test pair is preserved. The next intended package is
+INTERNAL 7.1.0, subject to current checks; no new public release was requested.
+Full shared-universe authority remains incomplete: do not treat NPC scene
+replicas as proof of arbitrary NPC combat, inventory, missions or station economy.
+Cargo support currently covers ordinary cargo from the two co-op ships; arbitrary
+NPC loot, multi-ware containers and unrestricted cargo categories remain unproven.
+The research-only INTERNET-HOSTING-ANALYSIS.txt is still separate from LAN work.
 
 User choices:
 - Work internally unless a public package is explicitly requested.
