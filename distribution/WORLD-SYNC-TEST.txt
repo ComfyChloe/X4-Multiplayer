@@ -1,9 +1,9 @@
 INTERNAL FOLLOW-UP - WORLD / CARGO / MOTION TEST
-19 October 2026 | X4 9.00 Steam build 23660954
+20 October 2026 | X4 9.00 Steam build 23660954
 
 This is an engineering milestone towards a shared universe. It is not a public
 release or a complete multiplayer universe. Use both packages from this exact
-release folder and its relay. The original 7.0 pair remains a separate test build.
+release folder and its relay. The original 7.0 and 7.1.0 pairs remain separate test builds.
 
 WHAT CHANGED
 The host enumerates actual NPC ships in the guest's current sector. Each receives
@@ -50,12 +50,16 @@ TEST SEQUENCE
    Linux host/guest edge checks do not replace this two-native-game acceptance.
 9. Compare stationary, rotating and moving shared ships, NPCs and HUD selection.
    Brief packet loss should permit bounded prediction, then freeze without endless
-   drift. Record the sector, speed and delay if movement still looks jerky.
+   drift, with zero native linear velocity at freeze. After recovery, check normal
+   acceleration, docking and a vacant-cockpit takeover. The new pilot must retain
+   full control. Record sector, speed and delay if movement still looks jerky.
 10. Complete the Cooperative Trial trade/combat regression in INSTALL.html. Test
     individual taps and sustained fire with the identical default weapon groups;
     compare damage on both games after firing stops. Complete this before ship
     destruction. Custom group membership and overlapping primary/secondary groups
     are not synchronized; do not treat active-group indices as membership transfer.
+    Include sideways flight while firing. A native projectile follow-up failed an
+    orientation control; aim and shared hits remain acceptance work.
 11. Run 4-DIAGNOSTICS on both computers and retain the server logs. Report the
    sector, ship type, time, host/guest revisions and what differed visually.
 

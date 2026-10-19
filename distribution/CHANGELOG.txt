@@ -1,3 +1,22 @@
+Version 7.1.1 INTERNAL motion/physics follow-up — 20 October 2026
+
+- Correct actual cooperative ship drift even when the received pose is unchanged;
+  apply the correction every render frame for the two shared ships.
+- Keep native linear velocity consistent with interpolation and bounded prediction,
+  including zero at freeze. Fence stale commands and release overrides on lifecycle
+  changes; a watchdog covers abandoned updates. Restrict this to the measured free
+  ship/zone/sector/cluster topology. No native angular override is introduced.
+- Native lifecycle tests cover packet loss, resumed motion, invalid commands,
+  watchdog release and real local pilot acceleration after takeover. These remain
+  single-native tests with synthetic peers, not joint gameplay acceptance.
+- A 24-projectile follow-up still fails an orientation control. Precise projectile
+  matching, aim and shared hits remain open; the tolerance was not relaxed.
+- Use High textures in the isolated Linux profile after measured startup shader
+  failures at Low textures. Keep Windows graphics defaults unchanged. No PiP fix
+  or general performance improvement is claimed.
+- Replace both packages and relay with this exact new pair. Preserve the original
+  7.0 and 7.1.0 archives. This is an internal candidate, not a public release.
+
 Version 7.1.0 INTERNAL follow-up — 19 October 2026
 
 - Share ordinary cargo jettisoned from the two co-op ships and native magnet

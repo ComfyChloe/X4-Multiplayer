@@ -1,5 +1,5 @@
 X4 LAN Lab {{VERSION}} — two-player co-op, Linux host + Windows 11 guest
-19 October 2026 | X4 9.00 (611726), Steam build 23660954
+20 October 2026 | X4 9.00 (611726), Steam build 23660954
 
 Open INSTALL.html for installation, ZeroTier and the complete playtest sequence.
 Read RELEASE-CHECKS.txt for verified results and remaining limitations.
@@ -9,7 +9,7 @@ Use the two matching archives from this release folder. Extract the complete ZIP
 before running anything. Close both games, stop the old server, remove each old
 mod with its original package's numbered 5 command, then install the new pair.
 Use this exact release on both computers, including its new relay. Do not mix
-with the original 7.0 pair. Start two new creative test worlds.
+with the original 7.0 or 7.1.0 pairs. Start two new creative test worlds.
 Disable other third-party mods for testing. Keep matching official DLC, including
 X4: Timelines for the shared Xperimental Shuttles.
 
@@ -24,6 +24,14 @@ This INTERNAL follow-up mirrors host NPC sector scenes, adds ordinary co-op ship
 cargo/magnet transactions, shared names/display codes/radar contacts and smoother
 source-clock movement. Read WORLD-SYNC-TEST.txt for the focused playtest and
 RELEASE-CHECKS.txt for actual acceptance evidence. Public Test 01 remains withheld.
+
+This patch also corrects native drift when a remote pose stays unchanged and
+keeps the two cooperative ships' native linear velocity consistent with their
+rendered motion. Packet-loss prediction freezes with zero velocity; lifecycle
+guards release overrides on docking, control or connection changes. Initial
+physical-velocity support is limited to free ships in aligned zone/sector/cluster
+spaces. A separate projectile experiment failed an orientation control; precise
+projectile/aim/hit equivalence and simultaneous two-native gameplay remain open.
 
 The console shows connections, received updates, game callback timing, relay CPU
 and RAM, ship pilots, economy and shared mission progress. Callback/update rates
@@ -76,8 +84,11 @@ TEST PROFILE AND GRAPHICS
 Use only new creative sandboxes in profile 45841. Do not load existing saves,
 quicksave or manually save. Autosave is disabled. Launchers apply 1920x1080
 exclusive fullscreen, Low graphics and a 60 FPS cap only to this profile, with
-configuration backups. The supported shader setting is retained for the Shuttle
-cockpit. Windows OneDrive Documents support remains included.
+configuration backups. Linux uses High textures as a measured workaround for
+startup shader failures; Windows retains its previously tested Low textures.
+Both retain shaderquality 2. Higher textures can use more graphics memory; this
+is not a general performance or NPC PiP fix. Windows OneDrive Documents support
+remains included.
 4-DIAGNOSTICS collects logs; 5-REMOVE-MOD archives this installed mod.
 General performance and real cross-platform endurance still need playtesting.
 Do not publicly share session.json or ui/config.lua; they contain the session key.

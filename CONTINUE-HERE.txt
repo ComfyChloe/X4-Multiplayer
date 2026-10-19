@@ -1,29 +1,54 @@
-CURRENT HANDOFF - INTERNAL 7.1.0 CANDIDATE, 19 OCTOBER 2026
+CURRENT HANDOFF — INTERNAL 7.1.1 DELIVERED, 20 OCTOBER 2026
 
-The completed real two-computer 7.0 playtest drove the overnight follow-up.
-The reviewed changes are integrated in main at fd5230b (PR #8). This is an
-internal candidate for the next playtest, not full-universe or two-native
-acceptance. No new public release was requested or prepared.
+The real two-computer 7.0 playtest drove the overnight follow-up. PRs8-13 are
+integrated through main eb59d68. PR13's native linear-velocity lifecycle
+evidence is independently accepted. Internal 7.1.1 is built, installed cleanly
+and startup-tested. It is not full-universe or two-native acceptance.
+No new public release was requested or prepared.
 
-DELIVERY ON THE PRIMARY PC
-One matched Linux-host / Windows-client pair is in:
+DELIVERY STATE — MATCHED PAIR AND CLEAN LOCAL INSTALLATION
+The existing canonical 7.1.0 pair remains unchanged at:
 Desktop/X4 Online/Internal Tests/7.1.0-2026-10-19
-- X4-LAN-7.1.0-Linux.zip
-- X4-LAN-7.1.0-Windows11.zip
-- INSTALL.html, NEXT-TEST.txt, RELEASE-CHECKS.txt
-- SOURCE-CHECKPOINT.json and DELIVERY-CHECKS.json identify source/archives/checks.
-The packaged source is f2b37b1; its full Git tree equals the fd5230b merge tree.
-The original 7.0 pair is preserved. Do not rebuild it or mix versions/pairs.
+Its packaged source f2b37b1 equals the full tree of merge fd5230b. The original 7.0
+pair is preserved. Do not rebuild or mix either historical pair.
+New destination: Desktop/X4 Online/Internal Tests/7.1.1-2026-10-20.
+Exactly one pair was built from reviewed 1c3fea3 (tree22fee978), production tree
+1f852523. Inventories/digests pass. The probe-free local installation has 33 files
+matching the Linux package. The actual packaged native game/server smoke passes:
+131/142-object baselines, 340 WORLD snapshots, 149 identities including P1/P2 and
+F1-F4, no mod errors. The peer was synthetic, not a second native game. Normal
+save bytes and actual save timestamps are unchanged; no test saves were created.
+The prior instrumented extension/settings are preserved locally. Native game and
+relay are closed. reports/package-7.1.1-checks.json records archive/evidence hashes;
+the delivery folder contains SOURCE-CHECKPOINT.json, DELIVERY-CHECKS.json,
+CLEAN-INSTALL-HASHES.json and NEXT-TEST.txt. Canonical 7.1.0 digests are unchanged.
+Do not rebuild or mix the pair. Post-build handoff/report commits do not change
+the exact source1c3fea3 already sealed in the archives.
+Generated private packages contain matched credentials; keep them out of Git.
 
-The clean Linux 7.1.0 artifact is installed in the current X4 extension folder.
-Every installed file matches the package; no development probes remain.
-The prior instrumented extension is preserved under the primary worktree's
-.local/evidence-164-withheld The isolated game and
-packaged test server were closed after validation. Use the new Linux folder's
-2-START-SERVER.sh and 3-START-X4-TEST.sh for the next fresh test world.
-Normal save bytes and actual save timestamps were unchanged; no test saves.
-Generated private packages contain their matched session credentials. Source,
-Git, shared reports and public downloads must not contain live session secrets.
+AFTER-MIDNIGHT FINDINGS
+- The user requested a retry with Claude after midnight and solo work if no reply
+  by 00:15 Europe/Berlin. A 00:01 request and 00:15:09 check received no Claude reply;
+  the primary continued alone. The separate AI Coms coordinator reviewed source
+  and evidence but never launched X4 on this PC.
+- PR11 repairs actual remote pose drift every render frame. PR12 establishes
+  non-component-local native velocity input in the tested aligned parent spaces.
+- PR13 aligns native linear velocity with displayed motion and fences/revokes
+  stale commands. Native d5caf04 lifecycle PASS: 12 phases, 17 settled samples each,
+  six negative-command cases with 25 readbacks each, watchdog release .0534s after
+  expiry, real pilot acceleration to 565.875 m/s after takeover. Adapter-pause
+  injection is explicitly not an engine-menu pause test.
+- The separate bcde58f 24-projectile run FAILS its unchanged .002 orientation gate
+  in one reference phase (.00224463). No projectile/aim/hit acceptance is claimed;
+  residual between-frame rotation needs further measurement before an angular
+  override is considered. Production currently changes linear velocity only.
+- Two Low-texture startup shader failures are preserved separately. High textures
+  completed the lifecycle and projectile runs on this Linux PC; the new Linux
+  installer prepares that isolated-profile workaround. Windows defaults remain
+  unchanged. This is not a general root-cause, performance or PiP fix claim.
+- Exact evidence/limits: reports/NATIVE-VELOCITY-FOLLOWUP.txt,
+  native-velocity-lifecycle-checks.json, native-velocity-projectile-observation.json,
+  VELOCITY-FRAME-RESEARCH.txt and stationary-pose-native-checks.json.
 
 INTEGRATED WORK AND EVIDENCE
 - Ordinary co-op cargo uses real full-quantity native drops and magnet pickup,
@@ -50,7 +75,7 @@ INTEGRATED WORK AND EVIDENCE
   modules, Mk3 combat thrusters and Docking Computer Mk2 (Timelines required).
   Native Windows hardware/docking and installer fixtures passed as reported by
   Claude; expanded software/thruster readback was performed on Linux only.
-- Linux 225 Python/LuaJIT tests passed without skips; all 15 production/opt-in MD
+- Historical 7.1.0: Linux 225 Python/LuaJIT tests passed without skips; all 15 production/opt-in MD
   scripts validate against the installed X4 9.00 schema. Independent review and
   matched package inventories/digests passed. The clean packaged Linux game/server
   startup smoke passed: 116/117-object baselines and 123 identities reached a
@@ -78,8 +103,8 @@ NEXT WORK
    docking/trading, stations/production, faction/mission consequences and saves.
    Arbitrary NPC loot, multi-ware crates and unrestricted cargo are not accepted.
    Shared mission success does not prove arbitrary vanilla mission synchronization.
-4. NPC PiP artifacts remain a low-priority open item. Supported shaderquality 2
-   fixes the measured Shuttle cockpit startup crash; it is not a PiP fix claim.
+4. NPC PiP artifacts remain open. Linux High textures plus shaderquality2 are
+   a measured local startup workaround, not a PiP fix or general root cause.
 
 WORKFLOW AND USER CHOICES
 - Default to internal work; public packages require an explicit request.

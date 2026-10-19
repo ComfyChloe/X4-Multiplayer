@@ -20,7 +20,7 @@ class DistributionTests(unittest.TestCase):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);p=root/'45841';p.mkdir();(p/'config.xml').write_text('<root><language>49</language><autosave>true</autosave></root>');(root/'save.xml.gz').write_bytes(b'original');before=(p/'config.xml').read_bytes()
    setup.configure_profile(p,root/'backup')
-   tree=ET.parse(p/'config.xml').getroot();self.assertEqual(tree.findtext('shaderquality'),'2');self.assertEqual(tree.findtext('autosave'),'false');self.assertEqual(tree.findtext('uisafemode'),'false');self.assertEqual(tree.findtext('language'),'49');self.assertEqual((root/'backup/config.xml').read_bytes(),before);self.assertEqual((root/'save.xml.gz').read_bytes(),b'original')
+   tree=ET.parse(p/'config.xml').getroot();self.assertEqual(tree.findtext('shaderquality'),'2');self.assertEqual(tree.findtext('texturequality'),'high');self.assertEqual(tree.findtext('autosave'),'false');self.assertEqual(tree.findtext('uisafemode'),'false');self.assertEqual(tree.findtext('language'),'49');self.assertEqual((root/'backup/config.xml').read_bytes(),before);self.assertEqual((root/'save.xml.gz').read_bytes(),b'original')
  def test_existing_test_save_and_symlink_refused_before_change(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);p=root/'45841';(p/'save').mkdir(parents=True);s=p/'save/slot.xml.gz';s.write_bytes(b'preserve')
@@ -46,6 +46,8 @@ class DistributionTests(unittest.TestCase):
    original=home/'.var/app/com.valvesoftware.Steam/.config/EgoSoft/X4/70000001/save/main.xml.gz';original.parent.mkdir(parents=True);original.write_bytes(b'original');before=original.stat().st_mtime_ns
    with patch.object(setup,'ROOT',package),patch.object(Path,'home',return_value=home),patch.object(setup,'ensure_closed'),patch.object(setup.shutil,'which',return_value='/mock/flatpak'):
     setup.install(SimpleNamespace(game=str(game),steam_kind='flatpak'))
+    fresh=ET.parse(home/'.var/app/com.valvesoftware.Steam/.config/EgoSoft/X4/45841/config.xml').getroot()
+    self.assertEqual(fresh.findtext('texturequality'),'high');self.assertEqual(fresh.findtext('autosave'),'false')
     with self.assertRaises(RuntimeError):setup.install(SimpleNamespace(game=str(game),steam_kind='flatpak'))
     with patch.object(setup.subprocess,'run') as run:
      setup.start();self.assertIn('45841',run.call_args.args[0]);self.assertIn('custom_creative',run.call_args.args[0])
