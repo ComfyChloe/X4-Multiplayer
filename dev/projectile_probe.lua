@@ -45,8 +45,8 @@ function A.universe.frame(now)
  -- Baseline experiment holds every orientation. Post-fix validation disables
  -- this for all cases using production poses; only the independent native
  -- translation control (whose production pose application is disabled) retains it.
+ local ship=A.coop.ships[2];local actual=C.GetObjectPositionInSector(ship)
  if cfg.projectile_probe_hold_orientation~=false or phase=='native' then
-  local ship=A.coop.ships[2];local actual=C.GetObjectPositionInSector(ship)
   local sector=C.GetContextByClass(ship,'sector',false)
   C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',{x=actual.x,y=actual.y,z=actual.z,yaw=0,pitch=0,roll=0}))
  end
