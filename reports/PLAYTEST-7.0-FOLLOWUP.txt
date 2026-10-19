@@ -163,3 +163,81 @@ returns the existing baseline revision, avoiding a fabricated future fence.
 Non-OK outcomes display a throttled notice, including explicit instructions not
 to repeat an uncertain transfer. No automatic fresh-ID retry was added. Focused
 constant-revision/duplicate-reply tests pass; Linux suite now198 PASS/no skips.
+
+NATIVE FIRING / IDENTITY CORRECTIONS (23166c2 -> 6f6be02)
+The first native firing run failed despite passing Lua protocol tests. A source
+primary tap of six shots was classified as secondary because the MD membership
+lookup omitted `.list`. The continuous350ms remote pulse produced24 shots for
+one6-shot tap (twice), and180 for78 sustained source shots. Failed evidence is
+retained as fire2-native-host-before-fix-result.json/.log.
+
+4f1075c grants finite native shot budgets from existing FIRE2 counter deltas.
+Weapon-fired callbacks consume the budget; negative overrun debt prevents split
+counter packets from replaying an already emitted salvo. Credits have bounded
+count/lifetime and are cancelled at group, pause, stale or authority boundaries.
+The corrected receiver measured split4+2 ->6, tap6 ->6, sustained78 ->78 and no
+shots after stop. The independent local source probe initially failed because
+it did not reset the player fire controller; that probe-only omission was fixed
+at6f6be02. The fresh native echo then captured PRIMARY6/SECONDARY0 and replayed
+exactly6 remote shots from real split2+4 counter updates. No MD/property errors
+occurred in that echo run. These checks used identical default groups, one native
+Linux world and a synthetic relay peer, not simultaneous native Windows/Linux.
+Custom membership/overlap and off-axis projectile equivalence remain open.
+Evidence: fire2-native-host-4f1075c-result.json/.log (receiver pass, local probe
+failure explicitly retained), fire2-native-echo-result.json/.log (capture/echo pass).
+
+The same native logs exposed an identity adapter stop: trade markets live in
+A.trade.state.markets, not A.trade.markets. 6bbfb53 corrects this and tolerates
+late trade/state/fixture initialization. Host+guest Lua regressions pass. Native
+4f1075c publishing produced both player identities, all four fixture identities
+and122 NPC identities without stopping. Current full Linux suite222 PASS/no skips.
+All14 production/opt-in MD files at4f1075c validated against the installed schema.
+
+NATIVE SECONDARY / HEALTH CONVERGENCE (00fc83b)
+The opt-in dual fixture explicitly configured both Shuttles with disjoint three
+primary and three secondary weapons. Native primary tap3 replayed3, secondary
+tap3 replayed3, and simultaneous3+3 replayed6. Final native source and receiver
+counters were primary6/secondary6, total12, after-stop0; no MD errors. This covers
+independent trigger classification/playback, not transferring user group edits.
+Evidence: fire2-native-dual-result.json/.log.
+
+The native guest replayed the recorded real-host health trace and then explicit
+synthetic states for both ships and both fixture targets. All63 readbacks of
+eight health fields matched exactly. A deliberate local ship1 hull/shield change
+from65/45 to42/5 was corrected to65/45 in0.83s by an unchanged host snapshot.
+The real trace varies only target2 shield; other health transitions are synthetic.
+No native hit/aim or simultaneous two-PC convergence claim follows from this.
+Evidence: health-replay-native-guest-result.json/.log, input trace SHA-256 and
+1-based WORLD field mapping included. The first run's unscheduled perturbation
+is preserved as before-drift-fix and does not count as drift acceptance.
+
+2cdb75c scopes identity sequence comparisons/application to the host epoch so a
+new host's first identity is not rejected behind an old high sequence. New/old
+epoch regression passes; full Linux suite223 PASS/no skips. All15 MD/probe scripts
+at00fc83b validate against the installed schema. Raw evidence stays in.local;
+reports/native-7.1.0-checks.json records sanitized metrics and artifact hashes.
+
+UNEQUAL TRIGGER / EVIDENCE VALIDATOR FOLLOW-UP (759a5e0)
+Synthetic3P/9S,9P/3S and staggered3P then9S each produced12 native shots with
+identical disjoint fixture memberships. Final primary15/secondary21,total36,
+after-stop0. The per-weapon native event timeline confirms the longer trigger
+continues after the shorter trigger exhausts, without another positive grant.
+Evidence: fire2-native-unequal-result.json/.log.
+
+The health validator now requires eight-field readbacks matching nonconstant
+recorded trace states; a plateau-only log with successful drift recovery is a
+negative regression. Short malformed readbacks also fail. Revalidation of the
+preserved00fc83b native evidence passes63 rows,27 recorded nonconstant matches,
+zero error and actual drift recovery. The original results/log are preserved;
+health-replay-native-guest-validated-result.json records validator source and
+original result hash. Current full suite225 PASS/no skips.
+
+NATIVE PLAYER / FIXTURE DISPLAY (759a5e0)
+A real Linux guest received synthetic host identities for P1/P2 and F1-F4.
+Each object had62 samples and61 correct code/name/live target-monitor headers
+after initial metadata arrival. All310 selections of the five selectable objects
+were targetable; own-ship P2 correctly cannot self-select. The opt-in probe's
+placeholder expansion now handles a mission-icon prefix on F4; this was a probe
+formatting limitation, not a production identity failure. No MD/property lookup
+or identity-stop errors. Evidence: identity-fixture-native-result.json/.log.
+Normal save bytes and actual save timestamps remain unchanged; no test saves.

@@ -52,8 +52,10 @@ TEST SEQUENCE
    Brief packet loss should permit bounded prediction, then freeze without endless
    drift. Record the sector, speed and delay if movement still looks jerky.
 10. Complete the Cooperative Trial trade/combat regression in INSTALL.html. Test
-    individual taps and sustained fire with different weapon groups; compare
-    damage on both games after firing stops. Complete this before ship destruction.
+    individual taps and sustained fire with the identical default weapon groups;
+    compare damage on both games after firing stops. Complete this before ship
+    destruction. Custom group membership and overlapping primary/secondary groups
+    are not synchronized; do not treat active-group indices as membership transfer.
 11. Run 4-DIAGNOSTICS on both computers and retain the server logs. Report the
    sector, ship type, time, host/guest revisions and what differed visually.
 

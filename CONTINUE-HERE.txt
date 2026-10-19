@@ -15,7 +15,22 @@ ACTIVE CONTRIBUTIONS (not a new accepted release)
   readbacks accepted six guns, the unused zero-capacity missile slot, matching
   hardware and Docking Computer Mk2. A later Linux probe verified all six
   software entries and the Mk3 combat thruster on both ships.
-  PR #7 review found transition replay and pause issues; its revision is pending.
+  PR #7 source6069cbb is integrated in the working branch with primary-owned
+  corrections402f0fe/23166c2. Independent review passed218 Linux checks. Later
+  native calibration exposed invalid MD membership lookup and excess salvos;
+  correction4f1075c adds finite shot budgets and proper native classification.
+  Current Linux suite:225 PASS/no skips. Native receiver tap6 ->6, sustained78 ->78;
+  native local capture6 ->remote6 (actual split2+4) passed at6f6be02. Custom group
+  membership/overlap, aiming and two-native gameplay remain unaccepted.
+  Identity6bbfb53 fixes late trade fixture lookup; native publishing now includes
+  all four fixtures without stopping. 2cdb75c scopes identity sequences to host
+  epochs. Native guest health replay passed63 exact readbacks and0.83s local drift
+  correction; corrected759a5e0 validator matched27 recorded nonconstant states.
+  Native dual and unequal/staggered trigger tests also passed. Native P1/P2 and
+  F1-F4 display validation passed:61 matching name/code/live headers per object,
+  310 successful targetability checks; own-ship selection correctly unavailable.
+  See reports/release-7.1.0-checks.txt and native-7.1.0-checks.json. Candidate
+  packaging/review is the remaining delivery step; joint gameplay remains pending.
 - AI Coms coordinator reviews contributions in separate worktrees. PR #3 Windows
   installer rollback/profile handling is integrated in main (9f6a19b).
 - Coordinate native launches/installations with the primary chat. Slack gameplay
@@ -87,9 +102,12 @@ EVIDENCE
   Broader guest jobs/mission effects and endurance are not verified.
 
 NEXT WORK
-1. Complete PR #7 review/native weapon and damage tests; maintain the passing
-   Cooperative Trial mission and ship handoff/life-cycle behavior.
-2. Finish cargo capacity/partial/contested native checks and produce the matched
+1. Complete the reviewed internal candidate delivery, then the simultaneous
+   Windows/Linux combat playtest. Default firing and separate native guest health
+   convergence checks passed; aiming and actual shared hit behavior remain open.
+   Maintain the passing Cooperative Trial and ship handoff/life-cycle behavior.
+2. Capacity/partial native checks passed separately. Finish contested two-native
+   collection and produce the matched
    internal follow-up pair. Keep release evidence tied to the actual tested head.
 3. Run both native games together over the authorized ZeroTier path, including
    ordinary cargo in both directions, identities, radar, HUD, motion and combat.

@@ -139,6 +139,35 @@ sectors instead of recreated. NAV2 uses the same motion buffer as UMOVE and
 applies changed poses no faster than every 15 ms. Dock transitions use
 native docking actions; a remote undock also leaves the dock's coordinate frame.
 
+FIRE2 is selected explicitly by the matched package's `fire2=true`. False or
+absent means legacy NAV fire only; the protocols do not switch during a session.
+If the required native group API is absent in FIRE2 mode, remote fire is disabled
+with a diagnostic instead of silently changing protocols. The sender envelope is:
+
+`FIRE2|1|lease|ship|pilotEpoch|sequence|sourceTime|primaryGroup|secondaryGroup|primaryShots|secondaryShots`
+
+The relay validates ownership, epoch, bounded groups (1-4), finite monotonic time
+and per-trigger counters. Playback uses the NAV2 source clock; the first counter
+sample is a baseline, never historical replay. Pause boundaries freeze per-epoch
+source cutoffs before an incoming NAV2 can reset its clock mapping. A new owner
+gets a separate mapping; missing mappings wait for the first valid NAV baseline.
+Queued pre-resume fire is discarded, including receive-before-frame ordering.
+
+Counter deltas grant finite per-trigger native shot budgets. Native weapon-fired
+callbacks consume them and stop the trigger at zero. Negative overrun debt is
+retained so split counter deliveries cannot authorize the same salvo twice.
+Pending credit is capped at 256 shots and expires after a fixed 350 ms window;
+new packets cannot extend that old window. A group change stops the previous
+group before activation and resets its credit/debt. Pause, silence, ship death
+and authority changes cancel playback. MD group indices are 0-3; the wire/C API
+indices are 1-4. Native capture uses the active group's weapon `.list`.
+
+Native default-group calibration measured tap6 ->6, sustained78 ->78 and real
+source capture6 ->remote6, including split2+4 and4+2 deliveries. This is trigger
+and cadence evidence, not an exact projectile protocol. Custom group membership
+and overlapping trigger membership are not replicated. Gimbal aim, projectile
+inheritance and general NPC combat authority remain separate work.
+
 The same native player faction owns both ships. Remote player figures on foot are
 disabled. Spacesuit replicas use `BODY2`, with independent generation and sector.
 Life handling guards lethal hull thresholds, ejects actual occupants, and keeps
