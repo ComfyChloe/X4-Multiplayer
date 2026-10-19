@@ -288,6 +288,20 @@ class Fire2AdapterTests(unittest.TestCase):
          assert(legacyOn()==0 and #fires('Fire2')==#f,'new epoch: no NAV fire, no replay of the new baseline')
         ''')
 
+    def test_resume_cutoff_does_not_leak_into_a_new_owner_clock(self):
+        l = self.make()
+        l.execute('''
+         nav2(1,50,0);fire2(1,50,1,1,0,0)
+         paused=true;now=10.12;frames.onUpdate();paused=false;now=13;frames.onUpdate()
+         assert(C.resumeCutoffs[2].cutoff==53)
+         auth(2,2);now=13.1;nav2(1,3,0,2);fire2(1,3,1,1,5,0,2)
+         assert(C.resumeCutoffs[2].epoch==2 and C.resumeCutoffs[2].cutoff==3)
+         fire2(2,54,1,1,99,0,1);assert(#fires('Fire2')==0,'old owner rejected')
+         now=13.15;nav2(2,3.05,0,2);fire2(2,3.05,1,1,6,0,2)
+         now=13.31;frames.onUpdate()
+         assert(#fires('Fire2')==1 and fires('Fire2')[1].primary,'new owner clock is independent')
+        ''')
+
 
 if __name__ == '__main__':
     unittest.main()

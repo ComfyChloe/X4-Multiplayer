@@ -141,6 +141,7 @@ function c.receive(f,now)
    local track=r.track or {}
    if not M.push(track,tonumber(f[17]),p,velocity,now) then return true end
    r.track=track
+   resumeCutoff(entity) -- Latch an unknown mapping at its first valid NAV2 baseline.
   else r.track=nil end
   r.seq,r.at,r.dock=seq,now,dock
   -- In fire2 mode the NAV counter never triggers fire; there is no protocol transition.
