@@ -1,5 +1,7 @@
 from pathlib import Path
 import xml.etree.ElementTree as E
+# Legacy configs copy the local loadout onto the proxy. With a shared ship spec,
+# PrepareShips has already equipped both ships identically before Arena setup.
 from life_guards import guard_bubble
 from coop_guards import bubble as coop_bubble
 R=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab'
@@ -14,7 +16,6 @@ xml='''<?xml version="1.0" encoding="utf-8"?>
  <do_else><set_value name="$ships" exact="[$proxy,$local]"/><set_value name="$localSlot" exact="2"/></do_else>
  <set_value name="$targets" exact="[]"/><set_value name="$drops" exact="[]"/>
  <set_value name="$shots" exact="[0,0]"/><set_value name="$busy" exact="false"/><set_value name="$docking" exact="[false,false]"/>
- <!-- Legacy configs copy the local loadout. A shared ship spec already equipped both ships identically. -->
  <do_if value="not md.X4LAN_Bubble.PrepareShips.$own?"><apply_loadout object="$proxy" loadout="$local.loadout"/></do_if>
  <get_loadout loadout="'x4ep1_gamestart_trade_mercury'" macro="macro.ship_arg_m_trans_container_01_a_macro" result="$targetLoadout"/>
  <do_all exact="2" counter="$i">

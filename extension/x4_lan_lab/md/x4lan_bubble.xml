@@ -9,7 +9,6 @@
  <do_else><set_value name="$ships" exact="[$proxy,$local]" /><set_value name="$localSlot" exact="2" /></do_else>
  <set_value name="$targets" exact="[]" /><set_value name="$drops" exact="[]" />
  <set_value name="$shots" exact="[0,0]" /><set_value name="$busy" exact="false" /><set_value name="$docking" exact="[false,false]" />
- 
  <do_if value="not md.X4LAN_Bubble.PrepareShips.$own?"><apply_loadout object="$proxy" loadout="$local.loadout" /></do_if>
  <get_loadout loadout="'x4ep1_gamestart_trade_mercury'" macro="macro.ship_arg_m_trans_container_01_a_macro" result="$targetLoadout" />
  <do_all exact="2" counter="$i">
