@@ -26,7 +26,7 @@ if fire2Mode and not fire2Ready then
 end
 local M=assert(X4LAN_MOTION,'motion buffer missing')
 local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0},
- fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}}}
+ fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}},velocity={},velocityGeneration=0}
 A.coop=c
 local function log(v) DebugError('[X4LAN] '..v) end
 local function integer(v,limit)
@@ -36,6 +36,39 @@ local function numeric(v,bound)
  local n=tonumber(v);if not n or n~=n or math.abs(n)>bound then return nil end;return n
 end
 local function send(p) if s.client and s.client.lease then s.transport:send(p) end end
+local function clearVelocity(i)
+ local v=c.velocity[i]
+ if not v then return end
+ c.velocityGeneration=c.velocityGeneration+1
+ AddUITriggeredEvent('X4LAN_Coop','VelocityFence',{ship=i,generation=c.velocityGeneration,
+  session=v.session,epoch=v.epoch,enabled=false})
+ c.velocity[i]=nil
+end
+function c.stopVelocity(discardTracks)
+ for i=1,2 do clearVelocity(i) end
+ if discardTracks then c.remote={} end
+end
+local function applyVelocity(i,sector,linear,now)
+ if not linear then clearVelocity(i);return end
+ for n=1,3 do if not numeric(linear[n],100000) then clearVelocity(i);return end end
+ local parent=C.GetContextByClass(c.ships[i],'zone',false)
+ if parent==0 then clearVelocity(i);return end
+ local v=c.velocity[i];local session=s.client.lease
+ if v and (v.session~=session or v.epoch~=c.epochs[i] or v.sector~=sector or v.parent~=parent) then clearVelocity(i);v=nil end
+ if not v then
+  c.velocityGeneration=c.velocityGeneration+1
+  v={generation=c.velocityGeneration,session=session,epoch=c.epochs[i],sector=sector,parent=parent,sequence=0};c.velocity[i]=v
+  AddUITriggeredEvent('X4LAN_Coop','VelocityFence',{ship=i,generation=v.generation,session=session,epoch=v.epoch,enabled=true})
+ end
+ local changed=not v.linear
+ if v.linear then for n=1,3 do if math.abs(linear[n]-v.linear[n])>.0001 then changed=true end end end
+ -- Changed vectors, especially the packet-loss freeze, never wait for a timer.
+ if changed or now>=(v.next or 0) then
+  v.next=now+.1;v.sequence=v.sequence+1;v.linear={linear[1],linear[2],linear[3]}
+  AddUITriggeredEvent('X4LAN_Coop','Velocity',{ship=i,generation=v.generation,session=v.session,epoch=v.epoch,
+   sequence=v.sequence,sector=A.id(sector),parent=A.id(parent),x=linear[1],y=linear[2],z=linear[3],expires=GetCurTime()+.3})
+ end
+end
 local function stopFire2(i)
  local q=c.fire2[i]
  if q and (q.on[1] or q.on[2]) then AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,epoch=q.epoch,primary=false,secondary=false,primaryShots=0,secondaryShots=0,primaryGroup=q.groups[1],secondaryGroup=q.groups[2]}) end
@@ -115,6 +148,7 @@ function c.receive(f,now)
   end
   for i=1,2 do
    if c.epochs[i]~=epochs[i] or c.owners[i]~=owners[i] then
+    clearVelocity(i)
     if c.remote[i] and c.remote[i].firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
     stopFire2(i);c.fire2[i]=nil;c.fire2Seq[i]=0;c.triggerShots[i]={0,0}
     c.remote[i]=nil;c.seq[i]=0;c.shots[i]=0;c.motion=c.motion or {};c.motion[i]=nil
@@ -134,6 +168,7 @@ function c.receive(f,now)
   local r=c.remote[entity]
   if r and seq<=r.seq then return true end
   if not r or r.sector~=name then
+   clearVelocity(entity)
    r={samples={},fire=fire,sector=name};c.remote[entity]=r
   end
   if modern then
@@ -259,7 +294,7 @@ local function publishMetrics(now)
  end
 end
 function c.frame(now)
- if not c.ready or not s.client or not s.client.lease then return end
+ if not c.ready or not s.client or not s.client.lease then c.stopVelocity(false);return end
  local controlled=c.entity(C.GetPlayerControlledShipID());local aboard=c.entity(C.GetPlayerContainerID());c.controlled=controlled
  if now>=(c.nextCrew or 0) then
   c.nextCrew=now+.1;c.crewSeq=c.crewSeq+1
@@ -267,6 +302,7 @@ function c.frame(now)
  end
  publishMetrics(now)
  if pauseBoundary(now) then
+  c.stopVelocity(false)
   -- FIRE2 never resumes from pre-pause history: stop active fire and drop queued edges.
   for i in pairs(c.fire2) do stopFire2(i) end
   return
@@ -299,8 +335,7 @@ function c.frame(now)
   end
  end
  for i=1,2 do
-  local r=c.remote[i];local ship=c.ships[i];local p=render(r,now)
-  fire2Frame(i,r,ship,now)
+  local r=c.remote[i];local ship=c.ships[i];local p,linear=render(r,now);local velocityApplied=false
   if r and r.firing and (not p or now>(r.fireDeadline or 0)) then r.firing=false;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
   if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) then
    if (r.fireDeadline or 0)>now and not r.firing then r.firing=true;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=true}) end
@@ -333,14 +368,23 @@ function c.frame(now)
       end
      end
      if changed then C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));r.applied=p end
+     if C.GetPlayerControlledShipID()~=ship and linear then
+      applyVelocity(i,sector,linear,now);velocityApplied=true
+     end
     end
    end
   end
+  if not velocityApplied then clearVelocity(i) end
+  -- Queue physical motion before replaying fire for this rendered pose.
+  fire2Frame(i,r,ship,now)
  end
 end
 RegisterEvent('X4LAN_Coop.Ready',function() c.ready=true;log('cooperative navigation ready') end)
 RegisterEvent('X4LAN_Coop.Docks',function(_,payload)
- local a,b=payload:match('^(%d)|(%d)$');if a and tonumber(a)<=2 and tonumber(b)<=2 then c.docks={tonumber(a),tonumber(b)} end
+ local a,b=payload:match('^(%d)|(%d)$');if a and tonumber(a)<=2 and tonumber(b)<=2 then
+  c.docks={tonumber(a),tonumber(b)}
+  for i=1,2 do if c.docks[i]~=0 then clearVelocity(i) end end
+ end
 end)
 RegisterEvent('X4LAN_Coop.Shot',function(_,payload)
  -- Payload 'n' (legacy) or 'n|p' / 'n|s': the shot came from the active primary or secondary group.

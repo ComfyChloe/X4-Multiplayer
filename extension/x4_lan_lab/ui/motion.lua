@@ -54,8 +54,10 @@ function M.render(track,now,delay)
  if not samples or #samples==0 then return nil end
  local target=now-track.offset-(delay or M.delay)
  local first,last=samples[1],samples[#samples]
- local p={}
- if target<=first.time then for i=1,6 do p[i]=first.pose[i] end;return p end
+ local p={};local velocity={0,0,0}
+ -- Optional second result: the derivative of rendered translation. Pose-only
+ -- callers retain their API; Euler rates are not a native angular vector.
+ if target<=first.time then for i=1,6 do p[i]=first.pose[i] end;return p,velocity end
  for n=2,#samples do
   local a,b=samples[n-1],samples[n]
   if target<=b.time then
@@ -63,16 +65,18 @@ function M.render(track,now,delay)
    for i=1,6 do
     local delta=b.pose[i]-a.pose[i]
     p[i]=a.pose[i]+(i>3 and M.angle(delta) or delta)*t
+    if i<=3 then velocity[i]=delta/(b.time-a.time) end
     if i>3 then p[i]=M.angle(p[i]) end
    end
-   return p
+   return p,velocity
   end
  end
  -- After packet loss, freeze at the bounded prediction; never snap back to last pose.
  local dt=math.min(M.horizon,math.max(0,target-last.time))
  for i=1,6 do
   p[i]=last.pose[i]+last.velocity[i]*dt
+  if i<=3 and target-last.time<M.horizon then velocity[i]=last.velocity[i] end
   if i>3 then p[i]=M.angle(p[i]) end
  end
- return p
+ return p,velocity
 end
