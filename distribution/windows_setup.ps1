@@ -64,11 +64,54 @@ function Assert-Game([string]$Path, [string]$Build) {
     if (!$m.Success -or $m.Groups[1].Value -ne $Build) { throw ('Steam build does not match this package. Expected: ' + $Build + '. Do not test with different builds.') }
 }
 function Assert-IPv4([string]$Address, [bool]$AllowLoopback = $false) {
-    if ($Address -notmatch '^(\d{1,3}\.){3}\d{1,3}$') { throw 'Enter an IPv4 address such as 192.168.1.25 or the host ZeroTier IPv4.' }
-    foreach ($part in $Address.Split('.')) { if ([int]$part -gt 255) { throw 'Invalid IPv4 address.' } }
-    $ip = [System.Net.IPAddress]::Parse($Address)
-    if ((!$AllowLoopback -and [System.Net.IPAddress]::IsLoopback($ip)) -or $Address -eq '0.0.0.0') { throw 'Enter the host LAN or ZeroTier IP, not localhost.' }
-    return $ip.ToString()
+    # Validate the dotted decimal text itself. .NET Framework IPAddress.Parse reads
+    # leading-zero octets as octal, so 192.168.010.5 would silently become .8.5.
+    $octet = '(25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9]?[0-9])'
+    if ($Address -notmatch ('^' + $octet + '(\.' + $octet + '){3}$')) { throw 'Enter an IPv4 address such as 192.168.1.25 or the host ZeroTier IPv4, without leading zeros.' }
+    $first = [int]$Address.Split('.')[0]
+    if ($first -eq 0) { throw 'Enter the host LAN or ZeroTier IP, not localhost or 0.0.0.0.' }
+    if ($first -ge 224) { throw 'Enter the host LAN or ZeroTier IP, not a broadcast, multicast or reserved address.' }
+    if (!$AllowLoopback -and $first -eq 127) { throw 'Enter the host LAN or ZeroTier IP, not localhost.' }
+    return $Address
+}
+function Get-DocumentsFolder { return [Environment]::GetFolderPath('MyDocuments') }
+function Read-Utf8Text([string]$Path) {
+    # Windows PowerShell 5.1 Get-Content reads BOM-less UTF-8 as ANSI.
+    return [IO.File]::ReadAllText($Path, $Utf8)
+}
+function Get-ConfigValue([xml]$Config, [string]$Key) {
+    $node = $Config.DocumentElement.SelectSingleNode($Key)
+    if ($null -eq $node) { return $null }
+    return $node.InnerText
+}
+function Set-ConfigHost([string]$Text, [string]$Address) {
+    # Internal guest packages carry the placeholder; the public launcher writes the
+    # concrete host before calling Install. Both must name exactly one host entry.
+    $entries = [regex]::Matches($Text, '(?m)^\s*host\s*=\s*"([^"]*)"\s*,?\s*$')
+    if ($entries.Count -ne 1) { throw 'The package mod config.lua must contain exactly one host entry. Use the original package.' }
+    $value = $entries[0].Groups[1]
+    if ($value.Value -eq 'SET_HOST_IP_DURING_INSTALL') {
+        return $Text.Substring(0, $value.Index) + $Address + $Text.Substring($value.Index + $value.Length)
+    }
+    if ($value.Value -ne $Address) { throw ('The package mod is configured for host ' + $value.Value + ', not ' + $Address + '. Use the original package.') }
+    return $Text
+}
+function Test-SameVolume([string]$First, [string]$Second) {
+    return [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($First)) -eq [IO.Path]::GetPathRoot([IO.Path]::GetFullPath($Second))
+}
+# Separate steps so the temporary-fixture tests can inject failures.
+function Copy-ModTree([string]$Source, [string]$Destination) { Copy-Item -LiteralPath $Source -Destination $Destination -Recurse }
+function Publish-StagedMod([string]$Staging, [string]$Target) { Move-Item -LiteralPath $Staging -Destination $Target }
+function Write-InstallationState([string]$Path, [string]$Text) {
+    # A unique temporary name per attempt: never reuse or delete a file this
+    # attempt did not create.
+    $temp = $Path + '.' + [Guid]::NewGuid().ToString('N') + '.tmp'
+    try {
+        [IO.File]::WriteAllText($temp, $Text, $Utf8)
+        Move-Item -LiteralPath $temp -Destination $Path -Force
+    } finally {
+        if (Test-Path -LiteralPath $temp) { Remove-Item -LiteralPath $temp -Force }
+    }
 }
 function Initialize-ProfileMetadata {
     if ('X4Lan.ProfileMetadata' -as [type]) { return }
@@ -170,27 +213,42 @@ function Install-Package {
     if (!$address) { $address = Read-Host 'Host IP (LAN or ZeroTier; shown in the server window)' }
     $localHost = $pkg.PSObject.Properties['channel'] -and $pkg.channel -eq 'public' -and $pkg.slot -eq 'p1'
     $address = Assert-IPv4 $address.Trim() ([bool]$localHost)
-    $documents = [Environment]::GetFolderPath('MyDocuments')
+    $documents = Get-DocumentsFolder
     if (!$documents) { throw 'The Windows Documents folder could not be located.' }
     $profile = Join-Path $documents ('Egosoft\X4\' + $ProfileId)
     Assert-EmptyTestProfile $profile
     $target = Join-Path $game 'extensions\x4_lan_lab'
     if (Test-Path -LiteralPath $target) { throw ('The mod folder already exists. Remove it with the original package first: ' + $target) }
     $configPath = Join-Path $profile 'config.xml'
-    if (Test-Path -LiteralPath $configPath) {
+    $configExisted = Test-Path -LiteralPath $configPath
+    if ($configExisted) {
         Assert-SafeProfileItem $configPath
-        [xml]$config = Get-Content -Raw -LiteralPath $configPath
+        [xml]$config = Read-Utf8Text $configPath
     } else { [xml]$config = '<root />' }
     if ($config.DocumentElement.Name -ne 'root') { throw 'Unknown config.xml format.' }
+    # Validate the mod configuration before anything is written.
+    $lua = Set-ConfigHost (Read-Utf8Text (Join-Path $PackageRoot 'extension\x4_lan_lab\ui\config.lua')) $address
     $backup = Join-Path $PackageRoot ('backups\' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
     New-Item -ItemType Directory -Force -Path $backup | Out-Null
-    if (Test-Path -LiteralPath $configPath) { Copy-Item -LiteralPath $configPath -Destination (Join-Path $backup 'config.xml') }
-    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $target) | Out-Null
-    Copy-Item -LiteralPath (Join-Path $PackageRoot 'extension\x4_lan_lab') -Destination $target -Recurse
+    $backupConfig = Join-Path $backup 'config.xml'
+    if ($configExisted) { Copy-Item -LiteralPath $configPath -Destination $backupConfig }
+    $statePath = Join-Path $PackageRoot 'installation.json'
+    $previousState = $null
+    if (Test-Path -LiteralPath $statePath) { $previousState = [IO.File]::ReadAllBytes($statePath) }
+    $extensions = Split-Path -Parent $target
+    $extensionsCreated = !(Test-Path -LiteralPath $extensions)
+    $profileCreated = !(Test-Path -LiteralPath $profile)
+    $tempConfig = Join-Path $profile 'config.x4lan.tmp'
+    $tempConfigExisted = Test-Path -LiteralPath $tempConfig
+    # Stage on the game volume so publishing the mod is a single rename.
+    $staging = Join-Path $extensions ('.x4lan-staging-' + [Guid]::NewGuid().ToString('N'))
+    $configReplaced = $false
+    $published = $false
     try {
-        $lua = Join-Path $target 'ui\config.lua'
-        $text = (Get-Content -Raw -LiteralPath $lua).Replace('SET_HOST_IP_DURING_INSTALL', $address)
-        [IO.File]::WriteAllText($lua, $text, $Utf8)
+        New-Item -ItemType Directory -Force -Path $extensions | Out-Null
+        Copy-ModTree (Join-Path $PackageRoot 'extension\x4_lan_lab') $staging
+        [IO.File]::WriteAllText((Join-Path $staging 'ui\config.lua'), $lua, $Utf8)
+        [IO.File]::WriteAllText((Join-Path $staging '.x4lan-package-id'), $pkg.package_id, $Utf8)
         New-Item -ItemType Directory -Force -Path $profile | Out-Null
         foreach ($key in @('autosave','uisafemode')) {
             $node = $config.DocumentElement.SelectSingleNode($key)
@@ -198,16 +256,32 @@ function Install-Package {
             $node.InnerText = 'false'
         }
         Set-TestGraphics $config | Out-Null
-        $tempConfig = Join-Path $profile 'config.x4lan.tmp'
         Assert-SafeProfileItem $tempConfig
         $config.Save($tempConfig)
         Move-Item -LiteralPath $tempConfig -Destination $configPath -Force
-        [IO.File]::WriteAllText((Join-Path $target '.x4lan-package-id'), $pkg.package_id, $Utf8)
+        $configReplaced = $true
+        Publish-StagedMod $staging $target
+        $published = $true
         $state = @{ game=$game; profile=$profile; steam=(Join-Path $steam 'steam.exe'); server=$address; package_id=$pkg.package_id; version=(Get-PackageVersion) }
-        [IO.File]::WriteAllText((Join-Path $PackageRoot 'installation.json'), ($state | ConvertTo-Json), $Utf8)
+        Write-InstallationState $statePath ($state | ConvertTo-Json)
     } catch {
-        Remove-Item -LiteralPath $target -Recurse -Force # Only the new directory just copied.
-        throw
+        $failure = $_
+        # Undo only what this run created; restore the exact prior config and state.
+        $problems = @()
+        $steps = @(
+            { if ($published -and (Test-Path -LiteralPath $target)) { Remove-Item -LiteralPath $target -Recurse -Force } },
+            { if (Test-Path -LiteralPath $staging) { Remove-Item -LiteralPath $staging -Recurse -Force } },
+            { if ($extensionsCreated -and (Test-Path -LiteralPath $extensions) -and !(Get-ChildItem -LiteralPath $extensions -Force)) { Remove-Item -LiteralPath $extensions -Force } },
+            { if (!$tempConfigExisted -and (Test-Path -LiteralPath $tempConfig)) { Remove-Item -LiteralPath $tempConfig -Force } },
+            { if ($configReplaced) { if ($configExisted) { [IO.File]::Copy($backupConfig, $configPath, $true) } else { Remove-Item -LiteralPath $configPath -Force } } },
+            { if ($profileCreated -and (Test-Path -LiteralPath $profile) -and !(Get-ChildItem -LiteralPath $profile -Force)) { Remove-Item -LiteralPath $profile -Force } },
+            { if ($null -ne $previousState) { [IO.File]::WriteAllBytes($statePath, $previousState) } elseif (Test-Path -LiteralPath $statePath) { Remove-Item -LiteralPath $statePath -Force } }
+        )
+        foreach ($step in $steps) {
+            try { & $step } catch { $problems += $_.Exception.Message }
+        }
+        if ($problems.Count) { throw ($failure.Exception.Message + ' Rollback incomplete: ' + ($problems -join '; ') + ' Backup: ' + $backup) }
+        throw $failure
     }
     Write-Host 'Installed. Existing player profiles were not modified.'
     Write-Host ('Test profile: ' + $profile)
@@ -221,9 +295,9 @@ function Start-TestGame {
     Assert-EmptyTestProfile $state.profile
     $configPath = Join-Path $state.profile 'config.xml'
     Assert-SafeProfileItem $configPath
-    [xml]$config = Get-Content -Raw -LiteralPath $configPath
+    [xml]$config = Read-Utf8Text $configPath
     if ($config.DocumentElement.Name -ne 'root') { throw 'Unknown config.xml format.' }
-    if ($config.root.autosave -ne 'false' -or $config.root.uisafemode -ne 'false') { throw 'The test profile must keep autosave=false and uisafemode=false. See INSTALL.html.' }
+    if ((Get-ConfigValue $config 'autosave') -ne 'false' -or (Get-ConfigValue $config 'uisafemode') -ne 'false') { throw 'The test profile must keep autosave=false and uisafemode=false. See INSTALL.html.' }
     if (Set-TestGraphics $config) {
         $backup = Join-Path $PackageRoot ('backups\graphics-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
         New-Item -ItemType Directory -Force -Path $backup | Out-Null
@@ -276,16 +350,25 @@ function Write-Diagnose {
     } else { Write-Host 'No game log found yet.' }
     Write-Host ('Diagnostics folder: ' + $logs)
 }
+function Get-RemovedModArchive([string]$Game) {
+    # A directory move is a rename and cannot cross volumes. Archive beside the
+    # package when possible, otherwise in the game folder outside extensions\.
+    $name = 'removed-mod-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff')
+    $packageArchive = Join-Path $PackageRoot ('backups\' + $name)
+    if (Test-SameVolume $Game $packageArchive) { return $packageArchive }
+    return Join-Path $Game ('x4lan-backups\' + $name)
+}
 function Remove-Package {
     Assert-Closed
     $state = Read-State
     $target = Join-Path $state.game 'extensions\x4_lan_lab'
     $marker = Join-Path $target '.x4lan-package-id'
     if (!(Test-Path -LiteralPath $marker) -or (Get-Content -Raw -LiteralPath $marker) -ne $state.package_id) { throw 'The installed mod cannot be matched to this package. No files were removed.' }
-    $destination = Join-Path $PackageRoot ('backups\removed-mod-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
+    $destination = Get-RemovedModArchive $state.game
     New-Item -ItemType Directory -Force -Path (Split-Path -Parent $destination) | Out-Null
     Move-Item -LiteralPath $target -Destination $destination
-    Write-Host 'Test mod removed from X4 and archived in the package folder. The test profile was retained; no saves were deleted.'
+    Write-Host 'Test mod removed from X4. The test profile was retained; no saves were deleted.'
+    Write-Host ('Removed mod archived in: ' + $destination)
 }
 try {
     Write-Host ('X4 LAN Lab ' + (Get-PackageVersion))
