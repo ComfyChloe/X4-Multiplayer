@@ -6,13 +6,20 @@
    <conditions><event_ui_triggered screen="'X4LAN_ProjectileProbe'" control="'Setup'"/></conditions>
    <actions>
     <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{2}"/>
+    <set_value name="$serial" exact="0"/>
     <add_to_group groupname="$weapons" list="$ship.weapons.operational.list"/>
     <raise_lua_event name="'X4LAN_ProjectileProbe.Ready'"/>
    </actions>
    <cues>
     <cue name="Projectile" instantiate="true">
      <conditions><event_weapon_fired group="$weapons"/></conditions>
-     <actions><raise_lua_event name="'X4LAN_ProjectileProbe.Projectile'" param="event.param"/></actions>
+     <actions>
+      <set_value name="$serial" operation="add" exact="1"/>
+      <!-- Engine .velocity is relative to the cluster, expressed in each
+           component's own rotation. It is not the sector-space NAV2 vector. -->
+      <debug_text text="'[X4LAN] PROJECTILE_PROBE readback=%s shipVx=%s shipVy=%s shipVz=%s shipSpeed=%s bulletVx=%s bulletVy=%s bulletVz=%s'.[$serial,$ship.velocity.x,$ship.velocity.y,$ship.velocity.z,$ship.speed,event.param.velocity.x,event.param.velocity.y,event.param.velocity.z]"/>
+      <raise_lua_event name="'X4LAN_ProjectileProbe.Projectile'" param="event.param"/>
+     </actions>
     </cue>
     <cue name="Velocity" instantiate="true">
      <conditions><event_ui_triggered screen="'X4LAN_ProjectileProbe'" control="'Velocity'"/></conditions>
