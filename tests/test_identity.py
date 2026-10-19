@@ -73,3 +73,41 @@ class DisplayIdentityTests(unittest.TestCase):
    I.unbind(11);assert(ffi.string(existingC.GetObjectIDCode(11))==nativeCode)
    assert(#requests==1 and requests[1].control=='Describe')
   ''')
+
+ def test_market_state_can_arrive_late_without_stopping_host_or_guest_identities(self):
+  for slot in ('p1','p2'):
+   with self.subTest(slot=slot):
+    l=LuaRuntime(unpack_returned_tuples=True)
+    l.execute('''
+     sent,requests,events={}, {}, {}
+     local api={GetObjectIDCode=function(id) return 'ABC-'..id end,GetComponentName=function(id) return 'Fixture '..id end,
+      IsComponentOperational=function(id) return id~=nil and id~=0 end,
+      GetObjectPositionInSector=function() return {x=0,y=0,z=0} end,
+      GetContextByClass=function() return 9 end,SetObjectForcedRadarVisible=function() end}
+     local ffi={C=api,cdef=function() end,string=function(v) return v end,new=function(_,_,v) return v end}
+     require=function() return ffi end
+     DebugError=function() end;ConvertIDTo64Bit=tonumber
+     RegisterEvent=function(k,f) events[k]=f end
+     AddUITriggeredEvent=function(s,c,a) requests[#requests+1]={c,a} end
+     GetComponentData=function(id,k) if k=='maxradarrange' then return 10000 end;return true,true end
+     X4LAN_CONFIG={world_sync=true}
+     X4LAN_BUBBLE_API={state={client={lease='epoch'},transport={send=function(_,p) sent[#sent+1]=p end}},
+      coop={ready=true,ships={11,12}},id=function(v) return v end,paused=function() return false end,
+      universe={ready=true,latest={epoch='epoch'},publish={},replicas={},receive=function() end,frame=function() end}}
+    ''')
+    l.globals().X4LAN_CONFIG.slot=slot
+    l.execute((UI/'universe_protocol.lua').read_text());l.execute((UI/'identity_game.lua').read_text())
+    l.execute('''
+     A=X4LAN_BUBBLE_API;U=A.universe;I=A.identity
+     U.receive({'IDENT','1','lease','epoch','1','F','3','ABC-33','4d61726b6574','1','1'},0)
+     U.frame(0);assert(not I.failed)
+     A.trade={};U.frame(.2);assert(not I.failed)
+     A.trade.state={markets={},ready=false};U.frame(.4);assert(not I.failed)
+     A.trade.state.markets[1]='33';A.trade.state.ready=true
+     U.frame(.6);assert(not I.failed)
+     if X4LAN_CONFIG.slot=='p1' then
+      local market,player=false,false
+      for _,p in ipairs(sent) do market=market or p:find('|F|3|ABC-33|',1,true);player=player or p:find('|P|1|',1,true) end
+      assert(market and player,'delayed fixture cannot stop other identities')
+     else assert(I.bound['33'] and I.bound['33'].name=='Market','queued identity binds when the fixture arrives') end
+    ''')

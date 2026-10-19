@@ -46,7 +46,8 @@ local function decode(text)
 end
 local function fixture(id)
  if id<=2 then return I.fixtures[id] end
- local value=A.trade and A.trade.markets[id-2]
+ local trade=A.trade and A.trade.state
+ local value=trade and trade.markets and trade.markets[id-2]
  return value and ConvertIDTo64Bit(A.id(value)) or nil
 end
 for i=1,2 do
