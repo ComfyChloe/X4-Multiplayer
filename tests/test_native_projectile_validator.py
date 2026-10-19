@@ -6,15 +6,16 @@ from dev.native_projectile_test import analyze
 class ProjectileValidatorTests(unittest.TestCase):
     def fixture(self):
         rows = []; controls = []; serial = 0
-        for phase, configured, vx in (('stationary',0,0),('rendered',0,0),('physical',100,100),('native',100,100)):
+        for phase_index,(phase, configured, vx) in enumerate((('stationary',0,0),('rendered',0,0),('physical',100,100),('native',100,100))):
             for _ in range(6):
                 serial += 1
+                t=100+12*phase_index+6+serial*.01
                 rows.append(f'PROJECTILE_PROBE sample={serial} phase={phase} configuredVx={configured} '
-                            f'dt=0.2 dx={vx*.2} dy=0 dz=800 vx={vx} vy=0 vz=4000')
-                controls.append(f'PROJECTILE_PROBE readback={serial} shipVx={configured} shipVy=0 shipVz=0 shipSpeed={configured} bulletVx=0 bulletVy=0 bulletVz=4000')
+                            f'startTime={t} endTime={t+.2} dt=0.2 dx={vx*.2} dy=0 dz=800 vx={vx} vy=0 vz=4000')
+                controls.append(f'PROJECTILE_PROBE readback={serial} phase={phase} gameTime={t} shipVx={configured} shipVy=0 shipVz=0 shipSpeed={configured} bulletVx=0 bulletVy=0 bulletVz=4000 forwardX=0 forwardY=0 forwardZ=1 upX=0 upY=1 upZ=0')
             for i in range(15):
                 x=0 if phase=='stationary' else i*20
-                controls.append(f'PROJECTILE_PROBE ship phase={phase} gameTime={i*.2} x={x} y=10000 z=-2000 engineSpeed={configured} yaw=0 pitch=0 roll=0')
+                controls.append(f'PROJECTILE_PROBE ship phase={phase} sourceTime={500+12*phase_index+5+i*.2} gameTime={100+12*phase_index+5+i*.2} x={x} y=10000 z=-2000 engineSpeed={configured} yaw=0 pitch=0 roll=0 beforeYaw=0 beforePitch=0 beforeRoll=0')
         return '\n'.join(controls+rows)
 
     def test_complete_measurements_report_deltas_without_gameplay_acceptance(self):
@@ -53,3 +54,14 @@ class ProjectileValidatorTests(unittest.TestCase):
 
     def test_rotating_control_is_not_an_equivalent_firing_direction(self):
         self.assertFalse(analyze(self.fixture().replace('yaw=0','yaw=0.2'))['measurement_complete'])
+
+    def test_post_correction_zero_does_not_hide_off_axis_firing(self):
+        for before,after in [('beforeYaw=0','beforeYaw=0.2'),('forwardX=0','forwardX=0.05')]:
+            with self.subTest(after=after):
+                self.assertFalse(analyze(self.fixture().replace(before,after))['measurement_complete'])
+
+    def test_shot_phase_and_time_must_correlate_with_trajectory(self):
+        log=self.fixture().replace('readback=1 phase=stationary','readback=1 phase=native')
+        self.assertFalse(analyze(log)['measurement_complete'])
+        log=self.fixture().replace('gameTime=106.01','gameTime=106.51')
+        self.assertFalse(analyze(log)['measurement_complete'])

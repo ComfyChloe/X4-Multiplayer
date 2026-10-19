@@ -22,9 +22,10 @@
       <set_value name="$bullet" exact="event.param"/>
       <set_value name="$time" exact="player.age"/>
       <set_value name="$origin" exact="$bullet.relativeposition.{$sector}"/>
+      <set_value name="$rotation" exact="$ship.relativerotation.{$sector}"/>
       <!-- Engine .velocity is relative to the cluster, expressed in each
            component's own rotation. It is not the sector-space NAV2 vector. -->
-      <debug_text text="'[X4LAN] PROJECTILE_PROBE readback=%s shipVx=%s shipVy=%s shipVz=%s shipSpeed=%s bulletVx=%s bulletVy=%s bulletVz=%s'.[$serial,$ship.velocity.x,$ship.velocity.y,$ship.velocity.z,$ship.speed,event.param.velocity.x,event.param.velocity.y,event.param.velocity.z]"/>
+      <debug_text text="'[X4LAN] PROJECTILE_PROBE readback=%s phase=%s gameTime=%s shipVx=%s shipVy=%s shipVz=%s shipSpeed=%s bulletVx=%s bulletVy=%s bulletVz=%s forwardX=%s forwardY=%s forwardZ=%s upX=%s upY=%s upZ=%s'.[$serial,$phase,$time,$ship.velocity.x,$ship.velocity.y,$ship.velocity.z,$ship.speed,event.param.velocity.x,event.param.velocity.y,event.param.velocity.z,$rotation.forward.x,$rotation.forward.y,$rotation.forward.z,$rotation.up.x,$rotation.up.y,$rotation.up.z]"/>
       <debug_text text="'[X4LAN] PROJECTILE_PROBE born=%s phase=%s configuredVx=%s x=%s y=%s z=%s gameTime=%s'.[$serial,$phase,$configuredVx,$origin.x,$origin.y,$origin.z,$time]"/>
      </actions>
      <cues><cue name="Trajectory"><delay exact="200ms"/><actions>
@@ -32,7 +33,7 @@
        <set_value name="$dt" exact="player.age - $time"/>
        <set_value name="$position" exact="$bullet.relativeposition.{$sector}"/>
        <set_value name="$dx" exact="$position.x - $origin.x"/><set_value name="$dy" exact="$position.y - $origin.y"/><set_value name="$dz" exact="$position.z - $origin.z"/>
-       <debug_text text="'[X4LAN] PROJECTILE_PROBE sample=%s phase=%s configuredVx=%s dt=%s dx=%s dy=%s dz=%s'.[$serial,$phase,$configuredVx,$dt,$dx,$dy,$dz]"/>
+       <debug_text text="'[X4LAN] PROJECTILE_PROBE sample=%s phase=%s configuredVx=%s startTime=%s endTime=%s dt=%s dx=%s dy=%s dz=%s'.[$serial,$phase,$configuredVx,$time,player.age,$dt,$dx,$dy,$dz]"/>
       </do_if>
       <do_else><debug_text text="'[X4LAN] PROJECTILE_PROBE failed=retired_before_sample serial=%s'.[$serial]"/></do_else>
      </actions></cue></cues>

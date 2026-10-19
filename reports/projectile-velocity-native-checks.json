@@ -147,12 +147,17 @@
     {
       "source": "c084ccd",
       "result": "FAIL",
-      "reason": "Lua GetObjectPositionInSector returned zero for bullets; controls also did not hold a common orientation."
+      "reason": "Lua GetObjectPositionInSector returned zero for bullets; orientation was not recorded. Native/local frame differences suggested rotation but did not prove it."
     },
     {
       "source": "743c4d1",
       "result": "FAIL",
       "reason": "144 MD typed length/time arithmetic errors; stationary/native controls rotated despite angular-velocity reset. Raw displacement was observable but this run is not accepted."
     }
-  ]
+  ],
+  "review_status": "Observed metrics only; independent firing-orientation acceptance pending",
+  "reviewed_acceptance": false,
+  "orientation_acceptance": false,
+  "historical_validator_source": "b687bb2",
+  "known_validator_gap": "The historical measurement_complete=true and zero orientation errors use post-fixture-correction angle samples, not independent orientation at firing. Raw artifacts remain unchanged."
 }
