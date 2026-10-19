@@ -59,9 +59,11 @@ class Fire2RelayTests(unittest.TestCase):
         self.assertEqual(self.forwarded(1.2), [])
 
 
+
+
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
 class Fire2AdapterTests(unittest.TestCase):
-    def make(self, groups_api=True, fire2=None):
+    def make(self, groups_api=True, fire2=True):
         l = LuaRuntime(unpack_returned_tuples=True)
         l.execute(MOCK + EXTRA)
         l.globals().X4LAN_CONFIG.slot = 'p1'
@@ -82,7 +84,7 @@ class Fire2AdapterTests(unittest.TestCase):
         for file in ('bubble_game.lua', 'motion.lua', 'coop_game.lua', 'life_game.lua'):
             l.execute((UI / file).read_text())
         l.execute('''events['X4LAN.Loaded']();now=10;frames.onUpdate();events['X4LAN_Bubble.Ready']();frames.onUpdate();events['X4LAN_Coop.Ready']()
-         C=X4LAN_BUBBLE_API.coop
+         C=X4LAN_BUBBLE_API.coop;C.sectors.cluster_14_sector001_macro=22
          function auth(rev,e2) client:receiveExtension({'AUTH','1',client.lease,tostring(rev),'p1','1','p1','p2',tostring(e2 or 1),'p2'},now) end
          function nav2(seq,time,fire,epoch)
           client:receiveExtension({'NAV2','1',client.lease,string.rep('b',32),'2',tostring(epoch or 1),tostring(seq),'cluster_14_sector001_macro',
@@ -93,39 +95,78 @@ class Fire2AdapterTests(unittest.TestCase):
            tostring(pg),tostring(sg),tostring(ps),tostring(ss)},now)
          end
          function fires(name) local out={};for _,r in ipairs(requests) do if r[2]==name then out[#out+1]=r[3] end end;return out end
+         function legacyOn() local n=0;for _,v in ipairs(fires('Fire')) do if v.on then n=n+1 end end;return n end
+         function logged(text) for _,v in ipairs(logs) do if v:find(text,1,true) then return true end end;return false end
+         function sentFire2(from) for i=from or 1,#sent do if sent[i]:find('^FIRE2|') then return sent[i] end end end
          auth(1)
         ''')
         return l
 
-    def test_sender_classifies_triggers_and_never_encodes_unknown_group(self):
+    # --- mode contract: exactly one fire protocol per session ---
+
+    def test_fire2_mode_sends_classified_triggers_and_never_encodes_unknown_group(self):
         l = self.make()
         l.execute('''
          events['X4LAN_Coop.Shot'](nil,'1|p');events['X4LAN_Coop.Shot'](nil,'1|s');events['X4LAN_Coop.Shot'](nil,'1|s');events['X4LAN_Coop.Shot'](nil,1)
          groups[11]={2,3};now=11;frames.onUpdate()
-         local f2
-         for _,p in ipairs(sent) do if p:find('^FIRE2|') then f2=p end end
-         local f={};for v in f2:gmatch('[^|]+') do f[#f+1]=v end
+         local f={};for v in sentFire2():gmatch('[^|]+') do f[#f+1]=v end
          assert(#f==11 and f[4]=='1' and f[5]=='1' and f[8]=='2' and f[9]=='3' and f[10]=='2' and f[11]=='2')
          assert(C.shots[1]==4)
          local n=#sent;groups[11]={0,1};now=12;frames.onUpdate()
-         for i=n+1,#sent do assert(not sent[i]:find('^FIRE2|'),'group 0 must not be encoded') end
+         assert(sentFire2(n+1)==nil,'group 0 must not be encoded')
         ''')
 
-    def test_first_frame_is_baseline_and_ends_nav_fire_without_replay(self):
+    def test_legacy_mode_neither_sends_nor_accepts_fire2(self):
+        for flag in (False, None):
+            with self.subTest(fire2=flag):
+                l = self.make(fire2=flag)
+                l.execute('''
+                 events['X4LAN_Coop.Shot'](nil,'1|p');now=11;frames.onUpdate();assert(sentFire2()==nil,'legacy mode never sends FIRE2')
+                 nav2(1,50,0);fire2(1,50,1,1,0,0);fire2(2,50.05,1,1,1,0)
+                 assert(next(C.fire2)==nil,'FIRE2 ignored in legacy mode')
+                 now=11.05;nav2(2,50.05,1);frames.onUpdate();assert(legacyOn()==1 and #fires('Fire2')==0)
+                ''')
+
+    def test_fire2_mode_never_uses_nav_counter(self):
         l = self.make()
         l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
-         nav2(1,50,0);nav2(2,50.05,3);frames.onUpdate();assert(C.remote[2].firing)
-         fire2(1,50.05,1,1,7,2);frames.onUpdate()
-         assert(not C.remote[2].firing and #fires('Fire2')==0,'baseline must not replay counters')
-         local offs=#fires('Fire')
-         nav2(3,50.1,9);now=10.2;frames.onUpdate();assert(#fires('Fire')==offs and not C.remote[2].firing,'NAV counter disabled after FIRE2')
+         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate()
+         assert(legacyOn()==0 and not C.remote[2].firing,'no NAV fire before any FIRE2')
+         fire2(1,50.05,1,1,1,0);now=10.1;nav2(3,50.1,2);fire2(2,50.1,1,1,2,0);now=10.3;frames.onUpdate()
+         local f=fires('Fire2');assert(legacyOn()==0 and #f==1 and f[1].primary==true)
+        ''')
+
+    def test_fire2_mode_without_group_api_disables_remote_fire_with_diagnostic(self):
+        l = self.make(groups_api=False)
+        l.execute('''
+         assert(logged('FIRE2_UNAVAILABLE'))
+         nav2(1,50,0);fire2(1,50,1,1,0,0);now=10.05;nav2(2,50.05,1);fire2(2,50.05,1,1,1,0);now=10.3;frames.onUpdate()
+         assert(next(C.fire2)==nil and legacyOn()==0 and #fires('Fire2')==0,'no silent protocol change')
+         now=11;frames.onUpdate();assert(sentFire2()==nil)
+        ''')
+
+    # --- baseline, playback and reordering ---
+
+    def test_baseline_adopts_counters_without_replay(self):
+        l = self.make()
+        l.execute('''
+         nav2(1,50,3);fire2(1,50,1,1,7,2);now=10.3;frames.onUpdate()
+         assert(#fires('Fire2')==0,'baseline must not replay counters')
+        ''')
+
+    def test_mixed_trigger_reorder_plays_each_new_shot_once(self):
+        l = self.make()
+        l.execute('''
+         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate()
+         fire2(1,50,1,1,0,0);now=10.10;nav2(3,50.10,2);fire2(2,50.10,1,1,1,1);now=10.26;frames.onUpdate()
+         local f=fires('Fire2');assert(legacyOn()==0 and #f==1 and f[1].primary==true and f[1].secondary==true)
+         now=10.3;fire2(3,50.3,1,1,1,1);now=10.7;frames.onUpdate()
+         f=fires('Fire2');assert(f[#f].primary==false and f[#f].secondary==false,'no replay, released')
         ''')
 
     def test_trigger_edges_play_at_nav2_source_time_and_apply_groups(self):
         l = self.make()
         l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
          nav2(1,50,0);fire2(1,50,1,1,0,0)
          now=10.05;nav2(2,50.05,0);fire2(2,50.05,2,1,1,0)
          frames.onUpdate();assert(#fires('Fire2')==0,'edge waits for the motion playback delay')
@@ -139,103 +180,54 @@ class Fire2AdapterTests(unittest.TestCase):
     def test_stale_edges_and_silence_stop_fire_even_while_motion_freezes(self):
         l = self.make()
         l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
          nav2(1,50,0);fire2(1,50,1,1,0,0);now=10.05;fire2(2,50.05,1,1,0,1);now=10.3;frames.onUpdate()
          local f=fires('Fire2');assert(#f==1 and f[1].secondary==true)
          now=10.75;frames.onUpdate();f=fires('Fire2');assert(f[#f].secondary==false,'silence stops fire')
-         -- A delayed old edge outside the motion window is dropped, never fired late.
          local q=C.fire2[2];q.at=now;q.events={{time=40,trigger=1,group=1}};frames.onUpdate()
-         assert(#q.events==0 and q.deadline[1]==0)
+         assert(#q.events==0 and q.deadline[1]==0,'old queued edge dropped, never fired late')
         ''')
 
-    def test_nav_ahead_of_delayed_baseline_never_shows_a_shot_twice(self):
-        l = self.make()
-        l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
-         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate()
-         assert(#fires('Fire')==1 and fires('Fire')[1].on==true,'NAV showed the one shot')
-         fire2(1,50,1,1,0,0);fire2(2,50.05,1,1,1,0)
-         now=10.21;frames.onUpdate();now=10.4;frames.onUpdate()
-         assert(#fires('Fire2')==0,'the shot NAV displayed must not replay through FIRE2')
-         now=10.45;nav2(3,50.45,2);fire2(3,50.45,1,1,2,0);now=10.65;frames.onUpdate()
-         local f=fires('Fire2');assert(#f==1 and f[1].primary==true,'the next real shot still plays once')
-        ''')
-
-    def test_baseline_ahead_of_nav_shows_the_shot_once_through_fire2(self):
-        l = self.make()
-        l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
-         nav2(1,50,0);fire2(1,50,1,1,0,0);now=10.05;fire2(2,50.05,1,1,1,0);nav2(2,50.05,1)
-         now=10.21;frames.onUpdate()
-         local on=0;for _,v in ipairs(fires('Fire')) do if v.on then on=on+1 end end
-         assert(on==0 and #fires('Fire2')==1 and fires('Fire2')[1].primary==true)
-        ''')
+    # --- pause ---
 
     def test_pause_drops_queued_active_and_paused_history(self):
         l = self.make()
         l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
          nav2(1,50,0);fire2(1,50,1,1,0,0)
-         -- queued edge, then pause: cleared, never resumes
          now=10.05;fire2(2,50.05,1,1,1,0);paused=true;now=10.12;frames.onUpdate()
          assert(#C.fire2[2].events==0)
          paused=false;now=10.21;frames.onUpdate();assert(#fires('Fire2')==0,'pre-pause edge resumed')
-         -- active fire, then pause: stopped
-         now=10.3;fire2(3,50.3,1,1,2,0);now=10.5;frames.onUpdate();assert(fires('Fire2')[1].primary==true)
+         now=10.3;nav2(2,50.3,0);fire2(3,50.3,1,1,2,0);now=10.5;frames.onUpdate();assert(fires('Fire2')[1].primary==true)
          paused=true;now=10.55;frames.onUpdate();local f=fires('Fire2');assert(f[#f].primary==false,'pause stops fire')
-         -- counters received while paused are adopted, not queued
-         now=10.6;fire2(4,50.6,1,1,5,0);assert(#C.fire2[2].events==0 and C.fire2[2].shown==5)
-         paused=false;now=10.65;fire2(5,50.65,1,1,5,0);now=10.9;frames.onUpdate()
+         now=10.6;fire2(4,50.6,1,1,5,0);assert(#C.fire2[2].events==0)
+         paused=false;now=10.65;frames.onUpdate();fire2(5,50.62,1,1,5,0);now=10.9;frames.onUpdate()
          assert(#fires('Fire2')==#f,'no fire from paused history')
-         now=10.95;fire2(6,50.95,1,1,6,0);now=11.15;frames.onUpdate()
+         now=10.95;nav2(3,50.95,0);fire2(6,50.95,1,1,6,0);now=11.15;frames.onUpdate()
          f=fires('Fire2');assert(f[#f].primary==true,'fresh post-resume shot plays')
         ''')
 
-    def test_missing_group_api_ignores_fire2_and_keeps_nav_fallback(self):
-        l = self.make(groups_api=False)
-        l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
-         nav2(1,50,0);fire2(1,50,1,1,0,0);assert(next(C.fire2)==nil,'no epoch latched')
-         now=10.05;nav2(2,50.05,1);frames.onUpdate();assert(C.remote[2].firing,'NAV fallback active')
-         local n=#sent;now=11;frames.onUpdate()
-         for i=n+1,#sent do assert(not sent[i]:find('^FIRE2|')) end
-        ''')
-
-    def test_fire2_flag_disables_nav_fire_from_startup(self):
-        l = self.make(fire2=True)
-        l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
-         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate()
-         assert(#fires('Fire')==0 and not C.remote[2].firing,'no NAV fire before any FIRE2')
-         fire2(1,50.05,1,1,1,0);now=10.1;fire2(2,50.1,1,1,2,0);now=10.3;frames.onUpdate()
-         local f=fires('Fire2');assert(#f==1 and f[1].primary==true)
-         auth(2,2);nav2(1,60,0,2);nav2(2,60.05,1,2);frames.onUpdate();assert(#fires('Fire')==0,'still no NAV fire in a new epoch')
-        ''')
-
-    def test_fire2_flag_without_api_logs_and_keeps_nav(self):
-        l = self.make(groups_api=False, fire2=True)
-        l.execute('''
-         local found=false;for _,v in ipairs(logs) do if v:find('FIRE2_UNAVAILABLE',1,true) then found=true end end;assert(found)
-         C.sectors.cluster_14_sector001_macro=22
-         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate();assert(C.remote[2].firing)
-        ''')
-
-    def test_fire2_false_keeps_adaptive_selection(self):
-        l = self.make(fire2=False)
-        l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
-         nav2(1,50,0);now=10.05;nav2(2,50.05,1);frames.onUpdate();assert(C.remote[2].firing)
-        ''')
-
-    def test_epoch_change_clears_fire2_and_restores_nav_fallback(self):
+    def test_pre_pause_packet_arriving_after_resume_never_fires(self):
         l = self.make()
         l.execute('''
-         C.sectors.cluster_14_sector001_macro=22
+         nav2(1,50,0);fire2(1,50,1,1,0,0)
+         paused=true;now=10.12;frames.onUpdate()
+         paused=false;now=10.21;frames.onUpdate()
+         fire2(2,50.05,1,1,1,0);now=10.22;frames.onUpdate();now=10.5;frames.onUpdate()
+         assert(#fires('Fire2')==0,'in-flight pre-pause shot must not start fire')
+         now=10.6;nav2(2,50.6,0);fire2(3,50.6,1,1,2,0);now=10.8;frames.onUpdate()
+         local f=fires('Fire2');assert(#f==1 and f[1].primary==true,'subsequent fresh edge plays')
+        ''')
+
+    # --- authority ---
+
+    def test_epoch_change_clears_fire2_and_rebaselines(self):
+        l = self.make()
+        l.execute('''
          nav2(1,50,0);fire2(1,50,1,1,0,0);now=10.05;fire2(2,50.05,1,1,1,0);now=10.3;frames.onUpdate()
          assert(#fires('Fire2')==1)
          auth(2,2);assert(C.fire2[2]==nil)
          local f=fires('Fire2');assert(f[#f].primary==false,'epoch change stops FIRE2 fire')
-         nav2(1,60,0,2);nav2(2,60.05,1,2);frames.onUpdate();assert(C.remote[2].firing,'NAV fallback again for the new epoch')
+         nav2(1,60,0,2);nav2(2,60.05,1,2);fire2(1,60.05,1,1,9,0,2);now=10.6;frames.onUpdate()
+         assert(legacyOn()==0 and #fires('Fire2')==#f,'new epoch: no NAV fire, no replay of the new baseline')
         ''')
 
 

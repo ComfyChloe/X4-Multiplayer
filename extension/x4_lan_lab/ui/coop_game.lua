@@ -4,27 +4,26 @@
 -- tracks; motion.lua also resets after pauses or discontinuities and bounds prediction.
 -- FIRE2 (entity|epoch|seq|sourceTime|primaryGroup|secondaryGroup|primaryShots|secondaryShots)
 -- mirrors the active weapon groups (C API numbering 1-4) and per-trigger shot counters,
--- played back on the NAV2 source clock. The first FIRE2 of an owner epoch is a baseline:
--- it never replays earlier shots and ends the NAV shot-counter path for that epoch.
--- Counter mapping: the NAV fire counter equals primaryShots+secondaryShots for the same
--- epoch, so shots already shown through NAV (even if NAV overtook a delayed baseline) are
--- reconciled and never shown again. A local pause stops FIRE2 fire, clears queued edges and
--- adopts counters received meanwhile without queuing them; only post-resume shots play.
--- Without FIRE2 (older peers) the NAV/NAV2 shot counter remains the fire trigger.
+-- played back on the NAV2 source clock.
+-- Mode contract (one fire protocol per session, chosen by the matched package config):
+--  fire2 absent/false: legacy NAV/NAV2 shot counter only; FIRE2 is neither sent nor accepted.
+--  fire2=true: FIRE2 only, from startup; the NAV counter never triggers fire. Without the
+--   weapon-group API remote fire is disabled with a FIRE2_UNAVAILABLE diagnostic (no fallback).
+-- The first FIRE2 of an owner epoch is a baseline and never replays earlier shots.
+-- A local pause stops fire and drops queued edges. On resume, every FIRE2 frame whose source
+-- time is not newer than the resume cutoff (NAV2 source clock) is adopted without playing.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
 if not cfg or not cfg.coop or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
 pcall(ffi.cdef,[[uint32_t GetDefensibleActiveWeaponGroup(UniverseID,bool);
 void SetDefensibleActiveWeaponGroup(UniverseID,bool,uint32_t);]])
--- Without the weapon-group API, FIRE2 is neither sent nor accepted: received FIRE2 frames
--- are ignored, so no epoch is latched and the NAV shot-counter path stays in use.
 local function api(name) local ok,f=pcall(function() return C[name] end);return ok and f or nil end
 local getGroup,setGroup=api('GetDefensibleActiveWeaponGroup'),api('SetDefensibleActiveWeaponGroup')
--- Config contract: fire2=true (boolean) selects FIRE2 from startup and disables the NAV
--- shot-counter fallback entirely; absent or false keeps the adaptive per-epoch selection.
--- fire2=true without the weapon-group API is logged and falls back to the NAV path.
-local fire2Only=cfg.fire2==true and getGroup~=nil and setGroup~=nil
-if cfg.fire2==true and not fire2Only then DebugError('[X4LAN] FIRE2_UNAVAILABLE: weapon-group API missing; using NAV shot counter') end
+local fire2Mode=cfg.fire2==true
+local fire2Ready=fire2Mode and getGroup~=nil and setGroup~=nil
+if fire2Mode and not fire2Ready then
+ DebugError('[X4LAN] FIRE2_UNAVAILABLE: weapon-group API missing; remote fire disabled (no NAV fallback in fire2 mode)')
+end
 local M=assert(X4LAN_MOTION,'motion buffer missing')
 local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0},
  fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}}}
@@ -113,10 +112,8 @@ function c.receive(f,now)
    r.track=track
   else r.track=nil end
   r.seq,r.at,r.dock=seq,now,dock
-  -- Once FIRE2 is selected for this owner epoch, the NAV counter never triggers fire.
-  -- With cfg.fire2==true (matched packages), it never does: no transition can replay a shot.
-  local q=c.fire2[entity]
-  if fire>r.fire and not fire2Only and not (q and q.epoch==epoch) then r.fireDeadline=now+.35 end;r.fire=fire
+  -- In fire2 mode the NAV counter never triggers fire; there is no protocol transition.
+  if fire>r.fire and not fire2Mode then r.fireDeadline=now+.35 end;r.fire=fire
   r.samples[#r.samples+1]={time=now,pose=p};while #r.samples>5 do table.remove(r.samples,1) end
   return true
  elseif f[1]=='FIRE2' then
@@ -125,28 +122,21 @@ function c.receive(f,now)
   local time=numeric(f[8],1e12);local groups={integer(f[9],4),integer(f[10],4)};local shots={integer(f[11]),integer(f[12])}
   if not entity or entity<1 or not epoch or not seq or not time or time<0 then return true end
   if not groups[1] or groups[1]<1 or not groups[2] or groups[2]<1 or not shots[1] or not shots[2] then return true end
-  if not (getGroup and setGroup) then return true end
+  if not fire2Ready then return true end
   if c.owners[entity]==cfg.slot or c.epochs[entity]~=epoch then return true end
   local q=c.fire2[entity]
   if not q or q.epoch~=epoch then
-   -- Baseline: adopt the counters without replaying them, and end NAV-driven fire now.
-   -- 'shown' is the total already displayed: the NAV counter may be ahead of a delayed baseline.
-   local r=c.remote[entity]
-   if r and r.firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=entity,on=false}) end
-   if r then r.firing=false;r.fireDeadline=0 end
-   local shown=math.max(shots[1]+shots[2],r and r.fire or 0)
-   c.fire2[entity]={epoch=epoch,seq=seq,time=time,shots=shots,groups=groups,at=now,shown=shown,events={},on={false,false},deadline={0,0}}
+   -- Baseline: adopt the counters without replaying them.
+   c.fire2[entity]={epoch=epoch,seq=seq,time=time,shots=shots,groups=groups,at=now,events={},on={false,false},deadline={0,0}}
    return true
   end
   if seq<=q.seq or time<=q.time or shots[1]<q.shots[1] or shots[2]<q.shots[2] then return true end
-  local total=shots[1]+shots[2]
-  -- Queue only shots beyond the shown total, and nothing while the local game is paused.
-  if total>q.shown and not A.paused() then
+  -- Paused or pre-resume history (source time at or before the cutoff) is adopted, never played.
+  if not A.paused() and not (q.cutoff and time<=q.cutoff) then
    for k=1,2 do
     if shots[k]>q.shots[k] then q.events[#q.events+1]={time=time,trigger=k,group=groups[k]} end
    end
   end
-  q.shown=math.max(q.shown,total)
   while #q.events>32 do table.remove(q.events,1) end
   q.seq,q.time,q.shots,q.groups,q.at=seq,time,shots,groups,now
   return true
@@ -231,7 +221,17 @@ function c.frame(now)
  if A.paused() then
   -- FIRE2 never resumes from pre-pause history: stop active fire and drop queued edges.
   for i in pairs(c.fire2) do stopFire2(i) end
+  c.wasPaused=true
   return
+ end
+ if c.wasPaused then
+  -- Resume cutoff on the NAV2 source clock: the peer's source time that corresponds to now.
+  -- Frames sent at or before it (still in flight, or sent during the pause) never play.
+  c.wasPaused=false
+  for i,q in pairs(c.fire2) do
+   local r=c.remote[i]
+   q.cutoff=(r and r.track and r.track.offset) and now-r.track.offset or q.time
+  end
  end
  if now>=(c.nextNav or 0) then
   c.nextNav=now+.05
@@ -251,8 +251,8 @@ function c.frame(now)
      for _,v in ipairs(velocity) do fields[#fields+1]=string.format('%.9g',v) end
      send(table.concat(fields,'|'))
      -- FIRE2 shares NAV2's source time; a group outside 1-4 is never encoded.
-     local primary,secondary=getGroup and getGroup(ship,true) or 0,getGroup and getGroup(ship,false) or 0
-     if primary>=1 and primary<=4 and secondary>=1 and secondary<=4 then
+     local primary,secondary=fire2Ready and getGroup(ship,true) or 0,fire2Ready and getGroup(ship,false) or 0
+     if fire2Ready and primary>=1 and primary<=4 and secondary>=1 and secondary<=4 then
       c.fire2Seq[i]=c.fire2Seq[i]+1;local shots=c.triggerShots[i]
       send(string.format('FIRE2|1|%s|%d|%d|%d|%.6f|%d|%d|%d|%d',s.client.lease,i,c.epochs[i],c.fire2Seq[i],now,primary,secondary,shots[1],shots[2]))
      end
