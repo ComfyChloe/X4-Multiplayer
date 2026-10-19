@@ -1,0 +1,137 @@
+{
+  "phases": {
+    "stationary": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        -0.9743987218166108,
+        -2.2271395290727023,
+        2299.995981351796
+      ]
+    },
+    "rendered": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        104.33268383982369,
+        3.516142283165478,
+        2299.9886818076657
+      ]
+    },
+    "physical": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        100.47640682982518,
+        -0.513713236661664,
+        2299.9992850529243
+      ]
+    },
+    "native": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        100.18256842976218,
+        0.21587882554199556,
+        2299.999534461712
+      ]
+    }
+  },
+  "errors": [],
+  "malformed_readbacks": 0,
+  "orientation_control": "native_only",
+  "projectile_samples_complete": true,
+  "two_native_acceptance": false,
+  "damage_or_aim_acceptance": false,
+  "controls": {
+    "stationary": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_speed": 0.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.0,
+      "max_native_firing_basis_error": 0.00159341
+    },
+    "rendered": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        100.00000000000013,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        100.0,
+        -0.031741950000000005,
+        0.0975177
+      ],
+      "native_speed": 100.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.0,
+      "max_native_firing_basis_error": 0.00097975
+    },
+    "physical": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": false,
+      "position_derived_sector_velocity": [
+        100.00061397039227,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        99.9999,
+        0.087279,
+        0.0332434
+      ],
+      "native_speed": 100.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.0,
+      "max_native_firing_basis_error": 0.00224463
+    },
+    "native": {
+      "position_intervals": 55,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        100.0029822509483,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        100.0,
+        -0.10028200000000001,
+        -0.00749287
+      ],
+      "native_speed": 100.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.001014,
+      "max_native_firing_basis_error": 0.00100926
+    }
+  },
+  "controls_complete": false,
+  "measurement_complete": false,
+  "source": "synthetic NAV2/FIRE2 pilot; real native host projectiles",
+  "source_commit": "bcde58f651ff49734403dc5829227160bad5a09d",
+  "production_tree": "1f852523f33a5ef35a9f0a3e58fb3188854279f2",
+  "native_remote_shots": 24.0,
+  "review_status": "Failed orientation control; no projectile acceptance.",
+  "artifact_sha256": {
+    ".local/native-world-tests/projectile-native-bcde58f-orientation-failure.log": "256baa9052e5cb15aac4a6f959f413283b62bfc9a365d1fc8056789fd055aabb",
+    ".local/native-world-tests/projectile-native-bcde58f-orientation-failure-result.json": "f3367c98db14ee7fae39f31a1e0ebffc6deb9b18bb63d313351411d16f72be42",
+    ".local/native-world-tests/projectile-native-bcde58f-orientation-failure-stdout.txt": "2bcdeb014310ed07352aa3c52b284ffe4edd015898139f392d687d94c3cc27c6",
+    ".local/native-world-tests/projectile-native-bcde58f-orientation-failure-installed-hashes.json": "f103bd3adff11b9b7ced5d806e267eec227ee68d6a770957c00ffd0a1a7d7af1"
+  }
+}

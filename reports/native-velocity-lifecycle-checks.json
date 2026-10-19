@@ -186,7 +186,7 @@
   "pause_scope": "Adapter pause branch injected while the native world continues, not an engine menu-pause scheduling test.",
   "source_commit": "d5caf04e5b976af46c7e0fa7061ea23429df8a85",
   "source_unchanged": true,
-  "review_status": "Pending independent native artifact and report review",
+  "review_status": "Accepted within documented lifecycle scope by independent review5578995063 at bcde58f; later projectile control failure is separate.",
   "graphics_workaround": "Measured successful run uses texturequality high and shaderquality2 in isolated profile45841; packages/installers unchanged. Root cause and minimum working texture level remain unproven.",
   "startup_failures": [
     {

@@ -51,3 +51,16 @@ texture level is claimed. Packages and installers remain unchanged.
 This evidence is not a two-native gameplay test and does not establish shared
 hits, player aim, NPC combat/economy, arbitrary mission sharing or full-universe
 authority. A separate projectile experiment will check inherited velocity.
+
+POST-FIX PROJECTILE OBSERVATION — NOT ACCEPTED
+Source bcde58f651ff49734403dc5829227160bad5a09d, same production adapter.
+All24 native shots/trajectories were recorded with no probe/MD errors. The
+rendered phase now reports native lateral speed100m/s and projectile median
+lateral speed104.333m/s versus stationary -.974m/s. However, the physical
+reference phase exceeded the unchanged at-shot orientation gate:
+.00224463 > .002. Therefore the complete projectile experiment FAILS and these
+numbers are observations only, not projectile/aim/hit acceptance. The failed
+artifacts are preserved as projectile-native-bcde58f-orientation-failure*.
+The native lifecycle PASS remains separately accepted (review5578995063).
+Residual between-frame native rotation requires further measurement; no
+sustained angular override was added to production.
