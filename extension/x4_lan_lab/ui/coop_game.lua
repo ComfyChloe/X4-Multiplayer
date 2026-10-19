@@ -6,13 +6,18 @@
 -- mirrors the active weapon groups (C API numbering 1-4) and per-trigger shot counters,
 -- played back on the NAV2 source clock. The first FIRE2 of an owner epoch is a baseline:
 -- it never replays earlier shots and ends the NAV shot-counter path for that epoch.
+-- Counter mapping: the NAV fire counter equals primaryShots+secondaryShots for the same
+-- epoch, so shots already shown through NAV (even if NAV overtook a delayed baseline) are
+-- reconciled and never shown again. A local pause stops FIRE2 fire, clears queued edges and
+-- adopts counters received meanwhile without queuing them; only post-resume shots play.
 -- Without FIRE2 (older peers) the NAV/NAV2 shot counter remains the fire trigger.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
 if not cfg or not cfg.coop or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
 pcall(ffi.cdef,[[uint32_t GetDefensibleActiveWeaponGroup(UniverseID,bool);
 void SetDefensibleActiveWeaponGroup(UniverseID,bool,uint32_t);]])
--- Without the weapon-group API FIRE2 is neither sent nor applied (shot-counter fallback).
+-- Without the weapon-group API, FIRE2 is neither sent nor accepted: received FIRE2 frames
+-- are ignored, so no epoch is latched and the NAV shot-counter path stays in use.
 local function api(name) local ok,f=pcall(function() return C[name] end);return ok and f or nil end
 local getGroup,setGroup=api('GetDefensibleActiveWeaponGroup'),api('SetDefensibleActiveWeaponGroup')
 local M=assert(X4LAN_MOTION,'motion buffer missing')
@@ -114,21 +119,28 @@ function c.receive(f,now)
   local time=numeric(f[8],1e12);local groups={integer(f[9],4),integer(f[10],4)};local shots={integer(f[11]),integer(f[12])}
   if not entity or entity<1 or not epoch or not seq or not time or time<0 then return true end
   if not groups[1] or groups[1]<1 or not groups[2] or groups[2]<1 or not shots[1] or not shots[2] then return true end
+  if not (getGroup and setGroup) then return true end
   if c.owners[entity]==cfg.slot or c.epochs[entity]~=epoch then return true end
   local q=c.fire2[entity]
   if not q or q.epoch~=epoch then
-   -- Baseline: adopt the counters without replaying them, and end NAV-driven fire now
-   -- so no shot already shown through NAV can be shown again.
+   -- Baseline: adopt the counters without replaying them, and end NAV-driven fire now.
+   -- 'shown' is the total already displayed: the NAV counter may be ahead of a delayed baseline.
    local r=c.remote[entity]
    if r and r.firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=entity,on=false}) end
    if r then r.firing=false;r.fireDeadline=0 end
-   c.fire2[entity]={epoch=epoch,seq=seq,time=time,shots=shots,groups=groups,at=now,events={},on={false,false},deadline={0,0}}
+   local shown=math.max(shots[1]+shots[2],r and r.fire or 0)
+   c.fire2[entity]={epoch=epoch,seq=seq,time=time,shots=shots,groups=groups,at=now,shown=shown,events={},on={false,false},deadline={0,0}}
    return true
   end
   if seq<=q.seq or time<=q.time or shots[1]<q.shots[1] or shots[2]<q.shots[2] then return true end
-  for k=1,2 do
-   if shots[k]>q.shots[k] then q.events[#q.events+1]={time=time,trigger=k,group=groups[k]} end
+  local total=shots[1]+shots[2]
+  -- Queue only shots beyond the shown total, and nothing while the local game is paused.
+  if total>q.shown and not A.paused() then
+   for k=1,2 do
+    if shots[k]>q.shots[k] then q.events[#q.events+1]={time=time,trigger=k,group=groups[k]} end
+   end
   end
+  q.shown=math.max(q.shown,total)
   while #q.events>32 do table.remove(q.events,1) end
   q.seq,q.time,q.shots,q.groups,q.at=seq,time,shots,groups,now
   return true
@@ -210,7 +222,11 @@ function c.frame(now)
   send('CREW|1|'..s.client.lease..'|'..c.crewSeq..'|'..controlled..'|'..aboard)
  end
  publishMetrics(now)
- if A.paused() then return end
+ if A.paused() then
+  -- FIRE2 never resumes from pre-pause history: stop active fire and drop queued edges.
+  for i in pairs(c.fire2) do stopFire2(i) end
+  return
+ end
  if now>=(c.nextNav or 0) then
   c.nextNav=now+.05
   for i=1,2 do
