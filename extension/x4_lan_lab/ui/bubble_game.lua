@@ -17,6 +17,7 @@ bool IsComponentOperational(UniverseID);
 const char* GetSaveFolderPath(void);
 UniverseID SpawnObjectAtPos2(const char*,UniverseID,UIPosRot,const char*);
 void SetObjectSectorPos(UniverseID,UniverseID,UIPosRot);
+void RemoveComponent(UniverseID);
 ]]
 local function log(s) DebugError('[X4LAN] '..tostring(s)) end
 local s={loaded=false,ready=false,fire=0,worldRevision=0,commands={},dock={0,0},lastLog=-math.huge}
@@ -107,10 +108,31 @@ local function frame()
  local sector=operational and C.GetContextByClass(ship,'sector',false) or s.sector
  if sector==0 then if cfg.coop and s.sector then sector=s.sector else return end end
  if not s.ship then
-  s.ship,s.sector=ship,sector
   local x=cfg.slot=='p1' and 1000 or -1000
-  s.proxy=C.SpawnObjectAtPos2(cfg.proxy_macro,sector,ffi.new('UIPosRot',{x=x,y=10000,z=0}),'player')
-  assert(s.proxy~=0 and C.IsComponentOperational(s.proxy),'bubble proxy spawn failed')
+  if cfg.ship_macro then
+   -- Shared ship spec: one macro and loadout for both players and both proxies.
+   -- MD equips and verifies both ships before the arena setup; no fallback ship.
+   if not s.shipRequest then
+    local own=C.SpawnObjectAtPos2(cfg.ship_macro,sector,ffi.new('UIPosRot',{x=-x,y=10000,z=0}),'player')
+    local proxy=own~=0 and C.SpawnObjectAtPos2(cfg.ship_macro,sector,ffi.new('UIPosRot',{x=x,y=10000,z=0}),'player') or 0
+    if own==0 or proxy==0 or not C.IsComponentOperational(own) or not C.IsComponentOperational(proxy) then
+     -- Remove only the ships spawned here; the player's original ship is never touched.
+     for _,object in ipairs({own,proxy}) do
+      if object~=0 and object~=ship and C.IsComponentOperational(object) then C.RemoveComponent(object) end
+     end
+     error('shared ship '..cfg.ship_macro..' is unavailable; enable X4: Timelines (ego_dlc_timelines) on both PCs')
+    end
+    s.shipRequest={own=own,proxy=proxy,sector=sector}
+    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{own=id(own),proxy=id(proxy),macro=cfg.ship_macro,loadout=cfg.ship_loadout or '',weapons=cfg.ship_weapons or -1})
+    log('shared ship requested: '..cfg.ship_macro..' loadout='..tostring(cfg.ship_loadout))
+   end
+   if not s.shipsReady then return end
+   s.ship,s.sector,s.proxy=s.shipRequest.own,s.shipRequest.sector,s.shipRequest.proxy
+  else
+   s.ship,s.sector=ship,sector
+   s.proxy=C.SpawnObjectAtPos2(cfg.proxy_macro,sector,ffi.new('UIPosRot',{x=x,y=10000,z=0}),'player')
+   assert(s.proxy~=0 and C.IsComponentOperational(s.proxy),'bubble proxy spawn failed')
+  end
   AddUITriggeredEvent('X4LAN_Bubble',cfg.slot=='p1' and 'SetupHost' or 'SetupGuest',id(s.proxy))
   log('bubble setup requested; slot='..cfg.slot)
  end
@@ -192,6 +214,11 @@ local ok,e=pcall(function()
  s.active=true
  RegisterEvent('X4LAN.Loaded',function() if not s.ship then s.loaded=true;s.setupAt=s.setupAt or GetCurRealTime()+10 end end)
  RegisterEvent('X4LAN_Bubble.Ready',function() s.ready=true;log('bubble engine ready') end)
+ RegisterEvent('X4LAN_Bubble.ShipsReady',function() if s.shipRequest then s.shipsReady=true;log('shared ship ready: '..cfg.ship_macro) end end)
+ RegisterEvent('X4LAN_Bubble.ShipsRefused',function(_,reason)
+  log('BUBBLE STOPPED: shared ship '..tostring(cfg.ship_macro)..' refused ('..tostring(reason)..'); no substitute ship is used')
+  pcall(closeNetwork);s.failed=true
+ end)
  RegisterEvent('X4LAN_Bubble.Fire',function() s.fire=s.fire+1 end)
  RegisterEvent('X4LAN_Bubble.World',function(_,payload)
   if cfg.slot~='p1' then return end

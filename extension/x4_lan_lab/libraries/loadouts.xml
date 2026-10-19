@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Shared co-op ship. Both players and both proxies use this exact loadout.
+     Requires X4: Timelines (ego_dlc_timelines) for the ship, engines, shield and guns. -->
+<diff><add sel="/loadouts"><loadout id="x4lan_coop_xperimental" macro="ship_ter_s_xperimental_01_a_macro">
+ <macros>
+  <engine macro="engine_ter_s_virtual_01_mk1_macro" path="../con_engine_01"/>
+  <engine macro="engine_ter_s_virtual_01_mk1_macro" path="../con_engine_02"/>
+  <weapon macro="weapon_ter_s_plasma_01_mk1_macro" path="../con_weapon_01"/>
+  <weapon macro="weapon_ter_s_plasma_01_mk1_macro" path="../con_weapon_02"/>
+  <weapon macro="weapon_ter_s_plasma_01_mk1_macro" path="../con_weapon_03"/>
+  <weapon macro="weapon_ter_s_plasma_01_mk1_macro" path="../con_weapon_04"/>
+  <weapon macro="weapon_ter_s_plasma_01_mk1_macro" path="../con_weapon_05"/>
+  <weapon macro="weapon_ter_s_plasma_01_mk1_macro" path="../con_weapon_06"/>
+  <shield macro="shield_ter_s_xperimental_01_mk5_macro" path="../con_shield_01"/>
+ </macros>
+ <software>
+  <software ware="software_dockmk2"/>
+  <software ware="software_flightassistmk1"/>
+  <software ware="software_scannerlongrangemk2"/>
+  <software ware="software_scannerobjectmk2"/>
+  <software ware="software_targetmk1"/>
+  <software ware="software_trademk1"/>
+ </software>
+ <virtualmacros>
+  <thruster macro="thruster_gen_s_combat_01_mk3_macro"/>
+ </virtualmacros>
+</loadout></add></diff>
