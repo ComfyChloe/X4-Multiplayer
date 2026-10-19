@@ -1,7 +1,9 @@
 -- Opt-in physical-velocity/trajectory diagnostic. The synthetic pilot sends
 -- four phases on source time 500..548: stationary, rendered motion, then the
 -- same rendered motion with an explicit native 100 m/s lateral velocity, and
--- native movement with pose application disabled by this diagnostic only.
+-- native translation with network position application disabled. The diagnostic
+-- preserves native position and holds orientation at zero in every control;
+-- setting angular velocity once did not prevent the engine controller turning it.
 -- This measures trajectories, not damage, actual player aiming or a fix.
 local A=X4LAN_BUBBLE_API
 local cfg=X4LAN_CONFIG
@@ -37,6 +39,12 @@ function A.universe.frame(now)
  local desired=(phase=='physical' or phase=='native') and 100 or 0
  if phase=='native' then r.nextApply=math.huge
  elseif r.nextApply==math.huge then r.nextApply=0 end
+ -- Hold orientation in every comparison without changing actual native position.
+ -- The engine turned even the stationary proxy when production skipped an
+ -- unchanged pose; that distinct observation is retained in the failed first runs.
+ local ship=A.coop.ships[2];local actual=C.GetObjectPositionInSector(ship)
+ local sector=C.GetContextByClass(ship,'sector',false)
+ C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',{x=actual.x,y=actual.y,z=actual.z,yaw=0,pitch=0,roll=0}))
  if desired~=requested or changed then
   requested=desired;AddUITriggeredEvent('X4LAN_ProjectileProbe','Velocity',desired)
  end

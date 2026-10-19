@@ -32,7 +32,7 @@
        <set_value name="$dt" exact="player.age - $time"/>
        <set_value name="$position" exact="$bullet.relativeposition.{$sector}"/>
        <set_value name="$dx" exact="$position.x - $origin.x"/><set_value name="$dy" exact="$position.y - $origin.y"/><set_value name="$dz" exact="$position.z - $origin.z"/>
-       <debug_text text="'[X4LAN] PROJECTILE_PROBE sample=%s phase=%s configuredVx=%s dt=%s dx=%s dy=%s dz=%s vx=%s vy=%s vz=%s'.[$serial,$phase,$configuredVx,$dt,$dx,$dy,$dz,$dx / $dt,$dy / $dt,$dz / $dt]"/>
+       <debug_text text="'[X4LAN] PROJECTILE_PROBE sample=%s phase=%s configuredVx=%s dt=%s dx=%s dy=%s dz=%s'.[$serial,$phase,$configuredVx,$dt,$dx,$dy,$dz]"/>
       </do_if>
       <do_else><debug_text text="'[X4LAN] PROJECTILE_PROBE failed=retired_before_sample serial=%s'.[$serial]"/></do_else>
      </actions></cue></cues>

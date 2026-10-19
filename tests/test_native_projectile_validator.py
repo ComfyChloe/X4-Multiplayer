@@ -31,7 +31,7 @@ class ProjectileValidatorTests(unittest.TestCase):
         self.assertFalse(analyze('\n'.join(r for r in rows if 'phase=native' not in r))['measurement_complete'])
 
     def test_invalid_objects_timestamps_or_nonfinite_vectors_do_not_pass(self):
-        for before,after in [('vz=4000','vz=0'),('dt=0.2','dt=0'),('vx=100','vx=nan'),('dx=20.0','dx=inf')]:
+        for before,after in [('dz=800','dz=0'),('dt=0.2','dt=0'),('dx=20.0','dx=nan'),('dx=20.0','dx=inf')]:
             with self.subTest(after=after):
                 self.assertFalse(analyze(self.fixture().replace(before,after))['measurement_complete'])
 

@@ -45,9 +45,14 @@ def analyze(log):
             continue
         values = dict(re.findall(r'(\w+)=([^\s]+)', line))
         try:
-            rows.append(dict(phase=values['phase'], **{
+            row = dict(phase=values['phase'], **{
                 key: float(values[key]) for key in
-                ('sample', 'configuredVx', 'dt', 'dx', 'dy', 'dz', 'vx', 'vy', 'vz')}))
+                ('sample', 'configuredVx', 'dt', 'dx', 'dy', 'dz')})
+            # X4 uses distinct length/time types. Log raw metre/second values;
+            # derive speed here rather than relying on unsupported MD m/s division.
+            for axis in ('x','y','z'):
+                row['v'+axis] = row['d'+axis]/row['dt'] if row['dt']>0 else float('nan')
+            rows.append(row)
         except (KeyError, ValueError):
             malformed += 1
     phases = {}
