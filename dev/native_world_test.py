@@ -35,7 +35,7 @@ def saves():
             for p in PROFILE.parent.glob('*/save/*') if p.is_file()}
 
 
-def install(slot):
+def install(slot, shared_ship=False):
     setup.ensure_closed()
     setup.check_game(GAME, '23660954')
     if TARGET.is_symlink() or not (TARGET/'.x4lan-package-id').is_file():
@@ -61,6 +61,8 @@ def install(slot):
     ET.ElementTree(content).write(PROFILE / 'content.xml', encoding='utf-8', xml_declaration=True)
     cfg = dict(token=secrets.token_hex(16), build='world1-9.00-steam23660954', bubble='world-dev',
                port=45843, coop=True, world_sync=True, world_mode='replica')
+    if shared_ship:
+        cfg.update(ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental')
     (HERE / 'native-session.json').write_text(json.dumps(cfg, indent=2))
     shutil.copytree(SOURCE / 'extension/x4_lan_lab', TARGET, dirs_exist_ok=True)
     values = dict(enabled=True, bubble_actions=True, trading=True, walking_avatars=False,
@@ -140,6 +142,12 @@ def peer(slot, duration, replay=False, config=None, baselines=8):
                             if phase != new_phase:
                                 phase = new_phase; history.append(dict(at=round(now-start, 2), phase=phase))
                                 print('Native guest phase:', phase, flush=True)
+                        # Exercise identity/contact packets independently of baseline data.
+                        if sender and new_phase not in ('empty','final-empty'):
+                            for row in sender.baseline.rows[:2]:
+                                entity = int(row.split(',')[0])
+                                name = ('Shared native ship '+str(entity)).encode().hex()
+                                sock.send(f'IDENT|1|{lease}|{lease}|{seq}|N|{entity}|TST-00{entity}|{name}|1|1'.encode())
                         if new_phase == 'move':
                             sock.send(f'UPOS|1|{lease}|{lease}|1|{seq}|{SECTOR}|3800|10000|1200|0|0|0'.encode())
                         if elapsed > (106 if replay else 62): break
@@ -167,6 +175,7 @@ if __name__ == '__main__':
     parser.add_argument('action', choices=['install','launch','peer','check-saves'])
     parser.add_argument('--slot', choices=['p1','p2'], default='p1')
     parser.add_argument('--duration', type=int, default=600)
+    parser.add_argument('--shared-ship', action='store_true', help='Verify the matched Timelines shuttle loadout.')
     parser.add_argument('--replay', action='store_true', help='Also replay the recorded complete native host sector.')
     parser.add_argument('--config', type=Path)
     parser.add_argument('--game', type=Path, help='Override the native X4 game directory on this computer.')
@@ -175,7 +184,7 @@ if __name__ == '__main__':
     if args.game:
         GAME = args.game.expanduser().resolve()
         TARGET = GAME / 'extensions/x4_lan_lab'
-    if args.action == 'install': install(args.slot)
+    if args.action == 'install': install(args.slot,args.shared_ship)
     elif args.action == 'launch':
         setup.ensure_closed()
         subprocess.run(['steam'] + setup.GAME_ARGS, check=True)

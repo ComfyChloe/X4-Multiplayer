@@ -265,4 +265,4 @@ function u.frame(now)
 end
 RegisterEvent('X4LAN_Universe.Exclude',function(_,object) u.excluded[key(ConvertIDTo64Bit(object))]=true end)
 RegisterEvent('X4LAN_Universe.Ready',function() u.ready=true;log('READY mode='..cfg.world_mode..' slot='..cfg.slot) end)
-log('ARMED W01: NPC scene only; cargo/combat/economy not synchronized')
+log('ARMED internal world replication; native cargo and shared identity adapters load separately; NPC combat remains experimental')

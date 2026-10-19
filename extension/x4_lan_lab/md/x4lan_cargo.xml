@@ -107,10 +107,10 @@
   <conditions><event_ui_triggered screen="'X4LAN_Cargo'" control="'Order'"/><check_value value="Setup.$host"/></conditions>
   <actions>
    <set_value name="$a" exact="event.param3"/><set_value name="$status" exact="'REJECTED'"/>
-   <do_if value="@Setup.$executed.{$a.$request}"><set_value name="$status" exact="Setup.$executed.{$a.$request}"/></do_if>
+   <do_if value="@Setup.$executed.{'$' + $a.$request}"><set_value name="$status" exact="Setup.$executed.{'$' + $a.$request}"/></do_if>
    <do_else>
     <!-- Mark before any mutation. Retries cannot issue a second native action. -->
-    <set_value name="Setup.$executed.{$a.$request}" exact="'UNCERTAIN'"/>
+    <set_value name="Setup.$executed.{'$' + $a.$request}" exact="'UNCERTAIN'"/>
     <set_value name="$ship" exact="Setup.$ships.{$a.$ship}"/><set_value name="$ware" exact="ware.{$a.$ware}"/>
     <do_if value="$ship.isoperational and not Setup.$arena.$dead.{$a.$ship} and typeof $ware == datatype.ware">
      <do_if value="not Setup.$wares.indexof.{$ware}"><append_to_list name="Setup.$wares" exact="$ware"/></do_if>
@@ -132,7 +132,7 @@
       </do_if>
      </do_elseif>
     </do_if>
-    <set_value name="Setup.$executed.{$a.$request}" exact="$status"/>
+    <set_value name="Setup.$executed.{'$' + $a.$request}" exact="$status"/>
    </do_else>
    <raise_lua_event name="'X4LAN_Cargo.Result'" param="'%s|%s'.[$a.$request,$status]"/>
    <debug_text text="'[X4LAN] CARGO_ORDER request=%s verb=%s ship=%s status=%s'.[$a.$request,$a.$verb,$a.$ship,$status]"/>
