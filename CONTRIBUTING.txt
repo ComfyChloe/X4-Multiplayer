@@ -1,0 +1,192 @@
+X4 MULTIPLAYER - CONTRIBUTOR AND AGENT HANDOFF
+19 October 2026 | INTERNAL DEVELOPMENT
+
+START HERE
+
+Humans using Claude Code, Codex or another coding agent can contribute through
+the same private Git repository. Git shares committed files and history, not
+agent conversations, private memory, credentials, installed games or virtual
+environments. The shared documents are the portable handoff.
+
+Read these files in order:
+1. AGENTS.md: common project instructions. CLAUDE.md imports this file for Claude.
+2. CONTINUE-HERE.txt: current state, measured evidence and outstanding work.
+3. DEVELOPMENT.txt: local setup, commands and machine-specific boundaries.
+4. WORLD-SYNC-REQUIREMENTS.txt and ARCHITECTURE.md: required gameplay and actual
+   implementation. Also read distribution/WORLD-SYNC-TEST.txt before a playtest.
+5. INTERNET-HOSTING-ANALYSIS.txt when working on transport or dedicated hosting.
+
+Mod 7.0.0 is an internal NPC scene milestone. The real Windows/Linux playtest is
+still pending; additional testers do not turn this into a public release. Normal
+cargo/magnet collection, shared NPC combat, the economy and arbitrary missions
+remain unfinished. Do not start by assuming the universe is already synchronized.
+The user has chosen to keep primary native X4 testing on their current PC.
+
+GET ACCESS AND CREATE A DEVELOPMENT ENVIRONMENT
+
+The repository owner invites the contributor's GitHub account as a collaborator
+to https://github.com/Lith7ium/X4-Multiplayer. The contributor accepts, then uses
+their own Git credentials. A Claude account alone does not grant repository
+access. Use Claude Code or another coding environment with an actual checkout;
+a normal chat does not automatically edit or push the repository.
+
+For a new Linux x86_64 checkout:
+  git clone https://github.com/Lith7ium/X4-Multiplayer.git X4-Multiplayer
+  cd X4-Multiplayer
+  python3 dev/bootstrap.py
+  .venv/bin/python dev/check.py
+
+This installs the development dependencies in .venv and runs the existing checks;
+it does not install or launch X4. It needs Python 3.10+, package-download access
+for initial setup and local UDP socket permission for the network tests. Keep
+existing work in other project folders safe; do not overwrite an older checkout.
+
+Platform boundary: tests/test_lua.py loads the Linux x86_64 x4lan_net.so directly.
+The complete suite is therefore a Linux x86_64 workflow today. A Windows developer
+can use an appropriate Linux x86_64 WSL2 environment or a Linux development host
+for it. Do not claim the suite is Windows-native or skip that test to get green.
+Native Windows X4/launcher validation remains a separate Windows task. macOS or
+ARM contributors need a compatible test environment for the full suite. The
+portable Python bootstrap alone does not prove cross-platform test coverage.
+
+For Claude Code, start it in the repository root. CLAUDE.md imports @AGENTS.md
+using the documented import mechanism; the rules are not duplicated. Verify the
+loaded instructions in Claude Code's /context view. Read CONTRIBUTING.txt and
+CONTINUE-HERE.txt explicitly if the client does not load project instructions.
+No Claude installation/session has been tested on this PC for this handoff.
+
+ONE TASK, ONE WORKING DIRECTORY, ONE BRANCH
+
+Each concurrently editing agent needs its own clone or worktree and task branch.
+Different branches in the SAME working directory do not isolate active agents:
+switching a branch changes the files for everyone using that directory. Never
+have two independent writers edit that checkout, even when they have different
+chat windows. Read-only review can inspect a stable commit separately.
+
+From a clean contributor checkout, after reading the assigned task:
+  git fetch origin
+  git switch -c contrib/yourname-task origin/main
+
+Replace yourname-task with a unique task name. For another agent on the same
+machine, create a separate sibling worktree from a clean checkout:
+  git fetch origin
+  git worktree add ../X4-Multiplayer-task -b contrib/yourname-other-task origin/main
+
+Run bootstrap inside that worktree too. Worktrees share Git history but have
+separate working files. They do NOT isolate the installed X4 extension, Steam
+profile, normal saves, UDP port or running relay. Only one coordinated native
+test may use a given installation/profile/port at a time. Primary-PC test
+permission does not automatically authorize replacing a friend's installation.
+
+Define the task before editing, using a GitHub issue, draft PR or an explicitly
+shared task note. The owner must be a person/agent identified by the team, not
+an assumed automatic assignment. Record:
+  Task and owner:
+  Starting commit and branch:
+  Intended behavior and acceptance evidence:
+  Files/subsystems in scope:
+  Shared interfaces and dependencies:
+  Out of scope:
+  Status / next action / handoff:
+
+Check existing tasks/PRs before claiming overlapping work. GitHub Issues or PRs
+are coordination records, not automatic file locks. Do not infer that another
+agent can see this chat or your local uncommitted changes.
+
+GOOD TASK BOUNDARIES
+
+- Independent first contributions: inspect a focused Windows launcher behavior,
+  review W01 evidence against its stated limits, or improve a specific diagnostic
+  and its relevant tests. These can be scoped away from universe authority.
+- Cargo work: native event capture and inventory transaction implementation are
+  related tasks. Agree on the event data and ownership contract before splitting
+  them across agents; do not invent two incompatible cargo protocols in parallel.
+- Protocol changes: Python relay, Lua serialization/receiver, engine adapter and
+  tests form one coordinated change. Assign one interface owner and define field
+  meanings, IDs/generations, revisions/epochs, retry semantics, size limits and
+  old-client behavior before other agents implement their side.
+- Engine simulation control, object lifetime, combat and economy have shared
+  invariants. Separate files alone do not make these independent tasks.
+- Package/version/session changes belong to the integration/release task. Two
+  builders produce different pair keys even when VERSION.txt has the same value.
+
+These are candidate work areas, not active assignments. A contributor should
+receive a specific task rather than ask an agent to fix the entire multiplayer
+universe independently. Keep unrelated refactoring out of a focused change.
+
+CHECK AND DELIVER A CONTRIBUTION
+
+Review git status and the diff before committing. Add only intended files; keep
+.venv, .local, logs, generated archives, local Claude settings and credentials out
+of Git. Source config.lua must stay inert. Shared .claude configuration may be
+tracked deliberately; personal settings and worktrees are ignored separately.
+
+For code changes, run the relevant checks and the standard Linux check before
+integration. Add tests for meaningful new behavior or failure modes. Documentation
+only changes need reference/diff checks, not a fresh game run. For every check,
+record the command, commit, OS, result and anything not exercised. When relevant,
+include X4 build/DLC, LuaJIT coverage and whether the peer was synthetic or native.
+The historical 162-test report is evidence for its recorded revision, not an
+automatic pass for a new branch. UDP sandbox errors are an incomplete check.
+
+Commit and publish the task branch, then open a pull request to main:
+  git add <specific-files>
+  git commit -m "Describe the behavior changed"
+  git push -u origin contrib/yourname-task
+
+Use .github/PULL_REQUEST_TEMPLATE.md. Explain the problem, resulting behavior,
+validation and remaining limits. If an engine test needs the primary PC, supply
+exact steps and expected observations; mark it pending rather than claiming it
+passed. A branch that passes mocked tests can still fail in the actual engine.
+
+Before integration, fetch the latest main and bring its changes into the task
+branch. For an already shared branch, merge rather than rewrite published history:
+  git fetch origin
+  git merge origin/main
+
+Start with a clean working tree. Resolve conflicts by understanding both changes;
+do not accept one entire side blindly, reset away edits or force-push. Run the
+checks relevant to the combined change after resolving conflicts. A clean text
+merge is not proof that authority, protocol or gameplay still agrees.
+
+The project owner or designated integrator reviews the combined change and merges
+the PR when its acceptance checks are met. Contributors deliver branches/PRs;
+they do not independently merge competing work or replace the active playtest
+installation. Existing direct maintenance sync is not a license for concurrent
+agents to push gameplay changes to main. This document does not install GitHub
+branch protection, CI or automatic review; those are separate repository settings.
+
+Preserve the pending 7.0 package pair for the current playtest. Once integration
+is ready for a new test build, the integrator chooses its version, records its
+source commit and creates one matched pair for both platforms. Do not mix ZIPs
+from different builds. Public packages need an explicit owner request for that
+release, even if more friends have joined the internal tester group.
+
+HANDOFF AT THE END OF A TASK
+
+Include the branch/commit/PR, changed behavior, tests actually run, pending native
+checks, known risks and a concrete next step. Update the document that owns any
+changed interface or durable decision. Update CONTINUE-HERE.txt when integrated
+project state changes; keep branch-specific progress in its task/PR so several
+agents do not continuously overwrite one global status file. The receiving agent
+must read the relevant diff and evidence rather than treat the summary as proof.
+
+STARTER PROMPT FOR A NEW AGENT
+
+  Read AGENTS.md, CONTRIBUTING.txt, CONTINUE-HERE.txt, DEVELOPMENT.txt,
+  WORLD-SYNC-REQUIREMENTS.txt and ARCHITECTURE.md. Work on the assigned task:
+  <insert task, acceptance criteria and agreed file/interface scope here>.
+  Inspect the current Git state and use a separate working directory/branch from
+  other active agents. Keep changes internal and write original code. The real
+  7.0 playtest is pending; preserve its packages and installed candidate. Run the
+  appropriate checks and deliver a commit/PR with evidence and remaining limits.
+  Speak German with us; keep documentation and interfaces in English.
+
+REFERENCES (checked 19 October 2026)
+
+Claude Code project instructions and importing a shared AGENTS.md:
+https://code.claude.com/docs/en/memory#share-one-file-with-other-coding-tools
+Claude Code parallel sessions using separate Git worktrees:
+https://code.claude.com/docs/en/common-workflows#run-parallel-sessions-with-worktrees
+GitHub collaborator access for a private personal repository:
+https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/repository-access-and-collaboration/inviting-collaborators-to-a-personal-repository

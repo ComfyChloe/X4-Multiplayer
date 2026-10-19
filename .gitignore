@@ -22,3 +22,6 @@ installed-before/
 *.bundle
 *.user
 *.swp
+CLAUDE.local.md
+/.claude/settings.local.json
+/.claude/worktrees/

@@ -1,4 +1,11 @@
-CURRENT DEVELOPMENT HANDOFF - 17 OCTOBER 2026
+CURRENT DEVELOPMENT HANDOFF - 19 OCTOBER 2026
+
+The user will continue here and keep this PC as the primary X4 test machine.
+Additional testers are organized; the 7.0 playtest is still pending. A contributor
+plans to use Claude. Read CONTRIBUTING.txt for shared context, independent task
+branches/worktrees, interface coordination, PR delivery and native test handoff.
+CLAUDE.md imports AGENTS.md; .github/PULL_REQUEST_TEMPLATE.md records review
+evidence. No collaborator account or agent task has been assigned by these files.
 
 The real two-computer 7.0 playtest is still PENDING (user update, 17 October).
 INTERNET-HOSTING-ANALYSIS.txt evaluates VPN/remote relay and an unattended X4

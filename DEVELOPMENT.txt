@@ -3,6 +3,8 @@ X4 MULTIPLAYER - PC / FEDORA LAPTOP DEVELOPMENT
 Repository: https://github.com/Lith7ium/X4-Multiplayer
 Current work: internal 7.0.0 / W01 NPC scene synchronization.
 Read CONTINUE-HERE.txt before changing gameplay. Public Test 01 is withheld.
+For additional contributors or concurrent agents, also read CONTRIBUTING.txt.
+CLAUDE.md imports the same AGENTS.md used by other coding agents.
 
 FIRST CHECKOUT (Fedora, Bazzite or another Linux development machine)
 For this private repository, Git needs its own GitHub authentication. Being
@@ -33,6 +35,9 @@ Python 3.10+ and Git are required. Standard Fedora can install missing tools wit
 its package manager; Bazzite should use its supported immutable-OS workflow.
 The Python relay itself has no third-party runtime dependency. Development tests
 use pinned lupa 2.8 with its LuaJIT runtime. Do not copy .venv between computers.
+The complete suite currently targets Linux x86_64: tests/test_lua.py loads the
+Linux native transport directly. Windows contributors can use Linux x86_64 WSL2
+or a Linux host for these checks; native Windows game/launcher tests are separate.
 
 USING AN EXISTING LAPTOP CHECKOUT
 First inspect it with git status and git remote -v. Commit or otherwise back up
@@ -42,15 +47,19 @@ Compare any old edits deliberately; the current source already includes changes
 made after the original 6.0.0 transfer.
 
 BEFORE CHANGING COMPUTERS
-Finish a coherent change, run the relevant checks, then:
+For a branch used by one developer at a time, finish a coherent change, run the
+relevant checks, then:
   git status
   git add <the source files you changed>
   git commit -m "Describe the change"
-  git pull --rebase
+  git fetch origin
+  git pull --ff-only
   git push
 On the other machine, start with a clean checkout and git pull --ff-only.
-Use separate branches if both machines are working independently. Resolve real
-conflicts explicitly. A remote repository does not synchronize uncommitted files.
+If history has diverged, inspect and integrate both sets of changes explicitly;
+do not reset or rewrite shared history. Concurrent contributors use separate task
+branches and reviewed PRs as described in CONTRIBUTING.txt. A remote repository
+does not synchronize uncommitted files, conversations or private agent memory.
 
 LOCAL DATA
 Keep generated packages, logs, credentials, installation metadata and backups in

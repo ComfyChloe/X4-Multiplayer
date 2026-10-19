@@ -1,6 +1,7 @@
 # X4 Multiplayer development
 
-- Read `CONTINUE-HERE.txt`, `DEVELOPMENT.txt` and `WORLD-SYNC-REQUIREMENTS.txt`.
+- Read `CONTINUE-HERE.txt`, `DEVELOPMENT.txt`, `CONTRIBUTING.txt` and
+  `WORLD-SYNC-REQUIREMENTS.txt`. `CLAUDE.md` imports these shared instructions.
 - Default to internal work. Public packages require an explicit request for that
   release. Public Test 01 is withheld because full shared-universe authority and
   ordinary cargo/magnet interactions are missing.
@@ -24,3 +25,12 @@
   private repository `https://github.com/Lith7ium/X4-Multiplayer` for synchronization.
 - Do not regenerate old MD fixture scripts blindly: compare generator output
   against current profile protections and gameplay changes before replacing it.
+- Give each concurrent editing agent a separate clone/worktree and task branch.
+  Agree on task ownership and shared interfaces before overlapping work; Git does
+  not share chat context or lock files. Coordinate Python/Lua protocol changes.
+- Deliver concurrent contributions through reviewed PRs to `main`. The project
+  owner or designated integrator combines changes and prepares matched packages.
+  Preserve the pending 7.0 test pair; do not silently rebuild or replace it.
+- Coordinate native tests on the primary PC. A Git worktree does not isolate an
+  X4 installation, Steam profile or relay port. Record actual evidence and pending
+  checks. Keep branch progress in its task/PR and integrated state in the handoff.

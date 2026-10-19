@@ -2,6 +2,9 @@
 
 For development on either PC or the Fedora laptop, start with
 [DEVELOPMENT.txt](DEVELOPMENT.txt) and [CONTINUE-HERE.txt](CONTINUE-HERE.txt).
+Contributors using Claude Code, Codex or another agent should also read
+[CONTRIBUTING.txt](CONTRIBUTING.txt). Shared instructions live in
+[AGENTS.md](AGENTS.md); [CLAUDE.md](CLAUDE.md) imports them for Claude Code.
 
 W01 adds original NPC sector scene replication: dynamic host object identities,
 complete acknowledged baselines, movement and guest replica lifecycle. Read
@@ -84,18 +87,22 @@ The Linux host runs the authoritative game as well as the small Python relay.
 
 ## Evidence and development
 
-- [6.0.0 release checks](reports/release-6.0.0-checks.txt).
-- [Current automated tests](reports/automated-6.0.0-tests.txt).
+- [7.0.0 release checks](reports/release-7.0.0-checks.txt).
+- [Recorded 7.0.0 automated tests](reports/automated-7.0.0-tests.txt).
 - [Earlier native trade tests](TRADE_TESTS.txt).
 - [Architecture](ARCHITECTURE.md), [research sources](RESEARCH.md).
 
 `x4lan/` contains relay sessions and the console. `extension/x4_lan_lab/` contains
 Lua, MD and AI adapters; `distribution/` contains installers and packaging.
-Run `python3 -m unittest discover -s tests -v`. LuaJIT tests need `lupa`; local UDP
-tests need socket access. Engine doubles do not establish native compatibility.
+Set up with `python3 dev/bootstrap.py`, then run `.venv/bin/python dev/check.py`
+on Linux x86_64. The full suite loads the Linux native transport; Windows
+contributors can use a compatible Linux environment. LuaJIT tests need `lupa`;
+local UDP tests need socket access. Engine doubles do not establish native compatibility.
 
-Regenerate the base files in order: `python3 dev/build_bubble_md.py`, then
-`python3 dev/build_trade_md.py`. Cooperative, life and quest MD scripts are saved
-directly. Native libraries are unchanged. No game-memory offsets or copied assets.
+Do not blindly regenerate the base MD files. If generator work is needed, run
+`dev/build_bubble_md.py` then `dev/build_trade_md.py` in a disposable copy and
+compare the output against current profile guards and gameplay changes.
+Cooperative, life and quest MD scripts are saved directly. Native libraries are
+unchanged. No game-memory offsets or copied assets.
 English documentation and interfaces are shipped; historical game logs retain the
 engine's own wording. Development harnesses must never enter distribution packages.
