@@ -5,9 +5,11 @@ Usage: python dev/validate_damage_probe.py <x4lan-debug.txt> [--late 0.5] [--tol
 For each probe run it pairs every 'apply_requested' with its native 'apply_readback' and
 reports requests that are missing, late (readback delay above --late seconds) or mismatched
 (observed hull/shield differs from the request by more than --tolerance percentage points),
-plus unmatched, invalid or echo-mismatched readbacks (pairing is by request number). Health changes seen on 'tick' lines between a confirmed
+plus unmatched, invalid, echo-mismatched or orphan readbacks (a readback whose request line
+is absent, e.g. in a truncated log, never counts as confirmed; pairing is by request number). Health changes seen on 'tick' lines between a confirmed
 readback and the next request are listed as CANDIDATE local drift only: the probe cannot prove
-their cause. The exit status is 1 when any completion is missing, invalid, unmatched or echo-mismatched.
+their cause. The exit status is 1 when any completion is missing, invalid, unmatched, echo-mismatched or orphan,
+or when the log contains no probe lines at all.
 """
 import argparse
 import json
@@ -46,7 +48,7 @@ def summarise(rows, late=.5, tolerance=.5):
     for row in rows:
         run = runs.setdefault(row.get('run', '?'), {
             'requested': {}, 'confirmed': 0, 'missing': [], 'late': [], 'mismatched': [],
-            'unmatched': 0, 'invalid': 0, 'echo_mismatch': [], 'candidate_drift': [], 'last_confirmed': None})
+            'unmatched': 0, 'invalid': 0, 'echo_mismatch': [], 'orphan': [], 'candidate_drift': [], 'last_confirmed': None})
         reason, detail = row.get('reason'), row['detail_text']
         if reason == 'apply_requested':
             apply = re.search(r'apply=(\d+)', detail)
@@ -62,7 +64,12 @@ def summarise(rows, late=.5, tolerance=.5):
                 run['invalid'] += 1
                 continue
             ident = int(apply.group(1))
-            run['requested'].pop(ident, None)
+            if ident not in run['requested']:
+                # A readback without its request (truncated log, duplicate or foreign line)
+                # must never count as a confirmed completion.
+                run['orphan'].append(ident)
+                continue
+            run['requested'].pop(ident)
             run['confirmed'] += 1
             if float(delay.group(1)) > late:
                 run['late'].append(ident)
@@ -100,7 +107,7 @@ def summarise(rows, late=.5, tolerance=.5):
         unresolved = sorted(run['requested'])
         result[name] = {'confirmed': run['confirmed'], 'missing': run['missing'] + unresolved,
                         'late': run['late'], 'mismatched': run['mismatched'], 'unmatched': run['unmatched'],
-                        'invalid': run['invalid'], 'echo_mismatch': run['echo_mismatch'],
+                        'invalid': run['invalid'], 'echo_mismatch': run['echo_mismatch'], 'orphan': run['orphan'],
                         'candidate_drift': run['candidate_drift']}
     return result
 
@@ -114,7 +121,7 @@ def main(argv=None):
     with open(args.log, encoding='utf-8', errors='replace') as handle:
         result = summarise(parse(handle), args.late, args.tolerance)
     print(json.dumps(result, indent=2))
-    bad = any(r['missing'] or r['unmatched'] or r['invalid'] or r['echo_mismatch'] for r in result.values())
+    bad = any(r['missing'] or r['unmatched'] or r['invalid'] or r['echo_mismatch'] or r['orphan'] for r in result.values())
     return 1 if bad or not result else 0
 
 

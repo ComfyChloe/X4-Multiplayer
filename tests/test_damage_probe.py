@@ -225,6 +225,32 @@ class DamageProbeValidatorTests(unittest.TestCase):
         self.assertEqual(result['candidate_drift'][0]['observed'], (75.0, 60.0))
         self.assertEqual(result['missing'], [2])
 
+    def test_orphan_readback_never_counts_as_confirmed(self):
+        rows = validator.parse([
+            self.line('apply_readback', 'apply=99 wrev=9 delay=0.010 requested[ship1=90.00/90.00 ship2=100.00/100.00] observed[ship1=90.00/90.00 ship2=100.00/100.00]'),
+        ])
+        result = validator.summarise(rows)['aaaa0001']
+        self.assertEqual(result['confirmed'], 0)
+        self.assertEqual(result['orphan'], [99])
+
+    def test_cli_fails_readback_only_truncated_and_empty_logs(self):
+        import tempfile, os, contextlib, io
+        cases = {
+            'readback-only': self.line('apply_readback', 'apply=99 wrev=9 delay=0.010 requested[ship1=90.00/90.00 ship2=100.00/100.00] observed[ship1=90.00/90.00 ship2=100.00/100.00]'),
+            'truncated': self.line('apply_requested', 'apply=1 wrev=1 requested[ship1=90.00/90.00 ship2=100.00/100.00 target1=- target2=-]'),
+            'empty': 'no probe lines here',
+            'complete': self.line('apply_requested', 'apply=1 wrev=1 requested[ship1=90.00/90.00 ship2=100.00/100.00 target1=- target2=-]') + '\n' +
+                        self.line('apply_readback', 'apply=1 wrev=1 delay=0.010 requested[ship1=90.00/90.00 ship2=100.00/100.00] observed[ship1=90.00/90.00 ship2=100.00/100.00]'),
+        }
+        for name, text in cases.items():
+            with self.subTest(name), tempfile.TemporaryDirectory() as d:
+                path = os.path.join(d, 'log.txt')
+                with open(path, 'w', encoding='utf-8') as handle:
+                    handle.write(text + '\n')
+                with contextlib.redirect_stdout(io.StringIO()):
+                    status = validator.main([path])
+                self.assertEqual(status, 0 if name == 'complete' else 1)
+
     def test_separate_runs_are_not_mixed(self):
         rows = validator.parse([
             self.line('apply_requested', 'apply=1 wrev=1 requested[ship1=90.00/90.00 ship2=100.00/100.00 target1=- target2=-]', run='r1'),
@@ -232,7 +258,8 @@ class DamageProbeValidatorTests(unittest.TestCase):
         ])
         result = validator.summarise(rows)
         self.assertEqual(result['r1']['missing'], [1])
-        self.assertEqual(result['r2']['confirmed'], 1)
+        self.assertEqual(result['r2']['confirmed'], 0, 'a readback from another run is not a completion')
+        self.assertEqual(result['r2']['orphan'], [1])
 
 
 if __name__ == '__main__':
