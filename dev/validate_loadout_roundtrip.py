@@ -10,7 +10,8 @@ NATIVE = re.compile(r'LOADOUT_ROUNDTRIP_NATIVE id=(\d+) source=(\S+) clone=(\S+)
 
 
 def validate(log):
-    if any(v in log for v in ('Lua error', 'Error in MD cue md.X4LAN', 'LOADOUT_ROUNDTRIP failed', 'UNIVERSE STOPPED')):
+    if (any(v in log for v in ('Lua error', 'Error in MD cue md.X4LAN', 'LOADOUT_ROUNDTRIP failed', 'UNIVERSE STOPPED'))
+            or re.search(r'extensions[/\\]x4_lan_lab[/\\](?:md|ui)[/\\][^\r\n]+\(\d+\):',log)):
         raise ValueError('Native probe or adapter error')
     rows = {'expected':{}, 'observed':{}}
     for kind, index, macro, signature in ROW.findall(log):

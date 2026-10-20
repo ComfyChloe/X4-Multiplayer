@@ -27,5 +27,6 @@ class LoadoutRoundtripValidatorTests(unittest.TestCase):
         raw=trace()
         for bad in ('\n'.join(raw.splitlines()[1:]),raw+'\n'+raw.splitlines()[0],
                     raw.replace('ship_8_macro','ship_7_macro'),raw+'\nLua error: probe failed',
+                    raw+'\n[=ERROR=] 0.00 extensions\\x4_lan_lab\\md\\probe.xml(18): Required attribute is missing',
                     raw.replace('LOADOUT_ROUNDTRIP complete count=8','')):
             with self.subTest(bad=bad[-90:]),self.assertRaises(ValueError):validate(bad)
