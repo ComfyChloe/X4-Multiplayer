@@ -154,6 +154,10 @@ local function bindSeedObject(r,now)
   if r.unresolved~=row.code then log('SEED_UNRESOLVED id='..r.entity.id..' code='..row.code);r.unresolved=row.code end
   return false
  end
+ if r.object then
+  assert(r.object==object,'retained seed object reference changed')
+  return true
+ end
  r.object=object;r.seedOriginal=true;u.replicaKeys[key(object)]=true
  C.ActivateObject(object,false)
  log('SEED_BOUND id='..r.entity.id..' code='..row.code..' object='..key(object))
@@ -231,8 +235,10 @@ local function render(now,sector)
    if r.track then p=M.render(r.track,now,r.modern and M.delay or .1) or p end
    local value=ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
    if u.seedObjects then
-    if r.object then assert(C.IsComponentOperational(r.object),'bound seed object disappeared')
-    else bindSeedObject(r,now) end
+    if r.object then assert(C.IsComponentOperational(r.object),'bound seed object disappeared') end
+    -- Fresh authenticated metadata must also validate retained bindings before
+    -- any pose write. A previously resolved handle is not a descriptor bypass.
+    bindSeedObject(r,now)
    elseif not r.object or not C.IsComponentOperational(r.object) then
      r.object=C.SpawnObjectAtPos2(r.entity.macro,sector,value,r.entity.owner)
      assert(r.object~=0,'NPC replica spawn failed');u.replicaKeys[key(r.object)]=true
