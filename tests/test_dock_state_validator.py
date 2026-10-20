@@ -29,7 +29,8 @@ class NativeDockStateTests(unittest.TestCase):
 
     def test_native_handles_action_identity_and_causal_order_are_required(self):
         raw=trace();lines=raw.splitlines()
-        mutations=[raw.replace('ship=0x65','ship=unavailable'),raw.replace('ship=0x65','ship=0x0'),
+        actions_last='\n'.join([line for line in lines if ' applied ' not in line]+[line for line in lines if ' applied ' in line])
+        mutations=[actions_last,raw.replace('ship=0x65','ship=unavailable'),raw.replace('ship=0x65','ship=0x0'),
                    raw.replace('ship=0x65','ship=0x67'),raw.replace('carrierHandle=0x66','carrierHandle=0x65'),
                    raw.replace('applied phase=1 code=CHD-001','applied phase=1 code=OTH-002'),
                    '\n'.join([lines[0],lines[2],lines[1]]+lines[3:]),

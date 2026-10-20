@@ -35,7 +35,7 @@ wrong dock references, changed ships, incomplete or reordered phase/action trace
 
 STATUS / LIMITS
 325 Linux/Python/LuaJIT tests pass; LuaJIT syntax and installed-game MD schema
-validate. The isolated diagnostic-pair revision is native PENDING. Earlier
+validate. The isolated diagnostic-pair revision passes the bounded native cycle. Earlier
 selection failures remain below. API/schema presence is not execution acceptance.
 This does not establish dock reference persistence, network authorization,
 arbitrary ship/station compatibility, occupancy reconciliation, queued traffic,
@@ -64,3 +64,15 @@ The next probe creates its own empty carrier/child instead of changing or evicti
 that traffic. Validator hardening requires resolved nonzero native handles,
 matching Lua/native identities, action ship identity and causal read/action order.
 Missing/unresolved or additional malformed headers are rejected explicitly.
+
+BOUNDED NATIVE TRANSITION PASS
+dock-state-fixture at9fa0267 PASSES the full validator: six ordered Lua/MD states,
+five ordered native actions, unchanged child/carrier handles, the exact external
+pad for phases1/3, free flight for phase4 and the original internal dock for phase5.
+request_store_ship took about13 seconds; undock took about8 seconds in this run.
+All phase timeouts remain30 seconds. This is one newly created carrier/child pair,
+not arbitrary station/ship compatibility or shared-world authority. Both diagnostic
+objects exist only in the discarded unsaved world. Native game/peer closed, exact
+source/raw logs/validator retained, normal saves unchanged and clean33 restored
+with full manifests. The coordinator's all-actions-after-completion mutation is
+also explicitly rejected by the combined causal-order regression.
