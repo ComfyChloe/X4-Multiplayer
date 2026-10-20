@@ -15,7 +15,15 @@ harness preserves the prior known test installation and save inventory. No
 personal save is opened. Close the owned game, retain the exact installation
 and logs, compare save hashes/timestamps, and restore the verified clean backup.
 
-Source syntax and the local X4 9.00 MD schema pass. Native behavior is PENDING.
+Source359f59a syntax and the local X4 9.00 MD schema pass. Native hangar-first
+completed all stages with seven stored children and no mod errors. A single FFI
+position write was overwritten before the two-second observation; MD warp moved
+the carrier and all seven children about20km, and one child undocked natively.
+The carrier retained small motion/rotation, so child translation residuals are
+not a controlled rigid-body acceptance. Exact source/logs/result and clean33-file
+restoration are retained; normal saves unchanged. The follow-up holds the FFI
+position every frame and adds an immediate readback, matching the real guest
+application pattern more closely. Follow-up native behavior is PENDING.
 This is a diagnostic primitive, not a shipping forced-undock workaround. It does
 not establish network attachment authority or justify weakening the retained
 failed seed-view position gate. Primary owns this PC's native session.

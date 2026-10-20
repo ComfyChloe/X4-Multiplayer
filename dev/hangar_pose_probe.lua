@@ -27,7 +27,9 @@ end
 local frame=U.frame
 function U.frame(now)
  frame(now)
- if not U.ready or A.paused() or stage==5 or now<due then return end
+ if not U.ready or A.paused() or stage==5 then return end
+ if stage==2 then C.SetObjectSectorPos(state.carrier,state.sector,value(state.origin,10000)) end
+ if now<due then return end
  if stage==0 then
   for _,entry in ipairs(U.publish) do
    local macro=GetComponentData(A.id(entry.object),'macro')
@@ -49,7 +51,7 @@ function U.frame(now)
   end
   due=now+1
  elseif stage==1 then
-  read('before');C.SetObjectSectorPos(state.carrier,state.sector,value(state.origin,10000));stage=2;due=now+2
+  state.origin=position(state.carrier);read('before');C.SetObjectSectorPos(state.carrier,state.sector,value(state.origin,10000));read('ffi-immediate');stage=2;due=now+2
  elseif stage==2 then
   read('ffi-move')
   local p=value(state.origin,20000)
