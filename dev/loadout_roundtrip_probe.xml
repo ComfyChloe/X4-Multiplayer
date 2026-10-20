@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_LoadoutRoundtrip" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Create" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_LoadoutRoundtrip'" control="'Create'"/></conditions><actions>
+  <set_value name="$v" exact="event.param3"/><set_value name="$source" exact="$v.$source"/>
+  <do_if value="$source.isoperational and md.X4LAN_Bubble.Arena.$host and $v.$index ge 1 and $v.$index le 8">
+   <set_value name="$macros" exact="[]"/>
+   <do_all exact="$v.$macros.count" counter="$i"><append_to_list name="$macros" exact="macro.{$v.$macros.{$i}}"/></do_all>
+   <generate_loadout macro="$source.macro" macros="$macros" repeat="true" level="1" variation="0" flags="engines shields weapons turrets shieldgroups turretgroups thrusters" result="$loadout" remaining="$remaining"/>
+   <create_ship name="$clone" macro="$source.macro" sector="player.ship.sector">
+    <owner exact="$source.owner"/><pilot><select race="race.argon"/></pilot><loadout loadout="$loadout"/>
+    <position x="100km + $v.$index * 1km" y="100km" z="100km"/>
+   </create_ship>
+   <set_value name="$software" exact="[]"/>
+   <do_all exact="$v.$software.count" counter="$i"><append_to_list name="$software" exact="ware.{$v.$software.{$i}}"/></do_all>
+   <generate_loadout macro="$source.macro" wares="$software" repeat="true" level="1" variation="0" flags="software" result="$softwareLoadout"/>
+   <apply_loadout object="$clone" loadout="$softwareLoadout" flags="software"/>
+   <debug_text text="'[X4LAN] LOADOUT_ROUNDTRIP_NATIVE id=%s source=%s clone=%s input=%s unused=%s sourceHull=%s cloneHull=%s sourceShield=%s cloneShield=%s'.[$v.$index,$source.idcode,$clone.idcode,$macros.count,$remaining.count,$source.maxhull,$clone.maxhull,$source.maxshield,$clone.maxshield]"/>
+   <raise_lua_event name="'X4LAN_LoadoutRoundtrip.Created'" param="'%s|%s'.[$v.$index,$clone]"/>
+  </do_if>
+ </actions></cue></cues>
+</mdscript>

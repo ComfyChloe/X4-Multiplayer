@@ -1,0 +1,47 @@
+HOST-CREATED SHIP EQUIPMENT — NATIVE FEASIBILITY EXPERIMENT
+20 October 2026 | A:primary | contrib/astra-entity-lifecycle
+
+PURPOSE AND SCOPE
+Saved object references preserve equipment on original ships, but ships created
+after the pristine snapshot have no matching native object on the guest. Before
+adding a creation descriptor to the network protocol, this experiment tests
+whether the engine can reconstruct observed hardware/software assignments from
+explicit macro and ware lists. It is dev-only and opt-in; no shipping gameplay
+or wire contract is changed by the probe.
+
+The probe reads the engine/shield/weapon/turret slots, virtual thrusters and
+software of eight distinct native ship macros in the host's sector. It sends
+only those macro/ware lists to an MD action. The action generates a loadout,
+creates a temporary ship and applies software; Lua reads back the same slots
+and removes only that newly created diagnostic ship. Source ships are not
+modified. The isolated world is discarded without saving.
+
+GetNumUpgradeSlots/GetUpgradeSlotCurrentComponent, virtual-slot and software
+signatures were checked against this PC's installed vanilla X4 UI. The MD
+schema accepts the generation/application actions. These checks establish API
+shape, not runtime correctness or deterministic slot assignment. The engine may
+assign compatible equipment to different slots; the validator rejects that.
+Native source/clone maximum hull and shields must also agree, and no provided
+hardware macro may remain unused. Both raw captures and failures are retained.
+
+EXECUTION — ONLY THE AGREED PRIMARY-PC OWNER
+Use an empty isolated profile45841 with autosave disabled and X4 closed. Finish
+and restore any prior seed experiment before installation; do not overlap native
+sessions. dev/native_loadout_roundtrip_test.py install backs up the known test
+installation through native_world_test, overlays exact source plus opt-in probe,
+and records installed hashes. Launch with native_world_test.py launch and run
+its synthetic p2 peer to request a host sector baseline. Capture the native log,
+close the owned game, run dev/validate_loadout_roundtrip.py on the retained log,
+compare normal save hashes/timestamps and restore the exact verified backup.
+No shared seed, saved user game or real second client is used by this primitive.
+
+STATUS
+Source prepared; Python/Lua syntax and MD schema checked. Native execution and
+result are PENDING. A green synthetic validator fixture is not native evidence.
+
+LIMITS
+Even a passing primitive does not prove network creation, inventory, ammunition,
+crew composition/skills, equipment modifications, docking, destruction, combat,
+economy or whole-universe authority. Those require separate descriptors/events,
+engine primitives and native cross-PC checks. This work does not change the
+independent joint bootstrap source937262c or any public/internal package.
