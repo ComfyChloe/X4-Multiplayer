@@ -27,10 +27,10 @@ class ExactLoadoutProbeTests(unittest.TestCase):
           C.GetNumLoadoutsInfo=function() return saved and 1 or 0 end
           C.GetLoadoutsInfo=function(out) if saved then out[0]={id='local_owned',name='owned_probe_1'};return 1 end;return 0 end
           C.SaveLoadout2=function(macro,loadout,source,id,overwrite,name)
-           assert(macro=='ship_arg_s_fighter_01_a_macro' and source=='local' and id=='owned_probe_1')
+           assert(macro=='ship_arg_s_fighter_01_a_macro' and source=='local' and id=='owned_probe_1' and not overwrite)
            assert(loadout.numengines==1 and loadout.numweapons==2 and loadout.numshields==0 and loadout.numturrets==0)
-           assert(loadout.weapons[0].slot==1 and loadout.weapons[0].macro=='weapon_gen_s_plasma_01_mk1_macro')
-           assert(loadout.weapons[1].slot==2 and loadout.weapons[1].macro=='weapon_gen_s_laser_01_mk1_macro')
+           assert(loadout.weapons[0].slot==0 and loadout.weapons[0].macro=='weapon_gen_s_plasma_01_mk1_macro')
+           assert(loadout.weapons[1].slot==1 and loadout.weapons[1].macro=='weapon_gen_s_laser_01_mk1_macro')
            assert(loadout.weapons[1].weaponsetting.ammomacroname=='')
            assert(loadout.numsoftware==1 and loadout.software[0].ware=='software_dockmk2')
            assert(loadout.thruster.macro=='thruster_gen_s_combat_01_mk3_macro');saved=true

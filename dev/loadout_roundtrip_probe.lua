@@ -58,7 +58,7 @@ local function savedLoadout(data,index)
   local values={};for _,slot in ipairs(data.slots) do if slot.kind==kind then values[#values+1]=slot end end
   local array=ffi.new('UILoadoutMacroData2[?]',math.max(1,#values));keep[#keep+1]=array
   for i,slot in ipairs(values) do
-   array[i-1].macro=slot.macro;array[i-1].upgradetypename=kind;array[i-1].slot=slot.index
+   array[i-1].macro=slot.macro;array[i-1].upgradetypename=kind;array[i-1].slot=slot.index-1
    array[i-1].weaponsetting.ammomacroname='';array[i-1].weaponsetting.weaponmode=''
   end
   loadout[category]=array;loadout['num'..category]=#values
@@ -67,7 +67,7 @@ local function savedLoadout(data,index)
  for i,ware in ipairs(data.software) do software[i-1].ware=ware end
  loadout.software=software;loadout.numsoftware=#data.software;loadout.thruster.macro=''
  for _,slot in ipairs(data.slots) do if slot.kind=='thruster' then loadout.thruster.macro=slot.macro end end
- C.SaveLoadout2(data.macro,loadout,'local',name,true,name,'Disposable X4LAN exact-slot experiment')
+ C.SaveLoadout2(data.macro,loadout,'local',name,false,name,'Disposable X4LAN exact-slot experiment')
  assert(#keep==5,'native loadout arrays must remain owned through save')
  local id=assert(find(),'saved diagnostic loadout not exposed by engine')
  log('saved id='..index..' preset='..id);return id
