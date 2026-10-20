@@ -71,7 +71,13 @@ receiving that one Lua notification. A pristine capture has count zero and its
 first native reload must report exactly one. The capture probe also verifies
 the production marker before saving, rather than assuming event order.
 
-Nine LuaJIT gate regressions cover pending setup, missing files, wrong sessions,
+The second native attempt, retained under .../gate-second, also stopped with the
+right saved marker but an unexpected load counter at its first inspection. This
+is a failure, not role-initialization acceptance. The next iteration permits a
+zero counter to remain pending within the existing timeout and records native
+load events explicitly; only counter one can admit the session.
+
+Eleven LuaJIT gate regressions cover pending setup, missing files, wrong sessions,
 wrong/used worlds, missed notifications, active reload and unsupported legacy
 fallback. dev/native_seed_play_test.py installs one role at a time against the
 same verified snapshot, and seed_play_probe.lua/xml read native pilot assignment,

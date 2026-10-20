@@ -68,19 +68,33 @@ assert(g.ready and g.frame(22) and not g.failed)
                 lua.globals().events["X4LAN_Seed.State"](None, payload)
                 lua.execute("assert(X4LAN_SEED_GATE.failed and not X4LAN_SEED_GATE.ready and #loads==0)")
 
-    def test_marker_without_native_load_and_active_reload_are_rejected(self):
+    def test_marker_without_native_completion_waits_then_times_out(self):
         lua = self.make()
         lua.execute("""
 local g=X4LAN_SEED_GATE;g.frame(0);g.frame(1)
 events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|0')
-assert(g.failed and not g.ready)
+assert(not g.failed and not g.ready and #loads==0)
+g.frame(181);assert(g.failed and not g.ready)
 """)
+
+    def test_active_reload_is_rejected(self):
         lua = self.make()
         lua.execute("""
 local g=X4LAN_SEED_GATE
 events['X4LAN_Seed.Loaded']();g.frame(0);g.frame(1)
 events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|1');assert(g.ready)
 events['X4LAN_Seed.Loaded']();assert(g.failed and not g.ready)
+""")
+
+    def test_marker_readable_before_native_completion_stays_pending(self):
+        lua = self.make()
+        lua.execute("""
+local g=X4LAN_SEED_GATE;g.frame(0);g.frame(1)
+events['X4LAN_Seed.State'](nil,'|1|0')
+g.frame(2);events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|0')
+assert(not g.failed and not g.ready and #loads==1)
+g.frame(3);events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|1')
+assert(g.ready and not g.failed and #loads==1)
 """)
 
     def test_bubble_does_not_spawn_or_request_setup_while_gate_is_pending(self):

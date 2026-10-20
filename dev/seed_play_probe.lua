@@ -2,6 +2,12 @@
 local A=X4LAN_BUBBLE_API;local G=X4LAN_SEED_GATE;local cfg=X4LAN_CONFIG
 if not A or not G or cfg.test_profile~='45841' then return end
 local C=require('ffi').C
+RegisterEvent('X4LAN_Seed.State',function(_,payload)
+ DebugError('[X4LAN] SEED_PLAY_STATE value='..tostring(payload)..' paused='..tostring(C.IsGamePaused()))
+end)
+RegisterEvent('X4LAN_Seed.Loaded',function()
+ DebugError('[X4LAN] SEED_PLAY_LOAD_EVENT paused='..tostring(C.IsGamePaused()))
+end)
 local frame=A.universe.frame;local observed=false
 function A.universe.frame(now)
  frame(now)

@@ -21,6 +21,7 @@
    <actions>
     <!-- Readable after UI reload even if its Lua notification was missed. -->
     <set_value name="State.$loads" exact="(if State.$loads? then State.$loads else 0) + 1"/>
+    <debug_text text="'[X4LAN] SEED_NATIVE loaded count=%s marked=%s'.[State.$loads,State.$id?]"/>
     <raise_lua_event name="'X4LAN_Seed.Loaded'"/>
    </actions>
   </cue>

@@ -36,7 +36,13 @@ RegisterEvent('X4LAN_Seed.State',function(_,payload)
  if marker==cfg.seed_id then
   -- UI handlers may be installed after event_game_loaded. MD retains the load
   -- count, so inspect native state instead of relying on one Lua notification.
-  if loads~=1 then fail('snapshot is not a freshly loaded pristine session');return end
+  -- A restored marker can become readable before the load-completed MD event.
+  -- Zero remains pending and is bounded by the same admission timeout.
+  if loads==0 then
+   if not G.waitLogged then G.waitLogged=true;log('WAIT_NATIVE_LOAD seed='..marker) end
+   return
+  end
+  if loads~=1 then fail('snapshot has unexpected native load count '..loads);return end
   G.loaded=true
   G.ready=true;log('READY seed='..marker..' slot='..cfg.slot);return
  end
