@@ -1,0 +1,42 @@
+NATIVE DOCKING / STORAGE TRANSITION FEASIBILITY
+21 October 2026 | A:primary | INTERNAL DEVELOPMENT
+
+PROBLEM
+The shared-seed ship experiment now avoids direct sector-position writes on
+attached ships. Its controlled comparison eliminates large stored-child offsets,
+but external-pad/internal-storage transitions still occur independently locally.
+Native dock.seed was zero for all68 observed bays of one carrier; it is not a
+usable unique dock identity. Shared attachment authority needs saved references
+and actual engine transitions, separately from position replication.
+
+BOUNDED PRIMITIVE
+dev/dock_state_probe.lua/.xml selects a non-player carrier and one stored child
+in a fresh isolated world. It retains the exact native ship/carrier/internal dock
+references and finds one compatible unoccupied external pad. It suspends those
+NPCs and holds the carrier transform. It then requests six measured phases:
+0 initial internal storage;1 spawn on the selected external pad;2 request storage;
+3 spawn on the same external pad;4 undock;5 spawn in the original internal bay.
+Each phase requires native Lua and MD state readbacks. The MD read acknowledgment
+must arrive before the next action. Requests are sequential, bounded to30 seconds
+per phase, and reject a stale phase, player-controlled ship or occupied target.
+No source ship is destroyed, and no game is saved. Only this disposable world is
+changed. This probe is opt-in and has no shipping UI entry or network protocol.
+
+EXECUTION
+Only the agreed primary native-PC owner runs it. With X4 closed, an empty45841
+save directory and autosave=false, use dev/native_dock_state_test.py install.
+Launch the isolated creative profile and native_world_test.py's synthetic p2 peer.
+Retain exact installed hashes, native logs, full normal-save before/after manifests
+and restored33-file hashes. Close the owned game/peer before restoring the known
+internal installation. Run dev/validate_dock_state.py on the full retained log.
+The validator rejects native parser/adapter errors, missing/unresolved readbacks,
+wrong dock references, changed ships, incomplete or reordered phase/action traces.
+
+STATUS / LIMITS
+323 Linux/Python/LuaJIT tests pass; LuaJIT syntax and installed-game MD schema
+validate. Native run is PENDING. API/schema presence is not execution acceptance.
+This does not establish dock reference persistence, network authorization,
+arbitrary ship/station compatibility, occupancy reconciliation, queued traffic,
+player docking, inventory/trading or whole-universe synchronization.
+Sealed7.1.1 packages and the separate937262c Windows/Linux bootstrap stay unchanged.
+Coordination remains :00/:15/:30/:45 Europe/Berlin; stop21 October08:00 CEST.
