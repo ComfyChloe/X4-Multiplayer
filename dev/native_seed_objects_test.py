@@ -36,7 +36,7 @@ def install(run, slot):
         for p in native.TARGET.rglob('*') if p.is_file()}, indent=2))
 
 
-def peer(run, slot, duration):
+def peer(run, slot, duration, seed_only=False):
     cfg = json.loads((run / 'play-session.json').read_text())
     session = UniverseSession(cfg['token'], cfg['build'], cfg['bubble'])
     relay = Relay('127.0.0.1', cfg['port'], session)
@@ -46,6 +46,13 @@ def peer(run, slot, duration):
     history = []; identities = {}; latest = None; seq = revision = 0
     start = time.monotonic(); next_hello = next_send = 0; ready_at = None
     replay = json.loads((run / 'host-objects.json').read_text()) if slot == 'p1' else None
+    omitted=[]
+    if seed_only:
+        if slot!='p1': raise ValueError('Seed-only selection belongs to the synthetic host replay')
+        omitted=[int(row.split(',')[0]) for row in replay['rows'] if int(row.split(',')[0])>=250000]
+        replay['rows']=[row for row in replay['rows'] if int(row.split(',')[0])<250000]
+        replay['identities']={id:value for id,value in replay['identities'].items() if int(id)<250000}
+        if not replay['rows']: raise ValueError('No saved-reference ships available for this bounded experiment')
     phase = None; next_baseline = 0
     try:
         while time.monotonic() - start < duration:
@@ -102,7 +109,8 @@ def peer(run, slot, duration):
     finally:
         sock.close(); relay.close()
         role = 'host' if slot == 'p2' else 'guest'
-        result = dict(role=role, synthetic_peer=True, history=history, elapsed=time.monotonic()-start)
+        result = dict(role=role, synthetic_peer=True, history=history, elapsed=time.monotonic()-start,
+                      seed_only=seed_only, omitted_host_created_ids=omitted)
         if slot == 'p2' and latest:
             rows = [row for row in latest.rows if ',ship,' in row]
             result.update(rows=rows, identities={row.split(',')[0]:identities[row.split(',')[0]]
@@ -117,6 +125,7 @@ if __name__ == '__main__':
     p.add_argument('--run', type=Path, required=True)
     p.add_argument('--slot', choices=('p1', 'p2'), required=True)
     p.add_argument('--duration', type=int, default=300)
+    p.add_argument('--seed-only',action='store_true',help='Explicitly test original saved ships; retain omitted new-host IDs in the report')
     a = p.parse_args()
     if a.action == 'install': install(a.run, a.slot)
-    else: peer(a.run, a.slot, a.duration)
+    else: peer(a.run, a.slot, a.duration,a.seed_only)

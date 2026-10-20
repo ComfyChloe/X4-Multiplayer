@@ -1,31 +1,51 @@
 NATIVE SEED OBJECT BINDING — OPT-IN EXPERIMENT
 20 October 2026 | internal development
 
-The default W01 path creates visual NPC replicas. This experiment adds an
-explicit seed_binding=true option which requires verified pristine-save
-admission. The guest indexes original native ships by their engine ID code and
-binds authenticated host IDENT records only when code, macro and owner agree.
-Engine handles and session network IDs remain separate. The registry refuses
-ambiguous codes, multiple IDs for one component, changed epochs/descriptors,
-dead bound components, players and the co-op/service fixtures.
+CURRENT IMPLEMENTATION
+The seed marker now retains an MD list of native ship references in the pristine
+snapshot. Both peers import that SAME saved list in bounded batches after native
+admission; engine reload resolves each saved reference to the local component.
+Its list index is the shared object ID. Human-readable ship codes are metadata,
+not lookup keys: native testing proved they can collide across the universe.
+Original equipment, pilots and engine references remain on the original ships.
 
-Original equipment, crew and engine references remain attached to the native
-ship. A bounded guest scan suspends local ship simulation; host poses update
-the originals, with a guarded MD warp when sector parents differ. Real pose
-drift is checked even when the host target is unchanged. Absence from a sector
-baseline releases the view but retains the original component and mapping.
-Player-owned non-fixture ships are included in the host capture in this mode.
+Explicit seed_binding=true requires the verified pristine snapshot and its
+versioned object registry. Missing/incompatible registries, replaced references,
+changed authority epochs/descriptors and protected player/service objects fail
+closed. No native original is deleted merely because a sector view omits it.
+The guest suspends local ship simulation, applies host poses and uses guarded MD
+warps across sector parents. It repairs native pose drift even if the received
+target is unchanged. Player-owned ships are included except co-op/service objects.
+Host-created ships use IDs above the reserved seed range and remain unresolved
+until the subsequent lifecycle/descriptor implementation; no visual fallback is
+used to pretend their native data is synchronized.
 
-This is not yet general shared-world authority. Unknown/new host objects remain
-unresolved. Destruction, ownership/equipment changes, commands, docking, health,
-station production, jobs and mission consequences require explicit authority
-and lifecycle work. The service donor/test freighter remains protected by its
-existing cargo/trade adapter; this experiment does not fix its order/hull issue.
-Retained out-of-view originals are not proof of correct current visibility.
-Native acceptance is pending. Mock tests do not establish engine behavior.
+RETAINED FAILED NATIVE EXPERIMENT
+objects-first used source ef1ac6d (production) / 7b8cbd6 (probe), with a fresh
+25,345,657-byte seed, SHA256
+ab45ae0c69f0fe3fea4cd147c9181476034a69c7c2242b63d846418036512821.
+Host admission passed and captured 142/143/142-ship baselines. Nine final host
+codes were absent from the pristine snapshot: new objects already existed during
+startup. The old code-keyed guest registry bound 105 ships, then STOPPED on a
+descriptor mismatch. The failed log, exact installed source, snapshot and save
+inventories remain in .local/evidence-147-withheld Normal save bytes
+and actual save timestamps are unchanged; owned staged copies removed; clean
+sealed 7.1.1 installation restored (33 files). This was a failure, not acceptance.
 
-The independent Windows/Linux bootstrap rendezvous remains pinned to 937262c
-and its existing seed manifest. This branch changes production bytes and needs
-its own fresh disposable seed and evidence before it can be used in that test.
-Coordination is now every fifteen minutes (:00/:15/:30/:45 Europe/Berlin), per
-the user's latest correction. Overnight work ends 21 October at 08:00 CEST.
+The next experiment uses a NEW snapshot containing the saved reference list.
+An explicitly selected --seed-only replay can validate the original-object
+primitive independently; the report must retain every omitted host-created ID.
+That bounded result must never be described as full-sector/universe acceptance.
+
+OPEN WORK
+Native acceptance of the corrected registry is pending. Destruction, new objects,
+commands, ownership/equipment changes, docking, health, station production, jobs
+and mission consequences require explicit host authority and lifecycle work.
+The service donor/test freighter remains protected by the cargo/trade adapter;
+this experiment does not fix its orders/hull. Out-of-view original retention is
+not proof of correct current visibility. Mock tests are not engine acceptance.
+
+The independent Windows/Linux bootstrap rendezvous stays pinned to 937262c and
+its existing seed manifest. This branch changes production bytes and needs its
+own fresh disposable seed. Coordination: :00/:15/:30/:45 Europe/Berlin; overnight
+work ends 21 October 2026 at 08:00 CEST. No package rebuilt or public release.

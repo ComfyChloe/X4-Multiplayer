@@ -20,7 +20,7 @@ class UniverseAdapterTests(unittest.TestCase):
            local module=old(name)
            if name=='ffi' then
             local alloc=module.new
-            module.new=function(name,v) if name:find('%[') then return {} else return alloc(name,v) end end
+            module.new=function(name,v) if name=='uint64_t' then return v elseif name:find('%[') then return {} else return alloc(name,v) end end
            end
            return module
           end
@@ -73,6 +73,19 @@ class UniverseAdapterTests(unittest.TestCase):
           end
           testRow='1,ship,ship_arg_s_scout_01_a_macro,argon,1500,200,300,0,0,0,none,0'
         ''')
+        if seed:
+            l.execute('''
+              local original=AddUITriggeredEvent
+              AddUITriggeredEvent=function(screen,event,payload)
+               if screen=='X4LAN_Seed' and event=='Objects' then
+                local objects={101,102,103,104,90,11}
+                for index,object in ipairs(objects) do
+                 events['X4LAN_Seed.Object'](nil,string.rep('b',32)..'|'..index..'|'..string.format('0x%x',object))
+                end
+                events['X4LAN_Seed.ObjectsEnd'](nil,string.rep('b',32)..'|1|6|6')
+               else original(screen,event,payload) end
+              end
+            ''')
         return l
 
     def test_seed_guest_binds_existing_equipped_ship_without_cloning_or_deleting(self):
@@ -95,19 +108,19 @@ class UniverseAdapterTests(unittest.TestCase):
         l=self.make('p2',seed=True);l.execute('''
           tick(1);baseline(1,{testRow},true);tick(25)
           local I=X4LAN_BUBBLE_API.identity
-          assert(not U.seedObjects.codes['NAT-90'] and not U.seedObjects.codes['NAT-11'])
+          assert(U.seedObjects.entries[5].object==90 and U.seedObjects.entries[6].object==11)
           I.rows.N1={code='NAT-104',epoch=U.latest.epoch,at=now}
           tick(1);assert(U.failed and #spawns==1 and #removed==0 and positions[104])
         ''')
 
     def test_seed_guest_moves_sector_parent_before_writing_pose(self):
         l=self.make('p2',seed=True);l.execute('''
-          tick(1);baseline(1,{testRow},true);tick(25)
-          X4LAN_BUBBLE_API.identity.rows.N1={code='NAT-103',epoch=U.latest.epoch,at=now}
+          tick(1);baseline(1,{(testRow:gsub('^1,','3,'))},true);tick(25)
+          X4LAN_BUBBLE_API.identity.rows.N3={code='NAT-103',epoch=U.latest.epoch,at=now}
           local moves={};AddUITriggeredEvent=function(screen,event,payload)
            if event=='SeedMove' then moves[#moves+1]=payload end
           end
-          tick(1);assert(U.replicas[1].object==103 and #moves==1 and positions[103].x==103)
+          tick(1);assert(U.replicas[3].object==103 and #moves==1 and positions[103].x==103)
           assert(moves[1].object=='103' and moves[1].sector=='22')
           sectors[103]=22;tick(1);assert(positions[103].x==1500 and not U.failed)
         ''')
@@ -118,6 +131,45 @@ class UniverseAdapterTests(unittest.TestCase):
           tick(20);assert(not U.failed and #U.sender.baseline.rows==3)
           assert(U.sender.baseline.rows[3]:find(',player,104,',1,true))
           assert(#removed==0 and #activated==0)
+        ''')
+
+    def test_seed_registry_batches_ignore_late_completed_batch_replays(self):
+        l=self.make(seed=True);l.execute('''
+          AddUITriggeredEvent=function(screen,event,payload)
+           if event~='Objects' then return end
+           local seed=string.rep('b',32)
+           if payload.start==1 then
+            events['X4LAN_Seed.Object'](nil,seed..'|1|0x65')
+            events['X4LAN_Seed.ObjectsEnd'](nil,seed..'|1|64|80')
+           else
+            assert(payload.start==65)
+            events['X4LAN_Seed.Object'](nil,seed..'|1|0x65')
+            events['X4LAN_Seed.ObjectsEnd'](nil,seed..'|1|64|80')
+            events['X4LAN_Seed.Object'](nil,seed..'|65|0x66')
+            events['X4LAN_Seed.ObjectsEnd'](nil,seed..'|65|80|80')
+           end
+          end
+          tick(3);assert(U.seedObjects.ready and not U.failed)
+          assert(U.seedObjects:index(101)==1 and U.seedObjects:index(102)==65)
+        ''')
+
+    def test_seed_registry_absence_or_wrong_batch_stops_before_world_changes(self):
+        for reply in ("events['X4LAN_Seed.ObjectsError'](nil,'old snapshot has no registry')",
+                      "events['X4LAN_Seed.Object'](nil,string.rep('b',32)..'|75|0x65')",
+                      "events['X4LAN_Seed.ObjectsEnd'](nil,string.rep('b',32)..'|1|64|250000')"):
+            l=self.make('p2',seed=True);l.execute('''
+              AddUITriggeredEvent=function(screen,event,payload)
+               if event=='Objects' then '''+reply+''' end
+              end
+              tick(4);assert(U.failed and #spawns==1 and #removed==0 and #activated==0)
+            ''')
+
+    def test_seed_registry_missing_response_is_bounded_and_never_starts_world_adapter(self):
+        l=self.make(seed=True);l.execute('''
+          AddUITriggeredEvent=function() end
+          U.receive({'UINTEREST','1',client.lease,'1','cluster_14_sector001_macro'},now)
+          tick(10);assert(not U.failed and not U.sender)
+          tick(2420);assert(U.failed and not U.sender and #removed==0 and #activated==0)
         ''')
 
     def test_seed_binding_stops_on_native_loss_or_player_boarding_without_replacement(self):

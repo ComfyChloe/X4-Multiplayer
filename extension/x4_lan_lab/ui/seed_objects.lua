@@ -1,45 +1,37 @@
--- Stable native object binding for peers which loaded the same pristine seed.
--- Session network IDs and engine handles are deliberately separate. Missing
--- objects stay unresolved; this registry never creates or deletes native objects.
+-- Shared indices refer to MD object references saved with the pristine world.
+-- Display ID codes are NOT globally unique and are never used as lookup keys.
 X4LAN_SEED_OBJECTS={}
 local B=X4LAN_SEED_OBJECTS
+B.newObjectBase=250000
 local function key(object) return tostring(object):gsub('ULL$','') end
-local function code(value)
- return type(value)=='string' and #value>0 and #value<=32 and value:match('^[A-Z0-9-]+$')
-end
 function B.registry(alive,protected)
- local self={codes={},ids={},handles={}}
- function self:observe(nativeCode,object,macro,owner)
-  if not code(nativeCode) or not object or not alive(object) or protected(object) then return false end
-  local old=self.codes[nativeCode]
-  assert(not old or old.object==object or not alive(old.object),'ambiguous native seed code')
-  if old and old.object==object then
-   assert(old.macro==macro,'native seed macro changed')
-   old.owner=owner
-  else self.codes[nativeCode]={object=object,macro=macro,owner=owner,code=nativeCode} end
+ local self={entries={},ids={},handles={}}
+ function self:observe(index,object,macro,owner,nativeCode)
+  assert(type(index)=='number' and index>=1 and index<B.newObjectBase and index==math.floor(index),'invalid saved object index')
+  if not object or not alive(object) then return false end
+  local old=self.entries[index];local other=self.handles[key(object)]
+  assert(not other or other==index,'native component appears at multiple seed indices')
+  assert(not old or old.object==object and old.macro==macro,'saved object reference changed')
+  self.entries[index]={object=object,macro=macro,owner=owner,code=nativeCode}
+  self.handles[key(object)]=index
   return true
  end
+ function self:index(object) return self.handles[key(object)] end
  function self:resolve(epoch,id,nativeCode,macro,owner)
   assert(type(epoch)=='string' and type(id)=='number' and id>0,'invalid shared object identity')
-  assert(code(nativeCode),'invalid native seed code')
   if self.epoch then assert(self.epoch==epoch,'seed authority epoch changed') else self.epoch=epoch end
-  local old=self.ids[id]
-  if old then
-   assert(old.code==nativeCode and old.macro==macro,'shared object identity changed')
-   assert(alive(old.object),'bound seed object disappeared')
-  end
-  local entry=self.codes[nativeCode]
-  if not entry or not alive(entry.object) then return nil end
-  assert(entry.macro==macro and entry.owner==owner,'native seed descriptor differs from host')
+  local entry=self.entries[id]
+  if not entry then return nil end -- Host-created objects need a lifecycle descriptor.
+  assert(alive(entry.object),'bound seed object disappeared id='..id)
+  assert(entry.macro==macro and entry.owner==owner and entry.code==nativeCode,
+   'saved object descriptor differs id='..id..' native='..tostring(entry.code)..'/'..entry.macro..'/'..entry.owner..
+   ' host='..tostring(nativeCode)..'/'..macro..'/'..owner)
   assert(not protected(entry.object),'protected player or service object in seed binding')
-  local other=self.handles[key(entry.object)]
-  assert(not other or other==id,'native seed object bound to multiple shared IDs')
-  self.ids[id]=entry;self.handles[key(entry.object)]=id
+  self.ids[id]=entry
   return entry.object
  end
  function self:release(id)
-  -- Absence from a sector view is not a destruction event. Retain the original
-  -- component and stable mapping so a later view can bind the same object again.
+  -- Sector-view absence is not a destruction event. Keep the original reference.
   local entry=self.ids[id]
   return entry and entry.object
  end

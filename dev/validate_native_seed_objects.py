@@ -19,8 +19,15 @@ def validate(host, guest, capture, replay):
     identities = capture['identities']
     if set(identities) != {str(id) for id in rows}:
         raise ValueError('Incomplete host identity capture')
-    if len({entry['code'] for entry in identities.values()}) != len(rows):
-        raise ValueError('Ambiguous host native codes')
+    omitted=[]
+    if replay.get('seed_only'):
+        omitted=sorted(id for id in rows if id>=250000)
+        if sorted(replay.get('omitted_host_created_ids',[]))!=omitted:
+            raise ValueError('Unexplained omitted host objects')
+        rows={id:row for id,row in rows.items() if id<250000}
+        identities={id:row for id,row in identities.items() if int(id)<250000}
+        if not rows: raise ValueError('No saved-reference objects exercised')
+    # Display codes may collide. The saved reference index is the shared key.
     phases = {entry['phase']:entry['revision'] for entry in replay['history'] if 'phase' in entry}
     if set(phases) != {'initial', 'absent', 'return'} or not phases['initial'] < phases['absent'] < phases['return']:
         raise ValueError('Missing or unordered exercised phases')
@@ -87,6 +94,7 @@ def validate(host, guest, capture, replay):
         raise ValueError('Native equipment/pilot state differs between loaded copies')
     return dict(original_ships=len(rows), native_identity_and_equipment_equal=True,
                 original_handles_retained_across_view_absence=True, settled_pose_error_limit_m=1,
+                explicitly_omitted_host_created_ids=omitted, seed_only=bool(replay.get('seed_only')),
                 synthetic_counterparts=True, two_native_acceptance=False, ongoing_universe_authority=False)
 
 

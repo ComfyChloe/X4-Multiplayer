@@ -7,7 +7,28 @@
    <actions>
     <do_if value="not md.X4LAN_Bubble.Arena.$ships? and not md.X4LAN_Bubble.PrepareShips.$own?">
      <set_value name="$id" exact="event.param3"/>
+     <!-- Saved references survive native reload; display codes can collide. -->
+     <find_ship name="$ships" space="player.galaxy" multiple="true" recursive="true"/>
+     <set_value name="$registryVersion" exact="1"/>
     </do_if>
+   </actions>
+  </cue>
+  <cue name="Objects" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_Seed'" control="'Objects'"/></conditions>
+   <actions>
+    <set_value name="$v" exact="event.param3"/>
+    <do_if value="State.$id? and State.$id == $v.$seed and State.$registryVersion? and State.$registryVersion == 1 and State.$loads == 1 and State.$ships.count lt 250000 and $v.$start ge 1 and $v.$start le State.$ships.count + 1">
+     <set_value name="$end" exact="[$v.$start + 63,State.$ships.count].min"/>
+     <do_all exact="[$end - $v.$start + 1,0].max" counter="$offset">
+      <set_value name="$index" exact="$v.$start + $offset - 1"/>
+      <set_value name="$object" exact="State.$ships.{$index}"/>
+      <do_if value="$object.isoperational">
+       <raise_lua_event name="'X4LAN_Seed.Object'" param="'%s|%s|%s'.[State.$id,$index,$object]"/>
+      </do_if>
+     </do_all>
+     <raise_lua_event name="'X4LAN_Seed.ObjectsEnd'" param="'%s|%s|%s|%s'.[State.$id,$v.$start,$end,State.$ships.count]"/>
+    </do_if>
+    <do_else><raise_lua_event name="'X4LAN_Seed.ObjectsError'" param="'missing or incompatible saved object registry'"/></do_else>
    </actions>
   </cue>
   <cue name="Inspect" instantiate="true">

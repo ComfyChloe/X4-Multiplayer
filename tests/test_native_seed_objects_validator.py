@@ -51,5 +51,17 @@ class NativeSeedObjectsValidatorTests(unittest.TestCase):
                         guest.replace('pose=100,200,300','pose=nan,200,300')):
             with self.assertRaises(ValueError): validate(host,content,capture,replay)
 
+    def test_seed_only_scope_requires_exact_explicit_post_snapshot_omissions(self):
+        host,guest,capture,replay=self.fixture()
+        capture['rows'].append('250001,ship,new_ship_macro,argon,0,0,0,0,0,0,none,0')
+        capture['identities']['250001']={'code':'NEW-001'}
+        with self.assertRaises(ValueError): validate(host,guest,capture,replay)
+        replay.update(seed_only=True,omitted_host_created_ids=[250001])
+        result=validate(host,guest,capture,replay)
+        self.assertEqual(result['explicitly_omitted_host_created_ids'],[250001])
+        self.assertTrue(result['seed_only'])
+        replay['omitted_host_created_ids']=[1,250001]
+        with self.assertRaises(ValueError): validate(host,guest,capture,replay)
+
 
 if __name__=='__main__': unittest.main()

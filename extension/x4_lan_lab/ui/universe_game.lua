@@ -30,6 +30,18 @@ if cfg.seed_binding then
  assert(cfg.seed_id and cfg.seed_verified==true and X4LAN_SEED_GATE and cfg.world_mode=='replica',
   'native seed binding requires verified pristine-save admission')
  u.seedObjects=assert(X4LAN_SEED_OBJECTS,'seed object registry missing').registry(C.IsComponentOperational,playerOrFixture)
+ u.nextId=X4LAN_SEED_OBJECTS.newObjectBase
+end
+local function seedRegistryFrame(now)
+ if u.seedObjects.error then error(u.seedObjects.error) end
+ if u.seedObjects.ready then return true end
+ u.seedObjects.started=u.seedObjects.started or now
+ assert(now-u.seedObjects.started<120,'saved object registry import timed out')
+ if not u.seedObjects.pending or now>=(u.seedObjects.retryAt or 0) then
+  local start=u.seedObjects.next or 1;u.seedObjects.pending=start;u.seedObjects.retryAt=now+2
+  AddUITriggeredEvent('X4LAN_Seed','Objects',{seed=cfg.seed_id,start=start})
+ end
+ return false
 end
 local function currentSector()
  local object=C.GetPlayerContainerID()
@@ -75,12 +87,7 @@ local function scanStep(scan)
     local macro,owner=GetComponentData(A.id(object),'macro','owner')
     assert(P.atom(macro,true) and P.atom(owner),'NPC descriptor unavailable; refusing incomplete baseline')
     if u.seedObjects and cfg.slot=='p2' then
-     assert(A.identity and A.identity.nativeCode,'native identity reader missing')
-     if u.seedObjects:observe(A.identity.nativeCode(object),object,macro,owner) then
-      -- Preserve native equipment, crews and mission references. Local AI must
-      -- not keep moving this copy while the host supplies its state.
-      C.ActivateObject(object,false)
-     end
+     C.ActivateObject(object,false)
     end
     if owner~='player' or u.seedObjects then
      if C.GetContextByClass(object,'sector',false)==scan.sector then
@@ -105,8 +112,9 @@ local function captured(scan)
   if C.IsComponentOperational(entry.object) and C.GetContextByClass(entry.object,'sector',false)==scan.sector then
    local identity=u.identities[entry.key]
    if not identity or identity.macro~=entry.macro then
-    u.nextId=u.nextId+1;assert(u.nextId<=2147483647,'world ID space exhausted')
-    identity={id=u.nextId,macro=entry.macro};u.identities[entry.key]=identity
+    local saved=u.seedObjects and u.seedObjects:index(entry.object)
+    if not saved then u.nextId=u.nextId+1;assert(u.nextId<=2147483647,'world ID space exhausted') end
+    identity={id=saved or u.nextId,macro=entry.macro};u.identities[entry.key]=identity
    end
    local row=identity.id..',ship,'..entry.macro..','..entry.owner..','..poseFields(pose(entry.object))..',none,0'
    assert(P.record(row),'invalid captured NPC state')
@@ -260,6 +268,7 @@ local function frame(now)
  if u.seedObjects then assert(X4LAN_SEED_GATE.ready and not X4LAN_SEED_GATE.failed,'seed admission lost') end
  if not u.setup then u.setup=true;AddUITriggeredEvent('X4LAN_Universe','Setup',{seed=cfg.seed_binding and cfg.seed_id or ''});return end
  if not u.ready or A.paused() then return end
+ if u.seedObjects and not seedRegistryFrame(now) then return end
  local name,sector=currentSector();if not name then return end
  if cfg.slot=='p2' then
   if u.interest~=name then
@@ -319,4 +328,37 @@ function u.frame(now)
 end
 RegisterEvent('X4LAN_Universe.Exclude',function(_,object) u.excluded[key(ConvertIDTo64Bit(object))]=true end)
 RegisterEvent('X4LAN_Universe.Ready',function() u.ready=true;log('READY mode='..cfg.world_mode..' slot='..cfg.slot) end)
+RegisterEvent('X4LAN_Seed.Object',function(_,payload)
+ if not u.seedObjects or not u.seedObjects.pending then return end
+ local ok,err=pcall(function()
+  local f=P.split(tostring(payload),'|');local index=P.integer(f[2],X4LAN_SEED_OBJECTS.newObjectBase-1)
+  if #f==3 and f[1]==cfg.seed_id and index and index<u.seedObjects.pending then return end -- Replayed completed batch.
+  assert(#f==3 and f[1]==cfg.seed_id and index and index>=u.seedObjects.pending and index<u.seedObjects.pending+64,'unexpected saved object entry')
+  assert(f[3]:match('^0x[%da-fA-F]+$') and #f[3]<=18,'invalid native saved reference')
+  local object=ffi.new('uint64_t',0)
+  for digit in f[3]:sub(3):gmatch('.') do object=object*16+tonumber(digit,16) end
+  if C.IsComponentOperational(object) then
+   local macro,owner=GetComponentData(A.id(object),'macro','owner')
+   assert(P.atom(macro,true) and P.atom(owner),'saved object descriptor unavailable')
+   u.seedObjects:observe(index,object,macro,owner,A.identity.nativeCode(object))
+   if cfg.slot=='p2' and not playerOrFixture(object) then C.ActivateObject(object,false) end
+  end
+ end)
+ if not ok then u.seedObjects.error=tostring(err) end
+end)
+RegisterEvent('X4LAN_Seed.ObjectsEnd',function(_,payload)
+ if not u.seedObjects or not u.seedObjects.pending then return end
+ local f=P.split(tostring(payload),'|');local start=P.integer(f[2]);local last=P.integer(f[3]);local total=P.integer(f[4])
+ if #f==4 and f[1]==cfg.seed_id and start and start<u.seedObjects.pending then return end
+ if #f~=4 or f[1]~=cfg.seed_id or start~=u.seedObjects.pending or not last or not total or
+    total>=X4LAN_SEED_OBJECTS.newObjectBase or last~=math.min(start+63,total) or
+    u.seedObjects.total and u.seedObjects.total~=total then
+  u.seedObjects.error='invalid saved object registry completion';return
+ end
+ u.seedObjects.total=total;u.seedObjects.next=last+1;u.seedObjects.pending=nil
+ if last==total then u.seedObjects.ready=true;log('SEED_REGISTRY_READY entries='..total) end
+end)
+RegisterEvent('X4LAN_Seed.ObjectsError',function(_,message)
+ if u.seedObjects then u.seedObjects.error=tostring(message) end
+end)
 log('ARMED internal world replication; native cargo and shared identity adapters load separately; NPC combat remains experimental')
