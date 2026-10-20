@@ -74,6 +74,15 @@ class OverlayAndRefusalTests(unittest.TestCase):
             (package / 'installation.json').write_text(json.dumps({'game': 'G', 'profile': str(Path(d) / '45841')}))
             self.assertEqual(harness.windows_paths(package)[1].name, '45841')
 
+    def test_save_check_tolerates_only_steam_metadata_timestamps(self):
+        save = r'C:\X4\259869033\save\save_001.xml.gz'
+        meta = r'C:\X4\259869033\save\steam_autocloud.vdf'
+        before = {save: {'sha256': 'a', 'mtime_ns': 1}, meta: {'sha256': 'm', 'mtime_ns': 1}}
+        self.assertEqual(harness.saves_changed(before, {save: {'sha256': 'a', 'mtime_ns': 1}, meta: {'sha256': 'm', 'mtime_ns': 9}}), [])
+        self.assertEqual(harness.saves_changed(before, {save: {'sha256': 'a', 'mtime_ns': 1}, meta: {'sha256': 'x', 'mtime_ns': 9}}), [meta])
+        self.assertEqual(harness.saves_changed(before, {save: {'sha256': 'a', 'mtime_ns': 2}, meta: {'sha256': 'm', 'mtime_ns': 1}}), [save])
+        self.assertEqual(harness.saves_changed(before, {meta: {'sha256': 'm', 'mtime_ns': 1}}), [save])
+
     def test_local_address_is_never_loopback(self):
         try:
             address = harness.local_ipv4()

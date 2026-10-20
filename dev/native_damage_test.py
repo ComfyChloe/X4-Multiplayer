@@ -127,6 +127,19 @@ def saves(profile):
     return result
 
 
+STEAM_METADATA = {'steam_autocloud.vdf'}  # Steam Cloud bookkeeping; Steam touches its timestamp on launch
+
+
+def saves_changed(before, now):
+    """Changed save paths. Real saves compare by content and mtime; Steam metadata by content only."""
+    changed = sorted(set(before) ^ set(now))
+    for path in set(before) & set(now):
+        a, b = before[path], now[path]
+        if a['sha256'] != b['sha256'] or (Path(path).name not in STEAM_METADATA and a['mtime_ns'] != b['mtime_ns']):
+            changed.append(path)
+    return sorted(changed)
+
+
 def setup_ps1(package, *args):
     command = ['powershell.exe', '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass',
                '-File', str(package / 'setup.ps1'), *args]
@@ -339,9 +352,9 @@ def restore():
     problems = [name for name in state['profile_files'] if sha256(profile / name) != sha256(backup / name)]
     if state.get('had_installation_json') and sha256(record) != sha256(backup / 'package-installation.json'):
         problems.append('package installation.json not restored')
-    now_saves = saves(profile)
-    if now_saves != state['saves']:
-        problems.append('saves changed: ' + ', '.join(sorted(set(now_saves) ^ set(state['saves'])) or ['contents']))
+    changed = saves_changed(state['saves'], saves(profile))
+    if changed:
+        problems.append('saves changed: ' + ', '.join(changed))
     if target.exists():
         problems.append('mod still installed at ' + str(target))
     (Path(state['run']) / 'restore.json').write_text(json.dumps(dict(problems=problems), indent=2))
