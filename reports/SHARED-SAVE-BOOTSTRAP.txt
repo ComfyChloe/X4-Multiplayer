@@ -55,7 +55,7 @@ The validator rejects unknown metadata, missing/duplicate stations, wrong saved
 session markers, missing save/load completion, changed owners/sectors/transforms
 and native mod errors. It explicitly does not require identical local handles.
 
-OPTIONAL ADMISSION PROTOTYPE — NATIVE VALIDATION IN PROGRESS
+OPTIONAL ADMISSION PROTOTYPE — SEPARATE NATIVE HOST/GUEST STARTS PASS
 The optional seed_game.lua / x4lan_seed.xml path blocks bubble setup and network
 admission until the staged pristine snapshot has actually loaded. The seed ID
 must match the relay's bubble/session identifier. Missing, wrong or already-used
@@ -81,8 +81,30 @@ Eleven LuaJIT gate regressions cover pending setup, missing files, wrong session
 wrong/used worlds, missed notifications, active reload and unsupported legacy
 fallback. dev/native_seed_play_test.py installs one role at a time against the
 same verified snapshot, and seed_play_probe.lua/xml read native pilot assignment,
-all four authority flags and the number of shared Shuttles/markets. Native results
-for the corrected gate are still pending.
+all four authority flags and the number of shared Shuttles/markets.
+
+Corrected run: .local/evidence-138-withheld, source0528b97 (branch93b2c91
+also includes reviewed sensor merge5fd786b). The full 294-test Linux/LuaJIT suite
+passes; production seed MD and both seed probes validate against the native schema.
+Both native roles load the same 25,774,446-byte snapshot, SHA-256
+d0844019ef1d266f905f6b77392e55b1b03bf32135d71d5a9fba0d7646510448.
+The raw logs now show the ordering: an inspection response still carries zero
+while the native load event advances the saved counter to one. Waiting for the
+subsequent inspection admits the world correctly, without a second load request.
+Neither role begins multiplayer setup before that confirmation.
+
+The host controls ship1 and all four host flags are true; the guest controls
+ship2 and all four flags are false. Each has exactly two shared Shuttles and two
+test markets, both ships operational. Both roles join a local synthetic relay
+counterpart. The host and guest runs are sequential on this Linux PC, not two
+native games connected together. This is startup/role evidence, not a complete
+gameplay or authority regression. The earlier independent 1,378-station reload
+comparison remains separate evidence, not a new station comparison in these runs.
+
+All preexisting save bytes and actual save timestamps are unchanged. Only the
+exact owned staged copies were removed after each run; sealed snapshots remain
+private for reinspection. reports/native-seed-admission-checks.json records the
+source, role readbacks, evidence hashes and failed attempts.
 
 A fresh session snapshot is taken before multiplayer fixture setup.
 Both peers load that same uninitialized world, verify its marker and

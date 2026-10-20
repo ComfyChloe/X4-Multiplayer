@@ -1,0 +1,85 @@
+{
+  "source": "0528b97",
+  "branch_head": "93b2c91",
+  "reviewed_sensor_merge": "5fd786b",
+  "game": "Linux X4 9.00 (611726), Steam23660954",
+  "tests": 294,
+  "lua_gate_tests": 11,
+  "md_schema_valid": true,
+  "seed": {
+    "native_save_sha256": "d0844019ef1d266f905f6b77392e55b1b03bf32135d71d5a9fba0d7646510448",
+    "size": 25774446,
+    "real_loopback_tcp": true,
+    "received_verified": true,
+    "gameplay_acceptance": false
+  },
+  "roles": {
+    "p1": {
+      "slot": "p1",
+      "native_seed_loaded": true,
+      "own_pilot_correct": true,
+      "native_authority_roles_correct": true,
+      "shared_shuttles": 2,
+      "markets": 2,
+      "seed_sha256": "d0844019ef1d266f905f6b77392e55b1b03bf32135d71d5a9fba0d7646510448",
+      "normal_saves_unchanged": true,
+      "two_native_acceptance": false,
+      "ongoing_world_authority": false
+    },
+    "p2": {
+      "slot": "p2",
+      "native_seed_loaded": true,
+      "own_pilot_correct": true,
+      "native_authority_roles_correct": true,
+      "shared_shuttles": 2,
+      "markets": 2,
+      "seed_sha256": "d0844019ef1d266f905f6b77392e55b1b03bf32135d71d5a9fba0d7646510448",
+      "normal_saves_unchanged": true,
+      "two_native_acceptance": false,
+      "ongoing_world_authority": false
+    }
+  },
+  "native_initialization_pass": true,
+  "synthetic_counterparts": true,
+  "two_native_acceptance": false,
+  "ongoing_world_authority": false,
+  "normal_saves_unchanged": true,
+  "owned_copies_removed": true,
+  "failed_attempts": {
+    "gate-first": {
+      "result": "FAIL",
+      "retained_log": "gate-first/play-p1/native-failed.log"
+    },
+    "gate-second": {
+      "result": "FAIL",
+      "retained_log": "gate-second/play-p1/native-failed.log"
+    }
+  },
+  "evidence_root": ".local/native-seed-tests",
+  "evidence": {
+    "gate-third/state.json": "432f247eb692023bb72a6954f9103bf0f08b9efc1f17f690c43ef5d4bab85130",
+    "gate-third/source.json": "3c693b9d6168d6b2fe0286d5387fc3bde427e0740acb439d52ab28465ea9a2bf",
+    "gate-third/transfer.json": "df70c3fa248445e3b78494a0d097ed5b03660147014365174858de97e9506950",
+    "gate-third/capture.log": "7c52107d081517c9d23804007dcbf91474eed69324a6599dbe164ca2709e602c",
+    "gate-third/capture-installed-hashes.json": "dd657eaec15b9f807f6ae5686cf4f970d8e88bef59df17bd18cd384553f35650",
+    "gate-third/saves-before.json": "37ebfabb586e4eab27163973f18cae1de8db7c7019221464a572dddc8c52f7a4",
+    "gate-third/saves-after-cleanup.json": "3f9652c8dbda3ae88afe4c98c689ab0a8ed41f1e7c7e809b9cae82cbb9b4a01f",
+    "gate-third/restored-installation.json": "3fbf33f464282b198cee06c8de7cdb232192c140fdf9a44fc7a438766c282f9f",
+    "gate-third/play-p1/native.log": "9f6dfe9806bcd72d7d818a95c2470a7ec92f6d95cbad690d692d4e3ca7f053a3",
+    "gate-third/play-p1/result.json": "d04dc19c289cb752da6d47bcb7c908bef2ba6fe19fe0425353aab0fd63172c06",
+    "gate-third/play-p1/peer-result.json": "d6e000424e9487172080150fbaef63be65f1423c8dacddd831dcf3eb6b95326c",
+    "gate-third/play-p1/installed-hashes.json": "046e2e0591743ba584cfed9872d08dd6f8d2d63e8af1b7a0b3a20448d36c65ed",
+    "gate-third/play-p1/saves-before.json": "0b61461ae46fd240edb993ea0f4a7a09d6a132f12b02cd8ac6aac43d7e278aba",
+    "gate-third/play-p1/saves-after.json": "aa3f9dea05fd36ca5bf5ac66f089fae12454d50bf611fd3e4f8468def0bf1b80",
+    "gate-third/play-p2/native.log": "df2d3ede885831778cefc1c944d4e72382455be07593d96597ade4ebb5a0a08a",
+    "gate-third/play-p2/result.json": "b0c060d9a4f725c178dd3a0acc8cf0a9916594c1618b08292088ee14f54dfc05",
+    "gate-third/play-p2/peer-result.json": "ae507eb793b713fcf83ac671aaecc00e5f91c39e98a84e0e687fd021bd09aa9b",
+    "gate-third/play-p2/installed-hashes.json": "86ef12e56a389c2ddad9e7d1e038d267c3a0d532f7a0f4fea9079fb9de3e5d69",
+    "gate-third/play-p2/saves-before.json": "e187e6923e4b1f25f7b0f3d4ed90db86acd0c96fe0a80765deb9360757225484",
+    "gate-third/play-p2/saves-after.json": "b99faf62d3c012d6810499c066f5d4ca3f1733583c8ace1a509530f0811fd720",
+    "gate-third-source-checks.txt": "27c1b0c71f088595287fc535b5339a7a43f84eea546ba7b68cc854c1e212bfaa",
+    "gate-third-schema.json": "8a1bd3df02c60c23717f9323be39de7e269fa10d974a4f180927024a9ed3aeb3",
+    "gate-first/play-p1/native-failed.log": "1c6480948248eb5f0784325e2dee1b5b7092bf72b7e59fbdc2283ebb7d2b6940",
+    "gate-second/play-p1/native-failed.log": "3ac61670554ef618fa014af6fb01a440676562a6fad085e6758453dfe6ef7a47"
+  }
+}
