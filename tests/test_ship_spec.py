@@ -23,6 +23,7 @@ X4LAN_CONFIG.ship_loadout='x4lan_coop_xperimental'
 X4LAN_CONFIG.ship_weapons=6
 GetComponentData=function() return 'cluster_14_sector001_macro' end
 requests,spawned={},{}
+ConvertIDTo64Bit=tonumber
 AddUITriggeredEvent=function(screen,control,value) requests[#requests+1]={screen,control,value} end
 api.SpawnObjectAtPos2=function(macro,sector,p,owner)
  assert(owner=='player');spawned[#spawned+1]=macro
@@ -98,7 +99,8 @@ class ShipSpecContractTests(unittest.TestCase):
         prepare = root.find("./cues/cue[@name='PrepareShips']")
         self.assertIsNotNone(prepare)
         text = ET.tostring(prepare, encoding='unicode')
-        self.assertEqual(text.count('<apply_loadout'), 2)
+        self.assertEqual(text.count('<create_ship'), 2)
+        self.assertEqual(text.count('<loadout loadout="$loadout"'), 2)
         self.assertIn('ware.software_dockmk2', text)
         # Exact configured count; an empty slot is accepted only without missile storage.
         self.assertIn('$candidate.weapons.operational.count != $args.$weapons', text)
@@ -106,6 +108,8 @@ class ShipSpecContractTests(unittest.TestCase):
         self.assertNotIn('!= $candidate.weapons.numslots or', text)
         self.assertIn('X4LAN_Bubble.ShipsRefused', text)
         self.assertIn('X4LAN_Bubble.ShipsReady', text)
+        self.assertIn('X4LAN_Bubble.PreparedOwn', text)
+        self.assertIn('X4LAN_Bubble.PreparedProxy', text)
         self.assertIn('SHIP_SPEC role=', text)
         self.assertNotIn('player.ship', text, 'the shared ship must never fall back to the current ship')
         refused = next(n for n in prepare.find('actions').findall('do_if') if n.get('value') == "$refusal != ''")
@@ -135,36 +139,46 @@ class ShipSpecAdapterTests(unittest.TestCase):
 assert(count('PrepareShips')==1 and count('%(s)s')==0)
 local p=last('PrepareShips')
 assert(p.macro=='ship_ter_s_xperimental_01_a_macro' and p.loadout=='x4lan_coop_xperimental' and p.weapons==6)
-assert(#spawned==2 and spawned[1]==spawned[2] and spawned[1]==p.macro)
-assert(p.own~=p.proxy)
+assert(#spawned==0 and p.own==nil and p.proxy==nil)
+assert(tostring(p.sector)=='22')
 now=11;frames.onUpdate();assert(count('PrepareShips')==1 and count('%(s)s')==0)
+positions[61]=shipPos;positions[62]=shipPos
+events['X4LAN_Bubble.PreparedOwn'](nil,61)
+frames.onUpdate();assert(count('%(s)s')==0, 'one callback is not readiness')
+events['X4LAN_Bubble.PreparedProxy'](nil,62)
 events['X4LAN_Bubble.ShipsReady']();frames.onUpdate()
-assert(count('%(s)s')==1 and last('%(s)s')==p.proxy)
+assert(count('%(s)s')==1 and tostring(last('%(s)s'))=='62')
 local s=X4LAN_BUBBLE_API.state
-assert(tostring(s.ship)==tostring(p.own) and tostring(s.proxy)==tostring(p.proxy) and not s.failed)
-frames.onUpdate();assert(count('%(s)s')==1 and #spawned==2)
+assert(s.ship==61 and s.proxy==62 and not s.failed)
+events['X4LAN_Bubble.PreparedOwn'](nil,11);events['X4LAN_Bubble.ShipsReady']()
+frames.onUpdate();assert(count('%(s)s')==1 and #spawned==0 and s.ship==61)
 ''' % {'s': setup})
 
     def test_unavailable_macro_stops_without_substitute(self):
-        l = self.make('unavailable=true')
+        l = self.make()
         l.execute('''
+events['X4LAN_Bubble.ShipsRefused'](nil,'macro/sector (X4: Timelines required)')
+frames.onUpdate()
 local s=X4LAN_BUBBLE_API.state
-assert(s.failed and count('PrepareShips')==0 and count('SetupHost')==0)
-assert(#spawned==1 and spawned[1]=='ship_ter_s_xperimental_01_a_macro')
-assert(logged('ego_dlc_timelines'))
+assert(s.failed and count('PrepareShips')==1 and count('SetupHost')==0)
+assert(#spawned==0 and positions[11]~=nil)
+assert(logged('Timelines required'))
 ''')
 
-    def test_partial_spawn_removes_only_new_ships_and_keeps_original(self):
-        for flag in ('failSecond', 'inertSecond'):
-            with self.subTest(flag=flag):
-                l = self.make(flag + '=true')
+    def test_incomplete_duplicate_or_original_object_callbacks_never_start_gameplay(self):
+        for own, proxy in [(61, None), (61, 0), (61, 61), (11, 62), (61, 11), (61, 99)]:
+            with self.subTest(own=own, proxy=proxy):
+                l = self.make()
+                l.execute("positions[61]=shipPos;positions[62]=shipPos")
+                l.globals().events['X4LAN_Bubble.PreparedOwn'](None, own)
+                if proxy is not None:
+                    l.globals().events['X4LAN_Bubble.PreparedProxy'](None, proxy)
                 l.execute('''
+events['X4LAN_Bubble.ShipsReady']();frames.onUpdate()
 local s=X4LAN_BUBBLE_API.state
-assert(s.failed and count('PrepareShips')==0 and count('SetupHost')==0)
-assert(#spawned==2 and #removed==1 and removed[1]==61 and positions[61]==nil)
+assert(s.failed and count('SetupHost')==0 and #spawned==0)
 assert(positions[11]~=nil, 'original ship must stay')
-for _,id in ipairs(removed) do assert(id~=11) end
-assert(logged('ego_dlc_timelines'))
+assert(#removed==0)
 ''')
 
     def test_md_refusal_stops_without_setup(self):

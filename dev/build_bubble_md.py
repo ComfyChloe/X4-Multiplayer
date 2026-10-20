@@ -134,34 +134,45 @@ xml='''<?xml version="1.0" encoding="utf-8"?>
 <!-- Shared ship spec: Lua spawns the local ship and the proxy from one configured
      macro. Both receive the same loadout before Arena setup; nothing is substituted. -->
 <cue name="PrepareShips" namespace="this">
-<conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'PrepareShips'"/></conditions>
+<conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'PrepareShips'" /></conditions>
 <actions>
- <set_value name="$args" exact="event.param3"/><set_value name="$candidate" exact="$args.$own"/><set_value name="$peer" exact="$args.$proxy"/>
- <set_value name="$refusal" exact="''"/>
- <do_if value="not $candidate.exists or not $peer.exists or $candidate.macro != $peer.macro or $candidate.macro.id != $args.$macro"><set_value name="$refusal" exact="'macro'"/></do_if>
+ <set_value name="$args" exact="event.param3" /><set_value name="$candidate" exact="null" /><set_value name="$peer" exact="null" />
+ <set_value name="$macro" exact="macro.{$args.$macro}" />
+ <set_value name="$refusal" exact="''" />
+ <do_if value="not $macro or not $args.$sector.exists"><set_value name="$refusal" exact="'macro/sector (X4: Timelines required)'" /></do_if>
  <do_else>
-  <get_loadout loadout="$args.$loadout" macro="$candidate.macro" result="$loadout"/>
-  <do_if value="not $loadout"><set_value name="$refusal" exact="'loadout'"/></do_if>
+  <get_loadout loadout="$args.$loadout" macro="$macro" result="$loadout" />
+  <do_if value="not $loadout"><set_value name="$refusal" exact="'loadout'" /></do_if>
   <do_else>
-   <apply_loadout object="$candidate" loadout="$loadout"/><apply_loadout object="$peer" loadout="$loadout"/>
-   <do_if value="$candidate.software.dock != ware.software_dockmk2 or $peer.software.dock != ware.software_dockmk2 or $candidate.weapons.operational.count != $args.$weapons or ($candidate.weapons.operational.count lt $candidate.weapons.numslots and $candidate.ammostorage.missile.capacity != 0) or $candidate.weapons.operational.count != $peer.weapons.operational.count or $candidate.shields.operational.count == 0 or $candidate.shields.operational.count != $peer.shields.operational.count or $candidate.engines.operational.count == 0 or $candidate.engines.operational.count != $peer.engines.operational.count or $candidate.maxhull != $peer.maxhull or $candidate.maxshield != $peer.maxshield"><set_value name="$refusal" exact="'equipment'"/></do_if>
+   <!-- Full native creation is needed for sensor discovery. -->
+   <create_ship name="$candidate" macro="$macro" sector="$args.$sector">
+    <owner exact="faction.player"/><loadout loadout="$loadout"/>
+    <position x="$args.$localX" y="10km" z="0m"/>
+   </create_ship>
+   <create_ship name="$peer" macro="$macro" sector="$args.$sector">
+    <owner exact="faction.player"/><loadout loadout="$loadout"/>
+    <position x="-$args.$localX" y="10km" z="0m"/>
+   </create_ship>
+   <do_if value="$candidate.software.dock != ware.software_dockmk2 or $peer.software.dock != ware.software_dockmk2 or $candidate.weapons.operational.count != $args.$weapons or ($candidate.weapons.operational.count lt $candidate.weapons.numslots and $candidate.ammostorage.missile.capacity != 0) or $candidate.weapons.operational.count != $peer.weapons.operational.count or $candidate.shields.operational.count == 0 or $candidate.shields.operational.count != $peer.shields.operational.count or $candidate.engines.operational.count == 0 or $candidate.engines.operational.count != $peer.engines.operational.count or $candidate.maxhull != $peer.maxhull or $candidate.maxshield != $peer.maxshield"><set_value name="$refusal" exact="'equipment'" /></do_if>
   </do_else>
  </do_else>
  <do_all exact="2" counter="$i">
-  <set_value name="$ship" exact="if $i == 1 then $candidate else $peer"/>
-  <debug_text text="'[X4LAN] SHIP_SPEC role=%s macro=%s idcode=%s maxhull=%s maxshield=%s weapons=%s/%s expected=%s missilecapacity=%s weapon=%s shields=%s shield=%s engines=%s engine=%s dock=%s software=%s cargo=%s maxspeed=%s'.[if $i == 1 then 'local' else 'proxy',@$ship.macro.id,@$ship.idcode,@$ship.maxhull,@$ship.maxshield,@$ship.weapons.operational.count,@$ship.weapons.numslots,$args.$weapons,@$ship.ammostorage.missile.capacity,@$ship.weapons.operational.list.{1}.macro.id,@$ship.shields.operational.count,@$ship.shields.operational.list.{1}.macro.id,@$ship.engines.operational.count,@$ship.engines.operational.list.{1}.macro.id,@$ship.software.dock,@$ship.software.installed,@$ship.cargo.capacity.all,@$ship.maxspeed]"/>
+  <set_value name="$ship" exact="if $i == 1 then $candidate else $peer" />
+  <debug_text text="'[X4LAN] SHIP_SPEC role=%s macro=%s idcode=%s maxhull=%s maxshield=%s weapons=%s/%s expected=%s missilecapacity=%s weapon=%s shields=%s shield=%s engines=%s engine=%s dock=%s software=%s cargo=%s maxspeed=%s'.[if $i == 1 then 'local' else 'proxy',@$ship.macro.id,@$ship.idcode,@$ship.maxhull,@$ship.maxshield,@$ship.weapons.operational.count,@$ship.weapons.numslots,$args.$weapons,@$ship.ammostorage.missile.capacity,@$ship.weapons.operational.list.{1}.macro.id,@$ship.shields.operational.count,@$ship.shields.operational.list.{1}.macro.id,@$ship.engines.operational.count,@$ship.engines.operational.list.{1}.macro.id,@$ship.software.dock,@$ship.software.installed,@$ship.cargo.capacity.all,@$ship.maxspeed]" />
  </do_all>
  <do_if value="$refusal != ''">
-  <debug_text text="'[X4LAN] SHIP_SPEC_REFUSED reason=%s macro=%s loadout=%s'.[$refusal,$args.$macro,$args.$loadout]"/>
-  <do_if value="$candidate.exists"><destroy_object object="$candidate" explosion="false"/></do_if>
-  <do_if value="$peer.exists"><destroy_object object="$peer" explosion="false"/></do_if>
-  <remove_value name="$candidate"/>
-  <raise_lua_event name="'X4LAN_Bubble.ShipsRefused'" param="$refusal"/>
+  <debug_text text="'[X4LAN] SHIP_SPEC_REFUSED reason=%s macro=%s loadout=%s'.[$refusal,$args.$macro,$args.$loadout]" />
+  <do_if value="$candidate.exists"><destroy_object object="$candidate" explosion="false" /></do_if>
+  <do_if value="$peer.exists"><destroy_object object="$peer" explosion="false" /></do_if>
+  <remove_value name="$candidate" />
+  <raise_lua_event name="'X4LAN_Bubble.ShipsRefused'" param="$refusal" />
  </do_if>
  <do_else>
-  <set_value name="$own" exact="$candidate"/>
-  <teleport_player object="$own" instant="true" force="true"/>
-  <raise_lua_event name="'X4LAN_Bubble.ShipsReady'"/>
+  <set_value name="$own" exact="$candidate" />
+  <raise_lua_event name="'X4LAN_Bubble.PreparedOwn'" param="$candidate" />
+  <raise_lua_event name="'X4LAN_Bubble.PreparedProxy'" param="$peer" />
+  <teleport_player object="$own" instant="true" force="true" />
+  <raise_lua_event name="'X4LAN_Bubble.ShipsReady'" />
  </do_else>
 </actions>
 </cue>

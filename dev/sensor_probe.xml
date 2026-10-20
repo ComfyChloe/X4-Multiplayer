@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_SensorProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Setup" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_SensorProbe'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="$ships" exact="md.X4LAN_Bubble.Arena.$ships"/>
+    <set_value name="$subject" exact="$ships.{md.X4LAN_Bubble.Arena.$localSlot}"/>
+    <get_loadout loadout="'x4ep1_gamestart_trade_mercury'" macro="macro.ship_arg_m_trans_container_01_a_macro" result="$loadout"/>
+    <create_ship name="$contact" macro="macro.ship_arg_m_trans_container_01_a_macro" sector="$ships.{1}.sector">
+     <owner exact="faction.argon"/><loadout loadout="$loadout"/>
+     <position x="-1km" y="10km" z="2km"/>
+    </create_ship>
+    <create_station name="$station" macro="macro.station_gen_factory_base_01_macro" sector="$ships.{1}.sector" owner="faction.argon" state="componentstate.operational" constructionplan="'x4lan_market'" rawname="'Sensor Probe Station'">
+     <position x="-1km" y="10km" z="6km"/>
+    </create_station>
+    <set_value name="$objects" exact="[$ships.{1},$ships.{2},md.X4LAN_Bubble.Arena.$donor,$contact,$station]"/>
+    <do_all exact="$objects.count" counter="$i"><raise_lua_event name="'X4LAN_SensorProbe.Object'" param="$objects.{$i}"/></do_all>
+   </actions>
+  </cue>
+  <cue name="Remote">
+   <conditions><event_ui_triggered screen="'X4LAN_SensorProbe'" control="'Remote'"/></conditions>
+   <actions>
+    <create_ship name="$contact" macro="macro.ship_arg_m_trans_container_01_a_macro" sector="Setup.$ships.{1}.sector">
+     <owner exact="faction.argon"/><loadout loadout="Setup.$loadout"/>
+     <position x="399km" y="10km" z="2km"/>
+    </create_ship>
+    <create_station name="$station" macro="macro.station_gen_factory_base_01_macro" sector="Setup.$ships.{1}.sector" owner="faction.argon" state="componentstate.operational" constructionplan="'x4lan_market'" rawname="'Remote Sensor Probe Station'">
+     <position x="399km" y="10km" z="6km"/>
+    </create_station>
+    <append_to_list name="Setup.$objects" exact="$contact"/><append_to_list name="Setup.$objects" exact="$station"/>
+    <raise_lua_event name="'X4LAN_SensorProbe.Object'" param="$contact"/><raise_lua_event name="'X4LAN_SensorProbe.Object'" param="$station"/>
+    <warp object="Setup.$subject" sector="Setup.$subject.sector"><position x="399km" y="10km" z="0m"/></warp>
+    <debug_text text="'[X4LAN] SENSOR_NATIVE remote=400km_from_original_ship'"/>
+   </actions>
+  </cue>
+  <cue name="Readback" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_SensorProbe'" control="'Readback'"/></conditions>
+   <actions>
+    <do_all exact="Setup.$objects.count" counter="$i">
+     <set_value name="$object" exact="Setup.$objects.{$i}"/>
+     <debug_text text="'[X4LAN] SENSOR_NATIVE phase=%s index=%s object=%s known=%s radar=%s maxrange=%s currentrange=%s owner=%s name=%s'.[event.param3,$i,$object,$object.isknown,$object.isradarvisible,$object.maxradarrange,$object.currentradarrange,$object.owner.id,$object.knownname]"/>
+    </do_all>
+   </actions>
+  </cue>
+  <cue name="Activate">
+   <conditions><event_ui_triggered screen="'X4LAN_SensorProbe'" control="'Activate'"/></conditions>
+   <actions><set_object_active object="Setup.$subject" activate="true" immediate="true"/><debug_text text="'[X4LAN] SENSOR_NATIVE activate=local_ship'"/></actions>
+  </cue>
+  <cue name="NativeShip" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_SensorProbe'" control="'NativeShip'"/></conditions>
+   <actions>
+    <get_loadout loadout="'x4lan_coop_xperimental'" macro="macro.ship_ter_s_xperimental_01_a_macro" result="$loadout"/>
+    <create_ship name="$ship" macro="macro.ship_ter_s_xperimental_01_a_macro" sector="Setup.$ships.{1}.sector">
+     <owner exact="faction.player"/><loadout loadout="$loadout"/>
+     <position x="399km" y="10km" z="-500m"/>
+    </create_ship>
+    <append_to_list name="Setup.$objects" exact="$ship"/><raise_lua_event name="'X4LAN_SensorProbe.Object'" param="$ship"/>
+    <debug_text text="'[X4LAN] SENSOR_NATIVE native_ship=%s'.[$ship]"/>
+   </actions>
+  </cue>
+  <cue name="NativePilot">
+   <conditions><event_ui_triggered screen="'X4LAN_SensorProbe'" control="'NativePilot'"/></conditions>
+   <actions><teleport_player object="NativeShip.$ship" control="true" instant="true" force="true"/></actions>
+  </cue>
+ </cues>
+</mdscript>
