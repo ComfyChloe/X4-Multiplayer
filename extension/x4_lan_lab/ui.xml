@@ -11,6 +11,7 @@
     <file name="ui/motion.lua" />
     <file name="ui/coop_game.lua" />
     <file name="ui/universe_protocol.lua" />
+    <file name="ui/seed_objects.lua" />
     <file name="ui/universe_game.lua" />
     <file name="ui/life_game.lua" />
     <file name="ui/walk_game.lua" />

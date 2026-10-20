@@ -8,6 +8,8 @@ local I={bound={},rows={},fixtures={},seq=0,cursor=1};A.identity=I
 local function key(object) return tostring(object):gsub('ULL$','') end
 local function log(v) DebugError('[X4LAN] IDENTITY '..v) end
 local nativeCode=C.GetObjectIDCode
+-- Stable seed binding must read the engine's original code, never our HUD alias.
+function I.nativeCode(object) return ffi.string(nativeCode(object)) end
 function I.display(object)
  local entry=I.bound[key(object)]
  return entry and entry.code or nativeCode(object)

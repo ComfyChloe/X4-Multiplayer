@@ -4,6 +4,7 @@
   <cue name="Setup">
    <conditions><event_ui_triggered screen="'X4LAN_Universe'" control="'Setup'"/></conditions>
    <actions>
+    <set_value name="Setup.$seed" exact="if event.param3.$seed? then event.param3.$seed else ''"/>
     <!-- W01 must not enumerate or remove the existing co-op fixtures. -->
     <do_all exact="2" counter="$i">
      <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$ships.{$i}"/>
@@ -12,6 +13,18 @@
     </do_all>
     <raise_lua_event name="'X4LAN_Universe.Exclude'" param="md.X4LAN_Bubble.Arena.$donor"/>
     <raise_lua_event name="'X4LAN_Universe.Ready'"/>
+   </actions>
+  </cue>
+  <cue name="SeedMove" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_Universe'" control="'SeedMove'"/></conditions>
+   <actions>
+    <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$v.$object"/>
+    <do_if value="Setup.$seed != '' and $v.$seed == Setup.$seed and md.X4LAN_Seed.State.$id? and md.X4LAN_Seed.State.$id == Setup.$seed and md.X4LAN_Seed.State.$loads == 1 and not md.X4LAN_Bubble.Arena.$host">
+     <do_if value="$ship.isoperational and $v.$sector.exists and $ship != player.ship and $ship != player.occupiedship and $ship != player.container and $ship != md.X4LAN_Bubble.Arena.$donor and not md.X4LAN_Bubble.Arena.$ships.indexof.{$ship} and not md.X4LAN_Bubble.Arena.$targets.indexof.{$ship}">
+      <warp object="$ship" sector="$v.$sector"><position x="$v.$x * 1m" y="$v.$y * 1m" z="$v.$z * 1m"/><rotation yaw="$v.$yaw * 1deg" pitch="$v.$pitch * 1deg" roll="$v.$roll * 1deg"/></warp>
+      <debug_text text="'[X4LAN] SEED_OBJECT_MOVED code=%s sector=%s'.[$ship.idcode,$ship.sector.macro.id]"/>
+     </do_if>
+    </do_if>
    </actions>
   </cue>
   <cue name="Describe" instantiate="true">

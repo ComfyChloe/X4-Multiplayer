@@ -20,10 +20,16 @@ A.universe=u
 local function log(v) DebugError('[X4LAN] UNIVERSE '..v) end
 local function key(object) return tostring(object):gsub('ULL$','') end
 local function send(p) s.transport:send(p) end
-local function protected(object)
+local function playerOrFixture(object)
  local k=key(object)
- return u.excluded[k] or u.replicaKeys[k] or A.coop.entity(object)>0 or
+ return u.excluded[k] or A.coop.entity(object)>0 or
   object==C.GetPlayerControlledShipID() or object==C.GetPlayerOccupiedShipID() or object==C.GetPlayerContainerID()
+end
+local function protected(object) return playerOrFixture(object) or u.replicaKeys[key(object)] end
+if cfg.seed_binding then
+ assert(cfg.seed_id and cfg.seed_verified==true and X4LAN_SEED_GATE and cfg.world_mode=='replica',
+  'native seed binding requires verified pristine-save admission')
+ u.seedObjects=assert(X4LAN_SEED_OBJECTS,'seed object registry missing').registry(C.IsComponentOperational,playerOrFixture)
 end
 local function currentSector()
  local object=C.GetPlayerContainerID()
@@ -43,7 +49,7 @@ local function beginScan(name,sector)
 end
 local function scanStep(scan)
  -- Bound per-frame enumeration; metadata/positions are read only for this sector.
- for _=1,512 do
+ for _=1,(u.seedObjects and cfg.slot=='p2' and 64 or 512) do
   if not scan.buffer or scan.index>=scan.count then
    local faction=scan.factions[scan.faction]
    if not faction then return true end
@@ -65,12 +71,22 @@ local function scanStep(scan)
    scan.seen[k]=true;scan.total=scan.total+1
    assert(scan.total<=250000,'universe fleet exceeds internal scan limit')
    if C.IsComponentOperational(object) and not protected(object) and C.IsComponentClass(object,'ship') and
-      C.GetContextByClass(object,'sector',false)==scan.sector then
+      (u.seedObjects and cfg.slot=='p2' or C.GetContextByClass(object,'sector',false)==scan.sector) then
     local macro,owner=GetComponentData(A.id(object),'macro','owner')
     assert(P.atom(macro,true) and P.atom(owner),'NPC descriptor unavailable; refusing incomplete baseline')
-    if owner~='player' then
-     scan.objects[#scan.objects+1]={object=object,key=k,macro=macro,owner=owner}
-     assert(#scan.objects<=P.limit,'sector object limit exceeded; refusing a truncated baseline')
+    if u.seedObjects and cfg.slot=='p2' then
+     assert(A.identity and A.identity.nativeCode,'native identity reader missing')
+     if u.seedObjects:observe(A.identity.nativeCode(object),object,macro,owner) then
+      -- Preserve native equipment, crews and mission references. Local AI must
+      -- not keep moving this copy while the host supplies its state.
+      C.ActivateObject(object,false)
+     end
+    end
+    if owner~='player' or u.seedObjects then
+     if C.GetContextByClass(object,'sector',false)==scan.sector then
+      scan.objects[#scan.objects+1]={object=object,key=k,macro=macro,owner=owner}
+      assert(#scan.objects<=P.limit,'sector object limit exceeded; refusing a truncated baseline')
+     end
     end
    end
   end
@@ -114,9 +130,26 @@ local function removeReplica(r)
   if A.coop.entity(object)>0 or object==C.GetPlayerControlledShipID() or object==C.GetPlayerOccupiedShipID() or object==C.GetPlayerContainerID() then
    error('player entered an NPC replica; end this internal scene test')
   end
-  C.RemoveComponent(object)
+  if r.seedOriginal then
+   u.seedObjects:release(r.entity.id)
+   C.ActivateObject(object,false)
+   if A.identity then A.identity.unbind(object) end
+  else C.RemoveComponent(object) end
  end
  if object then u.replicaKeys[key(object)]=nil end
+end
+local function bindSeedObject(r,now)
+ local row=A.identity and A.identity.rows['N'..r.entity.id]
+ if not row or not u.latest or row.epoch~=u.latest.epoch or now-row.at>2.5 then return false end
+ local object=u.seedObjects:resolve(row.epoch,r.entity.id,row.code,r.entity.macro,r.entity.owner)
+ if not object then
+  if r.unresolved~=row.code then log('SEED_UNRESOLVED id='..r.entity.id..' code='..row.code);r.unresolved=row.code end
+  return false
+ end
+ r.object=object;r.seedOriginal=true;u.replicaKeys[key(object)]=true
+ C.ActivateObject(object,false)
+ log('SEED_BOUND id='..r.entity.id..' code='..row.code..' object='..key(object))
+ return true
 end
 local function accept(b,now)
  local name=currentSector();if b.sector~=name then return end
@@ -189,22 +222,43 @@ local function render(now,sector)
    local p=r.entity.pose
    if r.track then p=M.render(r.track,now,r.modern and M.delay or .1) or p end
    local value=ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
-   if not r.object or not C.IsComponentOperational(r.object) then
-    r.object=C.SpawnObjectAtPos2(r.entity.macro,sector,value,r.entity.owner)
-    assert(r.object~=0,'NPC replica spawn failed');u.replicaKeys[key(r.object)]=true
-    C.ActivateObject(r.object,false)
+   if u.seedObjects then
+    if r.object then assert(C.IsComponentOperational(r.object),'bound seed object disappeared')
+    else bindSeedObject(r,now) end
+   elseif not r.object or not C.IsComponentOperational(r.object) then
+     r.object=C.SpawnObjectAtPos2(r.entity.macro,sector,value,r.entity.owner)
+     assert(r.object~=0,'NPC replica spawn failed');u.replicaKeys[key(r.object)]=true
+     C.ActivateObject(r.object,false)
    end
-   assert(r.object~=C.GetPlayerContainerID() and r.object~=C.GetPlayerControlledShipID(),'player in NPC replica')
-   local changed=not r.applied
-   if r.applied then for i=1,6 do if math.abs(p[i]-r.applied[i])>(i<=3 and .005 or .00001) then changed=true end end end
-   if changed then C.SetObjectSectorPos(r.object,sector,value);r.applied=p end
+   if r.object then
+    assert(not playerOrFixture(r.object),'player or fixture in NPC replica')
+    if r.seedOriginal and C.GetContextByClass(r.object,'sector',false)~=sector then
+     -- Moving between native sector parents is an MD operation. Do not write a
+     -- pose in the wrong parent while that asynchronous operation is pending.
+     if not r.nextWarp or now>=r.nextWarp then
+      r.nextWarp=now+1
+      AddUITriggeredEvent('X4LAN_Universe','SeedMove',{seed=cfg.seed_id,object=A.id(r.object),sector=A.id(sector),
+       x=value.x,y=value.y,z=value.z,yaw=value.yaw,pitch=value.pitch,roll=value.roll})
+     end
+     r.applied=nil
+    else
+     local changed=not r.applied
+     if r.applied then for i=1,6 do if math.abs(p[i]-r.applied[i])>(i<=3 and .005 or .00001) then changed=true end end end
+     if r.seedOriginal and not changed then
+      local actual=pose(r.object)
+      for i=1,6 do if math.abs(p[i]-actual[i])>(i<=3 and .005 or .00001) then changed=true end end
+     end
+     if changed then C.SetObjectSectorPos(r.object,sector,value);r.applied=p end
+    end
+   end
    end
   end
  end
 end
 local function frame(now)
  if u.failed or not s.client or not s.client.lease or not A.coop.ready then return end
- if not u.setup then u.setup=true;AddUITriggeredEvent('X4LAN_Universe','Setup');return end
+ if u.seedObjects then assert(X4LAN_SEED_GATE.ready and not X4LAN_SEED_GATE.failed,'seed admission lost') end
+ if not u.setup then u.setup=true;AddUITriggeredEvent('X4LAN_Universe','Setup',{seed=cfg.seed_binding and cfg.seed_id or ''});return end
  if not u.ready or A.paused() then return end
  local name,sector=currentSector();if not name then return end
  if cfg.slot=='p2' then
@@ -225,10 +279,10 @@ local function frame(now)
     local n=0
     for _,entry in ipairs(u.scan.objects) do
      if C.IsComponentOperational(entry.object) and not protected(entry.object) and C.GetContextByClass(entry.object,'sector',false)==sector then
-      C.RemoveComponent(entry.object);n=n+1
+      if u.seedObjects then C.ActivateObject(entry.object,false) else C.RemoveComponent(entry.object) end;n=n+1
      end
     end
-    log('LOCAL_NPC_SUPPRESSED count='..n..' sector='..name);u.scan=nil;u.nextScan=now+5
+    log((u.seedObjects and 'SEED_LOCAL_AI_SUSPENDED' or 'LOCAL_NPC_SUPPRESSED')..' count='..n..' sector='..name);u.scan=nil;u.nextScan=now+5
    end
   end
   return

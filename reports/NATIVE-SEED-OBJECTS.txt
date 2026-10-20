@@ -1,0 +1,31 @@
+NATIVE SEED OBJECT BINDING — OPT-IN EXPERIMENT
+20 October 2026 | internal development
+
+The default W01 path creates visual NPC replicas. This experiment adds an
+explicit seed_binding=true option which requires verified pristine-save
+admission. The guest indexes original native ships by their engine ID code and
+binds authenticated host IDENT records only when code, macro and owner agree.
+Engine handles and session network IDs remain separate. The registry refuses
+ambiguous codes, multiple IDs for one component, changed epochs/descriptors,
+dead bound components, players and the co-op/service fixtures.
+
+Original equipment, crew and engine references remain attached to the native
+ship. A bounded guest scan suspends local ship simulation; host poses update
+the originals, with a guarded MD warp when sector parents differ. Real pose
+drift is checked even when the host target is unchanged. Absence from a sector
+baseline releases the view but retains the original component and mapping.
+Player-owned non-fixture ships are included in the host capture in this mode.
+
+This is not yet general shared-world authority. Unknown/new host objects remain
+unresolved. Destruction, ownership/equipment changes, commands, docking, health,
+station production, jobs and mission consequences require explicit authority
+and lifecycle work. The service donor/test freighter remains protected by its
+existing cargo/trade adapter; this experiment does not fix its order/hull issue.
+Retained out-of-view originals are not proof of correct current visibility.
+Native acceptance is pending. Mock tests do not establish engine behavior.
+
+The independent Windows/Linux bootstrap rendezvous remains pinned to 937262c
+and its existing seed manifest. This branch changes production bytes and needs
+its own fresh disposable seed and evidence before it can be used in that test.
+Coordination is now every fifteen minutes (:00/:15/:30/:45 Europe/Berlin), per
+the user's latest correction. Overnight work ends 21 October at 08:00 CEST.

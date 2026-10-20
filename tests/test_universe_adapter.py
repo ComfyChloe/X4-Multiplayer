@@ -8,7 +8,7 @@ UI=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui'
 
 @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')
 class UniverseAdapterTests(unittest.TestCase):
-    def make(self,slot='p1',mode='replica'):
+    def make(self,slot='p1',mode='replica',seed=False):
         l=LuaRuntime(unpack_returned_tuples=True);l.execute(MOCK+EXTRA)
         l.globals().X4LAN_CONFIG.slot=slot;l.globals().X4LAN_CONFIG.world_mode=mode
         l.execute('''
@@ -50,7 +50,14 @@ class UniverseAdapterTests(unittest.TestCase):
           api.SetObjectSectorPos=function(id,sector,p) positions[id]=p;writes[#writes+1]={id=id,sector=sector,pose=p} end
           api.ActivateObject=function(id,on) activated[#activated+1]={id=id,on=on} end
         ''')
-        for name in ('bubble_game.lua','motion.lua','coop_game.lua','universe_protocol.lua','universe_game.lua'):
+        for name in ('bubble_game.lua','motion.lua','coop_game.lua','universe_protocol.lua','seed_objects.lua','universe_game.lua'):
+            if name=='universe_game.lua' and seed:
+                l.execute('''
+                  X4LAN_CONFIG.seed_binding=true;X4LAN_CONFIG.seed_verified=true
+                  X4LAN_CONFIG.seed_id=string.rep('b',32)
+                  X4LAN_SEED_GATE={ready=true,frame=function() return true end}
+                  X4LAN_BUBBLE_API.identity={rows={},nativeCode=function(id) return 'NAT-'..id end,unbind=function() end}
+                ''')
             l.execute((UI/name).read_text())
         l.execute('''
           events['X4LAN.Loaded']();now=10;frames.onUpdate()
@@ -67,6 +74,59 @@ class UniverseAdapterTests(unittest.TestCase):
           testRow='1,ship,ship_arg_s_scout_01_a_macro,argon,1500,200,300,0,0,0,none,0'
         ''')
         return l
+
+    def test_seed_guest_binds_existing_equipped_ship_without_cloning_or_deleting(self):
+        l=self.make('p2',seed=True);l.execute('''
+          local I=X4LAN_BUBBLE_API.identity
+          tick(1);baseline(1,{testRow},true);tick(25)
+          assert(not U.failed and not U.replicas[1].object and #spawns==1 and #removed==0)
+          I.rows.N1={code='NAT-101',epoch=U.latest.epoch,at=now}
+          tick(1);assert(U.replicas[1].object==101 and positions[101].x==1500)
+          assert(not U.failed and #spawns==1 and #removed==0)
+          positions[101]={x=999,y=200,z=300,yaw=0,pitch=0,roll=0}
+          tick(1);assert(positions[101].x==1500)
+          baseline(2,{},true);tick(2)
+          assert(positions[101] and #removed==0 and not U.replicas[1])
+          baseline(3,{testRow},true);tick(2)
+          assert(U.replicas[1].object==101 and #spawns==1 and not U.failed)
+        ''')
+
+    def test_seed_binding_refuses_wrong_descriptor_and_protects_fixtures(self):
+        l=self.make('p2',seed=True);l.execute('''
+          tick(1);baseline(1,{testRow},true);tick(25)
+          local I=X4LAN_BUBBLE_API.identity
+          assert(not U.seedObjects.codes['NAT-90'] and not U.seedObjects.codes['NAT-11'])
+          I.rows.N1={code='NAT-104',epoch=U.latest.epoch,at=now}
+          tick(1);assert(U.failed and #spawns==1 and #removed==0 and positions[104])
+        ''')
+
+    def test_seed_guest_moves_sector_parent_before_writing_pose(self):
+        l=self.make('p2',seed=True);l.execute('''
+          tick(1);baseline(1,{testRow},true);tick(25)
+          X4LAN_BUBBLE_API.identity.rows.N1={code='NAT-103',epoch=U.latest.epoch,at=now}
+          local moves={};AddUITriggeredEvent=function(screen,event,payload)
+           if event=='SeedMove' then moves[#moves+1]=payload end
+          end
+          tick(1);assert(U.replicas[1].object==103 and #moves==1 and positions[103].x==103)
+          assert(moves[1].object=='103' and moves[1].sector=='22')
+          sectors[103]=22;tick(1);assert(positions[103].x==1500 and not U.failed)
+        ''')
+
+    def test_seed_host_includes_player_fleet_but_not_shared_pilots_or_service_donor(self):
+        l=self.make(seed=True);l.execute('''
+          U.receive({'UINTEREST','1',client.lease,'1','cluster_14_sector001_macro'},now)
+          tick(20);assert(not U.failed and #U.sender.baseline.rows==3)
+          assert(U.sender.baseline.rows[3]:find(',player,104,',1,true))
+          assert(#removed==0 and #activated==0)
+        ''')
+
+    def test_seed_binding_stops_on_native_loss_or_player_boarding_without_replacement(self):
+        for case in ('positions[101]=nil', 'controlled=101'):
+            l=self.make('p2',seed=True);l.execute('''
+              tick(1);baseline(1,{testRow},true);tick(25)
+              X4LAN_BUBBLE_API.identity.rows.N1={code='NAT-101',epoch=U.latest.epoch,at=now}
+              tick(1);assert(U.replicas[1].object==101)
+            '''+case+''';tick(1);assert(U.failed and #spawns==1 and #removed==0)''')
 
     def test_host_enumerates_npcs_excludes_player_fixture_and_other_sector(self):
         l=self.make();l.execute('''
