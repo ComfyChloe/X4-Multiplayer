@@ -76,3 +76,21 @@ objects exist only in the discarded unsaved world. Native game/peer closed, exac
 source/raw logs/validator retained, normal saves unchanged and clean33 restored
 with full manifests. The coordinator's all-actions-after-completion mutation is
 also explicitly rejected by the combined causal-order regression.
+
+SAVED DOCK REFERENCES — NEXT DEV EXPERIMENT, NATIVE PENDING
+The optional native_dock_registry_test overlay adds a registry to the disposable
+seed probe only. Before saving, it enumerates native ship/station docking bays,
+deduplicates component references and stores both an ordered reference list and
+a component-to-index table in saved MD state. Component search is nonrecursive
+across contained objects because every ship is visited directly; recursive search
+would also visit docked children's components. Maximum collection size is250000.
+The marker is published only after collection. Reload reads existing references;
+it never enumerates again to infer identity. Native readback records every dock's
+index, handle, container, macros, external/storage flags and storage capacity, and
+checks the reverse lookup. The strict validator requires full ordered captures,
+resolved headers, matching definitions/handles, successful save/load completion
+and no native parser/probe error. These are acceptance conditions, not yet results.
+Use dev/native_dock_registry_test.py capture/load --run <owned-run> with the existing
+guarded seed harness for launch/transfer/cleanup. The optional hook delays saving
+until native dock readback finishes; regular seed experiments are unchanged unless
+dock_registry_probe is enabled. No gameplay/wire path or937262c joint fixture changes.

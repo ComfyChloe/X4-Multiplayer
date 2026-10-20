@@ -63,13 +63,19 @@ RegisterEvent('X4LAN_Seed.State',function(_,payload)
  if finished then return end
  local expected=cfg.seed_id..'|1|'..(cfg.seed_probe=='capture' and '0' or '1')
  assert(payload==expected,'production seed marker/load state differs')
- if not C.IsGamePaused() then Pause() end
- stations()
- if cfg.seed_probe=='capture' then
-  assert(IsSavingPossible(false),'native saving unavailable')
-  saveRequested=true;log('save_requested id='..cfg.seed_id)
-  SaveGame('save_010','X4 Multiplayer disposable seed '..cfg.seed_id)
- else finished=true;log('loaded id='..cfg.seed_id) end
+ local function observeAndFinish()
+  if not C.IsGamePaused() then Pause() end
+  stations()
+  if cfg.seed_probe=='capture' then
+   assert(IsSavingPossible(false),'native saving unavailable')
+   saveRequested=true;log('save_requested id='..cfg.seed_id)
+   SaveGame('save_010','X4 Multiplayer disposable seed '..cfg.seed_id)
+  else finished=true;log('loaded id='..cfg.seed_id) end
+ end
+ if cfg.dock_registry_probe then
+  assert(X4LAN_SEED_DOCKS,'optional dock registry probe missing')
+  X4LAN_SEED_DOCKS.start(cfg.seed_probe,cfg.seed_id,observeAndFinish)
+ else observeAndFinish() end
 end)
 RegisterEvent('X4LAN_SeedProbe.State',function(_,value)
  if finished then return end
@@ -84,6 +90,7 @@ RegisterEvent('X4LAN_SeedProbe.State',function(_,value)
  else error('unexpected seed marker; refusing to use another world') end
 end)
 SetScript('onUpdate',function()
+ if X4LAN_SEED_DOCKS then X4LAN_SEED_DOCKS.frame(GetCurRealTime()) end
  if finished or asked or not C.IsPlayerValid() then return end
  if not started then
   if not loading then AddUITriggeredEvent('X4LAN','Ready') end
