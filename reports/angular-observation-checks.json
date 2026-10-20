@@ -1,0 +1,118 @@
+{
+  "native_source": "4699e65274a38ace2d975ed1a747436a43976296",
+  "analyzer_source": "efc9b5ca9fdb04d217cab1a9319eb9753aa594d9",
+  "production_tree": "1f852523f33a5ef35a9f0a3e58fb3188854279f2",
+  "new_automated_tests": 268,
+  "native_runtime": "X4 9.00 (611726), Steam23660954, Linux; fresh isolated profile45841; High textures/shaderquality2",
+  "result": {
+    "frames": 2932,
+    "native_samples": 2932,
+    "shots": 24,
+    "malformed": 0,
+    "errors": [],
+    "phases": {
+      "stationary": {
+        "settled_frames": 183,
+        "derived_rate_intervals": 183,
+        "native_readbacks": 183,
+        "shots": 6,
+        "valid": true,
+        "max_before_angle": 0.001078974,
+        "max_after_angle": 0.0,
+        "median_derived_rate": 0.050736065674963964,
+        "max_derived_rate": 0.05074046740467495,
+        "max_native_basis_error": 0.00107904,
+        "max_shot_basis_error": 0.000827331,
+        "min_native_delay": 0.011610000000001008,
+        "max_native_delay": 0.021315000000001305,
+        "max_shot_delay": 0.01628300000000138
+      },
+      "rendered": {
+        "settled_frames": 182,
+        "derived_rate_intervals": 182,
+        "native_readbacks": 182,
+        "shots": 6,
+        "valid": true,
+        "max_before_angle": 0.001156552,
+        "max_after_angle": 0.0,
+        "median_derived_rate": 0.05731484629376733,
+        "max_derived_rate": 0.05731938943894305,
+        "max_native_basis_error": 0.00115665,
+        "max_shot_basis_error": 0.000907168,
+        "min_native_delay": 0.011741999999998143,
+        "max_native_delay": 0.020157999999998566,
+        "max_shot_delay": 0.01581600000000094
+      },
+      "physical": {
+        "settled_frames": 184,
+        "derived_rate_intervals": 184,
+        "native_readbacks": 184,
+        "shots": 6,
+        "valid": true,
+        "max_before_angle": 0.001401028,
+        "max_after_angle": 0.0,
+        "median_derived_rate": 0.08090069461476873,
+        "max_derived_rate": 0.0809068263473062,
+        "max_native_basis_error": 0.0014011,
+        "max_shot_basis_error": 0.00135297,
+        "min_native_delay": 0.015629000000004112,
+        "max_native_delay": 0.01734700000000089,
+        "max_shot_delay": 0.01676899999999648
+      },
+      "native": {
+        "settled_frames": 184,
+        "derived_rate_intervals": 184,
+        "native_readbacks": 184,
+        "shots": 6,
+        "valid": true,
+        "max_before_angle": 0.000898425,
+        "max_after_angle": 0.000898425,
+        "median_derived_rate": 0.0001747077737133864,
+        "max_derived_rate": 0.05363543420736507,
+        "max_native_basis_error": 0.000898769,
+        "max_shot_basis_error": 0.000896094,
+        "min_native_delay": 0.01568499999999773,
+        "max_native_delay": 0.016773000000000593,
+        "max_shot_delay": 0.01675000000000182
+      }
+    },
+    "observation_complete": true,
+    "projectile_measurement_complete": true,
+    "damage_or_aim_acceptance": false,
+    "two_native_acceptance": false,
+    "angular_velocity_getter_used": false,
+    "rate_meaning": "Wrapped Euler drift divided by elapsed game time between prior post-frame and current pre-frame samples; not a native angular-velocity getter.",
+    "shot_frame_meaning": "Last UI frame processed by this MD observer, not necessarily the latest rendered frame."
+  },
+  "limits": [
+    "Original bcde58f orientation failure is retained. This passing repeat does not prove a production fix.",
+    "Derived Euler rates are observations, not a native angular velocity getter or production vector.",
+    "The fourth native phase has an external orientation hold after the observed cooperative frame; its derived rate is not free angular drift.",
+    "Read-only logging adds work to the frame; timing is from this instrumented run, not a general performance claim.",
+    "No angular production override, two-native gameplay, player aim or hit equivalence is accepted."
+  ],
+  "restoration": {
+    "clean_7_1_1": true,
+    "files": 33,
+    "save_bytes_and_actual_timestamps_unchanged": true,
+    "game_and_relay_closed": true
+  },
+  "evidence_sha256": {
+    ".local/native-world-tests/angular-native-4699e65.log": "2105f46bba4e8e3c84f2fabb7feeeec4e731281404cf8f751cebe731aff8932c",
+    ".local/native-world-tests/angular-native-4699e65-initial-parser-result.json": "787720dd26e5b351f2272d770c78ff1849f3cd2cb0287854b5ba50ecc8e1a528",
+    ".local/native-world-tests/angular-native-4699e65-projectile-result.json": "24fb262f68abba49c8ba5c6d317aa683c68897ddb2574618f370d1f5ed668c14",
+    ".local/native-world-tests/angular-native-4699e65-reanalyzed.json": "eba897087433a7de9acacf7239dc7dcf4dd6cdc141259e0c6b67beea7994037d",
+    ".local/native-world-tests/angular-native-4699e65-installed-hashes.json": "744cffbc0d4ca4222f9c3432751a3aeef674a37d24152ad85736a0b1019d2355",
+    ".local/native-world-tests/angular-native-4699e65-stdout.txt": "f8399e4eed0b4143c8694858cc77249c7231e7eb70e6b0a17e5d1b09387167ad",
+    ".local/native-world-tests/angular-4699e65-unit-check.log": "b7b1b5415607862c52931a2ae85d86a1c858de2c17fa147215046c1629a8507b",
+    ".local/native-world-tests/angular-4699e65-schema.json": "2c1ed6af92518bd37e403b901f44da5c33e1c8e3b29e919e44af17b14ed52d5d",
+    ".local/native-world-tests/angular-parser-fixed-unit-check.log": "a89644ad078541d758e61208f34644d24f6e0dc38b02ef212f0aa9b2dacf3e55",
+    ".local/native-world-tests/angular-4699e65-restoration.json": "0e087febfe075c8844728305dfc8d1cb7ac3488f42c1b18008a96c699328c6d9"
+  },
+  "diagnostic_source_sha256": {
+    "dev/angular_probe.lua": "b58be865e59278631f88442aa7695d1b65de7e338435f98f84144c67f8daea5b",
+    "dev/angular_probe.xml": "31d6d736900ad064e637fbd2d19f8acd78223f7d6f78acf8d8e6517986786d74",
+    "dev/native_angular_test.py": "848d614279b7b681e6f25e4c040e495636180184b226b66295e05a86e932b0f1",
+    "tests/test_native_angular_validator.py": "4b5711733f2bda25fc6fa8cb3729c3fab811931f6481e737fc27e4e7bc961b65"
+  }
+}

@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Read-only independent native basis/timing observation. No physics writes. -->
+<mdscript name="X4LAN_AngularProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Observe" namespace="this">
+  <conditions><event_ui_triggered screen="'X4LAN_AngularProbe'" control="'Setup'"/></conditions>
+  <actions>
+   <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{2}"/>
+   <set_value name="$serial" exact="0"/><set_value name="$lastFrame" exact="0"/>
+   <add_to_group groupname="$weapons" list="$ship.weapons.operational.list"/>
+   <raise_lua_event name="'X4LAN_AngularProbe.Ready'"/>
+  </actions>
+  <cues>
+   <cue name="Sample" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_AngularProbe'" control="'Sample'"/></conditions><actions>
+    <set_value name="$v" exact="event.param3"/><set_value name="$lastFrame" exact="$v.$serial"/>
+    <set_value name="$r" exact="$ship.relativerotation.{$ship.sector}"/>
+    <debug_text text="'[X4LAN] ANGULAR_PROBE native=%s phase=%s time=%s uiTime=%s fx=%s fy=%s fz=%s ux=%s uy=%s uz=%s'.[$lastFrame,$v.$phase,player.age,$v.$time,$r.forward.x,$r.forward.y,$r.forward.z,$r.up.x,$r.up.y,$r.up.z]"/>
+   </actions></cue>
+   <cue name="Shot" instantiate="true" namespace="this"><conditions><event_weapon_fired group="Observe.$weapons"/></conditions><actions>
+    <set_value name="Observe.$serial" operation="add" exact="1"/>
+    <set_value name="$r" exact="Observe.$ship.relativerotation.{Observe.$ship.sector}"/>
+    <debug_text text="'[X4LAN] ANGULAR_PROBE shot=%s frame=%s time=%s fx=%s fy=%s fz=%s ux=%s uy=%s uz=%s'.[Observe.$serial,Observe.$lastFrame,player.age,$r.forward.x,$r.forward.y,$r.forward.z,$r.up.x,$r.up.y,$r.up.z]"/>
+   </actions></cue>
+  </cues>
+ </cue></cues>
+</mdscript>

@@ -1,0 +1,69 @@
+NATIVE ROTATION OBSERVATION — INTERNAL RESEARCH
+20 October 2026 | PR15 | production unchanged from the sealed 7.1.1 candidate
+
+WHY THIS EXISTS
+The bcde58f projectile experiment exceeded its unchanged .002 native firing-basis
+gate in one phase. Existing pre-correction logs ran after coop.frame, so zero
+angles there did not rule out drift between render frames. This diagnostic wraps
+the actual cooperative frame and reads before and after it, then records native
+MD orientation and the weapon-fired basis with timestamps. It never writes
+position or velocity. The original projectile fixture and thresholds are unchanged.
+
+SOURCE AND VALIDATION
+Native capture: 4699e65274a38ace2d975ed1a747436a43976296.
+Production tree: 1f852523f33a5ef35a9f0a3e58fb3188854279f2.
+The initial parser rejected the engine's [=ERROR=] prefix as numeric ERROR=].
+That failed report is preserved. Analyzer efc9b5c splits after ANGULAR_PROBE and
+reprocesses the IDENTICAL raw log; no replacement game run was used to conceal
+that error. A real-prefix regression is included. 268 Linux tests pass without
+skips. The unchanged diagnostic MD script passes the installed X4 9.00 schema.
+Exact source/evidence hashes: angular-observation-checks.json.
+
+MEASURED OBSERVATIONS
+2932 pre/post frames, 2932 native MD readbacks, 24 independently correlated shots.
+All four phases have six shots. The first three use production orientation only:
+
+Phase       settled frames  max pre angle  max post angle  median derived rate
+stationary       183          .001078974        0              .050736066
+rendered         182          .001156552        0              .057314846
+physical         184          .001401028        0              .080900695
+
+Angles are radians; rates are rad/s. The rate is the maximum absolute wrapped
+Euler component change from the prior post-frame sample to the current pre-frame
+sample, divided by elapsed game time. It is NOT a native angular-velocity getter,
+a body-axis angular vector, or a validated production input.
+
+Native readback delays in those settled windows span .011610 to .021315 seconds.
+The independent MD basis agrees with small nonzero rotation after correction.
+Maximum at-shot basis errors are .000827331, .000907168 and .001352970; the native
+reference is .000896094. Shot correlation uses the last UI frame processed by
+this MD observer, which need not be the latest rendered frame.
+
+This establishes between-frame rotation in this fixture despite post-frame zeros.
+It does not identify the exact engine/controller mechanism. The fourth native
+phase retains the existing fixture's external orientation hold after coop.frame;
+its derived rate cannot be interpreted as free rotation. Logging adds frame work;
+these timings are observations, not general performance measurements.
+
+PROJECTILE RESULT AND LIMIT
+This repeat passes the ORIGINAL projectile controls, including the unchanged
+.002 gate, and all 24 trajectories are sampled. The prior bcde58f failure remains
+valid evidence on the same production code. No production fix was introduced,
+so repeatability under frame-time variation and real aim/hit behavior remain open.
+No sustained angular override was introduced. Such an override requires an explicit
+coordinate/ownership contract and native rotation-control release checks, including
+local pilot takeover; the existing linear throttle check alone is insufficient.
+
+DELIVERY STATE
+The native game and relay were closed. Clean sealed 7.1.1 was restored byte for
+byte: 33 installed hashes match, no probes, original test-profile settings restored.
+Normal save bytes and actual save timestamps remain unchanged; no test saves.
+The Windows/Linux archives remain untouched. This diagnostic is not shipped.
+A simultaneous Windows/Linux playtest and full-universe acceptance remain open.
+
+REPRODUCE ANALYSIS (raw evidence is private local data, not committed)
+  .venv/bin/python -m dev.native_angular_test --analyze <raw-native-log>
+To capture, explicitly install both optional projectile/angular probes, set
+projectile_probe_hold_orientation=false and angular_probe=true, then use the
+existing fresh-profile harness and python -m dev.native_angular_test. Only the
+coordinated primary may launch on a shared installation. Never load a normal save.
