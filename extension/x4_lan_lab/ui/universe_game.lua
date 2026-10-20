@@ -246,7 +246,13 @@ local function render(now,sector)
    end
    if r.object then
     assert(not playerOrFixture(r.object),'player or fixture in NPC replica')
-    if r.seedOriginal and C.GetContextByClass(r.object,'sector',false)~=sector then
+    if r.seedOriginal and GetComponentData(A.id(r.object),'isdocked') then
+     -- Attached ships inherit their container transform. A direct sector pose
+     -- write can corrupt stored-child offsets without moving the child in that
+     -- frame. Keep the native attachment; resume pose repair after undocking.
+     -- This guard does not synchronize host/client docking or storage state.
+     r.applied=nil
+    elseif r.seedOriginal and C.GetContextByClass(r.object,'sector',false)~=sector then
      -- Moving between native sector parents is an MD operation. Do not write a
      -- pose in the wrong parent while that asynchronous operation is pending.
      if not r.nextWarp or now>=r.nextWarp then

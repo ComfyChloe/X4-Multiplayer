@@ -36,6 +36,7 @@ class UniverseAdapterTests(unittest.TestCase):
           api.IsComponentClass=function() return true end
           GetComponentData=function(id,field)
            id=tonumber(id)
+           if field=='isdocked' then return false end
            if id==22 then return 'cluster_14_sector001_macro' end
            if id==23 then return 'cluster_01_sector001_macro' end
            return 'ship_arg_s_scout_01_a_macro',id==104 and 'player' or 'argon'
@@ -140,6 +141,41 @@ class UniverseAdapterTests(unittest.TestCase):
                 l.execute('assert(U.failed and positions[101].x==999 and #removed==0 and #spawns==1)')
             else:
                 l.execute('assert(not U.failed and positions[101].x==1500 and #removed==0 and #spawns==1)')
+
+    def test_attached_original_keeps_parent_transform_then_resumes_after_undocking(self):
+        l=self.make('p2',seed=True);l.execute('''
+          tick(1);baseline(1,{testRow},true);tick(25)
+          local original=GetComponentData;docked=true
+          GetComponentData=function(id,field,...)
+           if tonumber(id)==101 and field=='isdocked' then return docked end
+           return original(id,field,...)
+          end
+          X4LAN_BUBBLE_API.identity.rows.N1={code='NAT-101',epoch=U.latest.epoch,at=now}
+          local moves={};AddUITriggeredEvent=function(screen,event,payload)
+           if event=='SeedMove' then moves[#moves+1]=payload end
+          end
+          tick(2);assert(U.replicas[1].object==101 and positions[101].x==101 and not U.failed)
+          -- Even a sector mismatch must never detach/warp an attached child.
+          sectors[101]=23;tick(2);assert(#moves==0 and positions[101].x==101)
+          docked=false;tick(1);assert(#moves==1 and positions[101].x==101)
+          sectors[101]=22;tick(1);assert(positions[101].x==1500 and not U.failed)
+          assert(#removed==0 and #spawns==1)
+        ''')
+
+    def test_attached_original_still_rejects_changed_authenticated_identity(self):
+        l=self.make('p2',seed=True);l.execute('''
+          tick(1);baseline(1,{testRow},true);tick(25)
+          local original=GetComponentData
+          GetComponentData=function(id,field,...)
+           if tonumber(id)==101 and field=='isdocked' then return true end
+           return original(id,field,...)
+          end
+          local I=X4LAN_BUBBLE_API.identity
+          I.rows.N1={code='NAT-101',epoch=U.latest.epoch,at=now};tick(1)
+          assert(U.replicas[1].object==101 and not U.failed)
+          I.rows.N1={code='NAT-102',epoch=U.latest.epoch,at=now};tick(1)
+          assert(U.failed and positions[101].x==101 and #removed==0)
+        ''')
 
     def test_seed_host_includes_player_fleet_but_not_shared_pilots_or_service_donor(self):
         l=self.make(seed=True);l.execute('''

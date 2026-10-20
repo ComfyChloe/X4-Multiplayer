@@ -71,6 +71,35 @@ The retained-binding review regression is corrected: fresh authenticated identit
 metadata must revalidate an existing component before another pose write. The
 adapter regression rejects a changed code while preserving valid drift repair.
 
+CONTROLLED DOCKED-WRITE COMPARISON — 21 OCTOBER, OVERALL STILL FAILED
+objects-trace at source2414afa uses new seed f022c176c6b3621c01fe198f6eec18c6,
+SHA256 f27f7721747f203e487fbc49a167298f584ba950ac58cb2df278eabac99e30fa.
+The host captured141/142/140 ships; the guest replay explicitly selects128 saved
+originals and records12 omitted host-created IDs. Baseline admission is separate
+from world validation. Full per-role save manifests, installed source and33-file
+restoration hashes are retained. Native launches used the installed Steam Linux
+Runtime directly after canceling a cloud-sync-blocked Steam launch, with unchanged
+isolated-profile/autosave/exact-owned-save/content-hash guards.
+
+The ordinary trace FAILS: four originals never converge within1m in the initial
+view; eight fail on return. Large errors reach39.8km, attached to carrier7439.
+Direct SetObjectSectorPos calls on stored children show no immediate movement.
+objects-trace-skip repeats the identical pristine seed and recorded host rows,
+changing only the explicit diagnostic omission of docked-child sector writes.
+All128 initial poses settle within0.000375m. Return still FAILS: IDs7448/7451/7453
+end218-237m off. The host's captured revision3 had those ships on external pads;
+the guest independently moved them into internal storage. Thus suppressing child
+writes removes the large offset failure but does not synchronize docking/storage.
+Both raw failed results remain; unchanged strict validation was not relaxed.
+
+A bounded production guard now avoids direct pose/sector warps on locally docked
+originals, preserving their parent transform. Fresh identity guards still run;
+normal pose/sector repair resumes after undocking. Two adapter regressions cover
+that transition and rejection of changed identity even while attached.321 tests
+pass. The production guard's own fresh native run remains PENDING; the controlled
+diagnostic comparison is evidence for its direction, not native acceptance of
+this new source. Explicit host attachment state and engine transitions remain next.
+
 OPEN WORK
 Full native acceptance of the corrected path remains open. Destruction, new objects,
 commands, ownership/equipment changes, docking, health, station production, jobs
