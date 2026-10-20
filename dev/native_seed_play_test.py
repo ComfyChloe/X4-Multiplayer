@@ -6,6 +6,7 @@ are never selected; only this run's exact transferred disposable copy is loaded.
 """
 import argparse
 import json
+import ipaddress
 from pathlib import Path
 import re
 import secrets
@@ -31,7 +32,8 @@ def identity(run):
     return state, manifest
 
 
-def install(run, slot):
+def install(run, slot, host="127.0.0.1"):
+    host = str(ipaddress.IPv4Address(host))
     native.setup.ensure_closed()
     native.setup.check_game(native.GAME, "23660954")
     state, _ = identity(run)
@@ -62,7 +64,7 @@ def install(run, slot):
             (native.TARGET / subdir / probe.name).unlink(missing_ok=True)
     shutil.copytree(ROOT / "extension/x4_lan_lab", native.TARGET, dirs_exist_ok=True)
     config = dict(enabled=True, bubble_actions=True, trading=True, walking_avatars=False,
-                  test_profile="45841", host="127.0.0.1", slot=slot, mode="proxy",
+                  test_profile="45841", host=host, slot=slot, mode="proxy",
                   proxy_macro="ship_arg_s_scout_01_a_macro", seed_id=state["seed_id"],
                   seed_verified=True, **session)
     (native.TARGET / "ui/config.lua").write_text("X4LAN_CONFIG={\n" + "".join(
@@ -137,9 +139,10 @@ if __name__ == "__main__":
     parser.add_argument("action", choices=("install", "launch", "finish"))
     parser.add_argument("--run", type=Path, required=True)
     parser.add_argument("--slot", choices=("p1", "p2"), required=True)
+    parser.add_argument("--host", default="127.0.0.1", help="Explicit relay IPv4 for an agreed joint test")
     args = parser.parse_args()
     if args.action == "install":
-        install(args.run, args.slot)
+        install(args.run, args.slot, args.host)
     elif args.action == "launch":
         native.setup.ensure_closed()
         installed_save(args.run, args.slot)
