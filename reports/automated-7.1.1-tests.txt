@@ -1,0 +1,21 @@
+X4 LAN Lab 7.1.1 — automated source validation
+20 October 2026, Linux
+
+Command: .venv/bin/python dev/check.py
+Result: 262 tests PASS, no skips; actual lupa.luajit21 coverage and local UDP tests.
+Python: 3.14.8
+Platform: Linux-7.2.9-ogc3.1.fc44.x86_64-x86_64-with-glibc2.43
+
+Includes motion derivatives/freeze/reset, per-frame pose correction, native-velocity
+lifecycle events, connection teardown/reconnect, and validation of native evidence.
+The installer tests verify High textures for both a fresh profile and an existing
+profile, shaderquality 2, backups and preservation of normal saves. Windows installer source is unchanged;
+these Linux tests do not establish new native Windows gameplay acceptance.
+
+Raw local check log SHA-256: 8ce9fc9ed400d769162ad15415b8db5c91cce4ac56d963bb7c80260322426dbb
+Executable-source manifest SHA-256: 90f392667c200f07637918e79c05abb78c3194213947d0823c1de12e5ce1f43f
+Manifest: .local/evidence-162-withheld
+The delivery SOURCE-CHECKPOINT.json identifies the reviewed packaging commit.
+
+Production/probe MD schema and native gameplay evidence are described separately
+in RELEASE-CHECKS.txt. Tests do not claim full-universe or two-native acceptance.

@@ -1,0 +1,152 @@
+{
+  "source_commit": "74c51823c0cdfec6afd932759bee655eb127e860",
+  "production_tree": "f2f7ed2781264e79f3e9995cd9520d8a5fd97592",
+  "orientation_control": "native_only",
+  "phases": {
+    "stationary": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        -2.9842240054191675,
+        3.787888281823151,
+        2299.9971575027716
+      ]
+    },
+    "rendered": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        1.8079961262532556,
+        3.5843548102872584,
+        2299.9992784793003
+      ]
+    },
+    "physical": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        97.97127070239051,
+        -1.113073341240971,
+        2300.002339892833
+      ]
+    },
+    "native": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        100.82926718575524,
+        -1.1844989909988368,
+        2300.000466479826
+      ]
+    }
+  },
+  "controls": {
+    "stationary": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_speed": 0.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.0,
+      "max_native_firing_basis_error": 0.000982276
+    },
+    "rendered": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        100.00081029756078,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_speed": 0.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.0,
+      "max_native_firing_basis_error": 0.000924304
+    },
+    "physical": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        100.00148617373257,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        100.0,
+        -0.01664875,
+        0.0147802
+      ],
+      "native_speed": 100.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.0,
+      "max_native_firing_basis_error": 0.000200234
+    },
+    "native": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        99.99842207756441,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        100.0,
+        0.059177049999999995,
+        0.05453255
+      ],
+      "native_speed": 100.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.000599,
+      "max_native_firing_basis_error": 0.000594472
+    }
+  },
+  "native_remote_shots": 24.0,
+  "measurement_complete": true,
+  "errors": [],
+  "malformed_readbacks": 0,
+  "two_native_acceptance": false,
+  "damage_or_aim_acceptance": false,
+  "platform": "Linux x86_64",
+  "game": "X4 9.00 (611726); Steam build23660954",
+  "automated_tests": 239,
+  "skipped_tests": 0,
+  "fixture_pose_writes": "none for stationary/rendered/physical controls; explicit orientation correction only for independent native-translation reference",
+  "review_status": "native evidence passed; independent review pending",
+  "production_velocity_changed": false,
+  "scope": "two cooperative ships only; actual pose checked every render frame; existing authority/pause/docking boundaries retained",
+  "failed_predecessor": {
+    "source": "0d6099c",
+    "measurement_complete": false,
+    "reason": "15ms limiter left rendered-control pre-angle0.002373 and firing-basis error0.00273469, exceeding unchanged0.002 limit; stationary/physical/native passed; no script errors."
+  },
+  "evidence_sha256": {
+    "projectile-native-74c5182-production-orientation-installed-hashes.json": "3171e5a020325fe42bcbfcc7b70e538c6a13c613d4f7547ce7523808d908d8f3",
+    "projectile-native-74c5182-production-orientation-result.json": "9533ea9fbacfdee89efc10e0707beaaa185cb413af71a9383a34f91cd90fae78",
+    "projectile-native-74c5182-production-orientation-stdout.txt": "15353576b3dc4bb9ace38913674e8f7925ce9034b257595bdce664272164ea0c",
+    "projectile-native-74c5182-production-orientation.log": "fd201fe4ffe1cadd81340089ee8bcf6ebb19171203ef91e85b76197c5162bbe8",
+    "projectile-native-0d6099c-production-orientation-installed-hashes.json": "43606f522d0dc595e53ec306561fe9ea6204225deb5173f8ec23457e6cce60fa",
+    "projectile-native-0d6099c-production-orientation-result.json": "887bfec2330c68fe2a18058af59d809b93079c1bbae92509484ae567079dc0e4",
+    "projectile-native-0d6099c-production-orientation-stdout.txt": "00c615e5340cb53351dcb2a10492b9307b84a9b1c992ba0a7e6e112495e0f542",
+    "projectile-native-0d6099c-production-orientation.log": "91bdd0603432ce5744d715de9fd5f31cece297397e62cab0344037f85e838bd0",
+    "stationary-pose-before-checks.txt": "f940d1e80cb15cfc46ff6ba397e8836b3f2921518c5c9bc6b2fc65cb27c8d279",
+    "stationary-pose-frame-limit-before.txt": "77b084084f80760da2b2787801452f3a2c2fc1976f7532bd538ac973d4f75bc1"
+  }
+}

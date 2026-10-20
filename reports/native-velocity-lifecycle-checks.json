@@ -1,0 +1,229 @@
+{
+  "measurement_complete": true,
+  "phases": {
+    "motion": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 110.562,
+      "max_pose_error": 1.8529535881938648,
+      "max_velocity_error": 4.371183710105697e-06,
+      "managed_values": [
+        true
+      ],
+      "free_zone_topology": true,
+      "median_displacement_velocity": [
+        100.00447064670882,
+        40.00233754090907,
+        -25.00235080355045
+      ],
+      "displacement_velocity_error": 0.004470646708824688
+    },
+    "freeze": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0009999999999763531,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        true
+      ],
+      "free_zone_topology": true,
+      "median_displacement_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "displacement_velocity_error": 0.0
+    },
+    "resume": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 110.562,
+      "max_pose_error": 1.8757457183745432,
+      "max_velocity_error": 4.371227422694801e-06,
+      "managed_values": [
+        true
+      ],
+      "free_zone_topology": true,
+      "median_displacement_velocity": [
+        99.99999999999937,
+        40.0000000000031,
+        -24.997639239714644
+      ],
+      "displacement_velocity_error": 0.002360760285355923
+    },
+    "adapter_pause": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        false
+      ],
+      "free_zone_topology": true
+    },
+    "watchdog": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        false
+      ],
+      "free_zone_topology": true
+    },
+    "revoked": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        false
+      ],
+      "free_zone_topology": true
+    },
+    "old_sequence": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        true
+      ],
+      "free_zone_topology": true
+    },
+    "wrong_session": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        true
+      ],
+      "free_zone_topology": true
+    },
+    "wrong_epoch": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        true
+      ],
+      "free_zone_topology": true
+    },
+    "expired": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        false
+      ],
+      "free_zone_topology": true
+    },
+    "wrong_parent": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 0.0,
+      "max_pose_error": 0.0,
+      "max_velocity_error": 0.0,
+      "managed_values": [
+        false
+      ],
+      "free_zone_topology": true
+    },
+    "takeover": {
+      "samples": 17,
+      "valid": true,
+      "max_native_speed": 565.875,
+      "max_pose_error": 9.347999999999956,
+      "max_velocity_error": 565.8920000000036,
+      "managed_values": [
+        false
+      ],
+      "free_zone_topology": true
+    }
+  },
+  "negative_commands": {
+    "old_generation": {
+      "samples": 25,
+      "valid": true
+    },
+    "old_sequence": {
+      "samples": 25,
+      "valid": true
+    },
+    "wrong_session": {
+      "samples": 25,
+      "valid": true
+    },
+    "wrong_epoch": {
+      "samples": 25,
+      "valid": true
+    },
+    "expired": {
+      "samples": 25,
+      "valid": true
+    },
+    "wrong_parent": {
+      "samples": 25,
+      "valid": true
+    }
+  },
+  "watchdog_valid": true,
+  "watchdog_release_after_expiry": 0.05339999999999634,
+  "malformed_readbacks": 0,
+  "errors": [],
+  "two_native_acceptance": false,
+  "pause_scope": "Adapter pause branch injected while the native world continues, not an engine menu-pause scheduling test.",
+  "source_commit": "d5caf04e5b976af46c7e0fa7061ea23429df8a85",
+  "source_unchanged": true,
+  "review_status": "Accepted within documented lifecycle scope by independent review5578995063 at bcde58f; later projectile control failure is separate.",
+  "graphics_workaround": "Measured successful run uses texturequality high and shaderquality2 in isolated profile45841; packages/installers unchanged. Root cause and minimum working texture level remain unproven.",
+  "startup_failures": [
+    {
+      "prefix": "native-velocity-d5caf04-shader-failure",
+      "shader": "p1/high/multimat.frag.glsl",
+      "line": 59,
+      "texturequality": "low",
+      "lifecycle_samples": 0
+    },
+    {
+      "prefix": "native-velocity-d5caf04-empty-cache-failure",
+      "shader": "p1/high/eye_cornea.frag.glsl",
+      "line": 131,
+      "texturequality": "low",
+      "lifecycle_samples": 0
+    }
+  ],
+  "artifact_sha256": {
+    ".local/native-world-tests/native-velocity-d5caf04-empty-cache-failure-result.json": "89ed5a02dda833089bb4cdbc796b673281b1f653cdc8da108e46df142e8538ae",
+    ".local/native-world-tests/native-velocity-d5caf04-empty-cache-failure-stdout.txt": "39327aab92f7b02ce35096cba2ed463edc6340c67cab4e2472b0323201d936f8",
+    ".local/native-world-tests/native-velocity-d5caf04-empty-cache-failure.log": "ee07d345f2b436ce0ff2b764643a61c6308dc3f74d1d2a70e18e7cb49a76b981",
+    ".local/native-world-tests/native-velocity-d5caf04-empty-cache-failure.png": "298fa3a5517d2b7e5be1b4e35c8314dada1d80ec1bd09b785bb1c6ae5a23fbea",
+    ".local/native-world-tests/native-velocity-d5caf04-fatal.png": "ba66a8b263aa9ca3b13526457c0b40949b45a6090705670c056f99a2b3918bbc",
+    ".local/native-world-tests/native-velocity-d5caf04-high-textures-environment.json": "36bb01fabd448f08fb28af6abe8a8e8e4add23aad7e21c941acb251e83365212",
+    ".local/native-world-tests/native-velocity-d5caf04-high-textures-installed-hashes.json": "b7a8855d19a0b53ef49bcf8709c8f55f20cfa8b0a21e09b4d4ca5dcd1d6104a3",
+    ".local/native-world-tests/native-velocity-d5caf04-high-textures-result.json": "66610efe9c6deb393cd321c60a59e658f6c3e5d847756ec4456f2a2b447c2543",
+    ".local/native-world-tests/native-velocity-d5caf04-high-textures-stdout.txt": "2fc88c838ce0c16a0713da5b605425f6acce034c2d0d73856ed5ed04338f6f7d",
+    ".local/native-world-tests/native-velocity-d5caf04-high-textures.log": "dea14e745e5aa635a35f68a3ff8d2207d2d0b0a4bc174563307fde0f2b70ddfa",
+    ".local/native-world-tests/native-velocity-d5caf04-retry-environment.json": "e3e5cb6ce32233425f054985a09b88711e45d103fa680f6971bce0aa79aa79bd",
+    ".local/native-world-tests/native-velocity-d5caf04-shader-failure-analyzer-result.json": "89ed5a02dda833089bb4cdbc796b673281b1f653cdc8da108e46df142e8538ae",
+    ".local/native-world-tests/native-velocity-d5caf04-shader-failure-installed-hashes.json": "b7a8855d19a0b53ef49bcf8709c8f55f20cfa8b0a21e09b4d4ca5dcd1d6104a3",
+    ".local/native-world-tests/native-velocity-d5caf04-shader-failure-result.json": "8ef31eeac4e3bb62d10b6e8eba6c4fc94b7fbf061b0b29893d51e7cc22d6ae88",
+    ".local/native-world-tests/native-velocity-d5caf04-shader-failure-stdout.txt": "39327aab92f7b02ce35096cba2ed463edc6340c67cab4e2472b0323201d936f8",
+    ".local/native-world-tests/native-velocity-d5caf04-shader-failure.log": "9ec789aeffb3d8e843802fc204a1e4c8d179d3da19ae335d8f282ea21a7ad063",
+    ".local/native-world-tests/native-velocity-startup-file-integrity.json": "937dadcb0ca292c66c2dc1fb2040c720167fb6f77f2abd9558c45db1089daab0",
+    ".local/native-world-tests/native-velocity-d5caf04-unit-check.log": "8c19fd9a9295fa881b18d84c3b54e9fc01bc06586cd303884e189f9a0e0664a6",
+    ".local/native-world-tests/native-velocity-d5caf04-production-schema.json": "63fb7c9253d1d5989cf5be567ec28a3ecc181b7f25718b1e501aadec1a252136",
+    ".local/native-world-tests/native-velocity-d5caf04-probe-schema.json": "19e6925ae710a9f727a8b301f019680a915a24e520d0c1890c70d3ed2835de09"
+  }
+}

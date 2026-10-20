@@ -1,8 +1,9 @@
 -- Original INTERNAL W01 NPC replication adapter. No third-party framework.
--- Ordinary cargo, NPC combat, station economy and missions remain separate work.
+-- Native cargo uses a separate authority adapter; NPC combat remains separate work.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API;local P=X4LAN_UNIVERSE_PROTOCOL
 if not cfg or not cfg.world_sync or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
+local M=assert(X4LAN_MOTION,'motion buffer missing')
 assert(cfg.test_profile=='45841' and cfg.build:sub(1,7)=='world1-','world adapter requires isolated W01 build')
 assert(cfg.world_mode=='observe' or cfg.world_mode=='replica','select an explicit world test mode')
 ffi.cdef[[
@@ -93,10 +94,13 @@ local function captured(scan)
    end
    local row=identity.id..',ship,'..entry.macro..','..entry.owner..','..poseFields(pose(entry.object))..',none,0'
    assert(P.record(row),'invalid captured NPC state')
-   objects[#objects+1]={id=identity.id,object=entry.object,sector=scan.name}
+   objects[#objects+1]={id=identity.id,object=entry.object,sector=scan.name,identity=identity}
    rows[#rows+1]={id=identity.id,row=row}
   end
  end
+ if A.cargo then for _,row in ipairs(A.cargo.rows(scan.sector)) do rows[#rows+1]=row end end
+ assert(#rows<=P.limit,'combined sector object limit exceeded')
+ u.lastScan=scan;u.cargoDirty=false
  table.sort(rows,function(a,b) return a.id<b.id end)
  local ordered={};for i,r in ipairs(rows) do ordered[i]=r.row end
  u.revision=u.revision+1;u.publish=objects;u.motionCursor=1
@@ -120,13 +124,13 @@ local function accept(b,now)
  if cfg.world_mode=='observe' then log('OBSERVED revision='..b.revision..' sector='..b.sector..' objects='..#b.rows);return end
  local wanted={};u.renderIds={};u.renderCursor=1
  for _,row in ipairs(b.rows) do
-  local entity=assert(P.record(row));assert(entity.kind=='ship','drop engine adapter is not implemented')
+  local entity=assert(P.record(row));assert(entity.kind=='ship' or A.cargo,'cargo adapter missing')
   wanted[entity.id]=entity
   u.renderIds[#u.renderIds+1]=entity.id
  end
  for id,r in pairs(u.replicas) do
   local next=wanted[id]
-  if not next or next.macro~=r.entity.macro or next.owner~=r.entity.owner or b.sector~=r.sector then
+  if not next or next.macro~=r.entity.macro or next.owner~=r.entity.owner or next.kind~=r.entity.kind or next.ware~=r.entity.ware or next.amount~=r.entity.amount or b.sector~=r.sector then
    removeReplica(r);u.replicas[id]=nil
   end
  end
@@ -135,7 +139,7 @@ local function accept(b,now)
   if not r then r={entity=entity,sector=b.sector,seq=-1};u.replicas[id]=r
   else
    r.entity=entity
-   if not r.at or now-r.at>=.75 then r.from=nil;r.target=nil end
+   if not r.at or now-r.at>=M.stale then r.track=nil;r.target=nil end
   end
  end
  log('COMMITTED revision='..b.revision..' sector='..b.sector..' objects='..#b.rows)
@@ -148,13 +152,22 @@ function u.receive(f,now)
   local rev=P.integer(f[5]);local index=f[6]=='-1' and -1 or P.integer(f[6])
   if cfg.slot=='p1' and #f==6 and rev and index and u.sender then u.sender:ack(f[4],rev,index) end
   return true
- elseif f[1]=='UPOS' then
-  if cfg.slot~='p2' or #f~=13 or not u.latest or f[4]~=u.latest.epoch then return true end
+ elseif f[1]=='UPOS' or f[1]=='UMOVE' then
+  local modern=f[1]=='UMOVE'
+  if cfg.slot~='p2' or #f~=(modern and 20 or 13) or not u.latest or f[4]~=u.latest.epoch then return true end
   local id,seq=P.integer(f[5]),P.integer(f[6]);local r=id and u.replicas[id]
   if not r or not seq or seq<=r.seq or f[7]~=r.sector then return true end
-  local row=id..',ship,'..r.entity.macro..','..r.entity.owner..','..table.concat(f,',',8,13)..',none,0'
+  local start=modern and 9 or 8
+  local row=id..',ship,'..r.entity.macro..','..r.entity.owner..','..table.concat(f,',',start,start+5)..',none,0'
   local parsed=P.record(row);if not parsed then return true end
-  r.from=r.target or r.entity.pose;r.target=parsed.pose;r.at=now;r.seq=seq
+  local velocity={0,0,0,0,0,0};local time=now
+  if modern then
+   time=tonumber(f[8]);for i=1,6 do velocity[i]=tonumber(f[14+i]) end
+  end
+  local track=r.track or {}
+  if not modern and not r.track then M.push(track,now-.1,r.entity.pose,velocity,now-.1) end
+  if not M.push(track,time,parsed.pose,velocity,now) then return true end
+  r.track=track;r.target=parsed.pose;r.at=now;r.seq=seq;r.modern=modern
   return true
  elseif f[1]=='UBEGIN' or f[1]=='UOBJECT' or f[1]=='UCOMMIT' then
   if cfg.slot~='p2' or u.failed then return true end
@@ -167,26 +180,25 @@ function u.receive(f,now)
 end
 local function render(now,sector)
  local ids=u.renderIds or {};if #ids==0 then return end
- for _=1,math.min(24,#ids) do
+ for _=1,math.min(128,#ids) do
   local r=u.replicas[ids[u.renderCursor]];u.renderCursor=u.renderCursor%#ids+1
   if r.sector==u.interest and (not r.nextApply or now>=r.nextApply) then
-   r.nextApply=now+.05
+   r.nextApply=now+.015
+   if r.entity.kind=='drop' then A.cargo.ensure(r,sector)
+   else
    local p=r.entity.pose
-   if r.target and now-r.at<.75 then
-    p={};local t=math.max(0,math.min(1,(now-r.at)/.1))
-    for i=1,6 do
-     local delta=r.target[i]-r.from[i]
-     if i>3 then delta=(delta+math.pi)%(2*math.pi)-math.pi end
-     p[i]=r.from[i]+delta*t
-    end
-   elseif r.target then p=r.target end
+   if r.track then p=M.render(r.track,now,r.modern and M.delay or .1) or p end
    local value=ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
    if not r.object or not C.IsComponentOperational(r.object) then
     r.object=C.SpawnObjectAtPos2(r.entity.macro,sector,value,r.entity.owner)
     assert(r.object~=0,'NPC replica spawn failed');u.replicaKeys[key(r.object)]=true
+    C.ActivateObject(r.object,false)
    end
    assert(r.object~=C.GetPlayerContainerID() and r.object~=C.GetPlayerControlledShipID(),'player in NPC replica')
-   C.ActivateObject(r.object,false);C.SetObjectSectorPos(r.object,sector,value)
+   local changed=not r.applied
+   if r.applied then for i=1,6 do if math.abs(p[i]-r.applied[i])>(i<=3 and .005 or .00001) then changed=true end end end
+   if changed then C.SetObjectSectorPos(r.object,sector,value);r.applied=p end
+   end
   end
  end
 end
@@ -221,6 +233,7 @@ local function frame(now)
   end
   return
  end
+ if u.cargoDirty and u.lastScan and u.lastScan.name==u.wanted and (not u.sender or u.sender.done) then captured(u.lastScan) end
  if u.sender and not u.sender.done then
   for _,p in ipairs(u.sender:packets(s.client.lease,now)) do send(p) end
  elseif u.wanted and not u.scan and now>=(u.nextScan or 0) then
@@ -233,12 +246,15 @@ local function frame(now)
  end
  if #u.publish>0 and now>=(u.nextMotion or 0) then
   u.nextMotion=now+.05
-  for _=1,math.min(12,#u.publish) do
+  for _=1,math.min(32,#u.publish) do
    local entry=u.publish[u.motionCursor];u.motionCursor=u.motionCursor%#u.publish+1
    local target=A.coop.sectors[entry.sector]
    if C.IsComponentOperational(entry.object) and C.GetContextByClass(entry.object,'sector',false)==target then
     u.motionSeq=u.motionSeq+1
-    send('UPOS|1|'..s.client.lease..'|'..s.client.lease..'|'..entry.id..'|'..u.motionSeq..'|'..entry.sector..'|'..poseFields(pose(entry.object)):gsub(',','|'))
+    local p=pose(entry.object);local identity=entry.identity
+    local velocity=M.velocity(identity.motion,p,now);identity.motion={time=now,pose=p}
+    send('UMOVE|1|'..s.client.lease..'|'..s.client.lease..'|'..entry.id..'|'..u.motionSeq..'|'..entry.sector..'|'..
+     string.format('%.6f',now)..'|'..poseFields(p):gsub(',','|')..'|'..poseFields(velocity):gsub(',','|'))
    end
   end
  end
@@ -249,4 +265,4 @@ function u.frame(now)
 end
 RegisterEvent('X4LAN_Universe.Exclude',function(_,object) u.excluded[key(ConvertIDTo64Bit(object))]=true end)
 RegisterEvent('X4LAN_Universe.Ready',function() u.ready=true;log('READY mode='..cfg.world_mode..' slot='..cfg.slot) end)
-log('ARMED W01: NPC scene only; cargo/combat/economy not synchronized')
+log('ARMED internal world replication; native cargo and shared identity adapters load separately; NPC combat remains experimental')

@@ -1,0 +1,35 @@
+NATIVE VELOCITY SETTER COORDINATES — INTERNAL RESEARCH
+
+Measured source: 23c38527be10bdcb6bbbac97ce80f9933927379c
+Baseline production: main e0c2a51 (reviewed cooperative pose correction).
+Game: X4 9.00 (611726), Linux; new disposable world, isolated profile 45841.
+No normal saves were loaded or changed. Game and relay closed after the run.
+
+The opt-in probe sets linear velocity (100, 40, -25) once at each of six
+orientations: zero, yaw 90, yaw 180, pitch 45, roll 45, mixed (35, 20, -15)
+degrees. Each phase lasts eight game seconds. Samples start after settling.
+The synthetic peer sends CREW/IDLE but no NAV; production has no remote track.
+The fixture controls rotation while preserving actual native XYZ translation.
+A LuaJIT regression checks that it does not inject translated positions.
+
+Result: PASS, 26 native samples and 25 displacement intervals per orientation.
+All six measured sector velocities match the input within 0.009579 m/s per
+component. Native component-local velocity, transformed by the independently
+observed sector basis, agrees within 0.009579 m/s. Observed sample forward/up
+bases match the setter acknowledgement with zero reported drift. No malformed
+readbacks or probe/MD errors. 247 Linux tests pass with LuaJIT, no skips; MD
+schema passes. Raw immutable artifact hashes and per-phase data are in
+velocity-frame-native-checks.json.
+
+The setter input is not component-local at these nonzero headings. The native
+velocity getter is component-local: e.g. yaw 90 returns (25, 40, 100) while
+measured sector motion remains (100, 40, -25). Parent-to-sector and
+sector-to-cluster axes were identity in every phase. Consequently this run
+cannot distinguish a sector, parent or cluster setter reference frame, nor
+justify applying its result in differently rotated parent spaces.
+
+This experiment changes no production adapter, protocol or package. It does
+not validate projectile aim, shared hits, native velocity lifecycle cleanup,
+or two-native gameplay. A follow-up must keep physical velocity coherent with
+rendered interpolation/prediction, zero it at freeze, and release overrides
+on pause, authority, docking, destruction, sector and connection transitions.

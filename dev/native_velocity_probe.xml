@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_NativeVelocity" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Observe" namespace="this">
+  <conditions><event_ui_triggered screen="'X4LAN_NativeVelocity'" control="'Setup'"/></conditions>
+  <actions>
+   <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{2}"/>
+   <set_value name="$session" exact="md.X4LAN_Coop.Session"/>
+   <raise_lua_event name="'X4LAN_NativeVelocity.Ready'"/>
+  </actions>
+  <cues>
+   <cue name="Sample" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_NativeVelocity'" control="'Sample'"/></conditions><actions>
+    <set_value name="$v" exact="event.param3"/><set_value name="$p" exact="$ship.relativeposition.{$ship.sector}"/>
+    <set_value name="$r" exact="$ship.relativerotation.{$ship.sector}"/>
+    <debug_text text="'[X4LAN] NATIVE_VELOCITY sample=%s tag=%s elapsed=%s time=%s x=%s y=%s z=%s vx=%s vy=%s vz=%s rx=%s ry=%s rz=%s ux=%s uy=%s uz=%s fx=%s fy=%s fz=%s speed=%s managed=%s generation=%s sequence=%s deadline=%s parentZone=%s topology=%s pilot=%s wantX=%s wantY=%s wantZ=%s wantVx=%s wantVy=%s wantVz=%s wantManaged=%s wantGeneration=%s wantSequence=%s'.[$v.$phase,$v.$tag,$v.$elapsed,player.age,$p.x,$p.y,$p.z,$ship.velocity.x,$ship.velocity.y,$ship.velocity.z,$r.right.x,$r.right.y,$r.right.z,$r.up.x,$r.up.y,$r.up.z,$r.forward.x,$r.forward.y,$r.forward.z,$ship.speed,$session.$velocityManaged.{2},$session.$velocityGeneration.{2},$session.$velocitySequence.{2},$session.$velocityDeadline.{2},$ship.parent.isclass.zone,$ship.parent.parent == $ship.sector and $ship.sector.parent == $ship.cluster,player.occupiedship == $ship,$v.$x,$v.$y,$v.$z,$v.$vx,$v.$vy,$v.$vz,$v.$expectedManaged,$v.$generation,$v.$sequence]"/>
+   </actions></cue>
+   <cue name="Takeover" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_NativeVelocity'" control="'Takeover'"/></conditions>
+    <actions><teleport_player object="$ship" control="true" instant="true" force="true"/></actions>
+    <cues><cue name="Throttle"><delay exact="0.3s"/><actions><set_playership_throttle value="1"/></actions></cue></cues>
+   </cue>
+   <cue name="Finish" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_NativeVelocity'" control="'Finish'"/></conditions><actions>
+    <set_playership_throttle value="0"/>
+    <teleport_player object="md.X4LAN_Bubble.Arena.$ships.{1}" control="true" instant="true" force="true"/>
+   </actions></cue>
+  </cues>
+ </cue></cues>
+</mdscript>

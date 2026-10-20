@@ -1,0 +1,290 @@
+{
+  "source_commit": "00d05e0d6e86607fd286e882ff1ed1602f86196e",
+  "production_tree": "e199daee5ad9652b98672f7eb5a36dfd22de301c",
+  "source": "synthetic NAV2/FIRE2 pilot; real native host projectiles",
+  "phases": {
+    "stationary": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        1.0554750529643284,
+        1.8185770374366483,
+        2300.004538916388
+      ]
+    },
+    "rendered": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        1.5577851831079506,
+        -1.1587128377895426,
+        2300.003573038425
+      ]
+    },
+    "physical": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        99.54922562299416,
+        -1.3867661111960454,
+        2300.0035169229873
+      ]
+    },
+    "native": {
+      "samples": 6,
+      "valid": true,
+      "median_velocity": [
+        100.78714504428973,
+        -0.34040662705500674,
+        2300.003232410075
+      ]
+    }
+  },
+  "controls": {
+    "stationary": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_speed": 0.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.000733,
+      "max_native_firing_basis_error": 0.000726882
+    },
+    "rendered": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        100.00014261876552,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        0.0,
+        0.0,
+        0.0
+      ],
+      "native_speed": 0.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.0,
+      "max_native_firing_basis_error": 0.00024749
+    },
+    "physical": {
+      "position_intervals": 56,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        99.99896229459625,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        100.0,
+        -0.00810788,
+        -0.0717147
+      ],
+      "native_speed": 100.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.0,
+      "max_native_firing_basis_error": 0.00103457
+    },
+    "native": {
+      "position_intervals": 55,
+      "native_readbacks": 6,
+      "valid": true,
+      "position_derived_sector_velocity": [
+        99.99967083143214,
+        0.0,
+        0.0
+      ],
+      "native_component_velocity": [
+        99.9999,
+        -0.0979959,
+        -0.0345505
+      ],
+      "native_speed": 100.0,
+      "max_orientation_error": 0.0,
+      "max_pre_correction_angle_in_firing_window": 0.001029,
+      "max_native_firing_basis_error": 0.00103131
+    }
+  },
+  "native_remote_shots": 24.0,
+  "projectile_samples_complete": true,
+  "controls_complete": true,
+  "measurement_complete": true,
+  "rendered_lateral_delta": 0.5023101301436221,
+  "physical_lateral_delta": 98.49375057002983,
+  "native_lateral_delta": 99.7316699913254,
+  "two_native_acceptance": false,
+  "damage_or_aim_acceptance": false,
+  "errors": [],
+  "malformed_readbacks": 0,
+  "game": "X4 9.00 (611726), Steam build 23660954",
+  "platform": "Linux x86_64",
+  "profile": "45841; fresh disposable world; autosave disabled",
+  "orientation_control": "Diagnostic holds zero sector orientation in every case, preserving actual position. Native-translation case additionally suppresses production network-position application.",
+  "trajectory_frame": "sector Cartesian XYZ, metres/second; MD relativeposition sampled using player.age; speeds derived in Python",
+  "native_velocity_frame": "cluster-relative linear velocity in each component's rotational axes; yaw-zero test does not establish setter frame at other headings",
+  "automated_tests": 234,
+  "skipped_tests": 0,
+  "review_status": "Accepted bounded diagnostic evidence in PR10 review5578609727",
+  "reviewed_acceptance": true,
+  "orientation_acceptance": true,
+  "orientation_evidence": "Settled pre-correction poses plus native sector forward/up basis at each firing, correlated by serial, phase and birth time; component error bound 0.002.",
+  "historical_b687": {
+    "source_commit": "b687bb25880e073c62172a8c98b6a4980892957f",
+    "phases": {
+      "stationary": {
+        "samples": 6,
+        "valid": true,
+        "median_velocity": [
+          -1.085794175013427,
+          3.402312280338079,
+          2299.9957597217526
+        ]
+      },
+      "rendered": {
+        "samples": 6,
+        "valid": true,
+        "median_velocity": [
+          0.34322597907531704,
+          0.7871160024071301,
+          2299.99762298151
+        ]
+      },
+      "physical": {
+        "samples": 6,
+        "valid": true,
+        "median_velocity": [
+          100.13243515244551,
+          0.2574763358357057,
+          2300.00140740011
+        ]
+      },
+      "native": {
+        "samples": 6,
+        "valid": true,
+        "median_velocity": [
+          101.86583787876702,
+          -0.018325491502207136,
+          2300.0016461299892
+        ]
+      }
+    },
+    "controls": {
+      "stationary": {
+        "position_intervals": 56,
+        "native_readbacks": 6,
+        "valid": true,
+        "position_derived_sector_velocity": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "native_component_velocity": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "native_speed": 0.0,
+        "max_orientation_error": 0.0
+      },
+      "rendered": {
+        "position_intervals": 56,
+        "native_readbacks": 6,
+        "valid": true,
+        "position_derived_sector_velocity": [
+          100.00023630118852,
+          0.0,
+          0.0
+        ],
+        "native_component_velocity": [
+          0.0,
+          0.0,
+          0.0
+        ],
+        "native_speed": 0.0,
+        "max_orientation_error": 0.0
+      },
+      "physical": {
+        "position_intervals": 56,
+        "native_readbacks": 6,
+        "valid": true,
+        "position_derived_sector_velocity": [
+          100.00063525520454,
+          0.0,
+          0.0
+        ],
+        "native_component_velocity": [
+          100.0,
+          0.0562562,
+          0.01078525
+        ],
+        "native_speed": 100.0,
+        "max_orientation_error": 0.0
+      },
+      "native": {
+        "position_intervals": 56,
+        "native_readbacks": 6,
+        "valid": true,
+        "position_derived_sector_velocity": [
+          99.99313368358597,
+          0.0,
+          0.0
+        ],
+        "native_component_velocity": [
+          99.9999,
+          -0.0851852,
+          -0.0636549
+        ],
+        "native_speed": 100.0,
+        "max_orientation_error": 0.0
+      }
+    },
+    "measurement_complete": true,
+    "known_validator_gap": "The historical measurement_complete=true and zero orientation errors use post-fixture-correction angle samples, not independent orientation at firing. Raw artifacts remain unchanged.",
+    "reviewed_acceptance": false
+  },
+  "failed_runs": [
+    {
+      "source": "c084ccd",
+      "result": "FAIL",
+      "reason": "Lua GetObjectPositionInSector returned zero for bullets; orientation was not recorded. Native/local frame differences suggested rotation but did not prove it."
+    },
+    {
+      "source": "743c4d1",
+      "result": "FAIL",
+      "reason": "144 MD typed length/time arithmetic errors; stationary/native controls rotated despite angular-velocity reset. Raw displacement was observable but this run is not accepted."
+    }
+  ],
+  "evidence_sha256": {
+    "projectile-native-00d-independent-orientation-installed-hashes.json": "71bea1c14afbc6625a7bea4059caf4b61c29db53b7d3b10e4292f6d2afa3d507",
+    "projectile-native-00d-independent-orientation-result.json": "1759c597d1e74480546453f5f15dd00f0c83f7611fe07ab5013f552e9097d4ad",
+    "projectile-native-00d-independent-orientation-stdout.txt": "968a07d4f08d2c34734fa85be800ffc7bac5a4af48528ea9ab171d32a5a0973a",
+    "projectile-native-00d-independent-orientation.log": "24f1caf85e12d03c79b525aa03056011879c463cb593461a7ce86fe3071ff6e9",
+    "projectile-native-b687-velocity-installed-hashes.json": "9ed025c957c724b7c23190adf1e7333cad154a9a2c4ceb9c79ef918ec8ba5fe5",
+    "projectile-native-b687-velocity-result.json": "75540c991b3f7930dbc0681cb8cd1f9e4df520b3d68a2058cdfcbee4d20ba88f",
+    "projectile-native-b687-velocity-stdout.txt": "adc4ed7fdb9665fdb5f38b360878a553df75a58f4e538da2165dd32fb5fc0498",
+    "projectile-native-b687-velocity.log": "8bfdb573a092b656b9e2b53f27e04b499dd58cbae91b4ec77ffcf49517d39a01",
+    "projectile-native-c084-installed-hashes.json": "f38487549a2d3829db079ffd086d51cc43eafb2e5edd78b68cc21b51aaba3228",
+    "projectile-native-c084-lua-position-unavailable-result.json": "78769a4f404dedb704945853ab2f3680b81869cbb08da33747617c1d1ab6ffbe",
+    "projectile-native-c084-lua-position-unavailable-stdout.txt": "81f076b06b5f6b557ce0ef14a0e46f2659732e8fd3aec6718d47aa38a97e4aa7",
+    "projectile-native-c084-lua-position-unavailable.log": "16c8e585d095d16316c06493fa23728cde3611760d883b0a62999880df02c445",
+    "projectile-native-743-md-unit-and-orientation-failure-installed-hashes.json": "1367bfd1507b1b7955938773bbc5396e4b5c4cb76c83c017b24cf0eb30b31f68",
+    "projectile-native-743-md-unit-and-orientation-failure-result.json": "68f9b93042282597fe6653a8857cd3b3f97df16cbb04eb6ef5071c8610329049",
+    "projectile-native-743-md-unit-and-orientation-failure-stdout.txt": "484ea4e0778e7f950e5bf42f75267b3c696b48c69aab6e6b1355bec4bef0049e",
+    "projectile-native-743-md-unit-and-orientation-failure.log": "b916b5a80184f89db0d9e97be093f1911f3f3ac5e84bcca5d5b32a2f35c40bb6"
+  },
+  "review_url": "https://github.com/Lith7ium/X4-Multiplayer/pull/10#pullrequestreview-5578609727",
+  "merged_main_commit": "7cfda311a50cebd6ba9db30d262743927887aeaf"
+}

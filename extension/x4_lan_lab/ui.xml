@@ -7,6 +7,7 @@
     <file name="ui/client.lua" />
     <file name="ui/game.lua" />
     <file name="ui/bubble_game.lua" />
+    <file name="ui/motion.lua" />
     <file name="ui/coop_game.lua" />
     <file name="ui/universe_protocol.lua" />
     <file name="ui/universe_game.lua" />
@@ -15,5 +16,7 @@
     <file name="ui/trade_protocol.lua" />
     <file name="ui/trade_game.lua" />
     <file name="ui/quest_game.lua" />
+    <file name="ui/cargo_game.lua" />
+    <file name="ui/identity_game.lua" />
   </environment>
 </addon>

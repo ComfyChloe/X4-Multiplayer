@@ -1,0 +1,92 @@
+X4 LAN LAB 7.1.0 - INTERNAL DEVELOPMENT CANDIDATE CHECKS
+19 October 2026 | X4 9.00 (611726), Steam build 23660954
+
+STATUS: INTERNAL CANDIDATE FOR THE NEXT PLAYTEST. TWO-NATIVE ACCEPTANCE PENDING.
+This follows the completed real two-PC 7.0 playtest. The original 7.0 pair is
+preserved. No public package was requested or built for this follow-up.
+
+AUTOMATED SOURCE
+The integrated gameplay source at 759a5e0 passes 225 Linux Python/LuaJIT checks,
+without skips. These include original transport/gameplay regressions and cargo,
+motion, identity, explicit FIRE2 selection and pause/epoch handling. The attached
+automated report records the exact command/environment for this candidate.
+All 15 checked MD files (production scripts plus opt-in probes) validate against
+the installed X4 9.00 MD schema at 00fc83b. Probes are not shipped.
+
+NATIVE LINUX EVIDENCE (FRESH PROFILE 45841, SYNTHETIC COUNTERPARTS)
+- Real host: ordinary DropCargo20 appears in a committed baseline; the native
+  magnet removes it. Real host also executes guest DROP20/PICKUP20 with duplicate
+  UDP intentions AND duplicate MD execution events: final20/no remaining drop.
+- Real guest: ordinary drop20 -> native collectible -> magnet pickup20 converges
+  to inventory20/no replica. Both completion messages deliberately lost once;
+  retries mutate once. Generation-tagged native callbacks are exercised.
+- Capacity: host rejects20 with only10 free, collects10, rejects1 when full, then
+  collects remaining10 after the fixture frees10. Final1100/no drop/no MD errors.
+- Guest partial magnet: two10-cell intentions, remaining quantity recreated as
+  generation2; final1100/no replica. Lost completions do not duplicate inventory.
+- HUD:90 targetability checks,0 failures,88 resolved host-name/code headers.
+  UMOVE202 transform samples, max difference1.3293m at100m/s; NAV2 717 samples,
+  max difference0.6651m at50m/s, within the15ms application interval. Deliberate
+  0.9s packet gaps exercise bounded prediction/freeze. Empty baseline removes NPCs.
+- Both Xperimental Shuttles: hull4580, shield4800, six guns, one shield, two engines,
+  Docking Computer Mk2, cargo1100 and native maxspeed649.789. The seventh connection
+  is an unused missile slot with zero capacity. Player controls transfer correctly.
+- Native software API verifies dockmk2, flightassistmk1, scannerlongrangemk2,
+  scannerobjectmk2, targetmk1, trademk1 and the Mk3 combat thruster on BOTH ships.
+- Shaderquality2 starts the cockpit successfully; the old unsupported0 setting
+  caused a shader compilation failure. Only the disposable profile was changed.
+
+- FIRE2 receiver at 4f1075c: split4+2 tap ->6 native shots, tap6 ->6,
+  sustained78 ->78, after-stop0. The earlier unlimited350ms pulses produced
+  24/24/180 and are rejected. Native weapon callbacks now consume finite credit.
+- Real source capture/echo at 6f6be02: primary6/secondary0, actual split2+4
+  network updates, exactly6 remote shots and no MD errors.
+- Dual-trigger calibration at 00fc83b: primary3 ->3, secondary3 ->3,
+  simultaneous3+3 ->6; native source and receiver totals primary6/secondary6,
+  after-stop0. The probe explicitly configured identical disjoint memberships;
+  this does not establish automatic membership synchronization.
+- Unequal/staggered native playback at 759a5e0:3P/9S,9P/3S and staggered3P then9S
+  each produce12 shots; final primary15/secondary21, total36, after-stop0.
+  The native event timeline verifies one trigger continues after the other stops.
+- Native guest health replay at 00fc83b:63 readbacks, all eight hull/shield values
+  exactly match the supplied states. The recorded host trace varies target2's
+  shield; other health changes were explicit synthetic fixture values. A local
+  ship1 perturbation from65/45 to42/5 recovered to65/45 in0.83s while the host
+  snapshot stayed unchanged. The corrected759a5e0 validator matches27 nonconstant
+  recorded trace states and rejects plateau-only evidence. This proves receiver
+  convergence, not hit prediction.
+- Identity publishing at 4f1075c includes both players, four fixtures and122 NPCs.
+  Delayed market initialization no longer stops the adapter. 2cdb75c also scopes
+  identity sequence numbers to the host epoch; the focused regression passes.
+- Native guest display at 759a5e0: both players and all four fixture objects each
+  have 61 matching code/name/live-header readbacks after the initial metadata
+  wait (62 samples each). All 310 selections of the five selectable objects are
+  targetable. Own-ship P2 self-selection is correctly unavailable. No MD errors.
+
+WINDOWS EVIDENCE REPORTED BY CLAUDE
+Native Shuttle hardware/docking/control checks passed, along with native
+PowerShell5.1 profile/rollback fixtures and the shaderquality2 assertion. The
+expanded six-software/thruster getter probe was performed on Linux only.
+A successful separate Windows startup is not joint Windows/Linux gameplay.
+
+PENDING / LIMITS
+- Joint Windows/Linux cargo/identity/radar/motion/combat acceptance, native
+  hit/aim equivalence and endurance. Separate native receiver convergence and
+  default/disjoint-trigger cadence checks have passed as described above.
+- User-customized weapon group membership, gimbal/aim direction and exact
+  projectile matching are not established by active-group trigger replication.
+- Contested pickup with two native games, arbitrary NPC loot, multi-ware crates
+  and unrestricted cargo categories. Donor capacity failure explicitly stops
+  cargo replication; it does not create a fake collectible.
+- General NPC combat/equipment, station production/economy, arbitrary vanilla
+  missions, complete galaxy discovery and save/load are not synchronized.
+- Existing mass-traffic-offset warnings during guest NPC suppression remain;
+  broader job/mission control and the reported low-priority PiP artifacts are open.
+
+PRESERVATION
+All normal save bytes and actual save timestamps were unchanged after the native
+runs; no test saves were created. Test probes and local session secrets stay out
+of packages/Git. Engine-owned references and schemas are not redistributed.
+Detailed chronological evidence: reports/PLAYTEST-7.0-FOLLOWUP.txt in the source.
+Machine-readable firing/health measurements and artifact hashes are recorded in
+reports/native-7.1.0-checks.json. Failed probe runs remain separate from acceptance.

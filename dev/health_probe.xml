@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in isolated guest health readback; never shipped. -->
+<mdscript name="X4LAN_HealthProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="State" namespace="this"><actions><set_value name="$perturbed" exact="false"/></actions><cues>
+  <cue name="Observe" instantiate="true" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'Apply'"/></conditions>
+   <actions><set_value name="$wanted" exact="event.param3.$values"/><set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/></actions>
+   <cues><cue name="Readback"><delay exact="50ms"/><actions>
+    <debug_text text="'[X4LAN] HEALTH_PROBE expected=%s,%s,%s,%s,%s,%s,%s,%s actual=%s,%s,%s,%s,%s,%s,%s,%s'.[$wanted.{1},$wanted.{2},$wanted.{4},$wanted.{5},$wanted.{7},$wanted.{8},$wanted.{9},$wanted.{10},$arena.$ships.{1}.hullpercentage,$arena.$ships.{1}.shieldpercentage,$arena.$ships.{2}.hullpercentage,$arena.$ships.{2}.shieldpercentage,$arena.$targets.{1}.hullpercentage,$arena.$targets.{1}.shieldpercentage,$arena.$targets.{2}.hullpercentage,$arena.$targets.{2}.shieldpercentage]"/>
+   </actions></cue>
+   <cue name="Perturb"><delay exact="250ms"/><actions>
+    <do_if value="$wanted.{1} == 65 and not State.$perturbed">
+     <set_value name="State.$perturbed" exact="true"/>
+     <set_object_hull object="$arena.$ships.{1}" exact="42"/><set_object_shield object="$arena.$ships.{1}" exact="5"/>
+     <debug_text text="'[X4LAN] HEALTH_PROBE perturb actual=%s,%s'.[$arena.$ships.{1}.hullpercentage,$arena.$ships.{1}.shieldpercentage]"/>
+    </do_if>
+   </actions></cue></cues>
+  </cue>
+ </cues></cue></cues>
+</mdscript>

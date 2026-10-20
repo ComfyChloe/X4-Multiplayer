@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_CargoSeed" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+<cues><cue name="Seed"><conditions><event_ui_triggered screen="'X4LAN_CargoSeed'" control="'Seed'"/></conditions>
+<actions>
+ <add_cargo object="md.X4LAN_Bubble.Arena.$ships.{2}" ware="ware.energycells" exact="20"/>
+ <append_to_list name="md.X4LAN_Cargo.Setup.$wares" exact="ware.energycells"/>
+ <debug_text text="'[X4LAN] CARGO_SEED ship2=%s'.[md.X4LAN_Bubble.Arena.$ships.{2}.cargo.{ware.energycells}.count]"/>
+</actions></cue></cues></mdscript>

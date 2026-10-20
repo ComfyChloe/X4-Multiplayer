@@ -1,3 +1,45 @@
+Version 7.1.1 INTERNAL motion/physics follow-up — 20 October 2026
+
+- Correct actual cooperative ship drift even when the received pose is unchanged;
+  apply the correction every render frame for the two shared ships.
+- Keep native linear velocity consistent with interpolation and bounded prediction,
+  including zero at freeze. Fence stale commands and release overrides on lifecycle
+  changes; a watchdog covers abandoned updates. Restrict this to the measured free
+  ship/zone/sector/cluster topology. No native angular override is introduced.
+- Native lifecycle tests cover packet loss, resumed motion, invalid commands,
+  watchdog release and real local pilot acceleration after takeover. These remain
+  single-native tests with synthetic peers, not joint gameplay acceptance.
+- A 24-projectile follow-up still fails an orientation control. Precise projectile
+  matching, aim and shared hits remain open; the tolerance was not relaxed.
+- Use High textures in the isolated Linux profile after measured startup shader
+  failures at Low textures. Keep Windows graphics defaults unchanged. No PiP fix
+  or general performance improvement is claimed.
+- Replace both packages and relay with this exact new pair. Preserve the original
+  7.0 and 7.1.0 archives. This is an internal candidate, not a public release.
+
+Version 7.1.0 INTERNAL follow-up — 19 October 2026
+
+- Share ordinary cargo jettisoned from the two co-op ships and native magnet
+  pickup through host-authorized, deduplicated inventory transactions. Handle
+  lost completions, partial quantities and late native container callbacks.
+- Add source time and linear/angular velocity to NPC and player motion, with
+  interpolation and bounded prediction during packet loss.
+- Share host display names/ID codes, fixture identities and expiring ship radar
+  observations. Improve known-object setup and avoid repeated AI activation.
+- Give both players matching Xperimental Shuttles, six guns, combat thrusters
+  and all six software modules including Docking Computer Mk2 (Timelines required).
+- Select FIRE2 explicitly for matching packages: active primary/secondary groups
+  and finite native shot budgets. Correct primary/secondary capture and excess
+  salvos; suppress old fire after pause/epoch changes.
+  Custom weapon group membership and precise projectile equivalence are not
+  established; consult RELEASE-CHECKS.txt for measured firing/damage behavior.
+- Use the supported shader setting for the Shuttle cockpit. Include reviewed
+  Windows profile/installer rollback corrections and English follow-up checks.
+- Include the new relay modules and exact mod version in compatibility labels.
+  Preserve the original 7.0 pair. New packages remain internal; no public release.
+- General NPC combat/equipment/loot, station economy, arbitrary vanilla missions
+  and persistent sessions remain incomplete.
+
 Version 7.0.0 INTERNAL W01 — 11 October 2026
 
 - Add an original host NPC registry and complete sector baseline transport with

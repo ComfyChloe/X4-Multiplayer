@@ -1,0 +1,99 @@
+{
+  "version": "7.1.1",
+  "channel": "internal",
+  "packaged_source": "1c3fea3d3fe143be26f6b97b317bab7a21867344",
+  "source_tree": "22fee9787298da3940f866120c2caa8a8555e1bc",
+  "production_tree": "1f852523f33a5ef35a9f0a3e58fb3188854279f2",
+  "archives": {
+    "X4-LAN-7.1.1-Linux.zip": {
+      "bytes": 142622,
+      "sha256": "33491b12c13eec9df13ca5e7390b636193cba03a54298590dfadc3aaf3dfea87"
+    },
+    "X4-LAN-7.1.1-Windows11.zip": {
+      "bytes": 191702,
+      "sha256": "5187e32af5d4fa8a2263457a452b154a3bb186bd8270db13b3ee8ac73e7c25b3"
+    }
+  },
+  "pair_inventory_and_digest_check": "PASS",
+  "installed_extension_exactly_matches_linux_package": true,
+  "installed_files": 33,
+  "test_probes_absent": true,
+  "native_startup": {
+    "package_version": "7.1.1",
+    "packaged_relay_and_receiver": true,
+    "native_host_plus_synthetic_peer": true,
+    "baselines": [
+      {
+        "revision": 1,
+        "sector": "cluster_14_sector001_macro",
+        "objects": 131,
+        "digest": 3744770152
+      },
+      {
+        "revision": 2,
+        "sector": "cluster_14_sector001_macro",
+        "objects": 142,
+        "digest": 1192568143
+      }
+    ],
+    "world_snapshots": 340,
+    "identity_count": 149,
+    "player_and_fixture_scopes": [
+      [
+        "F",
+        "1"
+      ],
+      [
+        "F",
+        "2"
+      ],
+      [
+        "F",
+        "3"
+      ],
+      [
+        "F",
+        "4"
+      ],
+      [
+        "P",
+        "1"
+      ],
+      [
+        "P",
+        "2"
+      ]
+    ],
+    "md_adapter_errors": [],
+    "two_native_acceptance": false,
+    "duration": 83.28,
+    "success": true
+  },
+  "save_preservation": {
+    "all_file_bytes_unchanged": true,
+    "actual_save_timestamps_unchanged": true,
+    "no_test_saves": true,
+    "steam_metadata_timestamp_changed": true
+  },
+  "graphics": {
+    "profile": "45841",
+    "texturequality": "high",
+    "shaderquality": "2",
+    "autosave": "false"
+  },
+  "canonical_7_1_0_archive_digests_unchanged": true,
+  "original_7_0_packages": "not modified",
+  "two_native_acceptance": false,
+  "projectile_orientation_followup": "FAILED at bcde58f; not repaired or accepted by this startup smoke",
+  "native_game_and_test_server": "closed after validation",
+  "evidence_sha256": {
+    ".local/native-world-tests/package-7.1.1-native-host-result.json": "a598752c84e4c66996374c8b9ce32e67077ac1f3465732513c2269b379e30821",
+    ".local/native-world-tests/package-7.1.1-native-host-result.log": "0658414144c69bb93f76182bebb0d7ce49cfa3d4ea6747d14ca3b575a2228342",
+    ".local/native-world-tests/package-7.1.1-native-host-stdout.txt": "a598752c84e4c66996374c8b9ce32e67077ac1f3465732513c2269b379e30821",
+    ".local/native-world-tests/package-7.1.1-server.log": "0cd0f2d0cd6354269836132bc5fe4f63884083a5e4e3b2b278ad07c9dfcc87a5",
+    ".local/native-world-tests/package-7.1.1-smoke.py": "ecdd3332b89f437441f1ae2eef0129b6c234fbfef015e04a10a4c1440436a6fe",
+    ".local/native-world-tests/delivery-7.1.1-unit-check.log": "8ce9fc9ed400d769162ad15415b8db5c91cce4ac56d963bb7c80260322426dbb",
+    ".local/native-world-tests/delivery-7.1.1-source-hashes.json": "90f392667c200f07637918e79c05abb78c3194213947d0823c1de12e5ce1f43f",
+    "delivery/CLEAN-INSTALL-HASHES.json": "eaae0d3095e18b0d99f89a176963decbae823ea5a90d1140da877dcf24baa2d6"
+  }
+}
