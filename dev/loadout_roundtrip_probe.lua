@@ -10,17 +10,36 @@ size_t GetNumVirtualUpgradeSlots(UniverseID,const char*,const char*);
 const char* GetVirtualUpgradeSlotCurrentMacro(UniverseID,const char*,size_t);
 uint32_t GetNumSoftwareSlots(UniverseID,const char*);
 uint32_t GetSoftwareSlots(SoftwareSlot*,uint32_t,UniverseID,const char*);
+UpgradeGroup GetUpgradeSlotGroup(UniverseID,const char*,const char*,size_t);
+uint32_t GetNumUpgradeGroups(UniverseID,const char*);
+uint32_t GetUpgradeGroups(UpgradeGroup*,uint32_t,UniverseID,const char*);
+UpgradeGroupInfo GetUpgradeGroupInfo(UniverseID,const char*,const char*,const char*,const char*);
 ]]
 local function log(v) DebugError('[X4LAN] LOADOUT_ROUNDTRIP '..v) end
 local function read(object)
- local rows,macros,software,slots={},{},{},{}
+ local rows,macros,software,slots,groups={},{},{},{},{}
  for _,kind in ipairs({'engine','shield','weapon','turret'}) do
   local count=tonumber(C.GetNumUpgradeSlots(object,'',kind));assert(count<=512,'upgrade slot limit')
   for index=1,count do
    local child=C.GetUpgradeSlotCurrentComponent(object,kind,index)
    local macro=child~=0 and GetComponentData(A.id(child),'macro') or 'none'
    rows[#rows+1]=kind..','..index..','..macro
-   if macro~='none' then macros[#macros+1]=macro;slots[#slots+1]={kind=kind,index=index,macro=macro} end
+   if macro~='none' then
+    local group=C.GetUpgradeSlotGroup(object,'',kind,index)
+    local grouped=(kind=='shield' or kind=='turret') and (ffi.string(group.path)~='..' or ffi.string(group.group)~='')
+    macros[#macros+1]=macro;slots[#slots+1]={kind=kind,index=index,macro=macro,grouped=grouped}
+   end
+  end
+ end
+ local count=tonumber(C.GetNumUpgradeGroups(object,''));assert(count<=512,'equipment group limit')
+ local nativeGroups=ffi.new('UpgradeGroup[?]',math.max(1,count));count=tonumber(C.GetUpgradeGroups(nativeGroups,count,object,''))
+ for index=0,count-1 do
+  local path,group=ffi.string(nativeGroups[index].path),ffi.string(nativeGroups[index].group)
+  if path~='..' or group~='' then
+   for _,kind in ipairs({'turret','shield'}) do
+    local info=C.GetUpgradeGroupInfo(object,'',path,group,kind);local macro=ffi.string(info.currentmacro)
+    if macro~='' and info.count>0 then groups[#groups+1]={kind=kind,path=path,group=group,macro=macro,count=tonumber(info.count)} end
+   end
   end
  end
  local count=tonumber(C.GetNumVirtualUpgradeSlots(object,'','thruster'));assert(count<=16,'thruster slot limit')
@@ -36,7 +55,7 @@ local function read(object)
   if ware~='' then software[#software+1]=ware;rows[#rows+1]='software,'..ware end
  end
  table.sort(rows);table.sort(macros);table.sort(software)
- return {signature=table.concat(rows,';'),macros=macros,software=software,slots=slots}
+ return {signature=table.concat(rows,';'),macros=macros,software=software,slots=slots,groups=groups}
 end
 local function savedLoadout(data,index)
  -- Only an opt-in empty disposable profile may exercise persistent presets.
@@ -55,7 +74,7 @@ local function savedLoadout(data,index)
  assert(not find(),'diagnostic preset already exists')
  local loadout=ffi.new('UILoadout2');local keep={}
  for kind,category in pairs({engine='engines',shield='shields',weapon='weapons',turret='turrets'}) do
-  local values={};for _,slot in ipairs(data.slots) do if slot.kind==kind then values[#values+1]=slot end end
+  local values={};for _,slot in ipairs(data.slots) do if slot.kind==kind and not slot.grouped then values[#values+1]=slot end end
   local array=ffi.new('UILoadoutMacroData2[?]',math.max(1,#values));keep[#keep+1]=array
   for i,slot in ipairs(values) do
    array[i-1].macro=slot.macro;array[i-1].upgradetypename=kind;array[i-1].slot=slot.index-1
@@ -63,12 +82,21 @@ local function savedLoadout(data,index)
   end
   loadout[category]=array;loadout['num'..category]=#values
  end
+ for _,kind in ipairs({'turret','shield'}) do
+  local values={};for _,group in ipairs(data.groups) do if group.kind==kind then values[#values+1]=group end end
+  local array=ffi.new('UILoadoutGroupData2[?]',math.max(1,#values));keep[#keep+1]=array
+  for i,group in ipairs(values) do
+   array[i-1].macro=group.macro;array[i-1].path=group.path;array[i-1].group=group.group;array[i-1].count=group.count
+   array[i-1].weaponsetting.ammomacroname='';array[i-1].weaponsetting.weaponmode=''
+  end
+  loadout[kind..'groups']=array;loadout['num'..kind..'groups']=#values
+ end
  local software=ffi.new('UILoadoutSoftwareData[?]',math.max(1,#data.software));keep[#keep+1]=software
  for i,ware in ipairs(data.software) do software[i-1].ware=ware end
  loadout.software=software;loadout.numsoftware=#data.software;loadout.thruster.macro=''
  for _,slot in ipairs(data.slots) do if slot.kind=='thruster' then loadout.thruster.macro=slot.macro end end
  C.SaveLoadout2(data.macro,loadout,'local',name,false,name,'Disposable X4LAN exact-slot experiment')
- assert(#keep==5,'native loadout arrays must remain owned through save')
+ assert(#keep==7,'native loadout arrays must remain owned through save')
  local id=assert(find(),'saved diagnostic loadout not exposed by engine')
  log('saved id='..index..' preset='..id);return id
 end

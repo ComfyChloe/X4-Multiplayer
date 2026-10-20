@@ -49,6 +49,31 @@ strict validator FAILS these differences. Both failed native runs and exact
 installed files are retained. Clean33-file installation and normal save
 hashes/timestamps verified again. No faithful arbitrary loadout acceptance.
 
+EXACT SLOT PRESET FOLLOW-UP — STILL FAILED OVERALL
+The native UI preset API can pass explicit slot assignments to MD get_loadout.
+The first saved-preset run (ba5a88b) failed because preset indices are zero-based
+and creating a new preset requires overwrite=false. Both semantics were verified
+against the installed vanilla UI and corrected. The second run (2bb71d3) has
+seven of eight exact physical equipment/software signatures; the destroyer's
+grouped turrets/shields are missing. Its strict validator remains FAILED. A
+preliminary user update incorrectly said eight matches; the full result was
+immediately corrected to seven, and no acceptance artifact claims otherwise.
+
+All eight generated presets were removed through the native API. The resulting
+empty isolated loadouts.xml was archived, verified empty, and removed to restore
+its prior absence. No global preset file was created. The game/peer were closed,
+clean33 restored, normal saves checked unchanged. The first full post-cleanup
+audit (no intervening native run) records eight save-file hashes/timestamps and
+all33 restored-file hashes under roundtrip-saved-second. Earlier roundtrip runs
+retain only their original boolean/count cleanup summaries; those are limited
+audit evidence, not retroactively reconstructed per-run manifests.
+
+The next source preserves explicit turret/shield group paths, names, macro and
+count alongside ungrouped slots. It excludes grouped members from the individual
+preset arrays. Native validation of this correction is PENDING. Temporary preset
+experiments require absent isolated/global preset files and use a unique name;
+they are dev-only and do not authorize persistent changes to user presets.
+
 LIMITS
 Even a passing primitive does not prove network creation, inventory, ammunition,
 crew composition/skills, equipment modifications, docking, destruction, combat,

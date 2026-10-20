@@ -19,6 +19,9 @@ class ExactLoadoutProbeTests(unittest.TestCase):
           C.IsComponentOperational=function() return true end
           C.GetNumUpgradeSlots=function(o,m,k) return ({engine=1,weapon=2})[k] or 0 end
           C.GetUpgradeSlotCurrentComponent=function(o,k,i) return k=='engine' and 101 or 200+i end
+          C.GetUpgradeSlotGroup=function() return {path='..',group=''} end
+          C.GetNumUpgradeGroups=function() return 0 end
+          C.GetUpgradeGroups=function() return 0 end
           C.GetNumVirtualUpgradeSlots=function() return 1 end
           C.GetVirtualUpgradeSlotCurrentMacro=function() return 'thruster_gen_s_combat_01_mk3_macro' end
           C.GetNumSoftwareSlots=function() return 1 end
@@ -29,6 +32,7 @@ class ExactLoadoutProbeTests(unittest.TestCase):
           C.SaveLoadout2=function(macro,loadout,source,id,overwrite,name)
            assert(macro=='ship_arg_s_fighter_01_a_macro' and source=='local' and id=='owned_probe_1' and not overwrite)
            assert(loadout.numengines==1 and loadout.numweapons==2 and loadout.numshields==0 and loadout.numturrets==0)
+           assert(loadout.numshieldgroups==0 and loadout.numturretgroups==0)
            assert(loadout.weapons[0].slot==0 and loadout.weapons[0].macro=='weapon_gen_s_plasma_01_mk1_macro')
            assert(loadout.weapons[1].slot==1 and loadout.weapons[1].macro=='weapon_gen_s_laser_01_mk1_macro')
            assert(loadout.weapons[1].weaponsetting.ammomacroname=='')
