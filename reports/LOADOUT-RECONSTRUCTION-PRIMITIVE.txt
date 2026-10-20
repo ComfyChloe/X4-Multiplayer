@@ -124,6 +124,19 @@ authorization or transport is introduced. Group descriptors alone still cannot
 reconstruct the failed partial-group case; preserve physical slot observations
 and reject unsupported reconstruction until an exact engine primitive is proven.
 
+SERIALIZED RECONSTRUCTION FOLLOW-UP — NATIVE PENDING
+The explicit --saved --fill-groups --serialized probe encodes native observations
+with X4SHIP1, decodes them, then reconstructs equipment inputs from those decoded
+fields and the ship macro's static slot/group layout. It verifies physical macro
+compatibility, occupied group coverage/counts and rejects unsupported mixed groups
+before writing a preset. The live source handle is retained for comparison and
+cleanup protection; equipment construction uses decoded macro/owner/slots/groups.
+Raw descriptor bytes and actual native clone macro/owner are logged. The validator
+can require this mode and rejects missing/unresolved descriptor/identity headers,
+wrong owners/macros and serialized hardware differing from source readbacks.
+334 tests and the changed MD schema pass. This new native path is not yet run;
+the earlier eight-macro native pass did not exercise serialization or networking.
+
 LIMITS
 Even a passing primitive does not prove network creation, inventory, ammunition,
 crew composition/skills, equipment modifications, docking, destruction, combat,

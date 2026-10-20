@@ -14,8 +14,10 @@ UpgradeGroup GetUpgradeSlotGroup(UniverseID,const char*,const char*,size_t);
 uint32_t GetNumUpgradeGroups(UniverseID,const char*);
 uint32_t GetUpgradeGroups(UpgradeGroup*,uint32_t,UniverseID,const char*);
 UpgradeGroupInfo GetUpgradeGroupInfo(UniverseID,const char*,const char*,const char*,const char*);
+bool IsUpgradeMacroCompatible(UniverseID,UniverseID,const char*,bool,const char*,size_t,const char*);
 ]]
 local function log(v) DebugError('[X4LAN] LOADOUT_ROUNDTRIP '..v) end
+if cfg.loadout_serialized then log('serialized-mode=true') end
 local function read(object)
  local rows,macros,software,slots,groups,allslots={},{},{},{},{},{}
  for _,kind in ipairs({'engine','shield','weapon','turret'}) do
@@ -63,6 +65,54 @@ local function read(object)
  end
  table.sort(rows);table.sort(macros);table.sort(software)
  return {signature=table.concat(rows,';'),macros=macros,software=software,slots=slots,groups=groups,allslots=allslots}
+end
+local function serializedEquipment(data,owner,index)
+ local codec=assert(X4LAN_ENTITY_DESCRIPTOR,'descriptor codec unavailable')
+ local d={macro=data.macro,owner=owner,slots={},groups={},software=data.software,thruster=false}
+ for _,slot in ipairs(data.slots) do
+  if slot.kind=='thruster' then assert(d.thruster==false,'multiple virtual thrusters unsupported');d.thruster=slot.macro
+  else d.slots[#d.slots+1]={kind=slot.kind,index=slot.index-1,macro=slot.macro} end
+ end
+ for _,g in ipairs(data.groups) do d.groups[#d.groups+1]={kind=g.kind,path=g.path,group=g.group,macro=g.macro,count=g.count} end
+ local wire=assert(codec.encode(d),'native equipment cannot be represented')
+ local decoded=assert(codec.decode(wire),'descriptor roundtrip failed')
+ log('descriptor id='..index..' bytes='..#wire..' hex='..wire:gsub('.',function(c) return string.format('%02x',c:byte()) end))
+ -- Rebuild inputs exclusively from decoded data and the ship MACRO layout.
+ -- The live source handle is used later only for comparison/cleanup guards.
+ local wanted,used,grouped={},{},{}
+ for _,s in ipairs(decoded.slots) do wanted[s.kind..':'..(s.index+1)]=s.macro end
+ data.slots={};data.allslots={};data.macros={};data.groups={};data.software=decoded.software
+ data.macro=decoded.macro;data.owner=decoded.owner;data.serialized=true
+ for _,kind in ipairs({'engine','shield','weapon','turret'}) do
+  local count=tonumber(C.GetNumUpgradeSlots(0,decoded.macro,kind));assert(count<=512,'macro slot limit')
+  for slot=1,count do
+   local key=kind..':'..slot;local macro=wanted[key] or 'none';used[key]=true
+   local g=C.GetUpgradeSlotGroup(0,decoded.macro,kind,slot);local path,name=ffi.string(g.path),ffi.string(g.group)
+   local isgroup=(kind=='turret' or kind=='shield') and (path~='..' or name~='')
+   data.allslots[#data.allslots+1]={kind=kind,index=slot,macro=macro,grouped=isgroup,path=path,group=name}
+   if macro~='none' then
+    assert(C.IsUpgradeMacroCompatible(0,0,decoded.macro,false,kind,slot,macro),'descriptor macro incompatible with physical slot')
+    data.slots[#data.slots+1]={kind=kind,index=slot,macro=macro,grouped=isgroup};data.macros[#data.macros+1]=macro
+   end
+  end
+ end
+ for key in pairs(wanted) do assert(used[key],'descriptor slot absent from macro') end
+ for _,g in ipairs(decoded.groups) do
+  local count,capacity=0,0
+  for _,s in ipairs(data.allslots) do
+   if s.kind==g.kind and s.path==g.path and s.group==g.group then
+    capacity=capacity+1
+    if s.macro~='none' then assert(s.macro==g.macro,'mixed group macros unsupported');count=count+1;grouped[s.kind..':'..s.index]=true end
+   end
+  end
+  assert(capacity>0 and count==g.count,'descriptor group layout/count mismatch')
+  data.groups[#data.groups+1]={kind=g.kind,path=g.path,group=g.group,macro=g.macro,count=count,capacity=capacity}
+ end
+ for _,s in ipairs(data.slots) do assert(not s.grouped or grouped[s.kind..':'..s.index],'occupied group missing from descriptor') end
+ if decoded.thruster~=false then
+  data.slots[#data.slots+1]={kind='thruster',index=1,macro=decoded.thruster};data.macros[#data.macros+1]=decoded.thruster
+ end
+ table.sort(data.macros)
 end
 local function savedLoadout(data,index)
  -- Only an opt-in empty disposable profile may exercise persistent presets.
@@ -114,6 +164,10 @@ local function complete(index,clone)
  local ok,result=pcall(read,clone)
  if not ok then log('failed id='..index..' reason='..tostring(result))
  else
+  if cfg.loadout_serialized then
+   local macro,owner=GetComponentData(A.id(clone),'macro','owner')
+   log('identity id='..index..' sourceMacro='..test.macro..' cloneMacro='..tostring(macro)..' sourceOwner='..test.owner..' cloneOwner='..tostring(owner))
+  end
   if cfg.loadout_fill_groups then
    -- Read actual remaining equipment/capacity after pruning. Count source
    -- macros absent from the clone, rather than fabricating a zero-unused row.
@@ -180,9 +234,11 @@ function U.frame(now)
     if cfg.loadout_fill_groups then
      data.code,data.hull,data.shield=GetComponentData(A.id(entry.object),'idcode','hullmax','shieldmax')
     end
+    if cfg.loadout_serialized then serializedEquipment(data,GetComponentData(A.id(entry.object),'owner'),requested) end
     if cfg.loadout_saved_exact then data.preset=savedLoadout(data,requested) end
     log('requested id='..requested..' macro='..macro)
-    AddUITriggeredEvent('X4LAN_LoadoutRoundtrip','Create',{index=requested,source=A.id(entry.object),macros=data.macros,software=data.software,preset=data.preset or '',fillgroups=cfg.loadout_fill_groups==true})
+    AddUITriggeredEvent('X4LAN_LoadoutRoundtrip','Create',{index=requested,source=A.id(entry.object),macros=data.macros,software=data.software,preset=data.preset or '',fillgroups=cfg.loadout_fill_groups==true,
+     serialized=data.serialized==true,macro=data.macro,owner=data.owner or ''})
     break -- Bound native reconstruction work to one request per frame.
    end
   end

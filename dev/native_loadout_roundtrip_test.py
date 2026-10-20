@@ -12,7 +12,9 @@ from dev import native_world_test as native
 from dev import native_seed_test as hashing
 
 
-def install(saved=False,fill_groups=False):
+def install(saved=False,fill_groups=False,serialized=False):
+    if serialized and not fill_groups:
+        raise ValueError('Serialized reconstruction requires the full-group experiment')
     if fill_groups and not saved:
         raise ValueError('Full-group reconstruction requires the explicit saved-preset experiment')
     native.setup.ensure_closed()
@@ -32,9 +34,13 @@ def install(saved=False,fill_groups=False):
             'isolated_loadouts_preexisting':False,'global_loadouts_preexisting':False},indent=2))
     if fill_groups:
         config.write_text(config.read_text().replace('X4LAN_CONFIG={','X4LAN_CONFIG={\n loadout_fill_groups=true,'))
+    if serialized:
+        config.write_text(config.read_text().replace('X4LAN_CONFIG={','X4LAN_CONFIG={\n loadout_serialized=true,'))
     for suffix,sub in (('lua','ui'),('xml','md')):
         shutil.copy2(ROOT/('dev/loadout_roundtrip_probe.'+suffix),native.TARGET/sub/('loadout_roundtrip_probe.'+suffix))
-    tree=ET.parse(native.TARGET/'ui.xml');ET.SubElement(tree.find('environment'),'file',name='ui/loadout_roundtrip_probe.lua')
+    tree=ET.parse(native.TARGET/'ui.xml')
+    if serialized:ET.SubElement(tree.find('environment'),'file',name='ui/entity_descriptor.lua')
+    ET.SubElement(tree.find('environment'),'file',name='ui/loadout_roundtrip_probe.lua')
     tree.write(native.TARGET/'ui.xml',encoding='utf-8',xml_declaration=True)
     (native.HERE/'roundtrip-installed-hashes.json').write_text(json.dumps({
         p.relative_to(native.TARGET).as_posix():hashing.digest(p)
@@ -45,4 +51,5 @@ if __name__=='__main__':
     import argparse
     p=argparse.ArgumentParser();p.add_argument('action',choices=['install']);p.add_argument('--saved',action='store_true')
     p.add_argument('--fill-groups',action='store_true',help='Dev-only full group then remove surplus components from newly created clones')
-    args=p.parse_args();install(args.saved,args.fill_groups)
+    p.add_argument('--serialized',action='store_true',help='Rebuild inputs from canonical decoded descriptors and macro layouts only')
+    args=p.parse_args();install(args.saved,args.fill_groups,args.serialized)

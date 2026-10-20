@@ -51,11 +51,13 @@ class ExactLoadoutProbeTests(unittest.TestCase):
         lua.execute((Path(__file__).resolve().parents[1]/'dev/loadout_roundtrip_probe.lua').read_text())
         lua.execute('X4LAN_BUBBLE_API.universe.frame(1);assert(delivered)')
 
-    def full_group_runtime(self,foreign_component=False):
+    def full_group_runtime(self,foreign_component=False,serialized=False):
         lua=LuaRuntime(unpack_returned_tuples=True)
         lua.globals().foreign_component=foreign_component
+        lua.globals().serialized_mode=serialized
         lua.execute('''
           X4LAN_CONFIG={test_profile='45841',loadout_roundtrip=true,loadout_saved_exact=true,loadout_fill_groups=true,loadout_probe_id='owned_probe'}
+          X4LAN_CONFIG.loadout_serialized=serialized_mode
           local C={};local ffi={C=C,cdef=function() end,typeof=function() return true end,string=function(x) return x end}
           ffi.new=function(kind,n)
            if kind=='UILoadout2' then return {thruster={}} end
@@ -69,7 +71,12 @@ class ExactLoadoutProbeTests(unittest.TestCase):
           C.ActivateObject=function(o,active) assert(o==2 and not active) end
           C.GetPlayerContainerID=function() return 999 end
           C.GetContextByClass=function(o) return foreign_component and 1 or 2 end
-          C.GetNumUpgradeSlots=function(o,m,k) return ({engine=1,turret=4})[k] or 0 end
+          macro_layout_reads=0
+          C.GetNumUpgradeSlots=function(o,m,k)
+           if o==0 then assert(m=='ship_test_macro');macro_layout_reads=macro_layout_reads+1 end
+           return ({engine=1,turret=4})[k] or 0
+          end
+          C.IsUpgradeMacroCompatible=function(o,module,m,construction,k,i,macro) assert(o==0 and m=='ship_test_macro');return true end
           C.GetUpgradeSlotCurrentComponent=function(o,k,i)
            if k=='engine' then return o*100+1 end
            if o==1 then return i==4 and 404 or 0 end
@@ -100,6 +107,7 @@ class ExactLoadoutProbeTests(unittest.TestCase):
             elseif field=='idcode' then out[#out+1]=o==1 and 'SRC-001' or 'NEW-002'
             elseif field=='hullmax' then out[#out+1]=1000
             elseif field=='shieldmax' then out[#out+1]=0 end
+            if field=='owner' then out[#out+1]='argon' end
            end
            return unpack(out)
           end
@@ -110,6 +118,7 @@ class ExactLoadoutProbeTests(unittest.TestCase):
            assert(payload.fillgroups and payload.preset=='owned');callback(nil,'1|0x2')
           end
         ''')
+        lua.execute((Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui/entity_descriptor.lua').read_text())
         lua.execute((Path(__file__).resolve().parents[1]/'dev/loadout_roundtrip_probe.lua').read_text())
         return lua
 
@@ -134,4 +143,19 @@ class ExactLoadoutProbeTests(unittest.TestCase):
           local ok,err=pcall(X4LAN_BUBBLE_API.universe.frame,1)
           assert(not ok and tostring(err):find('not owned by clone',1,true))
           assert(#removed==0)
+        ''')
+
+    def test_serialized_inputs_rebuild_from_macro_layout_before_native_preset(self):
+        lua=self.full_group_runtime(serialized=True)
+        lua.execute('''
+          local U=X4LAN_BUBBLE_API.universe
+          U.frame(1);U.frame(2);U.frame(3)
+          assert(macro_layout_reads==4 and #removed==4 and preset_removed)
+          local descriptor,identity,exact=false,false,false
+          for _,s in ipairs(logs) do
+           descriptor=descriptor or s:find('descriptor id=1 bytes=',1,true)
+           identity=identity or s:find('sourceMacro=ship_test_macro cloneMacro=ship_test_macro sourceOwner=argon cloneOwner=argon',1,true)
+           exact=exact or s:find('result id=1 exactSlots=true',1,true)
+          end
+          assert(descriptor and identity and exact)
         ''')
