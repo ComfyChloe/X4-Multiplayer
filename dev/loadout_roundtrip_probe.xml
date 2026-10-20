@@ -6,6 +6,7 @@
    <set_value name="$macros" exact="[]"/>
    <do_all exact="$v.$macros.count" counter="$i"><append_to_list name="$macros" exact="macro.{$v.$macros.{$i}}"/></do_all>
    <generate_loadout macro="$source.macro" macros="$macros" repeat="true" level="1" variation="0" flags="engines shields weapons turrets shieldgroups turretgroups thrusters" result="$loadout" remaining="$remaining"/>
+   <do_if value="$v.$preset != ''"><get_loadout loadout="$v.$preset" macro="$source.macro" result="$savedLoadout"/><set_value name="$loadout" exact="[$savedLoadout]"/></do_if>
    <create_ship name="$clone" macro="$source.macro" sector="player.ship.sector">
     <owner exact="$source.owner"/><pilot><select race="race.argon"/></pilot><loadout loadout="$loadout.{1}"/>
     <position x="100km + $v.$index * 1km" y="100km" z="100km"/>
@@ -13,7 +14,7 @@
    <set_value name="$software" exact="[]"/>
    <do_all exact="$v.$software.count" counter="$i"><append_to_list name="$software" exact="ware.{$v.$software.{$i}}"/></do_all>
    <generate_loadout macro="$source.macro" wares="$software" repeat="true" level="1" variation="0" flags="software" result="$softwareLoadout"/>
-   <apply_loadout object="$clone" loadout="$softwareLoadout.{1}" flags="software"/>
+   <do_if value="$v.$preset == ''"><apply_loadout object="$clone" loadout="$softwareLoadout.{1}" flags="software"/></do_if>
    <debug_text text="'[X4LAN] LOADOUT_ROUNDTRIP_NATIVE id=%s source=%s clone=%s input=%s unused=%s sourceHull=%s cloneHull=%s sourceShield=%s cloneShield=%s'.[$v.$index,$source.idcode,$clone.idcode,$macros.count,$remaining.count,$source.maxhull,$clone.maxhull,$source.maxshield,$clone.maxshield]"/>
    <raise_lua_event name="'X4LAN_LoadoutRoundtrip.Created'" param="'%s|%s'.[$v.$index,$clone]"/>
   </do_if>
