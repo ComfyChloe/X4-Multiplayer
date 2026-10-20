@@ -42,7 +42,12 @@ the probe supplied the list instead of its first loadout element, leaving clones
 unequipped. Raw logs, exact installed files and the failed result are retained
 locally. The game was closed, clean33-file installation restored and normal
 save hashes/timestamps verified unchanged. Corrected list-element consumption
-requires a new native run. No equipment reconstruction acceptance yet.
+was exercised in roundtrip-second at source d6c06ce: no MD/runtime errors,
+five of eight exact slot signatures match, but the carrier, a mixed-weapon
+fighter and a destroyer have shuffled weapon/turret/shield assignments. The
+strict validator FAILS these differences. Both failed native runs and exact
+installed files are retained. Clean33-file installation and normal save
+hashes/timestamps verified again. No faithful arbitrary loadout acceptance.
 
 LIMITS
 Even a passing primitive does not prove network creation, inventory, ammunition,
