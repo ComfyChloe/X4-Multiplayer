@@ -137,6 +137,14 @@ wrong owners/macros and serialized hardware differing from source readbacks.
 334 tests and the changed MD schema pass. This new native path is not yet run;
 the earlier eight-macro native pass did not exercise serialization or networking.
 
+The first serialized native run at1b9bbdf records eight exact physical equipment,
+capacity and owner/macro matches, but its full validation FAILS: the mode marker
+was logged twice during initial UI loading before the single reconstruction run.
+Raw logs/exact source remain failed evidence. The marker is now emitted only when
+the first native reconstruction is requested; the validator is unchanged. A new
+native run is required. All eight owned presets/clones were removed and full
+save/restoration hashes retained after this failed run.
+
 LIMITS
 Even a passing primitive does not prove network creation, inventory, ammunition,
 crew composition/skills, equipment modifications, docking, destruction, combat,

@@ -151,11 +151,12 @@ class ExactLoadoutProbeTests(unittest.TestCase):
           local U=X4LAN_BUBBLE_API.universe
           U.frame(1);U.frame(2);U.frame(3)
           assert(macro_layout_reads==4 and #removed==4 and preset_removed)
-          local descriptor,identity,exact=false,false,false
+          local descriptor,identity,exact=false,false,false;local markers=0
           for _,s in ipairs(logs) do
+           if s:find('serialized-mode=true',1,true) then markers=markers+1 end
            descriptor=descriptor or s:find('descriptor id=1 bytes=',1,true)
            identity=identity or s:find('sourceMacro=ship_test_macro cloneMacro=ship_test_macro sourceOwner=argon cloneOwner=argon',1,true)
            exact=exact or s:find('result id=1 exactSlots=true',1,true)
           end
-          assert(descriptor and identity and exact)
+          assert(descriptor and identity and exact and markers==1)
         ''')

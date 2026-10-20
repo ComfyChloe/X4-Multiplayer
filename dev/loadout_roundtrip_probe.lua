@@ -17,7 +17,6 @@ UpgradeGroupInfo GetUpgradeGroupInfo(UniverseID,const char*,const char*,const ch
 bool IsUpgradeMacroCompatible(UniverseID,UniverseID,const char*,bool,const char*,size_t,const char*);
 ]]
 local function log(v) DebugError('[X4LAN] LOADOUT_ROUNDTRIP '..v) end
-if cfg.loadout_serialized then log('serialized-mode=true') end
 local function read(object)
  local rows,macros,software,slots,groups,allslots={},{},{},{},{},{}
  for _,kind in ipairs({'engine','shield','weapon','turret'}) do
@@ -229,6 +228,7 @@ function U.frame(now)
   if C.IsComponentOperational(entry.object) then
    local macro=GetComponentData(A.id(entry.object),'macro')
    if not selected[macro] then
+    if cfg.loadout_serialized and requested==0 then log('serialized-mode=true') end
     selected[macro]=true;requested=requested+1
     local data=read(entry.object);data.macro=macro;data.source=entry.object;pending[requested]=data
     if cfg.loadout_fill_groups then
