@@ -38,3 +38,12 @@ class SensorValidationTests(unittest.TestCase):
         for text in [trace() + "\n" + trace().splitlines()[0], trace().replace("known=true", "known=nil")]:
             with self.assertRaises(ValueError):
                 analyze(text)
+
+    def test_unavailable_empty_and_unresolved_native_headers_fail(self):
+        for header in ("unavailable", "", "   ", "nil", "None", "Unknown Ship",
+                       "$name$", "$targetname$ 6 km", "$$"):
+            with self.subTest(header=header):
+                result = analyze(trace().replace("header=Contact", "header=" + header))
+                self.assertFalse(result["production_discovery"])
+                self.assertFalse(result["native_control_discovery"])
+                self.assertFalse(result["success"])

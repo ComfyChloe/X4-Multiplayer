@@ -5,7 +5,7 @@
   "steam_build": "23660954",
   "platform": "Linux",
   "counterparts": "synthetic Python peers",
-  "tracked_tests": 272,
+  "tracked_tests": 273,
   "skipped": 0,
   "two_native_acceptance": false,
   "runs": {
@@ -164,7 +164,7 @@
     }
   },
   "pending": [
-    "independent review",
+    "final independent review of HUD header validation",
     "joint Windows/Linux acceptance"
   ],
   "save_preservation": {
@@ -172,5 +172,6 @@
     "actual_save_timestamps_unchanged": true,
     "no_test_saves": true,
     "steam_metadata_timestamp_changed": true
-  }
+  },
+  "validator_sha256": "6226cdb0d500de9eadd703af38ad3aa25ddced7ec653c7fcecb729c75cf3b279"
 }
