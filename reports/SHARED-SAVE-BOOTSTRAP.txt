@@ -55,16 +55,37 @@ The validator rejects unknown metadata, missing/duplicate stations, wrong saved
 session markers, missing save/load completion, changed owners/sectors/transforms
 and native mod errors. It explicitly does not require identical local handles.
 
-NEXT INTEGRATION
-A fresh session snapshot should be taken before multiplayer fixture setup.
-Both peers can then load that same uninitialized world, verify its marker and
-create/bind the agreed shared player roles. Reusing an already active host save
+OPTIONAL ADMISSION PROTOTYPE — NATIVE VALIDATION IN PROGRESS
+The optional seed_game.lua / x4lan_seed.xml path blocks bubble setup and network
+admission until the staged pristine snapshot has actually loaded. The seed ID
+must match the relay's bubble/session identifier. Missing, wrong or already-used
+worlds fail closed, as does a seed configuration selecting the legacy adapter.
+The normal package configuration has no seed ID and does not enable this path.
+No default launcher integration or new package has been prepared.
+
+The first native attempt, retained under .local/evidence-137-withheld,
+restored the correct saved marker but missed the Lua game-loaded notification
+during UI reload. The gate stopped rather than starting an independent world.
+The corrected design reads a persistent MD load count; it does not depend on
+receiving that one Lua notification. A pristine capture has count zero and its
+first native reload must report exactly one. The capture probe also verifies
+the production marker before saving, rather than assuming event order.
+
+Nine LuaJIT gate regressions cover pending setup, missing files, wrong sessions,
+wrong/used worlds, missed notifications, active reload and unsupported legacy
+fallback. dev/native_seed_play_test.py installs one role at a time against the
+same verified snapshot, and seed_play_probe.lua/xml read native pilot assignment,
+all four authority flags and the number of shared Shuttles/markets. Native results
+for the corrected gate are still pending.
+
+A fresh session snapshot is taken before multiplayer fixture setup.
+Both peers load that same uninitialized world, verify its marker and
+create the agreed shared player roles. Reusing an already active host save
 needs additional restoration of persisted host flags, cue state, pilot roles,
 fixture references and request history. Blindly running fresh setup against
 such a save risks duplicate ships/stations and guest host authority.
 
-The native load gate must block networking/gameplay until the expected seed is
-loaded and live objects are rebound. The launcher must check matching content,
+The launcher must check matching content,
 stage only verified bytes and connect this with relay session admission. Mixed
 or stale seeds must fail closed. Keep the existing internal pair unchanged while
 this mode is incomplete.

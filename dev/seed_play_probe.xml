@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_SeedPlayProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Read">
+  <conditions><event_ui_triggered screen="'X4LAN_SeedPlayProbe'" control="'Read'"/></conditions>
+  <actions>
+   <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+   <find_ship name="$shuttles" macro="macro.ship_ter_s_xperimental_01_a_macro" owner="faction.player" multiple="true" space="player.galaxy"/>
+   <debug_text text="'[X4LAN] SEED_PLAY_NATIVE seed=%s slot=%s host=%s tradeHost=%s cargoHost=%s questHost=%s shuttles=%s markets=%s player=%s p1=%s p2=%s'.[md.X4LAN_Seed.State.$id,$arena.$localSlot,$arena.$host,md.X4LAN_Trade.Market.$host,md.X4LAN_Cargo.Setup.$host,md.X4LAN_Quest.Session.$host,$shuttles.count,md.X4LAN_Trade.Market.$markets.count,player.occupiedship,$arena.$ships.{1},$arena.$ships.{2}]"/>
+  </actions>
+ </cue></cues>
+</mdscript>

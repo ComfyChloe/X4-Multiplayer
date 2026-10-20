@@ -59,17 +59,25 @@ RegisterEvent('X4LAN.Loaded',function() started=GetCurRealTime();asked=false;C.R
 RegisterEvent('gameSaved',function(_,success)
  if saveRequested then log('saved success='..tostring(success)..' id='..cfg.seed_id);finished=true end
 end)
+RegisterEvent('X4LAN_Seed.State',function(_,payload)
+ if finished then return end
+ local expected=cfg.seed_id..'|1|'..(cfg.seed_probe=='capture' and '0' or '1')
+ assert(payload==expected,'production seed marker/load state differs')
+ if not C.IsGamePaused() then Pause() end
+ stations()
+ if cfg.seed_probe=='capture' then
+  assert(IsSavingPossible(false),'native saving unavailable')
+  saveRequested=true;log('save_requested id='..cfg.seed_id)
+  SaveGame('save_010','X4 Multiplayer disposable seed '..cfg.seed_id)
+ else finished=true;log('loaded id='..cfg.seed_id) end
+end)
 RegisterEvent('X4LAN_SeedProbe.State',function(_,value)
  if finished then return end
  if value==cfg.seed_id then
-  if not C.IsGamePaused() then Pause() end
-  stations()
-  if cfg.seed_probe=='capture' then
-   assert(IsSavingPossible(false),'native saving unavailable')
-   saveRequested=true;log('save_requested id='..cfg.seed_id)
-   SaveGame('save_010','X4 Multiplayer disposable seed '..cfg.seed_id)
-  else finished=true;log('loaded id='..cfg.seed_id) end
+  -- Saving waits for the production marker too, not assumed UI-event ordering.
+  AddUITriggeredEvent('X4LAN_Seed','Inspect')
  elseif cfg.seed_probe=='capture' and value=='' then
+  AddUITriggeredEvent('X4LAN_Seed','Mark',cfg.seed_id)
   AddUITriggeredEvent('X4LAN_SeedProbe','Mark',cfg.seed_id)
  elseif cfg.seed_probe=='load' and not loading and value=='' then
   loading=true;log('load_requested id='..cfg.seed_id);LoadGame('save_010')
