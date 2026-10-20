@@ -29,7 +29,11 @@ def analyze(text):
               if "Error in MD cue md.X4LAN" in line or "BUBBLE STOPPED" in line or "FATAL ERROR" in line]
     def visible(phase, index):
         row = rows.get((phase, index), {})
-        return row.get("known", False) and row.get("radar", False) and "Unknown" not in row.get("header", "Unknown")
+        header = row.get("header", "").strip()
+        resolved = (header.casefold() not in ("", "unavailable", "nil", "none", "null")
+                    and "unknown" not in header.casefold()
+                    and re.search(r"\$[^$]*\$", header) is None)
+        return row.get("known", False) and row.get("radar", False) and resolved
     distant = complete and all(
         any(abs(rows[phase, index]["pose"][0] - 399000) < 10 and rows[phase, index]["range"] >= 6000
             for index in (1, 2))
