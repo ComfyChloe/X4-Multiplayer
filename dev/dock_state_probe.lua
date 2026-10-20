@@ -8,7 +8,17 @@ local function log(s) DebugError('[X4LAN] DOCK_STATE '..s) end
 local state={phase=0};local selected=false
 RegisterEvent('X4LAN_DockState.Ready',function(_,value)
  local ship,carrier=tostring(value):match('^(0x[%da-fA-F]+)|(0x[%da-fA-F]+)$')
- assert(ship and A.cargo.object(ship)==state.ship and A.cargo.object(carrier)==state.carrier,'foreign native docking callback')
+ assert(ship and selected and not state.ready,'unexpected native docking callback')
+ state.ship=A.cargo.object(ship);state.carrier=A.cargo.object(carrier)
+ assert(state.ship~=state.sourceShip and state.carrier~=state.sourceCarrier and state.ship~=state.carrier,'diagnostic objects alias originals')
+ for _,object in ipairs({state.ship,state.carrier}) do
+  assert(C.IsComponentOperational(object) and A.coop.entity(object)==0 and object~=C.GetPlayerContainerID(),'unsafe diagnostic object')
+  C.ActivateObject(object,false)
+ end
+ state.sector=C.GetContextByClass(state.carrier,'sector',false)
+ local p=C.GetObjectPositionInSector(state.carrier)
+ state.pose=ffi.new('UIPosRot',{x=p.x,y=p.y,z=p.z,yaw=p.yaw*180/math.pi,pitch=p.pitch*180/math.pi,roll=p.roll*180/math.pi})
+ state.last=GetCurRealTime()
  state.ready=true
 end)
 RegisterEvent('X4LAN_DockState.ReadDone',function(_,phase)
@@ -30,16 +40,8 @@ function U.frame(now)
     for i=0,n-1 do
      if GetComponentData(A.id(ships[i]),'isinternallystored') and A.coop.entity(ships[i])==0 and ships[i]~=C.GetPlayerContainerID() then
       assert(A.coop.entity(entry.object)==0 and entry.object~=C.GetPlayerContainerID(),'protected carrier')
-      state.ship=ships[i];state.carrier=entry.object;state.started=now;state.last=now
-      state.sector=C.GetContextByClass(entry.object,'sector',false)
-      local p=C.GetObjectPositionInSector(entry.object)
-      state.pose=ffi.new('UIPosRot',{x=p.x,y=p.y,z=p.z,yaw=p.yaw*180/math.pi,pitch=p.pitch*180/math.pi,roll=p.roll*180/math.pi})
-      C.ActivateObject(entry.object,false)
-      for j=0,n-1 do
-       assert(A.coop.entity(ships[j])==0 and ships[j]~=C.GetPlayerContainerID(),'protected docked ship')
-       C.ActivateObject(ships[j],false)
-      end
-      selected=true;AddUITriggeredEvent('X4LAN_DockState','Init',{ship=A.id(state.ship),carrier=A.id(state.carrier)})
+      state.sourceShip=ships[i];state.sourceCarrier=entry.object;state.started=now;state.last=now
+      selected=true;AddUITriggeredEvent('X4LAN_DockState','Init',{ship=A.id(state.sourceShip),carrier=A.id(state.sourceCarrier)})
       return
      end
     end
@@ -47,10 +49,11 @@ function U.frame(now)
   end
   return
  end
+ if now-state.last>30 then state.failed=true;log('failed timeout phase='..state.phase);return end
+ if not state.ready then return end
  assert(C.IsComponentOperational(state.ship) and C.IsComponentOperational(state.carrier),'diagnostic ship disappeared')
  assert(A.coop.entity(state.carrier)==0 and state.carrier~=C.GetPlayerContainerID(),'player entered diagnostic carrier')
  C.SetObjectSectorPos(state.carrier,state.sector,state.pose)
- if now-state.last>30 then state.failed=true;log('failed timeout phase='..state.phase);return end
  if state.awaitingRead then
   if not state.readDone then return end
   state.awaitingRead=nil;state.readDone=nil

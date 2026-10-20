@@ -10,17 +10,18 @@ usable unique dock identity. Shared attachment authority needs saved references
 and actual engine transitions, separately from position replication.
 
 BOUNDED PRIMITIVE
-dev/dock_state_probe.lua/.xml selects a non-player carrier and one stored child
-in a fresh isolated world. It retains the exact native ship/carrier/internal dock
-references and finds one compatible unoccupied external pad. It suspends those
-NPCs and holds the carrier transform. It then requests six measured phases:
+dev/dock_state_probe.lua/.xml reads the macros of a non-player carrier and stored
+child, then creates an empty diagnostic carrier and child far from normal traffic.
+Original NPCs are left untouched. It selects exact native internal/external dock
+references on that new carrier, suspends only the diagnostic pair and holds the
+carrier transform. Six phases are measured:
 0 initial internal storage;1 spawn on the selected external pad;2 request storage;
 3 spawn on the same external pad;4 undock;5 spawn in the original internal bay.
-Each phase requires native Lua and MD state readbacks. The MD read acknowledgment
-must arrive before the next action. Requests are sequential, bounded to30 seconds
-per phase, and reject a stale phase, player-controlled ship or occupied target.
-No source ship is destroyed, and no game is saved. Only this disposable world is
-changed. This probe is opt-in and has no shipping UI entry or network protocol.
+Each phase requires Lua and MD readbacks using unchanged native ship handles.
+The MD read acknowledgment must arrive before the next action. Requests are
+sequential, bounded to30 seconds per phase, and reject stale phases, protected
+ships or other occupants/reservations. The fresh disposable world is discarded
+without saving. This opt-in probe has no shipping UI entry or network protocol.
 
 EXECUTION
 Only the agreed primary native-PC owner runs it. With X4 closed, an empty45841
@@ -33,8 +34,9 @@ The validator rejects native parser/adapter errors, missing/unresolved readbacks
 wrong dock references, changed ships, incomplete or reordered phase/action traces.
 
 STATUS / LIMITS
-323 Linux/Python/LuaJIT tests pass; LuaJIT syntax and installed-game MD schema
-validate. Native run is PENDING. API/schema presence is not execution acceptance.
+325 Linux/Python/LuaJIT tests pass; LuaJIT syntax and installed-game MD schema
+validate. The isolated diagnostic-pair revision is native PENDING. Earlier
+selection failures remain below. API/schema presence is not execution acceptance.
 This does not establish dock reference persistence, network authorization,
 arbitrary ship/station compatibility, occupancy reconciliation, queued traffic,
 player docking, inventory/trading or whole-universe synchronization.
@@ -54,3 +56,11 @@ are physically empty. Selection now permits a reservation already owned by the
 selected ship, while preserving rejection of other ships and occupied pads.
 Explicit occupant count/reference checks replace list equality in phase actions.
 No native transition acceptance is inferred from this selection correction.
+
+The own-reservation run c1b3925 also FAILED before transition: the stored child
+has no assigned dock, and every compatible non-launch pad belongs to another
+ship. Its raw trace, validator, exact source and full cleanup manifests remain.
+The next probe creates its own empty carrier/child instead of changing or evicting
+that traffic. Validator hardening requires resolved nonzero native handles,
+matching Lua/native identities, action ship identity and causal read/action order.
+Missing/unresolved or additional malformed headers are rejected explicitly.

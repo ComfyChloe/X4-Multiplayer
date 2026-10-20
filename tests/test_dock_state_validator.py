@@ -3,7 +3,7 @@ from dev.validate_dock_state import validate
 
 
 def trace():
-    lines=['DOCK_STATE_NATIVE selected code=CHD-001 carrier=CAR-001 inside=0x10 outside=0x20']
+    lines=['DOCK_STATE_NATIVE selected code=CHD-001 carrier=CAR-001 ship=0x65 carrierHandle=0x66 inside=0x10 outside=0x20']
     for phase in range(6):
         stored=phase in (0,2,5);docked=phase!=4
         if phase:lines.append(f'DOCK_STATE_NATIVE applied phase={phase} code=CHD-001')
@@ -24,5 +24,15 @@ class NativeDockStateTests(unittest.TestCase):
                    raw.replace('DOCK_STATE complete phases=6',''),raw.replace('DOCK_STATE_NATIVE applied phase=3','unavailable'),
                    raw+'\nDOCK_STATE failed timeout phase=5',raw+'\n[=ERROR=] extensions\\x4_lan_lab\\md\\dock_state_probe.xml(5): required attribute missing',
                    raw+'\n'+raw.splitlines()[2],raw.replace('outside=0x20','outside=0x10')]
+        for bad in mutations:
+            with self.subTest(bad=bad[-80:]),self.assertRaises(ValueError):validate(bad)
+
+    def test_native_handles_action_identity_and_causal_order_are_required(self):
+        raw=trace();lines=raw.splitlines()
+        mutations=[raw.replace('ship=0x65','ship=unavailable'),raw.replace('ship=0x65','ship=0x0'),
+                   raw.replace('ship=0x65','ship=0x67'),raw.replace('carrierHandle=0x66','carrierHandle=0x65'),
+                   raw.replace('applied phase=1 code=CHD-001','applied phase=1 code=OTH-002'),
+                   '\n'.join([lines[0],lines[2],lines[1]]+lines[3:]),
+                   raw+'\nDOCK_STATE_NATIVE read unavailable',raw+'\nDOCK_STATE_NATIVE selected unavailable']
         for bad in mutations:
             with self.subTest(bad=bad[-80:]),self.assertRaises(ValueError):validate(bad)
