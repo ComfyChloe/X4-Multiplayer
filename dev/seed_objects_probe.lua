@@ -4,6 +4,34 @@ if not A or not cfg.seed_binding or cfg.test_profile~='45841' then return end
 local U=A.universe;local I=A.identity;local C=require('ffi').C
 local frame=U.frame;local nextRead=0;local seen={};local expectedCodes={};local lastRevision
 local function log(v) DebugError('[X4LAN] SEED_OBJECT_PROBE '..v) end
+if cfg.seed_probe_trace_docked and cfg.slot=='p2' then
+ local mt=getmetatable(C);local lookup=type(mt)=='table' and mt.__index
+ assert(type(lookup)=='function','diagnostic native-call hook unavailable')
+ local apply=C.SetObjectSectorPos;local counts={}
+ mt.__index=function(lib,name)
+  if lib==C and name=='SetObjectSectorPos' then return function(object,sector,value)
+   local id=U.seedObjects and U.seedObjects:index(object)
+   local replica=id and U.replicas[id]
+   local selected=replica and replica.seedOriginal and replica.object==object
+   local docked=selected and GetComponentData(A.id(object),'isdocked')
+   local macro=selected and GetComponentData(A.id(object),'macro') or ''
+   local watch=selected and (docked or macro:find('_carrier_',1,true))
+   local before=watch and C.GetObjectPositionInSector(object)
+   local skipped=watch and docked and cfg.seed_probe_skip_docked==true
+   if not skipped then apply(object,sector,value) end
+   if watch then
+    local revision=U.latest and U.latest.revision or 0;local k=revision..':'..id;counts[k]=(counts[k] or 0)+1
+    if counts[k]<=3 then
+     local after=C.GetObjectPositionInSector(object)
+     log(string.format('write revision=%d id=%d docked=%s skipped=%s before=%.9g,%.9g,%.9g target=%.9g,%.9g,%.9g after=%.9g,%.9g,%.9g',
+      revision,id,tostring(docked),tostring(skipped==true),before.x,before.y,before.z,value.x,value.y,value.z,after.x,after.y,after.z))
+    end
+   end
+  end end
+  return lookup(lib,name)
+ end
+ log('trace-docked enabled skip='..tostring(cfg.seed_probe_skip_docked==true))
+end
 function U.frame(now)
  frame(now)
  if not U.ready or A.paused() or now<nextRead then return end

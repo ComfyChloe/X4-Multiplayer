@@ -22,10 +22,15 @@ from x4lan.host import Relay
 from x4lan.universe import UniverseSession, Receiver, Baseline, Sender
 
 
-def install(run, slot):
+def install(run, slot, trace_docked=False, skip_docked=False):
+    if skip_docked and not trace_docked:
+        raise ValueError('Diagnostic docked-write omission requires the native trace')
     play.install(run, slot)
     config = native.TARGET / 'ui/config.lua'
     config.write_text(config.read_text().replace('X4LAN_CONFIG={', 'X4LAN_CONFIG={\n seed_binding=true,'))
+    if trace_docked:
+        config.write_text(config.read_text().replace('X4LAN_CONFIG={',
+            'X4LAN_CONFIG={\n seed_probe_trace_docked=true,seed_probe_skip_docked='+str(skip_docked).lower()+','))
     for suffix, sub in (('lua', 'ui'), ('xml', 'md')):
         shutil.copy2(ROOT / ('dev/seed_objects_probe.' + suffix), native.TARGET / sub / ('seed_objects_probe.' + suffix))
     tree = ET.parse(native.TARGET / 'ui.xml')
@@ -126,6 +131,8 @@ if __name__ == '__main__':
     p.add_argument('--slot', choices=('p1', 'p2'), required=True)
     p.add_argument('--duration', type=int, default=300)
     p.add_argument('--seed-only',action='store_true',help='Explicitly test original saved ships; retain omitted new-host IDs in the report')
+    p.add_argument('--trace-docked',action='store_true',help='Dev-only trace of original docked/carrier pose writes')
+    p.add_argument('--skip-docked',action='store_true',help='Dev-only controlled comparison omitting local docked-child pose writes; requires --trace-docked')
     a = p.parse_args()
-    if a.action == 'install': install(a.run, a.slot)
+    if a.action == 'install': install(a.run, a.slot,a.trace_docked,a.skip_docked)
     else: peer(a.run, a.slot, a.duration,a.seed_only)

@@ -15,7 +15,7 @@
   <cue name="Undock" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_HangarPose'" control="'Undock'"/></conditions><actions>
    <set_value name="$ship" exact="event.param3.$object"/>
    <do_if value="md.X4LAN_Bubble.Arena.$host and $ship.isoperational and $ship != player.ship and $ship != player.occupiedship and $ship != player.container">
-    <undock ship="$ship"/><remove_docking_request ship="$ship"/>
+    <do_if value="$ship.assigneddock"><remove_docking_request ship="$ship" container="$ship.assigneddock.container" immediate="true"/></do_if><undock ship="$ship"/>
     <debug_text text="'[X4LAN] HANGAR_NATIVE_UNDOCK code=%s stored=%s docked=%s'.[$ship.idcode,$ship.isinternallystored,$ship.dock.exists]"/>
    </do_if>
   </actions></cue>

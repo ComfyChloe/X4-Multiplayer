@@ -11,7 +11,8 @@ SPEC = re.compile(r'SEED_OBJECT_SPEC slot=(p[12]) revision=(\d+) id=(\d+) code=(
 
 
 def validate(host, guest, capture, replay):
-    if any(term in host + guest for term in ('STOPPED', 'Error in MD cue md.X4LAN', 'Lua error')):
+    if (any(term in host + guest for term in ('STOPPED', 'Error in MD cue md.X4LAN', 'Lua error'))
+            or re.search(r'extensions[/\\]x4_lan_lab[/\\](?:md|ui)[/\\][^\r\n]+\(\d+\):',host+guest)):
         raise ValueError('Native adapter/MD error')
     rows = {int(row.split(',')[0]):row.split(',') for row in capture['rows']}
     if not rows or len(rows) != len(capture['rows']):

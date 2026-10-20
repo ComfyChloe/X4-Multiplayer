@@ -48,6 +48,7 @@ class NativeSeedObjectsValidatorTests(unittest.TestCase):
     def test_rejects_native_failure_and_invalid_position(self):
         host,guest,capture,replay=self.fixture()
         for content in (guest+' STOPPED binding failed',guest.replace('failed=nil','failed=true'),
+                        guest+'\n[=ERROR=] 0.00 extensions\\x4_lan_lab\\md\\probe.xml(18): Required attribute is missing',
                         guest.replace('pose=100,200,300','pose=nan,200,300')):
             with self.assertRaises(ValueError): validate(host,content,capture,replay)
 

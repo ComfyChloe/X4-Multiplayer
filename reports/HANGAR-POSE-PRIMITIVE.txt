@@ -16,14 +16,25 @@ personal save is opened. Close the owned game, retain the exact installation
 and logs, compare save hashes/timestamps, and restore the verified clean backup.
 
 Source359f59a syntax and the local X4 9.00 MD schema pass. Native hangar-first
-completed all stages with seven stored children and no mod errors. A single FFI
+completed all stages with seven stored children, but its full result is FAILED:
+the native XML parser required a container on remove_docking_request even though
+the installed schema allowed omission. The first analysis missed that startup
+error by checking only runtime cue errors; the raw log is retained unchanged.
+The cleanup action is now guarded by assigneddock and supplies its container.
+The movement-stage observations remain diagnostic, not a passing run. A single FFI
 position write was overwritten before the two-second observation; MD warp moved
 the carrier and all seven children about20km, and one child undocked natively.
 The carrier retained small motion/rotation, so child translation residuals are
 not a controlled rigid-body acceptance. Exact source/logs/result and clean33-file
 restoration are retained; normal saves unchanged. The follow-up holds the FFI
 position every frame and adds an immediate readback, matching the real guest
-application pattern more closely. Follow-up native behavior is PENDING.
+application pattern more closely. Native hangar-second (b267a34) retains the same
+parser error and remains FAILED overall. Its immediate and sustained FFI stages
+move all seven stored children correctly, with translation residual0.0039m.
+Therefore parent movement alone does not reproduce the seed-view failure. The
+next seed experiment traces actual carrier/child writes and can explicitly omit
+docked-child writes as a DEV-ONLY controlled comparison. That omission is not
+production attachment authority and does not handle host/guest dock divergence.
 This is a diagnostic primitive, not a shipping forced-undock workaround. It does
 not establish network attachment authority or justify weakening the retained
 failed seed-view position gate. Primary owns this PC's native session.
