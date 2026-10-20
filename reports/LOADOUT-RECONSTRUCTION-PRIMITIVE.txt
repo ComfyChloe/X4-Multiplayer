@@ -87,7 +87,7 @@ Temporary preset
 experiments require absent isolated/global preset files and use a unique name;
 they are dev-only and do not authorize persistent changes to user presets.
 
-CONTROLLED FULL-GROUP FOLLOW-UP — NATIVE PENDING
+CONTROLLED FULL-GROUP FOLLOW-UP — BOUNDED NATIVE PASS
 An additional explicit --saved --fill-groups experiment builds complete groups
 using the number of observed physical group slots. Before any removal it verifies
 every required physical macro on the new clone. It then removes only surplus
@@ -98,8 +98,17 @@ the original strict exact-slot gate is unchanged. Unsupported mixed assignments
 still stop before removal. This is a feasibility probe, not a gameplay path.
 Two regressions exercise preserving the desired fourth turret while removing
 clone-only slots1-3, and rejecting a foreign component before any removal.
-331 Linux/Python/LuaJIT tests pass; the changed MD schema validates. Native result
-remains pending. Diagnostic presets and clones require the same owned cleanup.
+331 Linux/Python/LuaJIT tests pass; the changed MD schema validates. Native
+roundtrip-full-groups at source5ac9408 PASSES the unchanged eight-macro exact-slot,
+software and native hull/shield-capacity validator. Actual surplus removals were
+turret slot2 on ship_arg_l_trans_container_05_a_macro and shield slot5 on
+ship_arg_l_destroyer_02_a_macro. This exercises partial turret and shield groups;
+it is a different fresh world from the earlier failed destroyer's slot3/4 case.
+All eight presets and clones were removed. The generated empty preset file was
+archived then removed to restore absence; normal saves and all33 restored files
+have full retained hash manifests. Exact installed source/raw logs/validation are
+retained under .local/evidence-196-withheld No wire/native
+cross-PC creation, inventory, ammunition, crew, or arbitrary-equipment acceptance.
 
 DESCRIPTOR FOUNDATION — NO NETWORK OR CREATION ACTIVATION
 The original Python/Lua X4SHIP1 codec records ship macro/owner, zero-based physical
