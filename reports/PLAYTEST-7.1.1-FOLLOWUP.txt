@@ -70,7 +70,27 @@ create_ship, retaining loadout checks and asynchronous setup gating. Incomplete,
 duplicate, dead or original-start-ship callbacks cannot start gameplay. It does
 not change motion/fire/cargo protocols. The generator's matching PrepareShips
 block is updated without regenerating or replacing its other production scripts.
-Native corrected host/guest regressions and independent review are pending.
+Corrected native HOST and GUEST runs at bc90d2e both pass all 54 readbacks:
+the distant 2 km ship and 6 km station are known, radar-visible and identified by
+the native target-monitor headers before the separate control ship is created.
+Both roles retain all six software modules and Mk3 thrusters on both shared
+ships; no mod MD errors were observed. Each used a synthetic counterpart, not a
+second native game. Exact logs, installed file hashes and save inventories are
+in .local/evidence-198-withheld,guest}-bc90d2e.
+All 272 tests belonging to tracked PR17 source pass on Linux with LuaJIT and no
+skips. All ten production MD scripts and the opt-in sensor script validate
+against the installed 9.00 schema.
+Native cargo regressions also pass: host drop/pickup with duplicated UDP and MD
+orders, and guest DropCargo/magnet pickup with a deliberately lost completion.
+Both retain exactly 20 Energy Cells and no remaining drop. The separate native
+guest movement run has 201 NPC and 509 player samples through packet gaps, with
+maximum errors 1.473 m / 0.00147 rad for NPCs and 0 m / 0 rad for the player.
+No mod errors occur. These remain synthetic-counterpart tests. Preexisting save
+bytes/timestamps are unchanged and the isolated test-save directory is empty.
+Portable evidence hashes/results: reports/native-sensor-discovery-checks.json.
+Independent review and joint Windows/Linux acceptance remain pending. This
+establishes the measured discovery fix, not acceptance of every HUD field,
+shared stations or full universe authority.
 
 The host playtest log also records five X4LAN_Coop.SectorMove diagnostic property
 errors while $ship.sector is null, around game time 1926.59-1930.22. Establish the

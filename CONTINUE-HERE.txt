@@ -1,4 +1,21 @@
-CURRENT HANDOFF — INTERNAL 7.1.1 DELIVERED, 20 OCTOBER 2026
+CURRENT HANDOFF — INTERNAL 7.1.1 PLAYTEST FOLLOW-UP, 20 OCTOBER 2026
+
+LATEST USER PLAYTEST — READ BEFORE THE HISTORICAL DELIVERY NOTES BELOW
+The real Windows/Linux 7.1.1 playtest is complete. Ordinary cargo WORKED with a
+small visibility delay, ship motion is excellent and the shared mission works.
+Preserve these results. Radar/HUD discovery, ordinary station alignment and
+test-freighter orders/motion/hull remain faulty. HUD Problem 1-3 and Map Problem
+are HOST screenshots; the docked-host screenshot is from the GUEST.
+reports/PLAYTEST-7.1.1-FOLLOWUP.txt records the evidence and current investigation.
+PR17 corrects native sensor initialization through MD ship creation; its native
+host/guest runs are separate from the user's joint playtest. Save bootstrap and
+ongoing NPC/station authority remain separate work. The sealed 7.1.1 packages
+are unchanged. Do not claim the whole shared universe is now implemented.
+Coordinate with Claude hourly at HH:00 Europe/Berlin in the new compact thread:
+https://example.invalid/private-coordination-withheld
+Verify both source and installed package versions before another joint run.
+
+HISTORICAL DELIVERY AND PRE-PLAYTEST CHECKS
 
 The real two-computer 7.0 playtest drove the overnight follow-up. PRs8-14 are
 integrated through main 320a775. PR13's native linear-velocity lifecycle
@@ -98,11 +115,11 @@ reports/PLAYTEST-7.0-FOLLOWUP.txt
 Earlier failed probes are retained as failed evidence, not acceptance.
 
 NEXT WORK
-1. Run the simultaneous Windows/Linux playtest from WORLD-SYNC-TEST.txt: ordinary
-   cargo in both directions, contested/partial pickup, names/codes, radar/HUD,
-   motion, combat and the previously successful Cooperative Trial mission.
-   No joint READY or two-native run occurred during this follow-up. Claude's
-   latest availability request was unanswered; do not infer that he is online.
+1. Address the completed 7.1.1 playtest findings in the follow-up report, then run
+   a matched Windows/Linux regression. Preserve accepted ordinary cargo, motion
+   and the Cooperative Trial mission. Both cargo directions, contested/partial
+   pickup and all cargo types were not separately confirmed by the latest user
+   report. Check Claude's current source, installed version and next usage reset.
 2. Measure and address off-axis aiming/projectile inheritance and actual shared
    hit behavior. Default shot cadence and snapshot repair do not establish these.
    Claude reserved dev/damage_probe.* and Windows testing; coordinate before

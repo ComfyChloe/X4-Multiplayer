@@ -3,8 +3,9 @@
 - Read `CONTINUE-HERE.txt`, `DEVELOPMENT.txt`, `CONTRIBUTING.txt` and
   `WORLD-SYNC-REQUIREMENTS.txt`. `CLAUDE.md` imports these shared instructions.
 - Default to internal work. Public packages require an explicit request for that
-  release. Public Test 01 is withheld because full shared-universe authority and
-  ordinary cargo/magnet interactions are missing.
+  release. Public Test 01 is withheld because full shared-universe authority is
+  unfinished. The user confirmed basic ordinary cargo/magnet success in 7.1.1;
+  preserve that regression without inferring acceptance of every cargo case.
 - Speak German with the user. Keep shipped documentation and interfaces English.
 - Write original code. Neresco projects are research references only; do not copy
   or embed their multiplayer sources, binaries or framework.

@@ -1,0 +1,176 @@
+{
+  "source": "bc90d2e",
+  "base": "2bf9504",
+  "game": "X4 9.00 (611726)",
+  "steam_build": "23660954",
+  "platform": "Linux",
+  "counterparts": "synthetic Python peers",
+  "tracked_tests": 272,
+  "skipped": 0,
+  "two_native_acceptance": false,
+  "runs": {
+    "sensor-remote": {
+      "result": {
+        "rows": 54,
+        "complete": true,
+        "isolated_distance": true,
+        "production_discovery": false,
+        "native_control_discovery": true,
+        "original_failure_reproduced": true,
+        "native_errors": [],
+        "success": false
+      },
+      "evidence": {
+        "saves-before.json": "d6f5e824570805a2e13f4a2f9733a53e473e24b13b0a6d5cbf407adee185ced1",
+        "installed-hashes.json": "e58ef3a2177a4f49e74648e0c01cabed63daf114de5b1066e6a6dfa890adb95b",
+        "native.log": "d208d6fb9d14a492481e90fa9c7ec6c9b4cd8f0859666d6f1bae0bb8f5becf25",
+        "saves-after.json": "848b027afad478c84aa7fa9dce664d7df4b81f47d41fb67b3e229823ece2a8c9",
+        "result.json": "1d6689ac2e284e16ab58c49dd0d7dc352cf6ffe65c93729255b7070b675b9cfc"
+      }
+    },
+    "sensor-fixed-host-bc90d2e": {
+      "result": {
+        "rows": 54,
+        "complete": true,
+        "isolated_distance": true,
+        "production_discovery": true,
+        "native_control_discovery": true,
+        "original_failure_reproduced": false,
+        "native_errors": [],
+        "success": true
+      },
+      "evidence": {
+        "saves-before.json": "848b027afad478c84aa7fa9dce664d7df4b81f47d41fb67b3e229823ece2a8c9",
+        "installed-hashes.json": "593316dd25cc92dbef2e6b7726ec20ff15d84ca6e42e491b57368efd90110c84",
+        "native.log": "3e63c83ebdeab08ae4a0cfc11589cfbf2442dc66ed17761e41f3a675e20a7857",
+        "result.json": "126b44a5d3e79a630ba78873540f910ef9ecaa04f115e07ec7c900ccc45e7b72",
+        "saves-after.json": "2d8cbf71d08661ca147ababe6614f7facb1dff287ebd3c93bce4b761b524cbc0"
+      }
+    },
+    "sensor-fixed-guest-bc90d2e": {
+      "result": {
+        "rows": 54,
+        "complete": true,
+        "isolated_distance": true,
+        "production_discovery": true,
+        "native_control_discovery": true,
+        "original_failure_reproduced": false,
+        "native_errors": [],
+        "success": true
+      },
+      "evidence": {
+        "saves-before.json": "2d8cbf71d08661ca147ababe6614f7facb1dff287ebd3c93bce4b761b524cbc0",
+        "installed-hashes.json": "d9af6576c6a334ea6102da375034e2f61eee3d08d97df8b0dfe4b4ef027d089f",
+        "native.log": "0660859e3c25b90b9dc5f886b04f900ce16cfbd66bdaee62e633cade2132c72f",
+        "result.json": "126b44a5d3e79a630ba78873540f910ef9ecaa04f115e07ec7c900ccc45e7b72",
+        "saves-after.json": "c9b88ed738460088dd92a6acdc8e1aa79088ccbeab77448ef240620c889693ed"
+      }
+    },
+    "cargo-host": {
+      "success": true,
+      "final_energycells": 20,
+      "remaining_drops": [],
+      "evidence": {
+        "saves-before.json": "9e182c2c977cab250de52f4cb4cf5ce6d723297ad2348976925b6dae4bc86258",
+        "installed-hashes.json": "a3078e67e58f4c45ef122584f2cb3817a1556212d3981efd38464a4512de7f89",
+        "native.log": "9cefb724b4737a70a3a678cc019c72da3f8b9f713d8e9e809c1128adea81d50f",
+        "result.json": "da34e56c2879d705742ed61ef5a34ffae383e3bbda640b6b881e15b8d32ccf46",
+        "saves-after.json": "0b20b89d85353ec2e3a27b081ec16c990867fdece7d4def2495a37680ac0f5b4"
+      }
+    },
+    "cargo-guest": {
+      "success": true,
+      "final_energycells": 20,
+      "remaining_drops": 0,
+      "evidence": {
+        "saves-before.json": "0b20b89d85353ec2e3a27b081ec16c990867fdece7d4def2495a37680ac0f5b4",
+        "installed-hashes.json": "e0c0349dc8dfd738bb5fbf9fe6bc8fbf677a9e94e2fca8260db6b5210aa2ee3a",
+        "native.log": "d074006a927c38b62e7945ea5e60ab679c27f6074da88cfcaba1e4e39625e881",
+        "result.json": "da650b3186523a11471a7347cf5d4284985fd874ac9ef2d4cf4e2e168ae9fe6f",
+        "saves-after.json": "54d6589fb47596b61d18af1c2e2ad46e47ca0d81e2e0faa379332c4daff8da42"
+      }
+    },
+    "motion-guest": {
+      "result": {
+        "NPC": {
+          "samples": 201,
+          "max_position_error_m": 1.473,
+          "max_angle_error_rad": 0.00147,
+          "loss_samples": 15
+        },
+        "PLAYER": {
+          "samples": 509,
+          "max_position_error_m": 0.0,
+          "max_angle_error_rad": 0.0,
+          "loss_samples": 323
+        },
+        "errors": [],
+        "success": true
+      },
+      "evidence": {
+        "saves-before.json": "54d6589fb47596b61d18af1c2e2ad46e47ca0d81e2e0faa379332c4daff8da42",
+        "installed-hashes.json": "034e6d15e43ffaf4bc3e259bf84862723bd7290bcde0d9e8edd040f98294c096",
+        "native.log": "c2e5c0e514489988af2ac131a4711793e23a14d1753494990734de5520f23c39",
+        "peer-result.json": "3dfc57bfdab00ea19b3d2364813ea0bd5eeb2a842b6113006d5a4608937003c5",
+        "saves-after.json": "ff6c87daa0f543b9f82087bf068a85373ba0bf88dae8910d06a7b9a8912889e2",
+        "result.json": "08e37f1cd795eae12b3fcfdd47904de311979a819cd260f41a16a7797effc568"
+      }
+    }
+  },
+  "schema": {
+    "extension/x4_lan_lab/md/x4lan.xml": {
+      "sha256": "41867c75a66eeef0ee38281a84dd80e1a073ae63fc3edabe1597bbb902db5130",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_bubble.xml": {
+      "sha256": "e28078e68fbec4c8b30050001561c39a558d2bb9a5d537699c17bc2faffa9310",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_cargo.xml": {
+      "sha256": "5045536591fcce024436c9d00d6938923d737e73eddeefc59ecce4c4d8dbb2af",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_coop.xml": {
+      "sha256": "8b6d633b77eab945b184dad0afa882c94149174ad6175ef39ddce5aa21adf8a2",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_interactions.xml": {
+      "sha256": "5c7aace6d1c749ac89036b256f63fb9e7775bb0744815de95c3dd783035cd266",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_life.xml": {
+      "sha256": "8dbb6c4082e0b0763ab47d2bc90651a4f4cbc6a0e589b728c820554cd5a531cd",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_quest.xml": {
+      "sha256": "be1048e6f88d0cb5ea8bef6132e73fcf843e02ecb7633a31c0a5e54650ce99cc",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_trade.xml": {
+      "sha256": "660b9d398a9a46e3fefd5c3ef27429d9f28670c1dc25087a437ddd62bea60fed",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_universe.xml": {
+      "sha256": "029a437232fa89078b4c32eb53ad617e1bae925edcb1569358eab96df49f2d90",
+      "valid": true
+    },
+    "extension/x4_lan_lab/md/x4lan_walk.xml": {
+      "sha256": "4a1520f797e10848b5ee5fda138fa3c26f8a4d0f68328d221ede2628c1523370",
+      "valid": true
+    },
+    "dev/sensor_probe.xml": {
+      "sha256": "651550b812d670fde6595cc81fe0cdbe58ecbea171dc1b067d7b9c8fdd095e0a",
+      "valid": true
+    }
+  },
+  "pending": [
+    "independent review",
+    "joint Windows/Linux acceptance"
+  ],
+  "save_preservation": {
+    "all_file_bytes_unchanged": true,
+    "actual_save_timestamps_unchanged": true,
+    "no_test_saves": true,
+    "steam_metadata_timestamp_changed": true
+  }
+}
