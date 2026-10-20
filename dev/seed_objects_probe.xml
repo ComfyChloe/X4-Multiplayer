@@ -5,6 +5,12 @@
   <do_if value="$ship.isoperational">
    <debug_text text="'[X4LAN] SEED_OBJECT_SPEC slot=%s revision=%s id=%s code=%s macro=%s owner=%s maxhull=%s maxshield=%s weapons=%s shields=%s engines=%s pilot=%s'.[$v.$slot,$v.$revision,$v.$id,$ship.idcode,$ship.macro.id,$ship.owner.id,$ship.maxhull,$ship.maxshield,$ship.weapons.operational.count,$ship.shields.operational.count,$ship.engines.operational.count,$ship.pilot.exists]"/>
    <debug_text text="'[X4LAN] SEED_OBJECT_PARENT slot=%s revision=%s id=%s stored=%s docked=%s parent=%s dockCode=%s dockSeed=%s'.[$v.$slot,$v.$revision,$v.$id,$ship.isinternallystored,$ship.dock.exists,$ship.parent,if $ship.dock then $ship.dock.container.idcode else 'none',if $ship.dock then @md.X4LAN_Seed.State.$ships.indexof.{$ship.dock.container} else 0]"/>
+   <do_if value="$ship.dock">
+    <find_object_component name="$docks" object="$ship.dock.container" class="class.dockingbay" multiple="true" recursive="true" includeobjects="false"/>
+    <set_value name="$matches" exact="0"/>
+    <do_all exact="$docks.count" counter="$i"><do_if value="$docks.{$i}.seed == $ship.dock.seed"><set_value name="$matches" operation="add" exact="1"/></do_if></do_all>
+    <debug_text text="'[X4LAN] SEED_OBJECT_DOCK slot=%s revision=%s id=%s key=%s macro=%s external=%s matches=%s total=%s'.[$v.$slot,$v.$revision,$v.$id,$ship.dock.seed,$ship.dock.macro.id,$ship.dock.external,$matches,$docks.count]"/>
+   </do_if>
   </do_if>
  </actions></cue></cues>
 </mdscript>
