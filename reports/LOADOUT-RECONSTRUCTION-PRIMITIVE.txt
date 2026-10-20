@@ -68,11 +68,38 @@ all33 restored-file hashes under roundtrip-saved-second. Earlier roundtrip runs
 retain only their original boolean/count cleanup summaries; those are limited
 audit evidence, not retroactively reconstructed per-run manifests.
 
-The next source preserves explicit turret/shield group paths, names, macro and
+Source176b1ce preserves explicit turret/shield group paths, names, macro and
 count alongside ungrouped slots. It excludes grouped members from the individual
-preset arrays. Native validation of this correction is PENDING. Temporary preset
+preset arrays. Native roundtrip-saved-groups remains FAILED: seven of eight exact
+signatures match, but a partially equipped destroyer group installs its one
+turret at physical slot3 instead of source slot4. The previous missing-group
+hardware is present; group macro/count does not preserve every occupied position.
+Do not relax the exact-slot gate or advertise faithful arbitrary reconstruction.
+All eight presets were removed; the empty generated file was archived and its
+prior absence restored. Full before/after save manifests and all33 restored
+installation hashes are retained with the raw log and exact176b1ce probe files.
+The initial Steam launch was blocked on cloud synchronization and never started
+X4; that failed attempt/empty peer result is retained separately. Its pending
+launch was canceled. The completed native run used the installed Steam Linux
+Runtime directly with the same guarded empty45841 profile and autosave=false.
+
+Temporary preset
 experiments require absent isolated/global preset files and use a unique name;
 they are dev-only and do not authorize persistent changes to user presets.
+
+DESCRIPTOR FOUNDATION — NO NETWORK OR CREATION ACTIVATION
+The original Python/Lua X4SHIP1 codec records ship macro/owner, zero-based physical
+slots, explicit group path/name/macro/count, software and virtual thruster. Its
+canonical bounded ASCII representation rejects partial, duplicate, unknown,
+noncanonical and oversized data atomically. Group strings use lower-case hex;
+software and slot order are canonical. Empty equipment is explicit, with a
+mandatory final thruster row (Lua false / Python None means none).
+Seven focused tests cover cross-language byte parity, every truncation of a
+representative descriptor, invalid numeric/collection inputs and native group
+paths. This is an unused pure module: no UI load entry, native call, creation
+authorization or transport is introduced. Group descriptors alone still cannot
+reconstruct the failed partial-group case; preserve physical slot observations
+and reject unsupported reconstruction until an exact engine primitive is proven.
 
 LIMITS
 Even a passing primitive does not prove network creation, inventory, ammunition,
