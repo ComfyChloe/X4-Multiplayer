@@ -40,3 +40,10 @@ arbitrary ship/station compatibility, occupancy reconciliation, queued traffic,
 player docking, inventory/trading or whole-universe synchronization.
 Sealed7.1.1 packages and the separate937262c Windows/Linux bootstrap stay unchanged.
 Coordination remains :00/:15/:30/:45 Europe/Berlin; stop21 October08:00 CEST.
+
+The first native run dock-state-first at c8720eb FAILED before any transition:
+no compatible free external pad was selected, followed by the phase0 timeout.
+Exact installed source and raw failure are retained. The game/peer were closed,
+normal saves checked unchanged and all33 clean installation hashes restored.
+Candidate diagnostics are added to distinguish missing bays from occupied or
+incompatible pads; this remains dev-only and is not attachment acceptance.

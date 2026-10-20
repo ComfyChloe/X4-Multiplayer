@@ -6,8 +6,10 @@
    <do_if value="md.X4LAN_Bubble.Arena.$host and $ship.isoperational and $carrier.isoperational and $ship != player.ship and $ship != player.occupiedship and $ship != player.container and $ship.isinternallystored and $ship.dock.container == $carrier">
     <set_value name="$inside" exact="$ship.dock"/><set_value name="$outside" exact="null"/>
     <find_object_component name="$docks" object="$carrier" class="class.dockingbay" multiple="true" recursive="true" includeobjects="false"/>
+    <debug_text text="'[X4LAN] DOCK_STATE_NATIVE candidates ship=%s carrier=%s size=%s total=%s'.[$ship.idcode,$carrier.idcode,$ship.docksize,$docks.count]"/>
     <do_all exact="$docks.count" counter="$i">
      <set_value name="$candidate" exact="$docks.{$i}"/>
+     <debug_text text="'[X4LAN] DOCK_STATE_NATIVE candidate dock=%s external=%s tube=%s sizes=%s compatible=%s assigned=%s docked=%s'.[$candidate,$candidate.external,$candidate.islaunchtube,$candidate.docksize,$candidate.docksize.indexof.{$ship.docksize},$candidate.assignedship.exists,$candidate.docked.count]"/>
      <do_if value="not $outside and $candidate.external and not $candidate.islaunchtube and $candidate.docksize.indexof.{$ship.docksize} and not $candidate.assignedship.exists and $candidate.docked.count == 0"><set_value name="$outside" exact="$candidate"/></do_if>
     </do_all>
     <do_if value="$outside">
