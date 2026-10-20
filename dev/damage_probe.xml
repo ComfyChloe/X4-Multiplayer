@@ -4,7 +4,11 @@
      ApplySeen/Readback: after a guest world Apply request, reads both co-op ships back one MD
      update later (after the production Apply cue has run) and returns the request number from
      the probe's preceding Mark event plus the echoed requested values, so the Lua probe can pair
-     the readback with exactly one 'apply_requested' line, even for identical repeated requests. -->
+     the readback with exactly one 'apply_requested' line, even for identical repeated requests.
+     MD batch markers: the game clock in microseconds when MD handled the Apply event (seen) and
+     when the readback ran (read). The game clock does not advance within one MD update, so
+     readbacks that share both markers were handled in one update and read back in one update
+     (meaningful only while the game is not paused). -->
 <mdscript name="X4LAN_DamageProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
  <cues>
   <cue name="Targets" checkinterval="1s">
@@ -27,13 +31,14 @@
    <actions>
     <set_value name="$requested" exact="event.param3.$values"/>
     <set_value name="$mark" exact="if md.X4LAN_DamageProbe.Targets.$applyMark? then md.X4LAN_DamageProbe.Targets.$applyMark else 0"/>
+    <set_value name="$seen" exact="(player.age * 1000000)i"/>
    </actions>
    <cues>
     <cue name="Readback">
      <delay exact="1ms"/>
      <actions>
       <set_value name="$ships" exact="md.X4LAN_Bubble.Arena.$ships"/>
-      <raise_lua_event name="'X4LAN_DamageProbe.Readback'" param="'%s|%s|%s|%s|%s|%s|%s|%s|%s'.[$mark,$requested.{1},$requested.{2},$requested.{4},$requested.{5},(if $ships.{1}.isoperational then $ships.{1}.hullpercentage else -1),(if $ships.{1}.isoperational then $ships.{1}.shieldpercentage else -1),(if $ships.{2}.isoperational then $ships.{2}.hullpercentage else -1),(if $ships.{2}.isoperational then $ships.{2}.shieldpercentage else -1)]"/>
+      <raise_lua_event name="'X4LAN_DamageProbe.Readback'" param="'%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s'.[$mark,$requested.{1},$requested.{2},$requested.{4},$requested.{5},(if $ships.{1}.isoperational then $ships.{1}.hullpercentage else -1),(if $ships.{1}.isoperational then $ships.{1}.shieldpercentage else -1),(if $ships.{2}.isoperational then $ships.{2}.hullpercentage else -1),(if $ships.{2}.isoperational then $ships.{2}.shieldpercentage else -1),$seen,(player.age * 1000000)i]"/>
      </actions>
     </cue>
    </cues>

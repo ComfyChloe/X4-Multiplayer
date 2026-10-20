@@ -6,10 +6,18 @@ For each probe run it pairs every 'apply_requested' with its native 'apply_readb
 reports requests that are missing, late (readback delay above --late seconds) or mismatched
 (observed hull/shield differs from the request by more than --tolerance percentage points),
 plus unmatched, invalid, echo-mismatched or orphan readbacks (a readback whose request line
-is absent, e.g. in a truncated log, never counts as confirmed; pairing is by request number). Health changes seen on 'tick' lines between a confirmed
-readback and the next request are listed as CANDIDATE local drift only: the probe cannot prove
-their cause. The exit status is 1 when any completion is missing, invalid, unmatched, echo-mismatched or orphan,
-or when the log contains no probe lines at all.
+is absent, e.g. in a truncated log, never counts as confirmed; pairing is by request number)
+and request/readback lines without a probe frame number ('frameless').
+Every observed mismatch stays listed in 'raw_mismatched'. An earlier request of a multi-request
+frame whose readback shows that frame's LAST request, while the last request's own readback
+matches it, moves from 'mismatched' to 'later_in_frame' ("consistent with a later request in
+the same recorded frame"); this is a classification, not proof of the engine's update order.
+Batches (frames with two or more requests) list the readback frames and the MD-side game-clock
+markers (md_seen: MD update that handled the Apply; md_read: MD update of the readback).
+Health changes seen on 'tick' lines between a confirmed readback and the next request are
+listed as CANDIDATE local drift only: the probe cannot prove their cause. The exit status is 1
+when any completion is missing, invalid, unmatched, echo-mismatched, orphan or frameless, or
+when the log contains no probe lines at all.
 """
 import argparse
 import json
@@ -49,17 +57,24 @@ def summarise(rows, late=.5, tolerance=.5):
         run = runs.setdefault(row.get('run', '?'), {
             'requested': {}, 'confirmed': 0, 'missing': [], 'late': [], 'mismatched': [],
             'unmatched': 0, 'invalid': 0, 'echo_mismatch': [], 'orphan': [], 'candidate_drift': [], 'last_confirmed': None,
-            'frames': {}, 'frame_of': {}, 'readback_frame': {}, 'observed': {}, 'wanted': {}})
+            'frameless': [], 'frames': {}, 'frame_of': {}, 'readback_frame': {}, 'observed': {}, 'wanted': {},
+            'md': {}, 'paused': {}})
         reason, detail = row.get('reason'), row['detail_text']
+        frame = row.get('frame') if re.fullmatch(r'\d+', row.get('frame') or '') else None
         if reason == 'apply_requested':
             apply = re.search(r'apply=(\d+)', detail)
             if apply:
                 ident = int(apply.group(1))
                 run['requested'][ident] = row
                 run['last_confirmed'] = None
+                run['paused'][ident] = row.get('paused')
+                if frame is None:
+                    # A request without a frame number can never be grouped with other requests.
+                    run['frameless'].append(ident)
+                    continue
                 # Requests logged in the same probe frame were queued in one Lua update.
-                run['frames'].setdefault(row.get('frame'), []).append(ident)
-                run['frame_of'][ident] = row.get('frame')
+                run['frames'].setdefault(frame, []).append(ident)
+                run['frame_of'][ident] = frame
         elif reason == 'apply_readback':
             apply = re.search(r'apply=(\d+)', detail)
             delay = re.search(r'delay=(-?\d+(?:\.\d+)?)', detail)
@@ -69,6 +84,8 @@ def summarise(rows, late=.5, tolerance=.5):
                 run['invalid'] += 1
                 continue
             ident = int(apply.group(1))
+            if frame is None:
+                run['frameless'].append(ident)
             if ident not in run['requested']:
                 # A readback without its request (truncated log, duplicate or foreign line)
                 # must never count as a confirmed completion.
@@ -94,7 +111,9 @@ def summarise(rows, late=.5, tolerance=.5):
             observed = [health(obs.group(1)), health(obs.group(2))]
             wanted = [health(req.group(1)), health(req.group(2))]
             run['observed'][ident], run['wanted'][ident] = observed, wanted
-            run['readback_frame'][ident] = row.get('frame')
+            run['readback_frame'][ident] = frame
+            md = re.search(r' md=(\d+)/(\d+)', detail)
+            run['md'][ident] = md.groups() if md else (None, None)
             if not close(observed, wanted, tolerance):
                 run['mismatched'].append(ident)
             run['last_confirmed'] = (ident, observed)
@@ -124,30 +143,36 @@ def summarise(rows, late=.5, tolerance=.5):
     for name, run in runs.items():
         # Requests still open at the end of the log never received a readback.
         unresolved = sorted(run['requested'])
-        # The MD readback shows the state after the whole update. An earlier request of a
-        # multi-request frame that observed exactly that frame's LAST request is superseded,
-        # not mismatched; the last request of each frame must still match its own values.
-        superseded, mismatched = [], []
+        # An earlier request of a multi-request frame whose readback shows exactly that frame's
+        # LAST request is "consistent with a later request in the same recorded frame", but only
+        # while the last request's own readback matches it. Every raw mismatch stays listed.
+        later_in_frame, mismatched = [], []
         for ident in run['mismatched']:
             ids = run['frames'].get(run['frame_of'].get(ident), [])
             last = ids[-1] if ids else None
-            if (len(ids) >= 2 and ident != last and last in run['wanted'] and
+            if (len(ids) >= 2 and ident != last and last in run['wanted'] and last not in run['mismatched'] and
                     close(run['observed'][ident], run['wanted'][last], tolerance)):
-                superseded.append(ident)
+                later_in_frame.append(ident)
             else:
                 mismatched.append(ident)
         batches = []
         for frame, ids in run['frames'].items():
             if len(ids) >= 2:
                 values = [tuple(run['wanted'].get(i) or ()) for i in ids]
+                markers = [run['md'].get(i, (None, None)) for i in ids]
                 batches.append({'frame': frame, 'requests': ids,
+                                'confirmed': all(i in run['wanted'] for i in ids),
+                                'unpaused': all(run['paused'].get(i) == 'false' for i in ids),
                                 'readback_frames': sorted({str(run['readback_frame'].get(i)) for i in ids}),
+                                'md_seen': sorted({str(m[0]) for m in markers}),
+                                'md_read': sorted({str(m[1]) for m in markers}),
                                 'identical_values': len(values) != len(set(values)),
                                 'distinct_values': len(set(values)) >= 2})
         result[name] = {'confirmed': run['confirmed'], 'missing': run['missing'] + unresolved,
-                        'late': run['late'], 'mismatched': mismatched, 'superseded': superseded,
+                        'late': run['late'], 'raw_mismatched': run['mismatched'], 'mismatched': mismatched,
+                        'later_in_frame': later_in_frame,
                         'unmatched': run['unmatched'], 'invalid': run['invalid'],
-                        'echo_mismatch': run['echo_mismatch'], 'orphan': run['orphan'],
+                        'echo_mismatch': run['echo_mismatch'], 'orphan': run['orphan'], 'frameless': run['frameless'],
                         'batches': batches, 'candidate_drift': run['candidate_drift']}
     return result
 
@@ -166,7 +191,8 @@ def main(argv=None):
     with open(args.log, encoding='utf-8', errors='replace') as handle:
         result = summarise(parse(handle), args.late, args.tolerance)
     print(json.dumps(result, indent=2))
-    bad = any(r['missing'] or r['unmatched'] or r['invalid'] or r['echo_mismatch'] or r['orphan'] for r in result.values())
+    bad = any(r['missing'] or r['unmatched'] or r['invalid'] or r['echo_mismatch'] or r['orphan'] or r['frameless']
+              for r in result.values())
     return 1 if bad or not result else 0
 
 

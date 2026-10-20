@@ -30,7 +30,10 @@ class DamageProbeStaticTests(unittest.TestCase):
         self.assertEqual({e.tag for e in root.iter()} - allowed, set())
         # set_value only writes the probe's own cue variables.
         self.assertEqual({e.get('name') for e in root.iter('set_value')},
-                         {'$requested', '$ships', '$mark', 'md.X4LAN_DamageProbe.Targets.$applyMark'})
+                         {'$requested', '$ships', '$mark', '$seen', 'md.X4LAN_DamageProbe.Targets.$applyMark'})
+        # Both MD batch markers are the game clock in whole microseconds, so equality is exact.
+        source = (ROOT / 'dev/damage_probe.xml').read_text()
+        self.assertEqual(source.count('(player.age * 1000000)i'), 2)
 
     def test_no_session_credentials_are_logged(self):
         source = (ROOT / 'dev/damage_probe.lua').read_text()
@@ -124,12 +127,15 @@ class DamageProbeAdapterTests(unittest.TestCase):
          assert(req[1]:find('ship1=70.00/70.00',1,true) and req[2]:find('ship1=70.00/70.00',1,true),'observed is still pre-application')
          assert(req[1]~=req[2],'different authoritative inputs must not produce identical lines')
          -- Native readback for the second request only (the first one never completes).
-         events['X4LAN_DamageProbe.Readback'](nil,'2|90|90|100|100|90|90|100|100')
+         events['X4LAN_DamageProbe.Readback'](nil,'2|90|90|100|100|90|90|100|100|10100000|10116000')
          local rb=lines('apply_readback');assert(#rb==1 and rb[1]:find('apply=2 wrev=2',1,true))
+         assert(rb[1]:find('md=10100000/10116000',1,true),'MD batch markers are logged')
          now=12;frames.onUpdate()
          local missing=lines('apply_missing');assert(#missing==1 and missing[1]:find('apply=1 wrev=1',1,true))
-         events['X4LAN_DamageProbe.Readback'](nil,'9|1|2|3|4|5|6|7|8');assert(#lines('apply_readback_unmatched')==1)
+         events['X4LAN_DamageProbe.Readback'](nil,'9|1|2|3|4|5|6|7|8|1|2');assert(#lines('apply_readback_unmatched')==1)
          events['X4LAN_DamageProbe.Readback'](nil,'bad');assert(#lines('apply_readback_invalid')==1)
+         events['X4LAN_DamageProbe.Readback'](nil,'9|1|2|3|4|5|6|7|8');assert(#lines('apply_readback_invalid')==2,'markers required')
+         events['X4LAN_DamageProbe.Readback'](nil,'9|1|2|3|4|5|6|7|8|1.5s|2');assert(#lines('apply_readback_invalid')==3,'integer markers only')
         ''')
 
     def test_identical_repeated_requests_pair_by_number(self):
@@ -139,7 +145,7 @@ class DamageProbeAdapterTests(unittest.TestCase):
          world(50,50,100,100);now=11.2;world(50,50,100,100)
          local req=lines('apply_requested');assert(#req==2,'unchanged health is re-sent after 1 s')
          assert(sequence():find('X4LAN_DamageProbe:Mark#1,X4LAN_Bubble:Apply,X4LAN_DamageProbe:Mark#2,X4LAN_Bubble:Apply',1,true),sequence())
-         events['X4LAN_DamageProbe.Readback'](nil,'2|50|50|100|100|50|50|100|100')
+         events['X4LAN_DamageProbe.Readback'](nil,'2|50|50|100|100|50|50|100|100|11200000|11216000')
          local rb=lines('apply_readback');assert(#rb==1 and rb[1]:find('apply=2 ',1,true),'the second identical request, not the first')
          now=13;frames.onUpdate();local m=lines('apply_missing');assert(#m==1 and m[1]:find('apply=1 ',1,true))
         ''')
@@ -148,7 +154,7 @@ class DamageProbeAdapterTests(unittest.TestCase):
         l = self.make(slot='p2')
         l.execute('''
          world(20,20,100,100)
-         events['X4LAN_DamageProbe.Readback'](nil,'1|90|90|100|100|90|90|100|100')
+         events['X4LAN_DamageProbe.Readback'](nil,'1|90|90|100|100|90|90|100|100|10000000|10016000')
          assert(#lines('apply_readback_echo_mismatch')==1 and #lines('apply_readback')==0)
         ''')
 
@@ -186,8 +192,9 @@ class DamageProbeAdapterTests(unittest.TestCase):
 
 
 class DamageProbeValidatorTests(unittest.TestCase):
-    def line(self, reason, detail='-', run='aaaa0001', ship1='70.00/70.00', ship2='100.00/100.00', rt='10.000'):
-        return (f'[=ERROR=] 1.0 [X4LAN] DAMAGE_PROBE run={run} seq=1 rt={rt} gt={rt} slot=p2 reason={reason} '
+    def line(self, reason, detail='-', run='aaaa0001', ship1='70.00/70.00', ship2='100.00/100.00', rt='10.000', frame='1'):
+        frame = f'frame={frame} ' if frame is not None else ''
+        return (f'[=ERROR=] 1.0 [X4LAN] DAMAGE_PROBE run={run} seq=1 {frame}rt={rt} gt={rt} slot=p2 reason={reason} '
                 f'detail={detail} paused=false auth=1:p1/1,p2/1 wrev=1 ship1={ship1} ship2={ship2} target1=none '
                 f'target2=none shots=0,0 trigger1=0,0 trigger2=0,0 nav=-,- fire2_1=[-] fire2_2=[-] mode=legacy')
 
@@ -262,6 +269,39 @@ class DamageProbeValidatorTests(unittest.TestCase):
                 with contextlib.redirect_stdout(io.StringIO()):
                     status = validator.main([path])
                 self.assertEqual(status, 0 if name == 'complete' else 1)
+
+    def test_frameless_lines_are_never_grouped_and_fail(self):
+        import contextlib, io, os, tempfile
+        lines = [self.line('apply_requested', 'apply=1 wrev=1 requested[ship1=31.00/31.00 ship2=100.00/100.00 target1=- target2=-]', frame=None),
+                 self.line('apply_requested', 'apply=2 wrev=2 requested[ship1=32.00/32.00 ship2=100.00/100.00 target1=- target2=-]', frame=None),
+                 self.line('apply_readback', 'apply=1 wrev=1 delay=0.010 requested[ship1=31.00/31.00 ship2=100.00/100.00] observed[ship1=32.00/32.00 ship2=100.00/100.00] md=1/2', frame=None),
+                 self.line('apply_readback', 'apply=2 wrev=2 delay=0.010 requested[ship1=32.00/32.00 ship2=100.00/100.00] observed[ship1=32.00/32.00 ship2=100.00/100.00] md=1/2', frame=None)]
+        result = validator.summarise(validator.parse(lines))['aaaa0001']
+        self.assertEqual(result['batches'], [], 'absent frame numbers are never one shared frame')
+        self.assertEqual(result['frameless'], [1, 2, 1, 2])
+        self.assertEqual((result['raw_mismatched'], result['mismatched'], result['later_in_frame']), ([1], [1], []))
+        with tempfile.TemporaryDirectory() as d:
+            path = os.path.join(d, 'log.txt')
+            with open(path, 'w', encoding='utf-8') as handle:
+                handle.write('\n'.join(lines) + '\n')
+            with contextlib.redirect_stdout(io.StringIO()):
+                self.assertEqual(validator.main([path]), 1)
+
+    def test_later_in_frame_keeps_raw_mismatches_and_needs_the_last_request_to_match(self):
+        def run(observed_last):
+            lines = [self.line('apply_requested', f'apply={n} wrev={n} requested[ship1={h}/{h} ship2=100.00/100.00 target1=- target2=-]', frame='5')
+                     for n, h in ((1, '31.00'), (2, '32.00'), (3, '31.00'))]
+            lines += [self.line('apply_readback', f'apply={n} wrev={n} delay=0.010 requested[ship1={h}/{h} ship2=100.00/100.00] '
+                                f'observed[ship1={o}/{o} ship2=100.00/100.00] md=7/8', frame='6')
+                      for n, h, o in ((1, '31.00', observed_last), (2, '32.00', observed_last), (3, '31.00', observed_last))]
+            return validator.summarise(validator.parse(lines))['aaaa0001']
+        result = run('31.00')
+        self.assertEqual((result['raw_mismatched'], result['mismatched'], result['later_in_frame']), ([2], [], [2]))
+        batch = result['batches'][0]
+        self.assertEqual((batch['md_seen'], batch['md_read'], batch['confirmed'], batch['unpaused']), (['7'], ['8'], True, True))
+        result = run('40.00')
+        self.assertEqual((result['raw_mismatched'], result['mismatched'], result['later_in_frame']), ([1, 2, 3], [1, 2, 3], []),
+                         'when the last request does not match, nothing is reclassified')
 
     def test_separate_runs_are_not_mixed(self):
         rows = validator.parse([

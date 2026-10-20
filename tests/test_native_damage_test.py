@@ -17,12 +17,6 @@ def probe_line(reason, detail, run='r1', frame=1):
             'trigger1=0,0 trigger2=0,0 nav=-,- fire2_1=[-] fire2_2=[-] mode=legacy\n')
 
 
-def pair(n, rev, hull):
-    v = f'{hull:.2f}/{hull:.2f}'
-    return (probe_line('apply_requested', f'apply={n} wrev={rev} requested[ship1={v} ship2=100.00/100.00 target1=- target2=-]') +
-            probe_line('apply_readback', f'apply={n} wrev={rev} delay=0.020 requested[ship1={v} ship2=100.00/100.00] observed[ship1={v} ship2=100.00/100.00]'))
-
-
 class ScheduleTests(unittest.TestCase):
     def test_phases_cover_identical_different_rapid_and_settle(self):
         names = [p[0] for p in harness.schedule()]
@@ -96,156 +90,289 @@ class PrepareSafetyTests(unittest.TestCase):
     def test_documents_come_from_the_known_folder_api(self):
         self.assertTrue(harness.documents_folder().is_dir())
 
-    def test_failed_install_leaves_restorable_state_sampled_before_install(self):
-        with tempfile.TemporaryDirectory() as d:
-            d = Path(d); package = d / 'pkg'; package.mkdir()
-            (package / 'package.json').write_text(json.dumps({'package_id': 'lan-x-p2', 'slot': 'p2'}))
-            (package / 'VERSION.txt').write_text('7.1.1')
-            documents = d / 'Documents'; (documents / 'Egosoft/X4/45841').mkdir(parents=True)
-            saved = dict(HERE=harness.HERE, STATE=harness.STATE, os=harness.os)
-            calls = []
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        d = self.d = Path(self.temp.name)
+        self.package = d / 'pkg'; self.package.mkdir()
+        (self.package / 'package.json').write_text(json.dumps({'package_id': 'lan-x-p2', 'slot': 'p2'}))
+        (self.package / 'VERSION.txt').write_text('7.1.1')
+        self.documents = d / 'Documents'
+        self.profile = self.documents / 'Egosoft/X4/45841'; self.profile.mkdir(parents=True)
+        (self.profile / 'config.xml').write_text('<root/>')
+        self.save = self.documents / 'Egosoft/X4/111/save/save_001.xml.gz'; self.save.parent.mkdir(parents=True)
+        self.save.write_bytes(b'normal save')
+        self.game = d / 'game'; self.target = self.game / 'extensions/x4_lan_lab'
+        self.calls = []
+        self.saved = {k: getattr(harness, k) for k in ('HERE', 'STATE', 'git_head', 'x4_running', 'documents_folder',
+                                                       'local_ipv4', 'setup_ps1', 'is_windows')}
+        harness.HERE = d / 'evidence'; harness.STATE = harness.HERE / 'state.json'
+        harness.git_head = lambda: 'abc1234def'
+        harness.x4_running = lambda: False
+        harness.documents_folder = lambda: self.documents
+        harness.local_ipv4 = lambda: '192.168.1.5'
+        harness.is_windows = lambda: True
+        harness.setup_ps1 = self.setup_ps1
+        self.install = 'ok'
 
-            def install(package_dir, *args):
-                calls.append(args)
-                (package_dir / 'installation.json').write_text('{}')    # Install writes the record...
-                raise RuntimeError('install failed')                    # ...then fails
-            patches = dict(git_head=lambda: 'abc1234def', x4_running=lambda: False, documents_folder=lambda: documents,
-                           local_ipv4=lambda: '192.168.1.5', setup_ps1=install)
-            originals = {k: getattr(harness, k) for k in patches}
-            try:
-                harness.HERE = d / 'evidence'; harness.STATE = harness.HERE / 'state.json'
-                harness.os = type('os', (), {'name': 'nt', 'environ': {}})
-                for k, v in patches.items():
-                    setattr(harness, k, v)
-                with self.assertRaises(RuntimeError):
-                    harness.prepare(package)
-                state = json.loads(harness.STATE.read_text())
-                self.assertEqual(state['stage'], 'backed-up', 'recovery state written before Install')
-                self.assertFalse(state['had_installation_json'], 'sampled before Install created the record')
-                self.assertEqual(calls[0][:2], ('-Action', 'Install'))
-                with self.assertRaises(RuntimeError):
-                    harness.run(1)                                      # an incomplete prepare never runs
-            finally:
-                for k, v in originals.items():
-                    setattr(harness, k, v)
-                harness.HERE, harness.STATE, harness.os = saved['HERE'], saved['STATE'], saved['os']
+    def tearDown(self):
+        for k, v in self.saved.items():
+            setattr(harness, k, v)
+        self.temp.cleanup()
+
+    def record(self):
+        return json.dumps({'game': str(self.game), 'profile': str(self.profile)})
+
+    def make_mod(self, package_id='lan-x-p2'):
+        (self.target / 'ui').mkdir(parents=True); (self.target / 'md').mkdir()
+        (self.target / 'ui.xml').write_text('<files>\n <file name="ui/coop_game.lua" />\n</files>\n')
+        (self.target / '.x4lan-package-id').write_text(package_id)
+
+    def setup_ps1(self, package_dir, *args):
+        """Mock of the package setup.ps1 with the real installer's refusal of an existing mod folder."""
+        self.calls.append(args[1])
+        if args[1] == 'Install':
+            if self.install == 'fail-after-record':
+                (package_dir / 'installation.json').write_text('{}')
+                raise RuntimeError('install failed')
+            if self.target.exists():
+                raise RuntimeError('The mod folder already exists.')
+            self.make_mod()
+            (package_dir / 'installation.json').write_text(self.record())
+            (self.profile / 'config.xml').write_text('<root><autosave>false</autosave></root>')
+        elif args[1] == 'Remove':
+            (self.game / 'archive').mkdir(parents=True, exist_ok=True)
+            self.target.rename(self.game / 'archive/x4_lan_lab')
+
+    def test_failed_install_leaves_restorable_state_sampled_before_install(self):
+        self.install = 'fail-after-record'
+        with self.assertRaises(RuntimeError):
+            harness.prepare(self.package)
+        state = json.loads(harness.STATE.read_text())
+        self.assertEqual(state['stage'], 'install-failed')
+        self.assertIsNone(state['owned_target'])
+        self.assertFalse(state['had_installation_json'], 'sampled before Install created the record')
+        with self.assertRaises(RuntimeError):
+            harness.run(1)                                      # an incomplete prepare never runs
+        harness.restore()
+        self.assertEqual(self.calls, ['Install'], 'nothing is removed after a failed Install')
+        self.assertFalse((self.package / 'installation.json').exists())
+        self.assertFalse(harness.STATE.exists())
+
+    def test_existing_mod_named_by_an_earlier_record_is_refused_before_any_change(self):
+        self.make_mod()
+        (self.package / 'installation.json').write_text(self.record())
+        with self.assertRaises(RuntimeError) as caught:
+            harness.prepare(self.package)
+        self.assertIn('already installed', str(caught.exception))
+        self.assertEqual(self.calls, [])
+        self.assertFalse(harness.HERE.exists(), 'no journal, no backup folder')
+
+    def test_preexisting_mod_refused_by_install_is_never_removed_by_restore(self):
+        self.make_mod()                                         # e.g. installed from another copy of the package
+        marker = (self.target / '.x4lan-package-id').read_bytes()
+        with self.assertRaises(RuntimeError):
+            harness.prepare(self.package)
+        self.assertEqual(json.loads(harness.STATE.read_text())['stage'], 'install-failed')
+        harness.restore()
+        self.assertEqual(self.calls, ['Install'])
+        self.assertEqual((self.target / '.x4lan-package-id').read_bytes(), marker, 'pre-existing mod untouched')
+        self.assertEqual((self.profile / 'config.xml').read_text(), '<root/>')
+
+    def test_run_owned_mod_is_removed_and_everything_restored(self):
+        old = json.dumps({'game': str(self.game), 'profile': str(self.profile), 'host': 'old'})
+        (self.package / 'installation.json').write_text(old)
+        harness.prepare(self.package)
+        state = json.loads(harness.STATE.read_text())
+        self.assertEqual((state['stage'], state['owned_target']), ('prepared', str(self.target)))
+        self.assertFalse(harness.STATE.with_name('state.json.tmp').exists(), 'atomic journal leaves no temp file')
+        self.assertTrue((self.target / 'ui/damage_probe.lua').is_file())
+        harness.restore()
+        self.assertEqual(self.calls, ['Install', 'Remove'])
+        self.assertFalse(self.target.exists())
+        self.assertEqual((self.package / 'installation.json').read_text(), old)
+        self.assertEqual((self.profile / 'config.xml').read_text(), '<root/>')
+        summary = json.loads((Path(state['run']) / 'restore.json').read_text())
+        self.assertEqual((summary['mod'], summary['saves_changed'], summary['problems']),
+                         ('removed by the package setup.ps1', 0, []))
+        self.assertFalse(harness.STATE.exists())
+
+    def test_changed_run_owned_mod_is_not_removed(self):
+        harness.prepare(self.package)
+        (self.target / 'ui.xml').write_text('<files/>')       # no longer what this run installed
+        with self.assertRaises(RuntimeError):
+            harness.restore()
+        self.assertEqual(self.calls, ['Install'])
+        self.assertTrue(self.target.exists())
+        self.assertTrue(harness.STATE.exists(), 'journal kept for a manual decision')
+
+    def test_unknown_install_outcome_removes_nothing_and_keeps_the_new_record(self):
+        harness.prepare(self.package)
+        state = json.loads(harness.STATE.read_text())
+        state.update(stage='backed-up', owned_target=None)    # as if the harness died inside Install
+        harness.write_state(state)
+        with self.assertRaises(RuntimeError) as caught:
+            harness.restore()
+        self.assertIn('outcome unknown', str(caught.exception))
+        self.assertEqual(self.calls, ['Install'])
+        self.assertTrue(self.target.exists() and (self.package / 'installation.json').exists())
+        self.assertEqual((self.profile / 'config.xml').read_text(), '<root/>', 'profile files still restored')
+
+    def test_changed_save_fails_restore(self):
+        harness.prepare(self.package)
+        self.save.write_bytes(b'changed')
+        with self.assertRaises(RuntimeError) as caught:
+            harness.restore()
+        self.assertIn('saves changed', str(caught.exception))
+
+
+def req(n, rev, hull, frame):
+    v = f'{hull:.2f}/{hull:.2f}'
+    return probe_line('apply_requested', f'apply={n} wrev={rev} requested[ship1={v} ship2=100.00/100.00 target1=- target2=-]', frame=frame)
+
+
+def back(n, rev, hull, seen, frame, md='100/116'):
+    v, o = f'{hull:.2f}/{hull:.2f}', f'{seen:.2f}/{seen:.2f}'
+    marker = f' md={md}' if md else ''
+    return probe_line('apply_readback', f'apply={n} wrev={rev} delay=0.020 requested[ship1={v} ship2=100.00/100.00] '
+                      f'observed[ship1={o} ship2=100.00/100.00]{marker}', frame=frame)
+
+
+def pair(n, rev, hull, frame):
+    return req(n, rev, hull, frame) + back(n, rev, hull, hull, frame + 1, md=f'{frame}00/{frame}16')
+
+
+SENT = [dict(rt=1, revision=1, phase='identical', ship1=(50.0, 50.0)),
+        dict(rt=2, revision=2, phase='different', ship1=(20.0, 20.0)),
+        dict(rt=3, revision=3, phase='rapid', ship1=(61.0, 61.0)),
+        dict(rt=4, revision=4, phase='burst', ship1=(31.0, 31.0)),
+        dict(rt=4, revision=5, phase='burst', ship1=(32.0, 32.0)),
+        dict(rt=4, revision=6, phase='burst', ship1=(31.0, 31.0)),
+        dict(rt=5, revision=7, phase='final', ship1=(100.0, 100.0))]
+BASE = pair(1, 1, 50, 1) + pair(2, 2, 20, 3) + pair(3, 3, 61, 5) + pair(7, 7, 100, 20)
+# Native shape: 31, 32, 31 queued in frame 10; one MD update handled them (md seen 1000) and one
+# MD update read them back in frame 11 (md read 1016), observing the frame's last request.
+ONE_UPDATE = (req(4, 4, 31, 10) + req(5, 5, 32, 10) + req(6, 6, 31, 10) +
+              back(4, 4, 31, 31, 11, '1000/1016') + back(5, 5, 32, 31, 11, '1000/1016') + back(6, 6, 31, 31, 11, '1000/1016'))
 
 
 class EvaluateTests(unittest.TestCase):
-    def sent(self):
-        return [dict(rt=1, revision=1, phase='identical', ship1=(50.0, 50.0)),
-                dict(rt=2, revision=2, phase='different', ship1=(20.0, 20.0)),
-                dict(rt=3, revision=3, phase='rapid', ship1=(61.0, 61.0)),
-                dict(rt=4, revision=4, phase='burst', ship1=(31.0, 31.0)),
-                dict(rt=5, revision=5, phase='final', ship1=(100.0, 100.0))]
-
-    def evaluate(self, text, joined=True):
+    def evaluate(self, text, joined=True, sent=SENT):
         with tempfile.TemporaryDirectory() as d:
             log = Path(d) / 'log.txt'
             log.write_text(text)
-            return harness.evaluate(log, self.sent(), joined)
+            return harness.evaluate(log, sent, joined)
 
     def test_complete_correlation_passes(self):
-        report = self.evaluate(pair(1, 1, 50) + pair(2, 2, 50) + pair(3, 3, 20))
+        report = self.evaluate(BASE + ONE_UPDATE)
         self.assertEqual(report['result'], 'PASS', report['reasons'])
-        self.assertEqual((report['requests'], report['confirmed']), (3, 3))
+        self.assertEqual((report['requests'], report['confirmed']), (7, 7))
+        self.assertEqual(report['observed_phases'], ['burst', 'different', 'final', 'identical', 'rapid'])
+        self.assertEqual((report['max_requests_per_frame'], report['covered_batches']), (3, 1))
+        self.assertEqual((report['raw_mismatched'], report['later_in_frame'], report['observed_mismatched']), (1, 1, 0))
 
     def test_missing_orphan_and_unrequested_health_fail(self):
-        missing = pair(1, 1, 50) + probe_line('apply_requested', 'apply=2 wrev=2 requested[ship1=20.00/20.00 ship2=100.00/100.00 target1=- target2=-]')
+        missing = BASE + ONE_UPDATE + req(8, 2, 20, 30)
         self.assertEqual(self.evaluate(missing)['result'], 'FAIL')
-        orphan = pair(1, 1, 50) + pair(2, 2, 20) + probe_line('apply_readback', 'apply=9 wrev=9 delay=0.010 requested[ship1=1.00/1.00 ship2=100.00/100.00] observed[ship1=1.00/1.00 ship2=100.00/100.00]')
+        orphan = BASE + ONE_UPDATE + back(9, 9, 1, 1, 31)
         self.assertEqual(self.evaluate(orphan)['result'], 'FAIL')
-        never_requested = pair(1, 1, 50)
-        report = self.evaluate(never_requested)
+        report = self.evaluate(pair(1, 1, 50, 1) + pair(3, 3, 61, 5) + pair(7, 7, 100, 20) + ONE_UPDATE)
         self.assertEqual(report['result'], 'FAIL')
         self.assertTrue(any('never requested' in r for r in report['reasons']))
 
+    def test_sent_but_unobserved_phase_fails(self):
+        # The final phase was sent, but the guest never requested its revision.
+        report = self.evaluate(pair(1, 1, 50, 1) + pair(2, 2, 20, 3) + pair(3, 3, 61, 5) + ONE_UPDATE)
+        self.assertEqual(report['result'], 'FAIL')
+        self.assertTrue(any('never observed' in r and 'final' in r for r in report['reasons']), report['reasons'])
+        # A request of the right revision with other health does not count as observing it.
+        report = self.evaluate(BASE.replace('ship1=100.00/100.00 ship2=100.00/100.00 target1', 'ship1=99.00/99.00 ship2=100.00/100.00 target1') + ONE_UPDATE)
+        self.assertTrue(any('never observed' in r for r in report['reasons']), report['reasons'])
+
     def test_no_guest_no_log_or_no_probe_fail(self):
-        self.assertEqual(self.evaluate(pair(1, 1, 50) + pair(2, 2, 20), joined=False)['result'], 'FAIL')
-        self.assertEqual(harness.evaluate(None, self.sent(), True)['result'], 'FAIL')
+        self.assertEqual(self.evaluate(BASE + ONE_UPDATE, joined=False)['result'], 'FAIL')
+        self.assertEqual(harness.evaluate(None, SENT, True)['result'], 'FAIL')
         self.assertEqual(self.evaluate('no probe here\n')['result'], 'FAIL')
 
-    def test_burst_requires_identical_and_distinct_requests_in_one_update(self):
-        burst = self.sent()
-
-        def req(n, rev, hull, frame):
-            v = f'{hull:.2f}/{hull:.2f}'
-            return probe_line('apply_requested', f'apply={n} wrev={rev} requested[ship1={v} ship2=100.00/100.00 target1=- target2=-]', frame=frame)
-
-        def back(n, rev, hull, seen, frame):
-            v, o = f'{hull:.2f}/{hull:.2f}', f'{seen:.2f}/{seen:.2f}'
-            return probe_line('apply_readback', f'apply={n} wrev={rev} delay=0.020 requested[ship1={v} ship2=100.00/100.00] observed[ship1={o} ship2=100.00/100.00]', frame=frame)
-        base = req(1, 1, 50, 1) + back(1, 1, 50, 50, 2) + req(2, 2, 20, 3) + back(2, 2, 20, 20, 4)
-        # Native shape: 31, 32, 31 queued in frame 5; one MD update reads all back in frame 6
-        # and observes the frame's last request, so #4 (32) is superseded, not mismatched.
-        one_update = (req(3, 3, 31, 5) + req(4, 4, 32, 5) + req(5, 5, 31, 5) +
-                      back(3, 3, 31, 31, 6) + back(4, 4, 32, 31, 6) + back(5, 5, 31, 31, 6))
+    def test_burst_requires_identical_and_distinct_requests_in_one_md_update(self):
         cases = {
-            'one update': (one_update, 'PASS'),
-            'separate frames': (req(3, 3, 31, 5) + back(3, 3, 31, 31, 6) + req(4, 4, 32, 7) + back(4, 4, 32, 32, 8) +
-                                req(5, 5, 31, 9) + back(5, 5, 31, 31, 10), 'FAIL'),
-            'distinct only': (req(3, 3, 31, 5) + req(4, 4, 32, 5) + back(3, 3, 31, 32, 6) + back(4, 4, 32, 32, 6), 'FAIL'),
-            'readbacks split over updates': (req(3, 3, 31, 5) + req(4, 4, 32, 5) + req(5, 5, 31, 5) +
-                                             back(3, 3, 31, 31, 6) + back(4, 4, 32, 31, 6) + back(5, 5, 31, 31, 7), 'FAIL'),
+            'one update': (ONE_UPDATE, 'PASS'),
+            'separate frames': (pair(4, 4, 31, 10) + pair(5, 5, 32, 12) + pair(6, 6, 31, 14), 'FAIL'),
+            'distinct only': (req(4, 4, 31, 10) + req(5, 5, 32, 10) + back(4, 4, 31, 32, 11, '1000/1016') +
+                              back(5, 5, 32, 32, 11, '1000/1016') + pair(6, 6, 31, 14), 'FAIL'),
+            'readbacks split over Lua frames': (req(4, 4, 31, 10) + req(5, 5, 32, 10) + req(6, 6, 31, 10) +
+                                                back(4, 4, 31, 31, 11, '1000/1016') + back(5, 5, 32, 31, 11, '1000/1016') +
+                                                back(6, 6, 31, 31, 12, '1000/1016'), 'FAIL'),
+            'one Lua frame, two MD read updates': (req(4, 4, 31, 10) + req(5, 5, 32, 10) + req(6, 6, 31, 10) +
+                                                   back(4, 4, 31, 31, 11, '1000/1016') + back(5, 5, 32, 31, 11, '1000/1016') +
+                                                   back(6, 6, 31, 31, 11, '1000/1032'), 'FAIL'),
+            'no MD markers': (req(4, 4, 31, 10) + req(5, 5, 32, 10) + req(6, 6, 31, 10) +
+                              back(4, 4, 31, 31, 11, None) + back(5, 5, 32, 31, 11, None) + back(6, 6, 31, 31, 11, None), 'FAIL'),
+            'paused': (ONE_UPDATE.replace('paused=false', 'paused=true'), 'FAIL'),
+            'absent frame numbers': (ONE_UPDATE.replace(' frame=10 ', ' ').replace(' frame=11 ', ' '), 'FAIL'),
         }
-        with tempfile.TemporaryDirectory() as d:
-            log = Path(d) / 'log.txt'
-            for name, (text, expected) in cases.items():
-                with self.subTest(name):
-                    log.write_text(base + text)
-                    report = harness.evaluate(log, burst, True)
-                    self.assertEqual(report['result'], expected, report['reasons'])
-                    if expected == 'PASS':
-                        self.assertEqual((report['max_requests_per_frame'], report['covered_batches']), (3, 1))
-                        self.assertEqual((report['superseded_in_frame'], report['observed_mismatched']), (1, 0))
-                    else:
-                        self.assertTrue(any('queued Mark/Apply' in r for r in report['reasons']))
+        for name, (text, expected) in cases.items():
+            with self.subTest(name):
+                report = self.evaluate(BASE + text)
+                self.assertEqual(report['result'], expected, report['reasons'])
+                if expected == 'PASS':
+                    self.assertEqual(report['covered_batches'], 1)
+                else:
+                    self.assertEqual(report['covered_batches'], 0)
+                    self.assertTrue(any('queued Mark/Apply' in r for r in report['reasons']), report['reasons'])
 
     def test_last_request_of_a_frame_must_match_its_own_values(self):
-        def line(reason, detail):
-            return probe_line(reason, detail, frame=5)
-        text = (line('apply_requested', 'apply=1 wrev=1 requested[ship1=31.00/31.00 ship2=100.00/100.00 target1=- target2=-]') +
-                line('apply_requested', 'apply=2 wrev=2 requested[ship1=32.00/32.00 ship2=100.00/100.00 target1=- target2=-]') +
-                line('apply_readback', 'apply=1 wrev=1 delay=0.020 requested[ship1=31.00/31.00 ship2=100.00/100.00] observed[ship1=40.00/40.00 ship2=100.00/100.00]') +
-                line('apply_readback', 'apply=2 wrev=2 delay=0.020 requested[ship1=32.00/32.00 ship2=100.00/100.00] observed[ship1=40.00/40.00 ship2=100.00/100.00]'))
-        with tempfile.TemporaryDirectory() as d:
-            log = Path(d) / 'log.txt'
-            log.write_text(text)
-            report = harness.evaluate(log, self.sent(), True)
-            self.assertEqual((report['superseded_in_frame'], report['observed_mismatched']), (0, 2),
-                             'observing neither request is a mismatch, never superseded')
+        text = (req(4, 4, 31, 10) + req(5, 5, 32, 10) +
+                back(4, 4, 31, 40, 11, '1000/1016') + back(5, 5, 32, 40, 11, '1000/1016'))
+        report = self.evaluate(BASE + text)
+        self.assertEqual((report['later_in_frame'], report['raw_mismatched'], report['observed_mismatched']), (0, 2, 2),
+                         'observing neither request is a mismatch, never later-in-frame')
 
-    def test_bundle_removes_token_leases_and_address(self):
+    def test_observed_mismatch_is_reported_not_hidden(self):
+        bad = BASE.replace('observed[ship1=50.00/50.00', 'observed[ship1=70.00/70.00') + ONE_UPDATE
+        report = self.evaluate(bad)
+        self.assertEqual((report['raw_mismatched'], report['observed_mismatched']), (2, 1))
+
+
+class BundleTests(unittest.TestCase):
+    def test_bundle_has_manifest_probe_only_trace_and_no_secrets(self):
+        import zipfile
         with tempfile.TemporaryDirectory() as d:
             d = Path(d)
             saved = harness.HERE
             try:
                 harness.HERE = d / 'evidence'
                 run_dir = harness.HERE / '20261020T000000Z-abc1234'; run_dir.mkdir(parents=True)
+                (run_dir / 'profile-before').mkdir(); (run_dir / 'profile-before/config.xml').write_text('<root/>')
                 package = d / 'pkg'; package.mkdir()
                 token = 'a' * 32
                 (package / 'session.json').write_text(json.dumps({'token': token}))
-                (run_dir / 'prepare.json').write_text(json.dumps({'address': '192.168.1.5', 'head': 'f' * 40}))
-                (run_dir / 'x4lan-debug.txt').write_text(f'token {token} lease {"b" * 32} at 192.168.1.5 head {"c" * 40}\n')
+                home = str(Path.home())
+                (run_dir / 'prepare.json').write_text(json.dumps({'address': '192.168.1.5', 'head': 'f' * 40,
+                                                                   'profile': home + '\\Documents\\Egosoft\\X4\\45841'}))
+                (run_dir / 'x4lan-debug.txt').write_text(
+                    f'[X4LAN] DAMAGE_PROBE run=r1 token {token} lease {"b" * 32} at 192.168.1.5 head {"c" * 40}\n'
+                    'other game line that must stay on this PC\n')
+                with self.assertRaises(RuntimeError):
+                    harness.bundle(run_dir, package)            # no restore summary yet
+                (run_dir / 'restore.json').write_text(json.dumps({'problems': []}))
                 archive = harness.bundle(run_dir, package)
-                import zipfile
                 with zipfile.ZipFile(archive) as z:
-                    text = z.read(run_dir.name + '/x4lan-debug.txt').decode()
-                    names = z.namelist()
-                self.assertNotIn(token, text); self.assertNotIn('b' * 32, text); self.assertNotIn('192.168.1.5', text)
-                self.assertIn('c' * 40, text, 'a 40-hex commit SHA is kept')
-                self.assertIn(run_dir.name + '/SHA256SUMS.txt', names)
+                    names = {n.split('/', 1)[1] for n in z.namelist()}
+                    trace = z.read(run_dir.name + '/' + harness.TRACE).decode()
+                    prepare = z.read(run_dir.name + '/prepare.json').decode()
+                    manifest = json.loads(z.read(run_dir.name + '/manifest.json'))
+                    everything = b''.join(z.read(n) for n in z.namelist())
+                self.assertEqual(names, {'prepare.json', 'restore.json', harness.TRACE, 'manifest.json', 'SHA256SUMS.txt'})
+                self.assertNotIn('other game line', trace, 'probe lines only')
+                for secret in (token, 'b' * 32, '192.168.1.5'):
+                    self.assertNotIn(secret.encode(), everything)
+                self.assertNotIn(json.dumps(home)[1:-1], prepare, 'home folder path removed')
+                self.assertIn('c' * 40, trace, 'a 40-hex commit SHA is kept')
+                self.assertEqual({f['name'] for f in manifest['files']}, {'prepare.json', 'restore.json', harness.TRACE})
                 with self.assertRaises(RuntimeError):
                     harness.bundle(d, package)
             finally:
                 harness.HERE = saved
-
-    def test_observed_mismatch_is_reported_not_hidden(self):
-        bad = (probe_line('apply_requested', 'apply=1 wrev=1 requested[ship1=50.00/50.00 ship2=100.00/100.00 target1=- target2=-]') +
-               probe_line('apply_readback', 'apply=1 wrev=1 delay=0.020 requested[ship1=50.00/50.00 ship2=100.00/100.00] observed[ship1=70.00/70.00 ship2=100.00/100.00]') +
-               pair(2, 2, 20))
-        report = self.evaluate(bad)
-        self.assertEqual(report['observed_mismatched'], 1)
 
 
 if __name__ == '__main__':

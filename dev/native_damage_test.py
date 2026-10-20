@@ -10,8 +10,15 @@ it cannot prove two-native multiplayer.
                           package installation.json, hash saves, overlay the probe
   run [--minutes N]       start relay + synthetic host, launch X4 via setup.ps1 Start, play the
                           schedule, close X4, collect evidence and validate it
-  restore                 remove the mod with setup.ps1 Remove, restore profile files exactly,
-                          verify saves are unchanged
+  restore                 remove the mod with setup.ps1 Remove ONLY if this run installed it (and
+                          it is unchanged), restore profile files exactly, verify saves unchanged
+  bundle --run DIR        sanitized review ZIP: manifest, probe-only trace, schedule, report and
+                          restore summary (no saves, credentials, full logs or profile backups)
+
+The recovery journal (state.json) is replaced atomically on every update. It records whether the
+mod folder is run-owned: only after this run's Install returned and the installed folder carries
+this package's marker. A mod that existed before prepare is refused up front or, when Install
+refuses it, left untouched.
 
 Evidence goes to .local/native-damage-tests/<utc>-<sha>/. Dispatch is never counted as completion.
 """
@@ -172,6 +179,21 @@ def saves_changed(before, now):
     return sorted(changed)
 
 
+def is_windows():
+    return os.name == 'nt'
+
+
+def write_state(state):
+    """Replace the recovery journal atomically: a complete temporary file, flushed, then renamed."""
+    HERE.mkdir(parents=True, exist_ok=True)
+    temp = STATE.with_name(STATE.name + '.tmp')
+    with open(temp, 'w', encoding='utf-8') as handle:
+        json.dump(state, handle, indent=2)
+        handle.flush()
+        os.fsync(handle.fileno())
+    os.replace(temp, STATE)
+
+
 def setup_ps1(package, *args):
     command = ['powershell.exe', '-NoLogo', '-NoProfile', '-ExecutionPolicy', 'Bypass',
                '-File', str(package / 'setup.ps1'), *args]
@@ -179,7 +201,7 @@ def setup_ps1(package, *args):
 
 
 def x4_running():
-    if os.name != 'nt':
+    if not is_windows():
         return False
     out = subprocess.run(['tasklist', '/FI', 'IMAGENAME eq X4.exe'], capture_output=True, text=True).stdout
     return 'X4.exe' in out
@@ -201,7 +223,7 @@ def overlay(target):
 
 
 def prepare(package):
-    if os.name != 'nt':
+    if not is_windows():
         raise RuntimeError('prepare targets the Windows guest; on Linux use dev/native_world_test.py install')
     if STATE.exists():
         raise RuntimeError('A previous run is not restored yet: run restore first.')
@@ -212,6 +234,15 @@ def prepare(package):
     pkg = json.loads((package / 'package.json').read_text(encoding='utf-8-sig'))
     if not str(pkg.get('package_id', '')).startswith('lan-') or pkg.get('slot') != 'p2':
         raise RuntimeError('Only an internal guest (p2) package may be used by this harness.')
+    record_before = package / 'installation.json'
+    had_record = record_before.is_file()          # sampled BEFORE Install rewrites it
+    if had_record:
+        # An earlier installation record names the game: a mod already there is not this run's,
+        # so refuse before anything is changed (a damaged record also refuses).
+        earlier = Path(json.loads(record_before.read_text(encoding='utf-8-sig'))['game']) / 'extensions' / 'x4_lan_lab'
+        if earlier.exists():
+            raise RuntimeError('Refusing: a mod is already installed at ' + str(earlier) +
+                               '; this harness removes only a mod it installed itself.')
     # Profile files and saves before anything changes; Documents via the Known Folder API.
     profile = documents_folder() / 'Egosoft' / 'X4' / PROFILE_ID
     run = HERE / (time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '-' + head[:7])
@@ -223,29 +254,37 @@ def prepare(package):
             shutil.copy2(profile / name, backup / name)
             present.append(name)
     before_saves = saves(profile)
-    record_before = package / 'installation.json'
-    had_record = record_before.is_file()          # sampled BEFORE Install rewrites it
     if had_record:
         shutil.copy2(record_before, backup / 'package-installation.json')
     address = local_ipv4()
     # Recovery state exists before anything is installed, so a failed prepare can be restored.
+    # owned_target stays None until this run's own Install is proven (see below).
     state = dict(run=str(run), head=head, package=str(package), package_id=pkg['package_id'],
                  version=(package / 'VERSION.txt').read_text(encoding='utf-8-sig').strip(),
                  game=None, profile=str(profile), profile_files=present, saves=before_saves, address=address,
-                 had_installation_json=had_record, stage='backed-up')
-    HERE.mkdir(parents=True, exist_ok=True)
-    STATE.write_text(json.dumps(state, indent=2))
-    setup_ps1(package, '-Action', 'Install', '-ServerIP', address)
+                 had_installation_json=had_record, owned_target=None, stage='backed-up')
+    write_state(state)
+    try:
+        setup_ps1(package, '-Action', 'Install', '-ServerIP', address)
+    except Exception:
+        # Install refused (e.g. a mod folder already exists) or rolled back: nothing at the mod
+        # path belongs to this run, and restore must never remove it.
+        state.update(stage='install-failed')
+        write_state(state)
+        raise
     game, profile2, record = windows_paths(package)
-    state.update(game=str(game), stage='installed')
-    STATE.write_text(json.dumps(state, indent=2))
+    target = game / 'extensions' / 'x4_lan_lab'
+    marker = target / '.x4lan-package-id'
+    if not marker.is_file() or marker.read_text(encoding='utf-8-sig') != pkg['package_id']:
+        raise RuntimeError('Install returned but ' + str(target) + ' does not carry this package marker; '
+                           'ownership unproven, nothing will be removed automatically.')
+    state.update(game=str(game), owned_target=str(target), installed=tree_hashes(target), stage='installed')
+    write_state(state)
     if profile2.resolve() != profile.resolve():
         raise RuntimeError('Installed profile differs from the backed-up test profile; run restore.')
-    target = game / 'extensions' / 'x4_lan_lab'
-    state['installed'] = tree_hashes(target)
     overlay(target)
     state.update(stage='prepared', overlaid=tree_hashes(target))
-    STATE.write_text(json.dumps(state, indent=2))
+    write_state(state)
     (run / 'prepare.json').write_text(json.dumps({k: v for k, v in state.items() if k != 'saves'}, indent=2))
     print('Prepared', state['version'], state['package_id'], 'with probe at', head[:7], '->', run)
 
@@ -358,6 +397,9 @@ def evaluate(log, sent, joined):
         for key in ('unmatched', 'invalid'):
             if r[key]:
                 reasons.append(f'run {name}: {key}={r[key]}')
+    for name, r in runs.items():
+        if r.get('frameless'):
+            reasons.append(f'run {name}: lines without a probe frame number {r["frameless"][:10]}')
     requested = [row for row in rows if row.get('reason') == 'apply_requested']
     phases = {p for p, _, v in schedule() if v is not None}
     seen = set()
@@ -366,6 +408,17 @@ def evaluate(log, sent, joined):
             seen.add(item['phase'])
     if phases - seen:
         reasons.append('schedule phases not sent: ' + ', '.join(sorted(phases - seen)))
+    # Observed coverage: a phase counts only when the guest requested a WORLD revision that the
+    # synthetic host sent in that phase, with exactly the health sent with that revision.
+    by_revision = {str(item['revision']): item for item in sent}
+    observed = set()
+    for row in requested:
+        m = re.search(r'wrev=(\d+) requested\[ship1=(\S+)', row.get('detail_text', ''))
+        item = by_revision.get(m.group(1)) if m else None
+        if item and m.group(2) == '%.2f/%.2f' % tuple(item['ship1']):
+            observed.add(item['phase'])
+    if phases - observed:
+        reasons.append('schedule phases never observed in guest Apply requests: ' + ', '.join(sorted(phases - observed)))
     wanted = {f'{h:.2f}/{s:.2f}' for item in sent if item['phase'] in ('identical', 'different')
               for h, s in [item['ship1']]}
     got = set()
@@ -375,21 +428,28 @@ def evaluate(log, sent, joined):
             got.add(detail.split('requested[ship1=')[1].split(' ')[0])
     if wanted - got:
         reasons.append('scheduled health never requested by the guest: ' + ', '.join(sorted(wanted - got)))
-    # Coverage gate: when bursts were sent, one probe frame (explicit Lua frame counter) must carry
-    # identical AND distinct Apply requests outstanding together, and all their readbacks must land
-    # in one frame (one MD update). Equal rounded clock values are never used as grouping evidence.
+    # Coverage gate: when bursts were sent, one numbered probe frame (explicit Lua frame counter)
+    # must carry identical AND distinct Apply requests outstanding together, every one confirmed,
+    # unpaused, read back in one Lua frame, AND sharing one MD 'seen' and one MD 'read' marker (MD
+    # game clock, constant within one MD update). Lua frames alone are not an MD update boundary.
     batches = [b for r in runs.values() for b in r.get('batches', [])]
     most = max((len(b['requests']) for b in batches), default=1 if requested else 0)
-    covered = [b for b in batches if b['identical_values'] and b['distinct_values'] and len(b['readback_frames']) == 1]
+    covered = [b for b in batches if b['identical_values'] and b['distinct_values'] and b.get('confirmed') and
+               b.get('unpaused') and len(b['readback_frames']) == 1 and 'None' not in b['readback_frames'] and
+               len(b.get('md_seen', [])) == 1 and len(b.get('md_read', [])) == 1 and
+               'None' not in b['md_seen'] + b['md_read']]
     if any(item['phase'] == 'burst' for item in sent) and not covered:
         reasons.append('no frame with identical and distinct requests outstanding together whose readbacks '
-                       'share one MD update: queued Mark/Apply pairs not demonstrated')
-    mismatched = sum(len(r['mismatched']) for r in runs.values())
-    superseded = sum(len(r.get('superseded', [])) for r in runs.values())
+                       'share one MD update (MD seen/read markers): queued Mark/Apply pairs not demonstrated')
     return dict(result='PASS' if not reasons else 'FAIL', reasons=reasons, requests=len(requested),
-                max_requests_per_frame=most, covered_batches=len(covered), superseded_in_frame=superseded,
-                confirmed=sum(r['confirmed'] for r in runs.values()), observed_mismatched=mismatched,
-                runs=runs, note='observed_mismatched is reported, not a correlation failure')
+                max_requests_per_frame=most, covered_batches=len(covered),
+                later_in_frame=sum(len(r.get('later_in_frame', [])) for r in runs.values()),
+                raw_mismatched=sum(len(r.get('raw_mismatched', [])) for r in runs.values()),
+                observed_mismatched=sum(len(r['mismatched']) for r in runs.values()),
+                observed_phases=sorted(observed), confirmed=sum(r['confirmed'] for r in runs.values()), runs=runs,
+                note=('later_in_frame: readback consistent with a later request in the same recorded frame whose own '
+                      'readback matches; raw_mismatched counts every readback that differs from its request; '
+                      'observed_mismatched (raw minus later_in_frame) is reported, not a correlation failure'))
 
 
 def restore():
@@ -399,16 +459,30 @@ def restore():
     if x4_running():
         raise RuntimeError('Close X4 first.')
     package, profile = Path(state['package']), Path(state['profile'])
-    game = state.get('game')
-    if not game:
-        # prepare stopped before or during Install: the package's own record names the game.
-        try:
-            game = str(windows_paths(package)[0])
-        except (OSError, KeyError, ValueError, RuntimeError):
-            game = None
-    target = Path(game) / 'extensions' / 'x4_lan_lab' if game else None
-    if target is not None and target.exists():
-        setup_ps1(package, '-Action', 'Remove')
+    problems, summary = [], dict(stage=state.get('stage'), owned_target=state.get('owned_target'), mod='untouched')
+    owned = Path(state['owned_target']) if state.get('owned_target') else None
+    keep_record = False
+    if owned is not None:
+        # Remove only the folder this run installed, and only while it is still what was installed.
+        if not owned.exists():
+            summary['mod'] = 'already absent'
+        elif tree_hashes(owned) not in (state.get('installed'), state.get('overlaid')):
+            problems.append('mod at ' + str(owned) + ' differs from what this run installed; not removed')
+            summary['mod'] = 'changed, not removed'
+        else:
+            setup_ps1(package, '-Action', 'Remove')
+            summary['mod'] = 'removed by the package setup.ps1'
+            if owned.exists():
+                problems.append('mod still installed at ' + str(owned))
+    elif state.get('stage') == 'backed-up':
+        # Install started but its outcome was never journaled: a mod folder may be this run's or
+        # may have existed before. Nothing is removed; the new record stays for 5-REMOVE-MOD.
+        record = package / 'installation.json'
+        if record.is_file() and (not state.get('had_installation_json') or
+                                 sha256(record) != sha256(Path(state['run']) / 'profile-before' / 'package-installation.json')):
+            keep_record = True
+            problems.append('Install outcome unknown and a new installation record exists: check the mod folder '
+                            'and remove it with the package 5-REMOVE-MOD.cmd if it is the test install')
     backup = Path(state['run']) / 'profile-before'
     for name in PROFILE_FILES:
         if name in state['profile_files']:
@@ -416,62 +490,92 @@ def restore():
         elif (profile / name).exists() and name != 'x4lan-debug.txt':
             (profile / name).unlink()
     record = package / 'installation.json'
-    if state.get('had_installation_json'):
+    if keep_record:
+        summary['installation_json'] = 'kept (outcome unknown)'
+    elif state.get('had_installation_json'):
         shutil.copy2(backup / 'package-installation.json', record)
-    elif record.exists():
-        record.unlink()
-    problems = [name for name in state['profile_files'] if sha256(profile / name) != sha256(backup / name)]
-    if state.get('had_installation_json') and sha256(record) != sha256(backup / 'package-installation.json'):
-        problems.append('package installation.json not restored')
-    changed = saves_changed(state['saves'], saves(profile))
+        summary['installation_json'] = 'restored'
+        if sha256(record) != sha256(backup / 'package-installation.json'):
+            problems.append('package installation.json not restored')
+    else:
+        if record.exists():
+            record.unlink()
+        summary['installation_json'] = 'absent as before'
+    mismatched = [name for name in state['profile_files'] if sha256(profile / name) != sha256(backup / name)]
+    problems += ['profile file not restored: ' + name for name in mismatched]
+    summary['profile_files_exact'] = [name for name in state['profile_files'] if name not in mismatched]
+    current = saves(profile)
+    changed = saves_changed(state['saves'], current)
+    summary.update(saves_checked=len(state['saves']), saves_changed=len(changed))
     if changed:
         problems.append('saves changed: ' + ', '.join(changed))
-    if target is not None and target.exists():
-        problems.append('mod still installed at ' + str(target))
-    (Path(state['run']) / 'restore.json').write_text(json.dumps(dict(problems=problems), indent=2))
+    summary['problems'] = problems
+    (Path(state['run']) / 'restore.json').write_text(json.dumps(summary, indent=2))
     if problems:
         raise RuntimeError('Restore incomplete: ' + '; '.join(problems))
     STATE.unlink()
-    print('Restored: mod removed by its own setup.ps1, profile files exact, saves unchanged.')
+    print('Restored: mod', summary['mod'] + '; profile files exact, saves unchanged.')
 
 
-BUNDLE_FILES = ('prepare.json', 'schedule.json', 'report.json', 'restore.json', 'x4lan-debug.txt')
+BUNDLE_FILES = ('prepare.json', 'schedule.json', 'report.json', 'restore.json')
+TRACE = 'damage-probe-trace.txt'
 SECRET = re.compile(r'\b[0-9a-f]{32}\b')   # session token and leases are 32 lowercase hex characters
 
 
-def sanitize(text, token, address):
-    """Remove the session token, any 32-hex lease/token-shaped value and this PC's LAN address."""
+def sanitize(text, token, address, home=None):
+    """Remove the session token, any 32-hex lease/token-shaped value, this PC's LAN address and
+    the home folder path (plain and JSON-escaped)."""
     if token:
         text = text.replace(token, '<token>')
     text = SECRET.sub('<hex32>', text)
     if address:
         text = text.replace(address, '<lan-ipv4>')
+    home = str(Path.home()) if home is None else home
+    if home:
+        for form in {home, home.replace('\\', '\\\\'), home.replace('\\', '/')}:
+            text = text.replace(form, '<home>')
     return text
 
 
 def bundle(run_dir, package):
-    """Sanitized review bundle: evidence files with secrets removed, plus their SHA-256 sums."""
+    """Sanitized review ZIP: manifest, probe-only trace, schedule, report and restore summary."""
     import zipfile
     run_dir = Path(run_dir).resolve()
     if run_dir.parent != HERE.resolve():
         raise RuntimeError('Only a run folder under ' + str(HERE) + ' can be bundled.')
+    if not (run_dir / 'restore.json').is_file():
+        raise RuntimeError('Restore first: a review bundle includes the restore summary.')
     token = ''
     if package and (Path(package) / 'session.json').is_file():
         token = json.loads((Path(package) / 'session.json').read_text(encoding='utf-8-sig')).get('token', '')
     prepare_record = run_dir / 'prepare.json'
     address = json.loads(prepare_record.read_text()).get('address', '') if prepare_record.is_file() else ''
+    files = {}
+    for name in BUNDLE_FILES:
+        if (run_dir / name).is_file():
+            files[name] = (run_dir / name).read_text(encoding='utf-8', errors='replace')
+    log = run_dir / 'x4lan-debug.txt'
+    if log.is_file():
+        # Only probe lines leave this PC, never the full game log.
+        with open(log, encoding='utf-8', errors='replace') as handle:
+            files[TRACE] = ''.join(line for line in handle if 'DAMAGE_PROBE' in line)
     archive = run_dir.parent / (run_dir.name + '-review.zip')
-    sums = []
+    entries = []
     with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
-        for name in BUNDLE_FILES:
-            path = run_dir / name
-            if not path.is_file():
-                continue
-            data = sanitize(path.read_text(encoding='utf-8', errors='replace'), token, address).encode('utf-8')
+        for name, text in files.items():
+            data = sanitize(text, token, address).encode('utf-8')
             if token and token.encode() in data:
                 raise RuntimeError('token still present in ' + name)
             z.writestr(run_dir.name + '/' + name, data)
-            sums.append(hashlib.sha256(data).hexdigest() + '  ' + name)
+            entries.append(dict(name=name, bytes=len(data), sha256=hashlib.sha256(data).hexdigest()))
+        manifest = dict(run=run_dir.name, files=entries,
+                        sanitized=['session token', 'any 32-hex token or lease', 'this PC LAN IPv4', 'home folder path'],
+                        excluded=['saves', 'session.json and credentials', 'full x4lan-debug.txt (only DAMAGE_PROBE lines)',
+                                  'profile backups (profile-before)', 'state.json'])
+        manifest_data = json.dumps(manifest, indent=2).encode('utf-8')
+        z.writestr(run_dir.name + '/manifest.json', manifest_data)
+        sums = [e['sha256'] + '  ' + e['name'] for e in entries]
+        sums.append(hashlib.sha256(manifest_data).hexdigest() + '  manifest.json')
         z.writestr(run_dir.name + '/SHA256SUMS.txt', '\n'.join(sums) + '\n')
     print('Sanitized review bundle:', archive)
     return archive

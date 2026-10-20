@@ -14,7 +14,9 @@
 --  fire2    per ship: epoch:seq@sourceTime groups=primary/secondary shots=p,s and trigger state
 -- Apply is asynchronous. 'apply_requested' is only the dispatch to MD and shows the requested
 -- values beside the still unchanged local values. 'apply_readback' is MD's later native readback
--- (dev/damage_probe.xml), tagged with its request number and echoing the requested values.
+-- (dev/damage_probe.xml), tagged with its request number and echoing the requested values,
+-- plus 'md=seen/read': MD's game clock in microseconds when it handled the Apply and when it read
+-- back (one value per MD update while unpaused; opaque here, compared only for equality).
 -- An echo that differs from that request is 'apply_readback_echo_mismatch'. A request without a readback within
 -- probe.completion seconds is reported once as 'apply_missing'. A readback only shows the state
 -- at that moment; it is not proof that nothing else changed health in between.
@@ -101,13 +103,16 @@ RegisterEvent('X4LAN_DamageProbe.Targets',function(_,payload)
  if type(payload)=='table' then probe.targets={payload[1],payload[2]};probe.log('targets') end
 end)
 -- MD readback after the production Apply ran: request number, echoed request values, observed
--- values. Pairing is by number; the echo must also equal what that request asked for.
+-- values, MD batch markers. Pairing is by number; the echo must also equal that request.
 RegisterEvent('X4LAN_DamageProbe.Readback',function(_,payload)
  local f={};for v in tostring(payload):gmatch('[^|]+') do f[#f+1]=v end
  local id=tonumber(f[1])
- if #f~=9 or not id then probe.log('apply_readback_invalid',tostring(payload));return end
+ if #f~=11 or not id or not f[10]:match('^%d+$') or not f[11]:match('^%d+$') then
+  probe.log('apply_readback_invalid',tostring(payload));return
+ end
  local key=echoKey(f[2],f[3],f[4],f[5])
- local values=string.format('requested[ship1=%s ship2=%s] observed[ship1=%s ship2=%s]',pair(f[2],f[3]),pair(f[4],f[5]),pair(f[6],f[7]),pair(f[8],f[9]))
+ local values=string.format('requested[ship1=%s ship2=%s] observed[ship1=%s ship2=%s] md=%s/%s',
+  pair(f[2],f[3]),pair(f[4],f[5]),pair(f[6],f[7]),pair(f[8],f[9]),f[10],f[11])
  for n,p in ipairs(probe.pending) do
   if p.id==id then
    table.remove(probe.pending,n)
