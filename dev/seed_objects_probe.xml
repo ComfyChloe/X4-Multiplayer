@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_SeedObjectsProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Read" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_SeedObjectsProbe'" control="'Read'"/></conditions><actions>
+  <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$v.$object"/>
+  <do_if value="$ship.isoperational">
+   <debug_text text="'[X4LAN] SEED_OBJECT_SPEC slot=%s revision=%s id=%s code=%s macro=%s owner=%s maxhull=%s maxshield=%s weapons=%s shields=%s engines=%s pilot=%s'.[$v.$slot,$v.$revision,$v.$id,$ship.idcode,$ship.macro.id,$ship.owner.id,$ship.maxhull,$ship.maxshield,$ship.weapons.operational.count,$ship.shields.operational.count,$ship.engines.operational.count,$ship.pilot.exists]"/>
+  </do_if>
+ </actions></cue></cues>
+</mdscript>
