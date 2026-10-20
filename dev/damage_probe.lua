@@ -8,6 +8,7 @@
 -- Correlation fields (no session credentials are logged):
 --  run      random marker chosen when this probe loads; a reload or reconnect shows a new run
 --  rt / gt  GetCurRealTime() and GetCurTime(): real and game clock of THIS PC (not shared)
+--  frame    co-op frame counter of this probe: requests sharing a frame were queued in one update
 --  auth     AUTH revision, owners and epochs of both co-op ships
 --  wrev     WORLD revision: published by the host (p1), last received by the guest (p2)
 --  fire2    per ship: epoch:seq@sourceTime groups=primary/secondary shots=p,s and trigger state
@@ -20,7 +21,7 @@
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not A or not A.coop or not cfg then return end
 local ffi=require('ffi');local C=ffi.C;local c=A.coop;local s=A.state
-local probe={seq=0,targets={},next=0,applies=0,pending={},completion=1.5,
+local probe={seq=0,frame=0,targets={},next=0,applies=0,pending={},completion=1.5,
  run=string.format('%04x%04x',math.random(0,65535),math.random(0,65535))}
 A.damageProbe=probe
 
@@ -54,10 +55,10 @@ function probe.log(reason,detail)
  probe.seq=probe.seq+1
  local trigger=c.triggerShots or {{-1,-1},{-1,-1}}
  local owners=c.owners or {};local epochs=c.epochs or {}
- DebugError(string.format('[X4LAN] DAMAGE_PROBE run=%s seq=%d rt=%.3f gt=%.3f slot=%s reason=%s detail=%s paused=%s '..
+ DebugError(string.format('[X4LAN] DAMAGE_PROBE run=%s seq=%d frame=%d rt=%.3f gt=%.3f slot=%s reason=%s detail=%s paused=%s '..
   'auth=%s:%s/%s,%s/%s wrev=%s ship1=%s ship2=%s target1=%s target2=%s shots=%d,%d trigger1=%d,%d trigger2=%d,%d '..
   'nav=%s,%s fire2_1=[%s] fire2_2=[%s] mode=%s',
-  probe.run,probe.seq,GetCurRealTime(),gameTime(),cfg.slot,reason,tostring(detail or '-'),tostring(A.paused()),
+  probe.run,probe.seq,probe.frame,GetCurRealTime(),gameTime(),cfg.slot,reason,tostring(detail or '-'),tostring(A.paused()),
   tostring(c.revision),tostring(owners[1]),tostring(epochs[1]),tostring(owners[2]),tostring(epochs[2]),worldRevision(),
   state(c.ships[1]),state(c.ships[2]),target(probe.targets[1]),target(probe.targets[2]),
   c.shots[1] or -1,c.shots[2] or -1,trigger[1][1],trigger[1][2],trigger[2][1],trigger[2][2],
@@ -135,6 +136,7 @@ local function checkShots()
 end
 local frame=c.frame
 function c.frame(now)
+ probe.frame=probe.frame+1
  checkShots()
  frame(now)
  checkPending(GetCurRealTime())

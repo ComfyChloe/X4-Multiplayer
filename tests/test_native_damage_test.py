@@ -11,8 +11,8 @@ harness = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(harness)
 
 
-def probe_line(reason, detail, run='r1'):
-    return (f'[X4LAN] DAMAGE_PROBE run={run} seq=1 rt=1 gt=1 slot=p2 reason={reason} detail={detail} paused=false '
+def probe_line(reason, detail, run='r1', frame=1):
+    return (f'[X4LAN] DAMAGE_PROBE run={run} seq=1 frame={frame} rt=1 gt=1 slot=p2 reason={reason} detail={detail} paused=false '
             'auth=1:p1/1,p2/1 wrev=1 ship1=50.00/50.00 ship2=100.00/100.00 target1=none target2=none shots=0,0 '
             'trigger1=0,0 trigger2=0,0 nav=-,- fire2_1=[-] fire2_2=[-] mode=legacy\n')
 
@@ -27,7 +27,7 @@ class ScheduleTests(unittest.TestCase):
     def test_phases_cover_identical_different_rapid_and_settle(self):
         names = [p[0] for p in harness.schedule()]
         self.assertEqual(names[0], 'settle')
-        for phase in ('identical', 'different', 'rapid', 'final'):
+        for phase in ('identical', 'different', 'rapid', 'burst', 'final'):
             self.assertIn(phase, names)
         self.assertEqual(harness.health_at(0, 0), ('settle', (100.0, 100.0)))
         self.assertEqual(harness.health_at(harness.SETTLE + 1, 0), ('identical', (50.0, 50.0)))
@@ -91,12 +91,53 @@ class OverlayAndRefusalTests(unittest.TestCase):
         self.assertFalse(address.startswith('127.'))
 
 
+class PrepareSafetyTests(unittest.TestCase):
+    @unittest.skipUnless(harness.os.name == 'nt', 'Windows Known Folder API')
+    def test_documents_come_from_the_known_folder_api(self):
+        self.assertTrue(harness.documents_folder().is_dir())
+
+    def test_failed_install_leaves_restorable_state_sampled_before_install(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d); package = d / 'pkg'; package.mkdir()
+            (package / 'package.json').write_text(json.dumps({'package_id': 'lan-x-p2', 'slot': 'p2'}))
+            (package / 'VERSION.txt').write_text('7.1.1')
+            documents = d / 'Documents'; (documents / 'Egosoft/X4/45841').mkdir(parents=True)
+            saved = dict(HERE=harness.HERE, STATE=harness.STATE, os=harness.os)
+            calls = []
+
+            def install(package_dir, *args):
+                calls.append(args)
+                (package_dir / 'installation.json').write_text('{}')    # Install writes the record...
+                raise RuntimeError('install failed')                    # ...then fails
+            patches = dict(git_head=lambda: 'abc1234def', x4_running=lambda: False, documents_folder=lambda: documents,
+                           local_ipv4=lambda: '192.168.1.5', setup_ps1=install)
+            originals = {k: getattr(harness, k) for k in patches}
+            try:
+                harness.HERE = d / 'evidence'; harness.STATE = harness.HERE / 'state.json'
+                harness.os = type('os', (), {'name': 'nt', 'environ': {}})
+                for k, v in patches.items():
+                    setattr(harness, k, v)
+                with self.assertRaises(RuntimeError):
+                    harness.prepare(package)
+                state = json.loads(harness.STATE.read_text())
+                self.assertEqual(state['stage'], 'backed-up', 'recovery state written before Install')
+                self.assertFalse(state['had_installation_json'], 'sampled before Install created the record')
+                self.assertEqual(calls[0][:2], ('-Action', 'Install'))
+                with self.assertRaises(RuntimeError):
+                    harness.run(1)                                      # an incomplete prepare never runs
+            finally:
+                for k, v in originals.items():
+                    setattr(harness, k, v)
+                harness.HERE, harness.STATE, harness.os = saved['HERE'], saved['STATE'], saved['os']
+
+
 class EvaluateTests(unittest.TestCase):
     def sent(self):
         return [dict(rt=1, revision=1, phase='identical', ship1=(50.0, 50.0)),
                 dict(rt=2, revision=2, phase='different', ship1=(20.0, 20.0)),
                 dict(rt=3, revision=3, phase='rapid', ship1=(61.0, 61.0)),
-                dict(rt=4, revision=4, phase='final', ship1=(100.0, 100.0))]
+                dict(rt=4, revision=4, phase='burst', ship1=(31.0, 31.0)),
+                dict(rt=5, revision=5, phase='final', ship1=(100.0, 100.0))]
 
     def evaluate(self, text, joined=True):
         with tempfile.TemporaryDirectory() as d:
@@ -123,6 +164,25 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(self.evaluate(pair(1, 1, 50) + pair(2, 2, 20), joined=False)['result'], 'FAIL')
         self.assertEqual(harness.evaluate(None, self.sent(), True)['result'], 'FAIL')
         self.assertEqual(self.evaluate('no probe here\n')['result'], 'FAIL')
+
+    def test_burst_requires_several_requests_in_one_frame(self):
+        burst = self.sent() + [dict(rt=5, revision=5, phase='burst', ship1=(31.0, 31.0))]
+
+        def pair_in(n, rev, hull, frame):
+            v = f'{hull:.2f}/{hull:.2f}'
+            return (probe_line('apply_requested', f'apply={n} wrev={rev} requested[ship1={v} ship2=100.00/100.00 target1=- target2=-]', frame=frame) +
+                    probe_line('apply_readback', f'apply={n} wrev={rev} delay=0.020 requested[ship1={v} ship2=100.00/100.00] observed[ship1={v} ship2=100.00/100.00]', frame=frame + 1))
+        base = pair_in(1, 1, 50, 1) + pair_in(2, 2, 20, 2)
+        with tempfile.TemporaryDirectory() as d:
+            log = Path(d) / 'log.txt'
+            log.write_text(base + pair_in(3, 3, 31, 5) + pair_in(4, 4, 32, 7))
+            report = harness.evaluate(log, burst, True)
+            self.assertEqual(report['result'], 'FAIL')
+            self.assertTrue(any('queued Mark/Apply' in r for r in report['reasons']))
+            log.write_text(base + pair_in(3, 3, 31, 5) + pair_in(4, 4, 32, 5))
+            report = harness.evaluate(log, burst, True)
+            self.assertEqual(report['result'], 'PASS', report['reasons'])
+            self.assertEqual(report['max_requests_per_frame'], 2)
 
     def test_observed_mismatch_is_reported_not_hidden(self):
         bad = (probe_line('apply_requested', 'apply=1 wrev=1 requested[ship1=50.00/50.00 ship2=100.00/100.00 target1=- target2=-]') +

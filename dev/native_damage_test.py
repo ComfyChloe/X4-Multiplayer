@@ -50,8 +50,15 @@ def schedule():
     phases += [('different', 2.0, (20.0, 20.0)), ('different', 2.0, (90.0, 90.0)),
                ('different', 2.0, (40.0, 40.0))]
     phases += [('rapid', 2.0, 'rapid')]                                 # new health every relay tick
+    phases += [('burst', 4.0, 'burst')]                                 # 3 distinct frames flushed back-to-back
     phases += [('final', 4.0, (100.0, 100.0))]
     return phases
+
+
+# Every BURST_EVERY seconds of the burst phase, these values reach the guest within ~1 ms,
+# so several Apply requests are queued in one game frame (proved by the probe's frame field).
+BURST_VALUES = ((31.0, 31.0), (32.0, 32.0), (33.0, 33.0))
+BURST_EVERY = .5
 
 
 def health_at(elapsed, tick):
@@ -64,6 +71,8 @@ def health_at(elapsed, tick):
             if value == 'rapid':
                 h = 60.0 + (tick % 30)
                 return name, (h, h)
+            if value == 'burst':
+                return name, (30.0, 30.0)                               # held between bursts
             return name, value
         t += length
     return 'done', (100.0, 100.0)
@@ -85,6 +94,25 @@ def sha256(path):
 def tree_hashes(root):
     root = Path(root)
     return {str(p.relative_to(root)).replace('\\', '/'): sha256(p) for p in sorted(root.rglob('*')) if p.is_file()}
+
+
+def documents_folder():
+    """The user's Documents via the Windows Known Folder API (honours redirection such as OneDrive)."""
+    import ctypes
+    from ctypes import wintypes
+
+    class GUID(ctypes.Structure):
+        _fields_ = [('Data1', wintypes.DWORD), ('Data2', wintypes.WORD), ('Data3', wintypes.WORD),
+                    ('Data4', ctypes.c_ubyte * 8)]
+    # FOLDERID_Documents {FDD39AD0-238F-46AF-ADB4-6C85480369C7}
+    folder = GUID(0xFDD39AD0, 0x238F, 0x46AF, (ctypes.c_ubyte * 8)(0xAD, 0xB4, 0x6C, 0x85, 0x48, 0x03, 0x69, 0xC7))
+    pointer = ctypes.c_wchar_p()
+    if ctypes.windll.shell32.SHGetKnownFolderPath(ctypes.byref(folder), 0, None, ctypes.byref(pointer)) != 0:
+        raise RuntimeError('The Windows Documents folder could not be located.')
+    try:
+        return Path(pointer.value)
+    finally:
+        ctypes.windll.ole32.CoTaskMemFree(pointer)
 
 
 def git_head():
@@ -180,8 +208,8 @@ def prepare(package):
     pkg = json.loads((package / 'package.json').read_text(encoding='utf-8-sig'))
     if not str(pkg.get('package_id', '')).startswith('lan-') or pkg.get('slot') != 'p2':
         raise RuntimeError('Only an internal guest (p2) package may be used by this harness.')
-    # Profile files and saves before anything changes; the profile path is the isolated one.
-    profile = Path(os.environ['USERPROFILE']) / 'Documents' / 'Egosoft' / 'X4' / PROFILE_ID
+    # Profile files and saves before anything changes; Documents via the Known Folder API.
+    profile = documents_folder() / 'Egosoft' / 'X4' / PROFILE_ID
     run = HERE / (time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '-' + head[:7])
     backup = run / 'profile-before'
     backup.mkdir(parents=True)
@@ -192,22 +220,27 @@ def prepare(package):
             present.append(name)
     before_saves = saves(profile)
     record_before = package / 'installation.json'
-    if record_before.is_file():
+    had_record = record_before.is_file()          # sampled BEFORE Install rewrites it
+    if had_record:
         shutil.copy2(record_before, backup / 'package-installation.json')
     address = local_ipv4()
-    setup_ps1(package, '-Action', 'Install', '-ServerIP', address)
-    game, profile2, record = windows_paths(package)
-    if profile2.resolve() != profile.resolve():
-        raise RuntimeError('Installed profile differs from the backed-up test profile.')
-    target = game / 'extensions' / 'x4_lan_lab'
-    installed = tree_hashes(target)
-    overlay(target)
+    # Recovery state exists before anything is installed, so a failed prepare can be restored.
     state = dict(run=str(run), head=head, package=str(package), package_id=pkg['package_id'],
                  version=(package / 'VERSION.txt').read_text(encoding='utf-8-sig').strip(),
-                 game=str(game), profile=str(profile), profile_files=present, saves=before_saves, address=address,
-                 had_installation_json=record_before.is_file(),
-                 installed=installed, overlaid=tree_hashes(target))
+                 game=None, profile=str(profile), profile_files=present, saves=before_saves, address=address,
+                 had_installation_json=had_record, stage='backed-up')
     HERE.mkdir(parents=True, exist_ok=True)
+    STATE.write_text(json.dumps(state, indent=2))
+    setup_ps1(package, '-Action', 'Install', '-ServerIP', address)
+    game, profile2, record = windows_paths(package)
+    state.update(game=str(game), stage='installed')
+    STATE.write_text(json.dumps(state, indent=2))
+    if profile2.resolve() != profile.resolve():
+        raise RuntimeError('Installed profile differs from the backed-up test profile; run restore.')
+    target = game / 'extensions' / 'x4_lan_lab'
+    state['installed'] = tree_hashes(target)
+    overlay(target)
+    state.update(stage='prepared', overlaid=tree_hashes(target))
     STATE.write_text(json.dumps(state, indent=2))
     (run / 'prepare.json').write_text(json.dumps({k: v for k, v in state.items() if k != 'saves'}, indent=2))
     print('Prepared', state['version'], state['package_id'], 'with probe at', head[:7], '->', run)
@@ -217,6 +250,8 @@ def run(minutes):
     if not STATE.exists():
         raise RuntimeError('Run prepare first.')
     state = json.loads(STATE.read_text())
+    if state.get('stage') != 'prepared':
+        raise RuntimeError('prepare did not complete; run restore first.')
     if state['head'] != git_head():
         raise RuntimeError('The checked-out commit differs from the prepared probe commit.')
     from x4lan.host import Relay
@@ -230,6 +265,7 @@ def run(minutes):
     sock.setblocking(False)
     nonce, lease, seq = secrets.token_hex(16), None, 0
     sent, joined, start, next_send, next_hello, tick = [], None, time.monotonic(), 0.0, 0.0, 0
+    next_burst = 0.0
     setup_ps1(package, '-Action', 'Start')
     print('SYNTHETIC HOST running; X4 guest is starting. Health below is scripted, not read from a host X4.')
     try:
@@ -259,6 +295,19 @@ def run(minutes):
                 fields = world_fields(ship1)
                 sock.send(('WORLD|1|' + lease + '|' + str(seq) + '|' + '|'.join(f'{v:g}' for v in fields)).encode())
                 sent.append(dict(rt=round(now - start, 3), revision=seq, phase=phase, ship1=ship1))
+                if phase == 'burst' and now >= next_burst:
+                    # Distinct revisions reach the guest within ~1 ms, inside one game frame: each
+                    # is accepted by the relay and force-flushed to the guest before the next.
+                    next_burst = now + BURST_EVERY
+                    for values in BURST_VALUES:
+                        seq += 1
+                        sock.send(('WORLD|1|' + lease + '|' + str(seq) + '|' +
+                                   '|'.join(f'{v:g}' for v in world_fields(values))).encode())
+                        time.sleep(.0003)
+                        relay.step(time.monotonic())
+                        relay.next_tick = 0
+                        relay.step(time.monotonic())
+                        sent.append(dict(rt=round(time.monotonic() - start, 3), revision=seq, phase='burst', ship1=values))
                 if joined and now - joined > total_seconds():
                     break
             time.sleep(.005)
@@ -322,8 +371,18 @@ def evaluate(log, sent, joined):
             got.add(detail.split('requested[ship1=')[1].split(' ')[0])
     if wanted - got:
         reasons.append('scheduled health never requested by the guest: ' + ', '.join(sorted(wanted - got)))
+    # Coverage gate: when bursts were sent, at least one co-op frame must carry several Apply
+    # requests, i.e. several Mark/Apply pairs queued in one native update.
+    per_frame = {}
+    for row in requested:
+        key = (row.get('run'), row.get('frame'))
+        per_frame[key] = per_frame.get(key, 0) + 1
+    most = max(per_frame.values(), default=0)
+    if any(item['phase'] == 'burst' for item in sent) and most < 2:
+        reasons.append('no frame with >=2 apply_requested: queued Mark/Apply pairs in one update not demonstrated')
     mismatched = sum(len(r['mismatched']) for r in runs.values())
     return dict(result='PASS' if not reasons else 'FAIL', reasons=reasons, requests=len(requested),
+                max_requests_per_frame=most,
                 confirmed=sum(r['confirmed'] for r in runs.values()), observed_mismatched=mismatched,
                 runs=runs, note='observed_mismatched is reported, not a correlation failure')
 
@@ -335,8 +394,15 @@ def restore():
     if x4_running():
         raise RuntimeError('Close X4 first.')
     package, profile = Path(state['package']), Path(state['profile'])
-    target = Path(state['game']) / 'extensions' / 'x4_lan_lab'
-    if target.exists():
+    game = state.get('game')
+    if not game:
+        # prepare stopped before or during Install: the package's own record names the game.
+        try:
+            game = str(windows_paths(package)[0])
+        except (OSError, KeyError, ValueError, RuntimeError):
+            game = None
+    target = Path(game) / 'extensions' / 'x4_lan_lab' if game else None
+    if target is not None and target.exists():
         setup_ps1(package, '-Action', 'Remove')
     backup = Path(state['run']) / 'profile-before'
     for name in PROFILE_FILES:
@@ -355,7 +421,7 @@ def restore():
     changed = saves_changed(state['saves'], saves(profile))
     if changed:
         problems.append('saves changed: ' + ', '.join(changed))
-    if target.exists():
+    if target is not None and target.exists():
         problems.append('mod still installed at ' + str(target))
     (Path(state['run']) / 'restore.json').write_text(json.dumps(dict(problems=problems), indent=2))
     if problems:
