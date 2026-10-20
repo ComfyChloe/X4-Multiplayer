@@ -47,3 +47,10 @@ Exact installed source and raw failure are retained. The game/peer were closed,
 normal saves checked unchanged and all33 clean installation hashes restored.
 Candidate diagnostics are added to distinguish missing bays from occupied or
 incompatible pads; this remains dev-only and is not attachment acceptance.
+
+Diagnostic run7cdde0f also FAILED before transition. Its42 component records
+show eight compatible non-launch external small-ship pads, all reserved; four
+are physically empty. Selection now permits a reservation already owned by the
+selected ship, while preserving rejection of other ships and occupied pads.
+Explicit occupant count/reference checks replace list equality in phase actions.
+No native transition acceptance is inferred from this selection correction.
