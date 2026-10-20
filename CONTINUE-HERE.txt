@@ -11,8 +11,8 @@ PR17 corrects native sensor initialization through MD ship creation; its native
 host/guest runs are separate from the user's joint playtest. Save bootstrap and
 ongoing NPC/station authority remain separate work. The sealed 7.1.1 packages
 are unchanged. Do not claim the whole shared universe is now implemented.
-Coordinate with Claude every ten minutes at :00/:10/:20/:30/:40/:50 Europe/Berlin
-(user update at 22:08, superseding the hourly rule) in the compact thread:
+Coordinate with Claude every fifteen minutes at :00/:15/:30/:45 Europe/Berlin
+(user correction at 22:50, superseding the ten-minute and hourly rules) in the compact thread:
 https://example.invalid/private-coordination-withheld
 Verify both source and installed package versions before another joint run.
 

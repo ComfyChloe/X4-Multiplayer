@@ -2,7 +2,7 @@ SHARED NATIVE SEED - OPT-IN WINDOWS/LINUX TEST HANDOFF
 20 October 2026 | internal development, no new release package
 
 The user authorized overnight universe work and attempted joint playtests until
-21 October 2026, 08:00 Europe/Berlin. Coordinate every ten minutes. Stop new work
+21 October 2026, 08:00 Europe/Berlin. Coordinate every fifteen minutes (:00/:15/:30/:45). Stop new work
 at that deadline and preserve a clear morning handoff. Normal saves stay untouched.
 
 CURRENT INPUT
