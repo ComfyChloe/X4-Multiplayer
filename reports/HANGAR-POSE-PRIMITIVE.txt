@@ -1,0 +1,21 @@
+NATIVE CARRIER AND STORED CHILD TRANSFORMS — DEV-ONLY
+20 October 2026 | A:primary | internal
+
+The shared-seed tests preserve original ship identities and equipment, yet some
+stored/docked ships retain incorrect sector positions after their carrier moves.
+This opt-in fresh-world experiment isolates two movement APIs. It selects one
+native carrier with at least two internally stored ships, deactivates them as
+the guest adapter does, records initial poses, shifts the carrier10km through
+SetObjectSectorPos, then20km through MD warp, and requests undocking of one child.
+Every phase logs actual parent/child positions and native storage/dock identity.
+The probe preserves orientation across the API degree/radian boundary.
+
+Only an empty isolated45841 profile with autosave disabled may be used. The
+harness preserves the prior known test installation and save inventory. No
+personal save is opened. Close the owned game, retain the exact installation
+and logs, compare save hashes/timestamps, and restore the verified clean backup.
+
+Source syntax and the local X4 9.00 MD schema pass. Native behavior is PENDING.
+This is a diagnostic primitive, not a shipping forced-undock workaround. It does
+not establish network attachment authority or justify weakening the retained
+failed seed-view position gate. Primary owns this PC's native session.

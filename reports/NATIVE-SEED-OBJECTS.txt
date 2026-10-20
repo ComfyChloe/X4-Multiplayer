@@ -47,7 +47,8 @@ readbacks and stable component handles; all101 remain alive through view absence
 The first run explicitly omitted7 unregistered host IDs, the follow-up10.
 This does not exercise the missing new-object lifecycle path.
 
-objects-second FAILS the unchanged position gate on five ships. Its older probe
+objects-second FAILS the unchanged position gate on five initial-view ships and
+six return-view ships (including7539, which initially converged). Its older probe
 also logged expired identity metadata after the synthetic peer ended; that raw
 failure remains preserved. Diagnostic-only1d34f58 caches observed identities and
 bounds observations to fresh baselines, and adds native parent/storage readbacks.

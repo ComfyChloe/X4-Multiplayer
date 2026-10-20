@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_HangarPose" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Read" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_HangarPose'" control="'Read'"/></conditions><actions>
+   <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$v.$object"/>
+   <debug_text text="'[X4LAN] HANGAR_NATIVE phase=%s index=%s code=%s stored=%s docked=%s sameCarrier=%s'.[$v.$phase,$v.$index,$ship.idcode,$ship.isinternallystored,$ship.dock.exists,if $ship.dock then $ship.dock.container == $v.$carrier else false]"/>
+  </actions></cue>
+  <cue name="Warp" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_HangarPose'" control="'Warp'"/></conditions><actions>
+   <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$v.$object"/>
+   <do_if value="md.X4LAN_Bubble.Arena.$host and $ship.isoperational and $ship != player.ship and $ship != player.occupiedship and $ship != player.container">
+    <warp object="$ship" sector="$v.$sector"><position x="$v.$x * 1m" y="$v.$y * 1m" z="$v.$z * 1m"/><rotation yaw="$v.$yaw * 1deg" pitch="$v.$pitch * 1deg" roll="$v.$roll * 1deg"/></warp>
+    <debug_text text="'[X4LAN] HANGAR_NATIVE_WARP code=%s'.[$ship.idcode]"/>
+   </do_if>
+  </actions></cue>
+  <cue name="Undock" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_HangarPose'" control="'Undock'"/></conditions><actions>
+   <set_value name="$ship" exact="event.param3.$object"/>
+   <do_if value="md.X4LAN_Bubble.Arena.$host and $ship.isoperational and $ship != player.ship and $ship != player.occupiedship and $ship != player.container">
+    <undock ship="$ship"/><remove_docking_request ship="$ship"/>
+    <debug_text text="'[X4LAN] HANGAR_NATIVE_UNDOCK code=%s stored=%s docked=%s'.[$ship.idcode,$ship.isinternallystored,$ship.dock.exists]"/>
+   </do_if>
+  </actions></cue>
+ </cues>
+</mdscript>
