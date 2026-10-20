@@ -125,6 +125,22 @@ class UniverseAdapterTests(unittest.TestCase):
           sectors[103]=22;tick(1);assert(positions[103].x==1500 and not U.failed)
         ''')
 
+    def test_retained_seed_binding_revalidates_fresh_identity_before_pose_write(self):
+        for code in ('NAT-102', 'NAT-101'):
+            l=self.make('p2',seed=True);l.execute('''
+              tick(1);baseline(1,{testRow},true);tick(25)
+              local I=X4LAN_BUBBLE_API.identity
+              I.rows.N1={code='NAT-101',epoch=U.latest.epoch,at=now}
+              tick(1);assert(U.replicas[1].object==101 and positions[101].x==1500)
+              positions[101]={x=999,y=200,z=300,yaw=0,pitch=0,roll=0}
+              I.rows.N1={code='''+repr(code)+''',epoch=U.latest.epoch,at=now}
+              tick(1)
+            ''')
+            if code=='NAT-102':
+                l.execute('assert(U.failed and positions[101].x==999 and #removed==0 and #spawns==1)')
+            else:
+                l.execute('assert(not U.failed and positions[101].x==1500 and #removed==0 and #spawns==1)')
+
     def test_seed_host_includes_player_fleet_but_not_shared_pilots_or_service_donor(self):
         l=self.make(seed=True);l.execute('''
           U.receive({'UINTEREST','1',client.lease,'1','cluster_14_sector001_macro'},now)
