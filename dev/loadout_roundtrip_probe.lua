@@ -30,9 +30,9 @@ local function read(object)
   if macro~='' then macros[#macros+1]=macro;slots[#slots+1]={kind='thruster',index=index,macro=macro} end
  end
  local count=tonumber(C.GetNumSoftwareSlots(object,''));assert(count<=64,'software limit')
- local slots=ffi.new('SoftwareSlot[?]',math.max(1,count));count=tonumber(C.GetSoftwareSlots(slots,count,object,''))
+ local softwareSlots=ffi.new('SoftwareSlot[?]',math.max(1,count));count=tonumber(C.GetSoftwareSlots(softwareSlots,count,object,''))
  for index=0,count-1 do
-  local ware=ffi.string(slots[index].current)
+  local ware=ffi.string(softwareSlots[index].current)
   if ware~='' then software[#software+1]=ware;rows[#rows+1]='software,'..ware end
  end
  table.sort(rows);table.sort(macros);table.sort(software)
