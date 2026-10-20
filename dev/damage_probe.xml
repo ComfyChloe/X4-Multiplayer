@@ -2,8 +2,9 @@
 <!-- Unshipped damage-sync probe companion (D-task step 1). Changes no game state.
      Targets: hands the two LAN target ships to dev/damage_probe.lua once the arena exists.
      ApplySeen/Readback: after a guest world Apply request, reads both co-op ships back one MD
-     update later (after the production Apply cue has run) and echoes the requested values, so
-     the Lua probe can pair the readback with its 'apply_requested' line. -->
+     update later (after the production Apply cue has run) and returns the request number from
+     the probe's preceding Mark event plus the echoed requested values, so the Lua probe can pair
+     the readback with exactly one 'apply_requested' line, even for identical repeated requests. -->
 <mdscript name="X4LAN_DamageProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
  <cues>
   <cue name="Targets" checkinterval="1s">
@@ -13,18 +14,26 @@
     <debug_text text="'[X4LAN] DAMAGE_PROBE_MD targets=%s,%s'.[md.X4LAN_Bubble.Arena.$targets.{1},md.X4LAN_Bubble.Arena.$targets.{2}]"/>
    </actions>
   </cue>
+  <!-- The Lua probe queues Mark(id) immediately before each production Apply. -->
+  <cue name="Mark" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_DamageProbe'" control="'Mark'"/></conditions>
+   <actions><set_value name="md.X4LAN_DamageProbe.Targets.$applyMark" exact="event.param3.$id"/></actions>
+  </cue>
   <cue name="ApplySeen" instantiate="true" namespace="this">
    <conditions>
     <event_ui_triggered screen="'X4LAN_Bubble'" control="'Apply'"/>
     <check_value value="md.X4LAN_Bubble.Arena.$ships? and event.param3.$values?"/>
    </conditions>
-   <actions><set_value name="$requested" exact="event.param3.$values"/></actions>
+   <actions>
+    <set_value name="$requested" exact="event.param3.$values"/>
+    <set_value name="$mark" exact="if md.X4LAN_DamageProbe.Targets.$applyMark? then md.X4LAN_DamageProbe.Targets.$applyMark else 0"/>
+   </actions>
    <cues>
     <cue name="Readback">
      <delay exact="1ms"/>
      <actions>
       <set_value name="$ships" exact="md.X4LAN_Bubble.Arena.$ships"/>
-      <raise_lua_event name="'X4LAN_DamageProbe.Readback'" param="'%s|%s|%s|%s|%s|%s|%s|%s'.[$requested.{1},$requested.{2},$requested.{4},$requested.{5},(if $ships.{1}.isoperational then $ships.{1}.hullpercentage else -1),(if $ships.{1}.isoperational then $ships.{1}.shieldpercentage else -1),(if $ships.{2}.isoperational then $ships.{2}.hullpercentage else -1),(if $ships.{2}.isoperational then $ships.{2}.shieldpercentage else -1)]"/>
+      <raise_lua_event name="'X4LAN_DamageProbe.Readback'" param="'%s|%s|%s|%s|%s|%s|%s|%s|%s'.[$mark,$requested.{1},$requested.{2},$requested.{4},$requested.{5},(if $ships.{1}.isoperational then $ships.{1}.hullpercentage else -1),(if $ships.{1}.isoperational then $ships.{1}.shieldpercentage else -1),(if $ships.{2}.isoperational then $ships.{2}.hullpercentage else -1),(if $ships.{2}.isoperational then $ships.{2}.shieldpercentage else -1)]"/>
      </actions>
     </cue>
    </cues>

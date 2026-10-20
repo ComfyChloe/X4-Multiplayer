@@ -29,7 +29,8 @@ class DamageProbeStaticTests(unittest.TestCase):
                    'delay', 'set_value', 'raise_lua_event', 'debug_text'}
         self.assertEqual({e.tag for e in root.iter()} - allowed, set())
         # set_value only writes the probe's own cue variables.
-        self.assertEqual({e.get('name') for e in root.iter('set_value')}, {'$requested', '$ships'})
+        self.assertEqual({e.get('name') for e in root.iter('set_value')},
+                         {'$requested', '$ships', '$mark', 'md.X4LAN_DamageProbe.Targets.$applyMark'})
 
     def test_no_session_credentials_are_logged(self):
         source = (ROOT / 'dev/damage_probe.lua').read_text()
@@ -93,7 +94,8 @@ class DamageProbeAdapterTests(unittest.TestCase):
           local out={};for _,k in ipairs(keys) do out[#out+1]=k..'='..ser(v[k] ~= nil and v[k] or v[tonumber(k)]) end
           return '{'..table.concat(out,',')..'}'
          end
-         function payloads() local out={};for _,r in ipairs(requests) do out[#out+1]=tostring(r[1])..':'..tostring(r[2])..':'..ser(r[3]) end;return table.concat(out,'\\n') end
+         function payloads() local out={};for _,r in ipairs(requests) do if r[1]~='X4LAN_DamageProbe' then out[#out+1]=tostring(r[1])..':'..tostring(r[2])..':'..ser(r[3]) end end;return table.concat(out,'\\n') end
+         function sequence() local out={};for _,r in ipairs(requests) do out[#out+1]=r[1]..':'..r[2]..(r[2]=='Mark' and ('#'..r[3].id) or '') end;return table.concat(out,',') end
         ''')
         return l
 
@@ -122,12 +124,32 @@ class DamageProbeAdapterTests(unittest.TestCase):
          assert(req[1]:find('ship1=70.00/70.00',1,true) and req[2]:find('ship1=70.00/70.00',1,true),'observed is still pre-application')
          assert(req[1]~=req[2],'different authoritative inputs must not produce identical lines')
          -- Native readback for the second request only (the first one never completes).
-         events['X4LAN_DamageProbe.Readback'](nil,'90|90|100|100|90|90|100|100')
+         events['X4LAN_DamageProbe.Readback'](nil,'2|90|90|100|100|90|90|100|100')
          local rb=lines('apply_readback');assert(#rb==1 and rb[1]:find('apply=2 wrev=2',1,true))
          now=12;frames.onUpdate()
          local missing=lines('apply_missing');assert(#missing==1 and missing[1]:find('apply=1 wrev=1',1,true))
-         events['X4LAN_DamageProbe.Readback'](nil,'1|2|3|4|5|6|7|8');assert(#lines('apply_readback_unmatched')==1)
+         events['X4LAN_DamageProbe.Readback'](nil,'9|1|2|3|4|5|6|7|8');assert(#lines('apply_readback_unmatched')==1)
          events['X4LAN_DamageProbe.Readback'](nil,'bad');assert(#lines('apply_readback_invalid')==1)
+        ''')
+
+    def test_identical_repeated_requests_pair_by_number(self):
+        l = self.make(slot='p2')
+        l.execute('''
+         hull['11']={70,70};hull['42']={70,70}
+         world(50,50,100,100);now=11.2;world(50,50,100,100)
+         local req=lines('apply_requested');assert(#req==2,'unchanged health is re-sent after 1 s')
+         assert(sequence():find('X4LAN_DamageProbe:Mark#1,X4LAN_Bubble:Apply,X4LAN_DamageProbe:Mark#2,X4LAN_Bubble:Apply',1,true),sequence())
+         events['X4LAN_DamageProbe.Readback'](nil,'2|50|50|100|100|50|50|100|100')
+         local rb=lines('apply_readback');assert(#rb==1 and rb[1]:find('apply=2 ',1,true),'the second identical request, not the first')
+         now=13;frames.onUpdate();local m=lines('apply_missing');assert(#m==1 and m[1]:find('apply=1 ',1,true))
+        ''')
+
+    def test_readback_echo_must_match_its_request(self):
+        l = self.make(slot='p2')
+        l.execute('''
+         world(20,20,100,100)
+         events['X4LAN_DamageProbe.Readback'](nil,'1|90|90|100|100|90|90|100|100')
+         assert(#lines('apply_readback_echo_mismatch')==1 and #lines('apply_readback')==0)
         ''')
 
     def test_fire2_lines_carry_source_metadata(self):
@@ -176,7 +198,9 @@ class DamageProbeValidatorTests(unittest.TestCase):
             self.line('apply_readback', 'apply=2 wrev=2 delay=0.800 requested[ship1=90.00/90.00 ship2=100.00/100.00] observed[ship1=80.00/90.00 ship2=100.00/100.00]'),
             self.line('apply_missing', 'apply=1 wrev=1 age=1.600'),
             self.line('apply_requested', 'apply=3 wrev=3 requested[ship1=50.00/50.00 ship2=100.00/100.00 target1=- target2=-]'),
-            self.line('apply_readback_unmatched', 'requested[ship1=1.00/2.00 ship2=3.00/4.00] observed[ship1=5.00/6.00 ship2=7.00/8.00]'),
+            self.line('apply_readback_unmatched', 'apply=9 requested[ship1=1.00/2.00 ship2=3.00/4.00] observed[ship1=5.00/6.00 ship2=7.00/8.00]'),
+            self.line('apply_requested', 'apply=4 wrev=4 requested[ship1=60.00/60.00 ship2=100.00/100.00 target1=- target2=-]'),
+            self.line('apply_readback_echo_mismatch', 'apply=4 wrev=4 requested[ship1=1.00/1.00 ship2=100.00/100.00] observed[ship1=60.00/60.00 ship2=100.00/100.00]'),
             'unrelated line',
         ])
         result = validator.summarise(rows)['aaaa0001']
@@ -185,6 +209,7 @@ class DamageProbeValidatorTests(unittest.TestCase):
         self.assertEqual(result['late'], [2])
         self.assertEqual(result['mismatched'], [2])
         self.assertEqual(result['unmatched'], 1)
+        self.assertEqual(result['echo_mismatch'], [4])
 
     def test_drift_after_confirmed_readback_is_only_a_candidate(self):
         rows = validator.parse([

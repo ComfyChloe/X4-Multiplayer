@@ -13,7 +13,8 @@
 --  fire2    per ship: epoch:seq@sourceTime groups=primary/secondary shots=p,s and trigger state
 -- Apply is asynchronous. 'apply_requested' is only the dispatch to MD and shows the requested
 -- values beside the still unchanged local values. 'apply_readback' is MD's later native readback
--- (dev/damage_probe.xml), echoing the request it belongs to. A request without a readback within
+-- (dev/damage_probe.xml), tagged with its request number and echoing the requested values.
+-- An echo that differs from that request is 'apply_readback_echo_mismatch'. A request without a readback within
 -- probe.completion seconds is reported once as 'apply_missing'. A readback only shows the state
 -- at that moment; it is not proof that nothing else changed health in between.
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
@@ -77,31 +78,44 @@ AddUITriggeredEvent=function(screen,control,value)
  if screen=='X4LAN_Coop' and (control=='Fire' or control=='Fire2') and type(value)=='table' then
   local edge=control=='Fire' and tostring(value.on) or (tostring(value.primary)..'/'..tostring(value.secondary))
   probe.log('edge-'..control,tostring(value.ship)..':'..edge)
- elseif screen=='X4LAN_Bubble' and control=='Apply' and type(value)=='table' and type(value.values)=='table' then
+ end
+end
+-- Apply: a probe-only marker event carrying the request number is queued immediately BEFORE
+-- the unchanged production Apply, so MD tags its readback with that number. Identical
+-- repeated requests (the guest re-sends unchanged health every second) stay distinguishable.
+local observeFire=AddUITriggeredEvent
+AddUITriggeredEvent=function(screen,control,value)
+ if screen=='X4LAN_Bubble' and control=='Apply' and type(value)=='table' and type(value.values)=='table' then
   local v=value.values
   probe.applies=probe.applies+1
+  trigger('X4LAN_DamageProbe','Mark',{id=probe.applies})
+  observeFire(screen,control,value)
   probe.pending[#probe.pending+1]={id=probe.applies,rt=GetCurRealTime(),wrev=worldRevision(),key=echoKey(v[1],v[2],v[4],v[5])}
   probe.log('apply_requested',string.format('apply=%d wrev=%s requested[%s]',probe.applies,worldRevision(),requested(v)))
+  return
  end
+ observeFire(screen,control,value)
 end
 RegisterEvent('X4LAN_DamageProbe.Targets',function(_,payload)
  if type(payload)=='table' then probe.targets={payload[1],payload[2]};probe.log('targets') end
 end)
--- MD readback after the production Apply ran: echoed request values, then observed values.
+-- MD readback after the production Apply ran: request number, echoed request values, observed
+-- values. Pairing is by number; the echo must also equal what that request asked for.
 RegisterEvent('X4LAN_DamageProbe.Readback',function(_,payload)
  local f={};for v in tostring(payload):gmatch('[^|]+') do f[#f+1]=v end
- if #f~=8 then probe.log('apply_readback_invalid',tostring(payload));return end
- local key=echoKey(f[1],f[2],f[3],f[4])
+ local id=tonumber(f[1])
+ if #f~=9 or not id then probe.log('apply_readback_invalid',tostring(payload));return end
+ local key=echoKey(f[2],f[3],f[4],f[5])
+ local values=string.format('requested[ship1=%s ship2=%s] observed[ship1=%s ship2=%s]',pair(f[2],f[3]),pair(f[4],f[5]),pair(f[6],f[7]),pair(f[8],f[9]))
  for n,p in ipairs(probe.pending) do
-  if p.key==key then
+  if p.id==id then
    table.remove(probe.pending,n)
-   probe.log('apply_readback',string.format('apply=%d wrev=%s delay=%.3f requested[ship1=%s ship2=%s] observed[ship1=%s ship2=%s]',
-    p.id,p.wrev,GetCurRealTime()-p.rt,pair(f[1],f[2]),pair(f[3],f[4]),pair(f[5],f[6]),pair(f[7],f[8])))
+   if p.key~=key then probe.log('apply_readback_echo_mismatch',string.format('apply=%d wrev=%s %s',p.id,p.wrev,values));return end
+   probe.log('apply_readback',string.format('apply=%d wrev=%s delay=%.3f %s',p.id,p.wrev,GetCurRealTime()-p.rt,values))
    return
   end
  end
- probe.log('apply_readback_unmatched',string.format('requested[ship1=%s ship2=%s] observed[ship1=%s ship2=%s]',
-  pair(f[1],f[2]),pair(f[3],f[4]),pair(f[5],f[6]),pair(f[7],f[8])))
+ probe.log('apply_readback_unmatched',string.format('apply=%d %s',id,values))
 end)
 local function checkPending(now)
  local keep={}

@@ -5,9 +5,9 @@ Usage: python dev/validate_damage_probe.py <x4lan-debug.txt> [--late 0.5] [--tol
 For each probe run it pairs every 'apply_requested' with its native 'apply_readback' and
 reports requests that are missing, late (readback delay above --late seconds) or mismatched
 (observed hull/shield differs from the request by more than --tolerance percentage points),
-plus unmatched or invalid readbacks. Health changes seen on 'tick' lines between a confirmed
+plus unmatched, invalid or echo-mismatched readbacks (pairing is by request number). Health changes seen on 'tick' lines between a confirmed
 readback and the next request are listed as CANDIDATE local drift only: the probe cannot prove
-their cause. The exit status is 1 when any completion is missing, invalid or unmatched.
+their cause. The exit status is 1 when any completion is missing, invalid, unmatched or echo-mismatched.
 """
 import argparse
 import json
@@ -46,7 +46,7 @@ def summarise(rows, late=.5, tolerance=.5):
     for row in rows:
         run = runs.setdefault(row.get('run', '?'), {
             'requested': {}, 'confirmed': 0, 'missing': [], 'late': [], 'mismatched': [],
-            'unmatched': 0, 'invalid': 0, 'candidate_drift': [], 'last_confirmed': None})
+            'unmatched': 0, 'invalid': 0, 'echo_mismatch': [], 'candidate_drift': [], 'last_confirmed': None})
         reason, detail = row.get('reason'), row['detail_text']
         if reason == 'apply_requested':
             apply = re.search(r'apply=(\d+)', detail)
@@ -77,6 +77,12 @@ def summarise(rows, late=.5, tolerance=.5):
             if apply:
                 run['requested'].pop(int(apply.group(1)), None)
                 run['missing'].append(int(apply.group(1)))
+        elif reason == 'apply_readback_echo_mismatch':
+            apply = re.search(r'apply=(\d+)', detail)
+            if apply:
+                run['requested'].pop(int(apply.group(1)), None)
+                run['echo_mismatch'].append(int(apply.group(1)))
+            run['last_confirmed'] = None
         elif reason == 'apply_readback_unmatched':
             run['unmatched'] += 1
         elif reason == 'apply_readback_invalid':
@@ -94,7 +100,8 @@ def summarise(rows, late=.5, tolerance=.5):
         unresolved = sorted(run['requested'])
         result[name] = {'confirmed': run['confirmed'], 'missing': run['missing'] + unresolved,
                         'late': run['late'], 'mismatched': run['mismatched'], 'unmatched': run['unmatched'],
-                        'invalid': run['invalid'], 'candidate_drift': run['candidate_drift']}
+                        'invalid': run['invalid'], 'echo_mismatch': run['echo_mismatch'],
+                        'candidate_drift': run['candidate_drift']}
     return result
 
 
@@ -107,7 +114,7 @@ def main(argv=None):
     with open(args.log, encoding='utf-8', errors='replace') as handle:
         result = summarise(parse(handle), args.late, args.tolerance)
     print(json.dumps(result, indent=2))
-    bad = any(r['missing'] or r['unmatched'] or r['invalid'] for r in result.values())
+    bad = any(r['missing'] or r['unmatched'] or r['invalid'] or r['echo_mismatch'] for r in result.values())
     return 1 if bad or not result else 0
 
 
