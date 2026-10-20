@@ -105,8 +105,10 @@ The production guard was then exercised in objects-docked-guard at c8db1e1
 (production c9f7055), seed881724db27e9d29e17bbf37e8ae4ea68, SHA256
 81263353cbc2cd8522f853c3cb4ab654c05a924a190c321353dffe4521003264.
 Host baselines127/128/127;120 originals replayed,7 new-host IDs omitted. Every
-original is observed within1m initially, but ID7451 later changes from external
-pad to storage locally and remains305.09326m off during return. Overall strict
+original is observed within1m early in the initial phase, but ID7451 changes from
+external pad to storage locally and is already305.09326m off at the end of that
+initial phase. It remains off during return; early convergence is not sustained
+agreement. Overall strict
 validation remains FAILED; the large stored-child offset is absent in this run.
 Both native admissions and all cleanup/save/hash manifests are retained.
 
