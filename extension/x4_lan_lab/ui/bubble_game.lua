@@ -111,20 +111,11 @@ local function frame()
  if not s.ship then
   local x=cfg.slot=='p1' and 1000 or -1000
   if cfg.ship_macro then
-   -- Shared ship spec: one macro and loadout for both players and both proxies.
-   -- MD equips and verifies both ships before the arena setup; no fallback ship.
+   -- MD also registers the ships as native sensor sources. SpawnObjectAtPos2
+   -- objects report radar range but fail discovery away from the starter ship.
    if not s.shipRequest then
-    local own=C.SpawnObjectAtPos2(cfg.ship_macro,sector,ffi.new('UIPosRot',{x=-x,y=10000,z=0}),'player')
-    local proxy=own~=0 and C.SpawnObjectAtPos2(cfg.ship_macro,sector,ffi.new('UIPosRot',{x=x,y=10000,z=0}),'player') or 0
-    if own==0 or proxy==0 or not C.IsComponentOperational(own) or not C.IsComponentOperational(proxy) then
-     -- Remove only the ships spawned here; the player's original ship is never touched.
-     for _,object in ipairs({own,proxy}) do
-      if object~=0 and object~=ship and C.IsComponentOperational(object) then C.RemoveComponent(object) end
-     end
-     error('shared ship '..cfg.ship_macro..' is unavailable; enable X4: Timelines (ego_dlc_timelines) on both PCs')
-    end
-    s.shipRequest={own=own,proxy=proxy,sector=sector}
-    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{own=id(own),proxy=id(proxy),macro=cfg.ship_macro,loadout=cfg.ship_loadout or '',weapons=cfg.ship_weapons or -1})
+    s.shipRequest={sector=sector,original=ship}
+    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{sector=id(sector),localX=-x,macro=cfg.ship_macro,loadout=cfg.ship_loadout or '',weapons=cfg.ship_weapons or -1})
     log('shared ship requested: '..cfg.ship_macro..' loadout='..tostring(cfg.ship_loadout))
    end
    if not s.shipsReady then return end
@@ -215,7 +206,21 @@ local ok,e=pcall(function()
  s.active=true
  RegisterEvent('X4LAN.Loaded',function() if not s.ship then s.loaded=true;s.setupAt=s.setupAt or GetCurRealTime()+10 end end)
  RegisterEvent('X4LAN_Bubble.Ready',function() s.ready=true;log('bubble engine ready') end)
- RegisterEvent('X4LAN_Bubble.ShipsReady',function() if s.shipRequest then s.shipsReady=true;log('shared ship ready: '..cfg.ship_macro) end end)
+ for _,role in ipairs({'Own','Proxy'}) do
+  local field=role:lower()
+  RegisterEvent('X4LAN_Bubble.Prepared'..role,function(_,object)
+   if s.shipRequest and not s.failed and not s.shipsReady then s.shipRequest[field]=ConvertIDTo64Bit(object) end
+  end)
+ end
+ RegisterEvent('X4LAN_Bubble.ShipsReady',function()
+  local r=s.shipRequest
+  if not r or s.failed or s.shipsReady then return end
+  if not r.own or not r.proxy or r.own==r.proxy or r.own==r.original or r.proxy==r.original or
+     r.own==0 or r.proxy==0 or not C.IsComponentOperational(r.own) or not C.IsComponentOperational(r.proxy) then
+   s.failed=true;log('BUBBLE STOPPED: incomplete native shared ship preparation');return
+  end
+  s.shipsReady=true;log('shared ship ready: '..cfg.ship_macro)
+ end)
  RegisterEvent('X4LAN_Bubble.ShipsRefused',function(_,reason)
   log('BUBBLE STOPPED: shared ship '..tostring(cfg.ship_macro)..' refused ('..tostring(reason)..'); no substitute ship is used')
   pcall(closeNetwork);s.failed=true

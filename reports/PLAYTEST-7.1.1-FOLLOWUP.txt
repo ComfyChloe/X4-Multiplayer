@@ -1,0 +1,141 @@
+INTERNAL 7.1.1 TWO-COMPUTER PLAYTEST FOLLOW-UP
+20 October 2026 | Investigation in progress
+
+USER EVIDENCE
+The user completed the real 7.1.1 playtest. Earlier startup checks with a
+synthetic peer do not supersede these gameplay findings.
+
+- Nearby stations are absent from radar and incompletely identified in the HUD.
+  "HUD Problem 1" shows Unknown Station at 6.4 km.
+- NPC models are visible but HUD metadata/target acquisition is unreliable.
+  "HUD Problem 3" shows Unknown Ship at 2.2 km.
+- HUD Problem 1-3 and Map Problem are HOST screenshots, confirmed by the user.
+  This is not exclusively a guest identity-receiver defect.
+- The affected player-faction NPC was the test freighter. Guest orders moved it
+  on the guest only; host orders did not execute. Both players could damage its
+  shields but not its hull. Its exact native component has not yet been proven.
+- The guest's "Host gelandet auf Station" screenshot shows the host ship floating
+  in empty space while the user reports being docked. Ordinary stations differ
+  between the worlds. The screenshot alone does not measure station transforms.
+- Ship motion is now excellent. The shared Cooperative Trial mission still works.
+  Preserve these behaviors while changing world initialization and authority.
+- The user subsequently confirmed that the ordinary cargo test WORKED in this
+  joint playtest, with a small visibility delay. Preserve this accepted basic
+  flow. Both directions, contested/partial pickup and all cargo types were not
+  separately confirmed in this report; do not infer broader acceptance.
+
+Local evidence: .local/evidence-222-withheld contains the preserved host
+debug log, profile config and SHA-256 inventory of the supplied screenshots.
+Original pictures are untouched. The game was closed and the extension absent
+at inspection; the sealed package was reinstalled before isolated diagnostics.
+Do not commit private logs, screenshots, package keys or generated saves.
+
+CONFIRMED SOURCE GAPS
+Both installers launch independent custom_creative worlds. No host-save transfer,
+shared initial world admission or saved-world restoration exists.
+universe_game.lua scans faction ships, explicitly excluding owner == "player".
+It has no ordinary station baseline and no general NPC order/health/equipment
+channel. The fixture donor is explicitly excluded by x4lan_universe.xml.
+IDENT scope F covers two targets and two markets only, not ordinary stations.
+Native docking replication recognizes the two test markets only.
+
+These facts explain why appearance/motion acceptance is insufficient. They do
+not by themselves identify the sensor failure or the test freighter's hull
+behavior. Do not remove hull guards or change sensor flags on speculation.
+
+Subsequent source inspection: x4lan_trade.xml gives the fixture donor a minimum
+hull of 100 percent. It is a protected cargo/trade service object, but is exposed
+as a player-owned Mercury Vanguard. Its independent guest orders and protected
+hull fit the reported test-freighter behavior. Its exact playtest component ID
+was not recorded; this does not prove arbitrary NPC damage authority.
+
+NATIVE SENSOR REPRODUCTION
+The first successful Linux control run found known ship/station contacts at
+2/6 km in the starting area. That area also contains the original starter ship.
+A second fresh-world run moved only the spawned player Shuttle 400 km away:
+the new ordinary ship/station remained Unknown at 2/6 km across two samples,
+despite max/current radar range 40 km. Explicit activation of the player Shuttle
+did not repair discovery across two further samples.
+Creating the same Shuttle macro/loadout with MD create_ship nearby immediately
+revealed both contacts, BEFORE teleporting the player into the control ship.
+The final control pilot sample remained correct. 54 Lua readbacks and companion
+MD observations are preserved in .local/evidence-199-withheld
+The validator correctly reports original_failure_reproduced=true, success=false;
+the original failure must never be relabeled as a passing production run.
+One earlier startup failed with shader exit1119 at High textures and identical
+profile settings; the next start succeeded. Both observations are preserved.
+
+The source correction replaces only shared-player-pair creation with MD
+create_ship, retaining loadout checks and asynchronous setup gating. Incomplete,
+duplicate, dead or original-start-ship callbacks cannot start gameplay. It does
+not change motion/fire/cargo protocols. The generator's matching PrepareShips
+block is updated without regenerating or replacing its other production scripts.
+Corrected native HOST and GUEST runs at bc90d2e both pass all 54 readbacks:
+the distant 2 km ship and 6 km station are known, radar-visible and identified by
+the native target-monitor headers before the separate control ship is created.
+Both roles retain all six software modules and Mk3 thrusters on both shared
+ships; no mod MD errors were observed. Each used a synthetic counterpart, not a
+second native game. Exact logs, installed file hashes and save inventories are
+in .local/evidence-198-withheld,guest}-bc90d2e.
+All 273 tests belonging to tracked PR17 source pass on Linux with LuaJIT and no
+skips. All ten production MD scripts and the opt-in sensor script validate
+against the installed 9.00 schema.
+Native cargo regressions also pass: host drop/pickup with duplicated UDP and MD
+orders, and guest DropCargo/magnet pickup with a deliberately lost completion.
+Both retain exactly 20 Energy Cells and no remaining drop. The separate native
+guest movement run has 201 NPC and 509 player samples through packet gaps, with
+maximum errors 1.473 m / 0.00147 rad for NPCs and 0 m / 0 rad for the player.
+No mod errors occur. These remain synthetic-counterpart tests. Preexisting save
+bytes/timestamps are unchanged and the isolated test-save directory is empty.
+Portable evidence hashes/results: reports/native-sensor-discovery-checks.json.
+Independent review reproduced the evidence and requested rejection of empty,
+unavailable or unresolved HUD headers. The validator now rejects those cases;
+the same retained original/corrected captures reproduce their earlier results.
+Final review of this validator correction and joint Windows/Linux acceptance
+remain pending. This
+establishes the measured discovery fix, not acceptance of every HUD field,
+shared stations or full universe authority.
+
+The host playtest log also records five X4LAN_Coop.SectorMove diagnostic property
+errors while $ship.sector is null, around game time 1926.59-1930.22. Establish the
+underlying transition before treating a guarded debug print as a movement fix.
+
+REQUIRED CHANGE AND ACCEPTANCE
+1. Host creates a disposable session universe and produces an immutable native
+   snapshot. Transfer its exact bytes and compatibility manifest to the guest;
+   verify the digest before admitting that guest. Normal personal saves remain
+   untouched. A mixed build, DLC/mod set, stale session or partial transfer must
+   not start gameplay.
+2. Restore peer roles and bind existing saved objects without duplicating the
+   fixture ships/stations or inheriting the host's local pilot/MD authority on the
+   guest. Compare native station identity, topology and transforms on both sides.
+3. Establish ongoing host authority: guest orders are intentions executed once
+   on the host; ships/stations, health/destruction, inventory/economy and mission
+   consequences converge. A copied starting save alone does not satisfy this.
+4. Diagnose host sensor discovery with independent native range, known-state and
+   target-monitor readbacks. Then test host and guest with an ordinary station
+   below 10 km and ordinary ships, including sector changes.
+5. Repeat the original test-freighter order/motion/hull scenario in both command
+   directions, using the same proven object identity. Preserve motion, ordinary
+   cargo and shared mission regressions.
+
+COORDINATION
+Primary: contrib/astra-shared-world-bootstrap from main 2bf9504.
+Claude: damage-probe PR16, separate owned files; Windows native validation after
+matching the agreed instrumented source. Claude corrected his 21:14 version
+claim after a disk audit at the 22:00 checkpoint: this Windows PC DID run 7.1.1
+p2 (lan-8c608a7f69059119-p2) in the joint playtest. It was removed at 20:54 and
+archived; the old 7.0 folder was present but not installed. He explicitly
+acknowledged the new 7.1.1 findings and screenshot/test-freighter corrections.
+Reported next usage reset: 21 October 02:50 CEST; weekly reset 24 October 05:00
+CEST. Do not replace these reported timestamps with an assumed five-hour cycle.
+The user's 22:08 update changes status/next-step coordination to EVERY TEN
+MINUTES at :00/:10/:20/:30/:40/:50 Europe/Berlin, beginning 22:10 today.
+Use the compact follow-up thread:
+https://example.invalid/private-coordination-withheld
+The existing x4-claude-monitor.timer, prompt and README were updated in place;
+systemd verified next execution 20 October 22:10 Europe/Berlin. Claude received
+the cadence notice on Slack and the coordinator received a steering message.
+No duplicate monitor was created.
+
+No new package or full-universe acceptance is claimed by this report.
