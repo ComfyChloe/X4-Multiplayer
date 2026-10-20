@@ -39,7 +39,7 @@ class DamageProbeAdapterTests(unittest.TestCase):
           local h=hull[tostring(object)];if not h then return nil end;return h[1],h[2]
          end
         ''')
-        files = ['bubble_game.lua', 'coop_game.lua']
+        files = [n for n in ('bubble_game.lua', 'motion.lua', 'coop_game.lua') if (UI / n).is_file()]
         for name in files:
             l.execute((UI / name).read_text())
         if probe:
