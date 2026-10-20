@@ -87,6 +87,20 @@ Temporary preset
 experiments require absent isolated/global preset files and use a unique name;
 they are dev-only and do not authorize persistent changes to user presets.
 
+CONTROLLED FULL-GROUP FOLLOW-UP — NATIVE PENDING
+An additional explicit --saved --fill-groups experiment builds complete groups
+using the number of observed physical group slots. Before any removal it verifies
+every required physical macro on the new clone. It then removes only surplus
+components corresponding to empty source slots, with a native container check
+that each removed component belongs to that clone. Source/player/fixture ships
+are excluded. After one second it reads actual equipment and native capacities;
+the original strict exact-slot gate is unchanged. Unsupported mixed assignments
+still stop before removal. This is a feasibility probe, not a gameplay path.
+Two regressions exercise preserving the desired fourth turret while removing
+clone-only slots1-3, and rejecting a foreign component before any removal.
+331 Linux/Python/LuaJIT tests pass; the changed MD schema validates. Native result
+remains pending. Diagnostic presets and clones require the same owned cleanup.
+
 DESCRIPTOR FOUNDATION — NO NETWORK OR CREATION ACTIVATION
 The original Python/Lua X4SHIP1 codec records ship macro/owner, zero-based physical
 slots, explicit group path/name/macro/count, software and virtual thruster. Its

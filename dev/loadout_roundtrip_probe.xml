@@ -15,7 +15,7 @@
    <do_all exact="$v.$software.count" counter="$i"><append_to_list name="$software" exact="ware.{$v.$software.{$i}}"/></do_all>
    <generate_loadout macro="$source.macro" wares="$software" repeat="true" level="1" variation="0" flags="software" result="$softwareLoadout"/>
    <do_if value="$v.$preset == ''"><apply_loadout object="$clone" loadout="$softwareLoadout.{1}" flags="software"/></do_if>
-   <debug_text text="'[X4LAN] LOADOUT_ROUNDTRIP_NATIVE id=%s source=%s clone=%s input=%s unused=%s sourceHull=%s cloneHull=%s sourceShield=%s cloneShield=%s'.[$v.$index,$source.idcode,$clone.idcode,$macros.count,$remaining.count,$source.maxhull,$clone.maxhull,$source.maxshield,$clone.maxshield]"/>
+   <do_if value="not $v.$fillgroups"><debug_text text="'[X4LAN] LOADOUT_ROUNDTRIP_NATIVE id=%s source=%s clone=%s input=%s unused=%s sourceHull=%s cloneHull=%s sourceShield=%s cloneShield=%s'.[$v.$index,$source.idcode,$clone.idcode,$macros.count,$remaining.count,$source.maxhull,$clone.maxhull,$source.maxshield,$clone.maxshield]"/></do_if>
    <raise_lua_event name="'X4LAN_LoadoutRoundtrip.Created'" param="'%s|%s'.[$v.$index,$clone]"/>
   </do_if>
  </actions></cue></cues>
