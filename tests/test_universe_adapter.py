@@ -1,6 +1,7 @@
 """W01 engine doubles: scope, atomicity and protected player objects."""
 from pathlib import Path
 import unittest
+import xml.etree.ElementTree as ET
 from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 
@@ -176,6 +177,35 @@ class UniverseAdapterTests(unittest.TestCase):
           I.rows.N1={code='NAT-102',epoch=U.latest.epoch,at=now};tick(1)
           assert(U.failed and positions[101].x==101 and #removed==0)
         ''')
+
+    def test_queued_seed_move_rechecks_attachment_at_native_execution(self):
+        l=self.make('p2',seed=True);l.execute('''
+          tick(1);baseline(1,{(testRow:gsub('^1,','3,'))},true);tick(25)
+          X4LAN_BUBBLE_API.identity.rows.N3={code='NAT-103',epoch=U.latest.epoch,at=now}
+          queued={};AddUITriggeredEvent=function(screen,event,payload)
+           if event=='SeedMove' then queued[#queued+1]=payload end
+          end
+          tick(1);assert(#queued==1 and queued[1].object=='103')
+          local original=GetComponentData
+          GetComponentData=function(id,field,...)
+           if tonumber(id)==103 and field=='isdocked' then return true end
+           return original(id,field,...)
+          end
+          tick(30);assert(#queued==1 and positions[103].x==103 and not U.failed)
+        ''')
+        # Consume the already-queued event using the actual immediate MD gate.
+        # This models its simple Boolean predicate, not native MD execution.
+        cue=ET.parse(UI.parent/'md/x4lan_universe.xml').find(".//cue[@name='SeedMove']")
+        gates=[node for node in cue.iter('do_if') if node.find('warp') is not None]
+        self.assertEqual(len(gates),1)
+        expression=gates[0].get('value')
+        def permits(docked,stored):
+            values={'$ship.dock.exists':docked,'$ship.isinternallystored':stored}
+            return all(not values[term[4:]] if term.startswith('not ') else values[term]
+                       for term in expression.split(' and '))
+        self.assertTrue(permits(False,False))
+        for docked,stored in ((True,False),(False,True),(True,True)):
+            self.assertFalse(permits(docked,stored))
 
     def test_seed_host_includes_player_fleet_but_not_shared_pilots_or_service_donor(self):
         l=self.make(seed=True);l.execute('''

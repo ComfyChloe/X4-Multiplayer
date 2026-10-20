@@ -83,7 +83,8 @@ isolated-profile/autosave/exact-owned-save/content-hash guards.
 
 The ordinary trace FAILS: four originals never converge within1m in the initial
 view; eight fail on return. Large errors reach39.8km, attached to carrier7439.
-Direct SetObjectSectorPos calls on stored children show no immediate movement.
+Direct SetObjectSectorPos traces on docked children include both immediate jumps
+and stationary writes; they do not support a uniform no-movement claim.
 objects-trace-skip repeats the identical pristine seed and recorded host rows,
 changing only the explicit diagnostic omission of docked-child sector writes.
 All128 initial poses settle within0.000375m. Return still FAILS: IDs7448/7451/7453
@@ -96,9 +97,9 @@ A bounded production guard now avoids direct pose/sector warps on locally docked
 originals, preserving their parent transform. Fresh identity guards still run;
 normal pose/sector repair resumes after undocking. Two adapter regressions cover
 that transition and rejection of changed identity even while attached.321 tests
-pass. The production guard's own fresh native run remains PENDING; the controlled
-diagnostic comparison is evidence for its direction, not native acceptance of
-this new source. Explicit host attachment state and engine transitions remain next.
+pass. The controlled diagnostic comparison supports the guard's direction; its
+separate production run is recorded below. Explicit host attachment state and
+engine transitions remain necessary.
 
 The production guard was then exercised in objects-docked-guard at c8db1e1
 (production c9f7055), seed881724db27e9d29e17bbf37e8ae4ea68, SHA256
@@ -113,6 +114,15 @@ The read-only docking-key experiment found dock.seed=0 on all68 inspected bays
 of the carrier, including external pads. Native docking seeds are NOT usable
 unique identities here. Future attachment authority must preserve actual saved
 dockingbay references or verify another identity, not assume these seeds differ.
+
+QUEUED NATIVE WARP GUARD
+Review found that attachment may change after Lua queues a cross-sector SeedMove.
+The MD cue now rechecks both native dock existence and internal-storage state
+immediately before warp. A regression queues a real adapter request while free,
+then docks the mock before consumption and checks the actual MD Boolean gate for
+free/docked/stored combinations. This is a model of that predicate, not a native
+race test.322 Linux/Python/LuaJIT tests pass and the changed MD schema validates.
+The queued race has not yet been exercised in X4.
 
 OPEN WORK
 Full native acceptance of the corrected path remains open. Destruction, new objects,
