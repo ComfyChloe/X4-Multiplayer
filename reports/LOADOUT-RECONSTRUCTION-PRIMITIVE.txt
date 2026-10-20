@@ -124,7 +124,7 @@ authorization or transport is introduced. Group descriptors alone still cannot
 reconstruct the failed partial-group case; preserve physical slot observations
 and reject unsupported reconstruction until an exact engine primitive is proven.
 
-SERIALIZED RECONSTRUCTION FOLLOW-UP — NATIVE PENDING
+SERIALIZED RECONSTRUCTION FOLLOW-UP — BOUNDED NATIVE PASS
 The explicit --saved --fill-groups --serialized probe encodes native observations
 with X4SHIP1, decodes them, then reconstructs equipment inputs from those decoded
 fields and the ship macro's static slot/group layout. It verifies physical macro
@@ -134,16 +134,29 @@ cleanup protection; equipment construction uses decoded macro/owner/slots/groups
 Raw descriptor bytes and actual native clone macro/owner are logged. The validator
 can require this mode and rejects missing/unresolved descriptor/identity headers,
 wrong owners/macros and serialized hardware differing from source readbacks.
-334 tests and the changed MD schema pass. This new native path is not yet run;
-the earlier eight-macro native pass did not exercise serialization or networking.
+334 tests and the changed MD schema pass. The earlier eight-macro native pass
+did not exercise serialization or networking; the serialized runs follow below.
 
 The first serialized native run at1b9bbdf records eight exact physical equipment,
 capacity and owner/macro matches, but its full validation FAILS: the mode marker
 was logged twice during initial UI loading before the single reconstruction run.
 Raw logs/exact source remain failed evidence. The marker is now emitted only when
-the first native reconstruction is requested; the validator is unchanged. A new
-native run is required. All eight owned presets/clones were removed and full
+the first native reconstruction is requested; the validator is unchanged.
+All eight owned presets/clones were removed and full
 save/restoration hashes retained after this failed run.
+
+The fresh roundtrip-serialized-second at77594e1 PASSES --require-serialized:
+eight canonical descriptors reproduce the observed native equipment slots,
+software, thrusters, actual ship macro/owner and maximum hull/shield capacities.
+Exactly one actual-run marker and all eight source/clone readbacks are retained.
+This fresh world required no surplus-component removals; the separate accepted
+full-group run above covers partial turret/shield pruning. Do not combine the
+failed first serialized run's pruning with this pass as if it were one run.
+All eight presets/clones were removed, empty generated preset-file absence was
+restored, and normal save hashes/actual save timestamps plus all33 restored files
+were verified. Raw logs, exact installed source, descriptors, validation and full
+cleanup manifests remain under .local/evidence-197-withheld
+This proves bounded local reconstruction from decoded data, not network creation.
 
 LIMITS
 Even a passing primitive does not prove network creation, inventory, ammunition,
