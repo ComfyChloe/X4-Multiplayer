@@ -2,12 +2,13 @@
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not A or not cfg.seed_binding or cfg.test_profile~='45841' then return end
 local U=A.universe;local I=A.identity;local C=require('ffi').C
-local frame=U.frame;local nextRead=0;local seen={};local lastRevision
+local frame=U.frame;local nextRead=0;local seen={};local expectedCodes={};local lastRevision
 local function log(v) DebugError('[X4LAN] SEED_OBJECT_PROBE '..v) end
 function U.frame(now)
  frame(now)
  if not U.ready or A.paused() or now<nextRead then return end
  nextRead=now+2
+ if cfg.slot=='p2' and (not U.latest or now-U.acceptedAt>=15) then return end
  local revision=cfg.slot=='p1' and U.revision or U.latest and U.latest.revision
  if not revision then return end
  local list={}
@@ -26,13 +27,16 @@ function U.frame(now)
    local p=C.GetObjectPositionInSector(object);local wanted=entry.r and entry.r.entity.pose
    if wanted then maxError=math.max(maxError,math.abs(p.x-wanted[1]),math.abs(p.y-wanted[2]),math.abs(p.z-wanted[3])) end
    local identity=I.rows['N'..entry.id]
-   local match=cfg.slot=='p1' or identity and code==identity.code and entry.r.seedOriginal==true
+   if identity then expectedCodes[entry.id]=identity.code end
+   local match=cfg.slot=='p1' or code==expectedCodes[entry.id] and entry.r.seedOriginal==true
    if match then matching=matching+1 end
    local old=seen[entry.id]
    log(string.format('object slot=%s revision=%d id=%d handle=%s code=%s macro=%s owner=%s original=%s sameHandle=%s pose=%.9g,%.9g,%.9g',
     cfg.slot,revision,entry.id,tostring(object):gsub('ULL$',''),code,macro,owner,tostring(match),
     tostring(not old or old==object),p.x,p.y,p.z))
    seen[entry.id]=object
+   local stored,docked=GetComponentData(A.id(object),'isinternallystored','isdocked')
+   log(string.format('attachment slot=%s revision=%d id=%d stored=%s docked=%s',cfg.slot,revision,entry.id,tostring(stored),tostring(docked)))
    if revision~=lastRevision then AddUITriggeredEvent('X4LAN_SeedObjectsProbe','Read',
     {object=A.id(object),id=entry.id,revision=revision,slot=cfg.slot}) end
   end
