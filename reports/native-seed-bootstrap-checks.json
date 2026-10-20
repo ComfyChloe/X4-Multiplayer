@@ -1,0 +1,32 @@
+{
+  "seed_id": "7a6f8920b880e4f405ce1cada94384f1",
+  "stations": 1378,
+  "native_reload": true,
+  "station_identity_topology_equal": true,
+  "max_position_error_m": 0.0160040494908104,
+  "max_angle_error_rad": 9.89735327028285e-07,
+  "local_component_ids_equal": false,
+  "ongoing_simulation_authority": false,
+  "two_native_acceptance": false,
+  "native_save_sha256": "224d4322a63e18ff83866093e5eb028763ff7bd2331242599389e5c499d35a59",
+  "size": 25437300,
+  "real_loopback_tcp": true,
+  "received_verified": true,
+  "gameplay_acceptance": false,
+  "preexisting_save_bytes_and_timestamps_unchanged": true,
+  "owned_test_slot_removed": true,
+  "evidence": {
+    "saves-before.json": "5875165beb337b3836a0c85f1111cd34199d852a8a40d450d257c588259a6782",
+    "capture-installed-hashes.json": "9a77b5f7fc2e9292825021228906d04f68b7889b8ca971b52875346bb1c3c330",
+    "capture.log": "672e3adc60d7681e9bed7825465f2143e37ea13083c1b6151ff1bdd08c7b4eee",
+    "transfer.json": "c17174240ec3cf500cc4d8d37f65146612aed8b5e316a2e62809786f15ebbdd1",
+    "load-installed-hashes.json": "6991f75aa99b6ba15c1332099014901ff20ecc503374fa1c3b18223a96a5f4ff",
+    "load.log": "7031a1a3ee16765c8d88c80a252915d5d48e92f9cb9a559be8a104530598f028",
+    "saves-after-load.json": "cc50226adf1665f45abc76e2abc0631535ad77c687e7faee272a59566e6344bb",
+    "saves-after-cleanup.json": "9e182c2c977cab250de52f4cb4cf5ce6d723297ad2348976925b6dae4bc86258",
+    "result.json": "5ebddeb7ac55bea9f7d42726d6a6bb58369c3931c64934898944b77397aed18e"
+  },
+  "game": "X4 9.00 (611726) / Steam23660954 Linux",
+  "transport_tests": 7,
+  "native_validator_tests": 3
+}

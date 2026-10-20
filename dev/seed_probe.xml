@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in disposable save experiment. No production setup or role restoration. -->
+<mdscript name="X4LAN_SeedProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="State" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_SeedProbe'" control="'Mark'"/></conditions>
+   <actions>
+    <set_value name="$id" exact="event.param3"/>
+    <raise_lua_event name="'X4LAN_SeedProbe.State'" param="$id"/>
+   </actions>
+  </cue>
+  <cue name="Read" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_SeedProbe'" control="'Read'"/></conditions>
+   <actions><raise_lua_event name="'X4LAN_SeedProbe.State'" param="if State.$id? then State.$id else ''"/></actions>
+  </cue>
+ </cues>
+</mdscript>

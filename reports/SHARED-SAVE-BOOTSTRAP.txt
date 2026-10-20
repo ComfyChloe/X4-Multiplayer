@@ -1,0 +1,77 @@
+SHARED HOST SAVE — INTERNAL IMPLEMENTATION AND NATIVE FEASIBILITY
+20 October 2026
+
+The 7.1.1 playtest confirms that independent custom_creative starts do not give
+the players a shared universe. Ordinary station positions differ. Copying a
+native host snapshot can align the initial world, but is only the first step
+towards ongoing host authority.
+
+IMPLEMENTED, NOT ENABLED IN GAMEPLAY
+x4lan/seed.py seals an immutable native snapshot and its session/build/content
+manifest. A bounded TCP stream transfers the exact bytes, authenticates the
+request and manifest using a nonce and the private session key, and verifies
+SHA-256 before publishing the received bundle. A different seed, game build,
+extension set or mod digest is rejected. There is no network-supplied filename.
+Partial transfers and corrupt data do not produce a completed bundle.
+
+The opt-in staging operation copies a verified bundle into save_010 of an empty
+isolated profile 45841. It refuses normal profiles, linked save directories,
+existing save slots and reuse of completed bundle directories. The installed
+copy does not share an inode with the immutable snapshot. The caller must check
+that X4 is closed. This is a LAN/ZeroTier building block, not encrypted Internet
+hosting, a public distribution change, or a complete launcher/admission flow.
+
+NATIVE TEST
+dev/native_seed_test.py, seed_probe.lua/xml and validate_native_seed.py run the
+following explicitly separated steps with gameplay adapters disabled:
+  1. Create a new disposable world and persist a random MD session marker.
+  2. Pause, enumerate native stations and ask X4 to save the world.
+  3. Close X4, seal the completed native save, transfer over real loopback TCP
+     and verify the received bytes.
+  4. Copy into the empty isolated test slot, launch and actually load that slot.
+  5. Verify the saved MD marker and independently enumerate native stations.
+  6. Close X4, preserve the evidence, verify preexisting save bytes/timestamps,
+     and remove only the unchanged test copy owned by this run.
+
+Successful run: .local/evidence-148-withheld
+Game: Linux X4 9.00 (611726), Steam build 23660954, official DLC enabled.
+Snapshot: 25,437,300 bytes.
+SHA-256: 224d4322a63e18ff83866093e5eb028763ff7bd2331242599389e5c499d35a59.
+All 1,378 enumerated stations retain their ID code, macro, owner and sector.
+Maximum position difference: 0.01600405 m; rotation: 0.000000990 rad.
+Native local component handles DO change. A saved host handle must never be
+treated as the guest's live component handle.
+All preexisting save bytes and actual save timestamps are unchanged. Generated
+save files and raw logs remain private under .local, outside Git and packages.
+
+The first capture/transfer is preserved separately under .../first. Saving and
+byte transfer succeeded, but the probe passed Lua gsub's second return value to
+ConvertStringToLuaID, producing nil metadata. It is not topology acceptance.
+The corrected probe constrains the conversion argument to one return value and
+the complete second run provides the station evidence above.
+
+Seven transport/staging tests and three native-log validator tests pass.
+The validator rejects unknown metadata, missing/duplicate stations, wrong saved
+session markers, missing save/load completion, changed owners/sectors/transforms
+and native mod errors. It explicitly does not require identical local handles.
+
+NEXT INTEGRATION
+A fresh session snapshot should be taken before multiplayer fixture setup.
+Both peers can then load that same uninitialized world, verify its marker and
+create/bind the agreed shared player roles. Reusing an already active host save
+needs additional restoration of persisted host flags, cue state, pilot roles,
+fixture references and request history. Blindly running fresh setup against
+such a save risks duplicate ships/stations and guest host authority.
+
+The native load gate must block networking/gameplay until the expected seed is
+loaded and live objects are rebound. The launcher must check matching content,
+stage only verified bytes and connect this with relay session admission. Mixed
+or stale seeds must fail closed. Keep the existing internal pair unchanged while
+this mode is incomplete.
+
+Ongoing authority remains required after admission: orders must execute on the
+host, ordinary NPC health/lifetimes and stations/economy must reconcile, and
+competing guest simulation must be controlled without destroying mission
+references. A common initial save alone does not fix these missing channels.
+No joint Windows/Linux load, ongoing universe authority, late join, arbitrary
+mission synchronization or production save/resume acceptance is claimed.
