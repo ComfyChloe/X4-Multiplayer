@@ -36,8 +36,13 @@ compare normal save hashes/timestamps and restore the exact verified backup.
 No shared seed, saved user game or real second client is used by this primitive.
 
 STATUS
-Source prepared; Python/Lua syntax and MD schema checked. Native execution and
-result are PENDING. A green synthetic validator fixture is not native evidence.
+Source307a460 passed321 Linux/LuaJIT tests and MD schema validation. Native
+roundtrip-first FAILED: generate_loadout returns a list even for one ship macro;
+the probe supplied the list instead of its first loadout element, leaving clones
+unequipped. Raw logs, exact installed files and the failed result are retained
+locally. The game was closed, clean33-file installation restored and normal
+save hashes/timestamps verified unchanged. Corrected list-element consumption
+requires a new native run. No equipment reconstruction acceptance yet.
 
 LIMITS
 Even a passing primitive does not prove network creation, inventory, ammunition,
