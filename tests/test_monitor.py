@@ -66,5 +66,7 @@ class MonitorTests(unittest.TestCase):
   thread=threading.Thread(target=worker);thread.start()
   try:
    self.assertTrue(probe({'token':TOKEN,'build':'build','bubble':'bubble','port':r.socket.getsockname()[1]}))
-   self.assertEqual(len(s.peers),0);self.assertEqual(r.received_packets,1);self.assertEqual(r.sent_packets,1)
   finally:stop.set();thread.join();r.close()
+  # The client can receive the datagram before the worker increments its send
+  # counter. Inspect shared counters only after that worker has completed.
+  self.assertEqual(len(s.peers),0);self.assertEqual(r.received_packets,1);self.assertEqual(r.sent_packets,1)
