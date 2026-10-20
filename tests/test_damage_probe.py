@@ -225,6 +225,18 @@ class DamageProbeValidatorTests(unittest.TestCase):
         self.assertEqual(result['candidate_drift'][0]['observed'], (75.0, 60.0))
         self.assertEqual(result['missing'], [2])
 
+    def test_same_id_readback_must_echo_the_saved_request(self):
+        req = lambda rev, hull: self.line('apply_requested', f'apply=1 wrev={rev} requested[ship1={hull}/{hull} ship2=100.00/100.00 target1=- target2=-]')
+        back = lambda rev, hull: self.line('apply_readback', f'apply=1 wrev={rev} delay=0.010 requested[ship1={hull}/{hull} ship2=100.00/100.00] observed[ship1={hull}/{hull} ship2=100.00/100.00]')
+        for name, lines, confirmed in (
+                ('health 20 echoed as 90', [req(1, '20.00'), back(1, '90.00')], 0),
+                ('revision 1 echoed as 2', [req(1, '20.00'), back(2, '20.00')], 0),
+                ('exact echo', [req(1, '20.00'), back(1, '20.00')], 1)):
+            with self.subTest(name):
+                result = validator.summarise(validator.parse(lines))['aaaa0001']
+                self.assertEqual(result['confirmed'], confirmed)
+                self.assertEqual(result['echo_mismatch'], [] if confirmed else [1])
+
     def test_orphan_readback_never_counts_as_confirmed(self):
         rows = validator.parse([
             self.line('apply_readback', 'apply=99 wrev=9 delay=0.010 requested[ship1=90.00/90.00 ship2=100.00/100.00] observed[ship1=90.00/90.00 ship2=100.00/100.00]'),

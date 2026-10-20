@@ -69,7 +69,20 @@ def summarise(rows, late=.5, tolerance=.5):
                 # must never count as a confirmed completion.
                 run['orphan'].append(ident)
                 continue
-            run['requested'].pop(ident)
+            saved = run['requested'].pop(ident)
+            # Confirm only when the readback's echo equals the saved request: same health
+            # for both ships and the same WORLD revision. A same-ID echo that differs is not
+            # a completion of that request.
+            saved_detail = saved['detail_text']
+            saved_req = re.search(r'requested\[ship1=(\S+) ship2=(\S+)', saved_detail)
+            saved_rev = re.search(r'wrev=(\S+)', saved_detail)
+            echo_rev = re.search(r'wrev=(\S+)', detail)
+            if (not saved_req or not saved_rev or not echo_rev or saved_rev.group(1) != echo_rev.group(1) or
+                    any(health(a) != health(b) or health(a) is None
+                        for a, b in zip(saved_req.groups(), req.groups()))):
+                run['echo_mismatch'].append(ident)
+                run['last_confirmed'] = None
+                continue
             run['confirmed'] += 1
             if float(delay.group(1)) > late:
                 run['late'].append(ident)
