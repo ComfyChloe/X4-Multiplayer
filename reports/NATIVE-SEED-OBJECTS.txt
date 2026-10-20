@@ -32,13 +32,44 @@ inventories remain in .local/evidence-147-withheld Normal save bytes
 and actual save timestamps are unchanged; owned staged copies removed; clean
 sealed 7.1.1 installation restored (33 files). This was a failure, not acceptance.
 
-The next experiment uses a NEW snapshot containing the saved reference list.
+Subsequent experiments use a NEW snapshot containing the saved reference list.
 An explicitly selected --seed-only replay can validate the original-object
 primitive independently; the report must retain every omitted host-created ID.
 That bounded result must never be described as full-sector/universe acceptance.
 
+CORRECTED NATIVE OBSERVATIONS — STILL NOT OVERALL ACCEPTANCE
+objects-second and objects-parent use production5a4a0d9 and the saved-reference
+snapshot25,732,808 bytes, SHA256
+fd9bfec19b6c5058f897ed10065fcb02c0d7c1e0f840cce3de22879f39c9ef7c.
+Both loaded native HOST/GUEST roles separately with synthetic counterparts.
+All101 selected original ships have matching native identities, equipment/pilot
+readbacks and stable component handles; all101 remain alive through view absence.
+The first run explicitly omitted7 unregistered host IDs, the follow-up10.
+This does not exercise the missing new-object lifecycle path.
+
+objects-second FAILS the unchanged position gate on five ships. Its older probe
+also logged expired identity metadata after the synthetic peer ended; that raw
+failure remains preserved. Diagnostic-only1d34f58 caches observed identities and
+bounds observations to fresh baselines, and adds native parent/storage readbacks.
+objects-parent still FAILS the pose gate: the discrepant ships are internally
+stored on carrier7527/RVA-846 on BOTH peers. Other measured ships converge within
+0.004m. A stale internal-storage position after relocating the carrier is a
+hypothesis requiring a native undocking/parent transition experiment. We did not
+force-undock ships, relax the validator or relabel either failed run as passing.
+
+objects-parent's first startup stalled before admission and timed out with no
+host baseline. Failed log/process state/empty history were retained; the retry
+completed both admissions and the three-phase guest run. Each run retained exact
+installed files, raw logs and save inventories under .local/evidence-128-withheld
+Normal saves are unchanged; exact run-owned copies removed and clean33-file
+installation restored after the guest run. No personal save was loaded.
+
+The retained-binding review regression is corrected: fresh authenticated identity
+metadata must revalidate an existing component before another pose write. The
+adapter regression rejects a changed code while preserving valid drift repair.
+
 OPEN WORK
-Native acceptance of the corrected registry is pending. Destruction, new objects,
+Full native acceptance of the corrected path remains open. Destruction, new objects,
 commands, ownership/equipment changes, docking, health, station production, jobs
 and mission consequences require explicit host authority and lifecycle work.
 The service donor/test freighter remains protected by the cargo/trade adapter;
