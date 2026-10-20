@@ -21,6 +21,7 @@ import hashlib
 import importlib.util
 import json
 import os
+import re
 import secrets
 import shutil
 import socket
@@ -57,7 +58,9 @@ def schedule():
 
 # Every BURST_EVERY seconds of the burst phase, these values reach the guest within ~1 ms,
 # so several Apply requests are queued in one game frame (proved by the probe's frame field).
-BURST_VALUES = ((31.0, 31.0), (32.0, 32.0), (33.0, 33.0))
+# 31, 32, 31: identical AND distinct requests outstanding together. Production bubble_game.lua
+# drops an unchanged consecutive WORLD key, so equal values coexist only with a distinct one between.
+BURST_VALUES = ((31.0, 31.0), (32.0, 32.0), (31.0, 31.0))
 BURST_EVERY = .5
 
 
@@ -163,7 +166,8 @@ def saves_changed(before, now):
     changed = sorted(set(before) ^ set(now))
     for path in set(before) & set(now):
         a, b = before[path], now[path]
-        if a['sha256'] != b['sha256'] or (Path(path).name not in STEAM_METADATA and a['mtime_ns'] != b['mtime_ns']):
+        name = re.split(r'[\\/]', path)[-1]   # Windows paths are also compared on Linux test hosts
+        if a['sha256'] != b['sha256'] or (name not in STEAM_METADATA and a['mtime_ns'] != b['mtime_ns']):
             changed.append(path)
     return sorted(changed)
 
@@ -371,18 +375,19 @@ def evaluate(log, sent, joined):
             got.add(detail.split('requested[ship1=')[1].split(' ')[0])
     if wanted - got:
         reasons.append('scheduled health never requested by the guest: ' + ', '.join(sorted(wanted - got)))
-    # Coverage gate: when bursts were sent, at least one co-op frame must carry several Apply
-    # requests, i.e. several Mark/Apply pairs queued in one native update.
-    per_frame = {}
-    for row in requested:
-        key = (row.get('run'), row.get('frame'))
-        per_frame[key] = per_frame.get(key, 0) + 1
-    most = max(per_frame.values(), default=0)
-    if any(item['phase'] == 'burst' for item in sent) and most < 2:
-        reasons.append('no frame with >=2 apply_requested: queued Mark/Apply pairs in one update not demonstrated')
+    # Coverage gate: when bursts were sent, one probe frame (explicit Lua frame counter) must carry
+    # identical AND distinct Apply requests outstanding together, and all their readbacks must land
+    # in one frame (one MD update). Equal rounded clock values are never used as grouping evidence.
+    batches = [b for r in runs.values() for b in r.get('batches', [])]
+    most = max((len(b['requests']) for b in batches), default=1 if requested else 0)
+    covered = [b for b in batches if b['identical_values'] and b['distinct_values'] and len(b['readback_frames']) == 1]
+    if any(item['phase'] == 'burst' for item in sent) and not covered:
+        reasons.append('no frame with identical and distinct requests outstanding together whose readbacks '
+                       'share one MD update: queued Mark/Apply pairs not demonstrated')
     mismatched = sum(len(r['mismatched']) for r in runs.values())
+    superseded = sum(len(r.get('superseded', [])) for r in runs.values())
     return dict(result='PASS' if not reasons else 'FAIL', reasons=reasons, requests=len(requested),
-                max_requests_per_frame=most,
+                max_requests_per_frame=most, covered_batches=len(covered), superseded_in_frame=superseded,
                 confirmed=sum(r['confirmed'] for r in runs.values()), observed_mismatched=mismatched,
                 runs=runs, note='observed_mismatched is reported, not a correlation failure')
 
@@ -430,17 +435,62 @@ def restore():
     print('Restored: mod removed by its own setup.ps1, profile files exact, saves unchanged.')
 
 
+BUNDLE_FILES = ('prepare.json', 'schedule.json', 'report.json', 'restore.json', 'x4lan-debug.txt')
+SECRET = re.compile(r'\b[0-9a-f]{32}\b')   # session token and leases are 32 lowercase hex characters
+
+
+def sanitize(text, token, address):
+    """Remove the session token, any 32-hex lease/token-shaped value and this PC's LAN address."""
+    if token:
+        text = text.replace(token, '<token>')
+    text = SECRET.sub('<hex32>', text)
+    if address:
+        text = text.replace(address, '<lan-ipv4>')
+    return text
+
+
+def bundle(run_dir, package):
+    """Sanitized review bundle: evidence files with secrets removed, plus their SHA-256 sums."""
+    import zipfile
+    run_dir = Path(run_dir).resolve()
+    if run_dir.parent != HERE.resolve():
+        raise RuntimeError('Only a run folder under ' + str(HERE) + ' can be bundled.')
+    token = ''
+    if package and (Path(package) / 'session.json').is_file():
+        token = json.loads((Path(package) / 'session.json').read_text(encoding='utf-8-sig')).get('token', '')
+    prepare_record = run_dir / 'prepare.json'
+    address = json.loads(prepare_record.read_text()).get('address', '') if prepare_record.is_file() else ''
+    archive = run_dir.parent / (run_dir.name + '-review.zip')
+    sums = []
+    with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
+        for name in BUNDLE_FILES:
+            path = run_dir / name
+            if not path.is_file():
+                continue
+            data = sanitize(path.read_text(encoding='utf-8', errors='replace'), token, address).encode('utf-8')
+            if token and token.encode() in data:
+                raise RuntimeError('token still present in ' + name)
+            z.writestr(run_dir.name + '/' + name, data)
+            sums.append(hashlib.sha256(data).hexdigest() + '  ' + name)
+        z.writestr(run_dir.name + '/SHA256SUMS.txt', '\n'.join(sums) + '\n')
+    print('Sanitized review bundle:', archive)
+    return archive
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
     p = sub.add_parser('prepare'); p.add_argument('--package', type=Path, required=True)
     r = sub.add_parser('run'); r.add_argument('--minutes', type=float, default=4)
     sub.add_parser('restore')
+    b = sub.add_parser('bundle'); b.add_argument('--run', type=Path, required=True); b.add_argument('--package', type=Path)
     args = parser.parse_args(argv)
     if args.command == 'prepare':
         prepare(args.package)
     elif args.command == 'run':
         run(args.minutes)
+    elif args.command == 'bundle':
+        bundle(args.run, args.package)
     else:
         restore()
 

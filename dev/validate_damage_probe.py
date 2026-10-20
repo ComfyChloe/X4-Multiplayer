@@ -48,13 +48,18 @@ def summarise(rows, late=.5, tolerance=.5):
     for row in rows:
         run = runs.setdefault(row.get('run', '?'), {
             'requested': {}, 'confirmed': 0, 'missing': [], 'late': [], 'mismatched': [],
-            'unmatched': 0, 'invalid': 0, 'echo_mismatch': [], 'orphan': [], 'candidate_drift': [], 'last_confirmed': None})
+            'unmatched': 0, 'invalid': 0, 'echo_mismatch': [], 'orphan': [], 'candidate_drift': [], 'last_confirmed': None,
+            'frames': {}, 'frame_of': {}, 'readback_frame': {}, 'observed': {}, 'wanted': {}})
         reason, detail = row.get('reason'), row['detail_text']
         if reason == 'apply_requested':
             apply = re.search(r'apply=(\d+)', detail)
             if apply:
-                run['requested'][int(apply.group(1))] = row
+                ident = int(apply.group(1))
+                run['requested'][ident] = row
                 run['last_confirmed'] = None
+                # Requests logged in the same probe frame were queued in one Lua update.
+                run['frames'].setdefault(row.get('frame'), []).append(ident)
+                run['frame_of'][ident] = row.get('frame')
         elif reason == 'apply_readback':
             apply = re.search(r'apply=(\d+)', detail)
             delay = re.search(r'delay=(-?\d+(?:\.\d+)?)', detail)
@@ -88,8 +93,9 @@ def summarise(rows, late=.5, tolerance=.5):
                 run['late'].append(ident)
             observed = [health(obs.group(1)), health(obs.group(2))]
             wanted = [health(req.group(1)), health(req.group(2))]
-            if any(o is None or w is None or max(abs(o[0] - w[0]), abs(o[1] - w[1])) > tolerance
-                   for o, w in zip(observed, wanted)):
+            run['observed'][ident], run['wanted'][ident] = observed, wanted
+            run['readback_frame'][ident] = row.get('frame')
+            if not close(observed, wanted, tolerance):
                 run['mismatched'].append(ident)
             run['last_confirmed'] = (ident, observed)
         elif reason == 'apply_missing':
@@ -118,11 +124,37 @@ def summarise(rows, late=.5, tolerance=.5):
     for name, run in runs.items():
         # Requests still open at the end of the log never received a readback.
         unresolved = sorted(run['requested'])
+        # The MD readback shows the state after the whole update. An earlier request of a
+        # multi-request frame that observed exactly that frame's LAST request is superseded,
+        # not mismatched; the last request of each frame must still match its own values.
+        superseded, mismatched = [], []
+        for ident in run['mismatched']:
+            ids = run['frames'].get(run['frame_of'].get(ident), [])
+            last = ids[-1] if ids else None
+            if (len(ids) >= 2 and ident != last and last in run['wanted'] and
+                    close(run['observed'][ident], run['wanted'][last], tolerance)):
+                superseded.append(ident)
+            else:
+                mismatched.append(ident)
+        batches = []
+        for frame, ids in run['frames'].items():
+            if len(ids) >= 2:
+                values = [tuple(run['wanted'].get(i) or ()) for i in ids]
+                batches.append({'frame': frame, 'requests': ids,
+                                'readback_frames': sorted({str(run['readback_frame'].get(i)) for i in ids}),
+                                'identical_values': len(values) != len(set(values)),
+                                'distinct_values': len(set(values)) >= 2})
         result[name] = {'confirmed': run['confirmed'], 'missing': run['missing'] + unresolved,
-                        'late': run['late'], 'mismatched': run['mismatched'], 'unmatched': run['unmatched'],
-                        'invalid': run['invalid'], 'echo_mismatch': run['echo_mismatch'], 'orphan': run['orphan'],
-                        'candidate_drift': run['candidate_drift']}
+                        'late': run['late'], 'mismatched': mismatched, 'superseded': superseded,
+                        'unmatched': run['unmatched'], 'invalid': run['invalid'],
+                        'echo_mismatch': run['echo_mismatch'], 'orphan': run['orphan'],
+                        'batches': batches, 'candidate_drift': run['candidate_drift']}
     return result
+
+
+def close(observed, wanted, tolerance):
+    return all(o is not None and w is not None and max(abs(o[0] - w[0]), abs(o[1] - w[1])) <= tolerance
+               for o, w in zip(observed, wanted))
 
 
 def main(argv=None):

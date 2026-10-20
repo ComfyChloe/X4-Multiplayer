@@ -165,24 +165,80 @@ class EvaluateTests(unittest.TestCase):
         self.assertEqual(harness.evaluate(None, self.sent(), True)['result'], 'FAIL')
         self.assertEqual(self.evaluate('no probe here\n')['result'], 'FAIL')
 
-    def test_burst_requires_several_requests_in_one_frame(self):
-        burst = self.sent() + [dict(rt=5, revision=5, phase='burst', ship1=(31.0, 31.0))]
+    def test_burst_requires_identical_and_distinct_requests_in_one_update(self):
+        burst = self.sent()
 
-        def pair_in(n, rev, hull, frame):
+        def req(n, rev, hull, frame):
             v = f'{hull:.2f}/{hull:.2f}'
-            return (probe_line('apply_requested', f'apply={n} wrev={rev} requested[ship1={v} ship2=100.00/100.00 target1=- target2=-]', frame=frame) +
-                    probe_line('apply_readback', f'apply={n} wrev={rev} delay=0.020 requested[ship1={v} ship2=100.00/100.00] observed[ship1={v} ship2=100.00/100.00]', frame=frame + 1))
-        base = pair_in(1, 1, 50, 1) + pair_in(2, 2, 20, 2)
+            return probe_line('apply_requested', f'apply={n} wrev={rev} requested[ship1={v} ship2=100.00/100.00 target1=- target2=-]', frame=frame)
+
+        def back(n, rev, hull, seen, frame):
+            v, o = f'{hull:.2f}/{hull:.2f}', f'{seen:.2f}/{seen:.2f}'
+            return probe_line('apply_readback', f'apply={n} wrev={rev} delay=0.020 requested[ship1={v} ship2=100.00/100.00] observed[ship1={o} ship2=100.00/100.00]', frame=frame)
+        base = req(1, 1, 50, 1) + back(1, 1, 50, 50, 2) + req(2, 2, 20, 3) + back(2, 2, 20, 20, 4)
+        # Native shape: 31, 32, 31 queued in frame 5; one MD update reads all back in frame 6
+        # and observes the frame's last request, so #4 (32) is superseded, not mismatched.
+        one_update = (req(3, 3, 31, 5) + req(4, 4, 32, 5) + req(5, 5, 31, 5) +
+                      back(3, 3, 31, 31, 6) + back(4, 4, 32, 31, 6) + back(5, 5, 31, 31, 6))
+        cases = {
+            'one update': (one_update, 'PASS'),
+            'separate frames': (req(3, 3, 31, 5) + back(3, 3, 31, 31, 6) + req(4, 4, 32, 7) + back(4, 4, 32, 32, 8) +
+                                req(5, 5, 31, 9) + back(5, 5, 31, 31, 10), 'FAIL'),
+            'distinct only': (req(3, 3, 31, 5) + req(4, 4, 32, 5) + back(3, 3, 31, 32, 6) + back(4, 4, 32, 32, 6), 'FAIL'),
+            'readbacks split over updates': (req(3, 3, 31, 5) + req(4, 4, 32, 5) + req(5, 5, 31, 5) +
+                                             back(3, 3, 31, 31, 6) + back(4, 4, 32, 31, 6) + back(5, 5, 31, 31, 7), 'FAIL'),
+        }
         with tempfile.TemporaryDirectory() as d:
             log = Path(d) / 'log.txt'
-            log.write_text(base + pair_in(3, 3, 31, 5) + pair_in(4, 4, 32, 7))
-            report = harness.evaluate(log, burst, True)
-            self.assertEqual(report['result'], 'FAIL')
-            self.assertTrue(any('queued Mark/Apply' in r for r in report['reasons']))
-            log.write_text(base + pair_in(3, 3, 31, 5) + pair_in(4, 4, 32, 5))
-            report = harness.evaluate(log, burst, True)
-            self.assertEqual(report['result'], 'PASS', report['reasons'])
-            self.assertEqual(report['max_requests_per_frame'], 2)
+            for name, (text, expected) in cases.items():
+                with self.subTest(name):
+                    log.write_text(base + text)
+                    report = harness.evaluate(log, burst, True)
+                    self.assertEqual(report['result'], expected, report['reasons'])
+                    if expected == 'PASS':
+                        self.assertEqual((report['max_requests_per_frame'], report['covered_batches']), (3, 1))
+                        self.assertEqual((report['superseded_in_frame'], report['observed_mismatched']), (1, 0))
+                    else:
+                        self.assertTrue(any('queued Mark/Apply' in r for r in report['reasons']))
+
+    def test_last_request_of_a_frame_must_match_its_own_values(self):
+        def line(reason, detail):
+            return probe_line(reason, detail, frame=5)
+        text = (line('apply_requested', 'apply=1 wrev=1 requested[ship1=31.00/31.00 ship2=100.00/100.00 target1=- target2=-]') +
+                line('apply_requested', 'apply=2 wrev=2 requested[ship1=32.00/32.00 ship2=100.00/100.00 target1=- target2=-]') +
+                line('apply_readback', 'apply=1 wrev=1 delay=0.020 requested[ship1=31.00/31.00 ship2=100.00/100.00] observed[ship1=40.00/40.00 ship2=100.00/100.00]') +
+                line('apply_readback', 'apply=2 wrev=2 delay=0.020 requested[ship1=32.00/32.00 ship2=100.00/100.00] observed[ship1=40.00/40.00 ship2=100.00/100.00]'))
+        with tempfile.TemporaryDirectory() as d:
+            log = Path(d) / 'log.txt'
+            log.write_text(text)
+            report = harness.evaluate(log, self.sent(), True)
+            self.assertEqual((report['superseded_in_frame'], report['observed_mismatched']), (0, 2),
+                             'observing neither request is a mismatch, never superseded')
+
+    def test_bundle_removes_token_leases_and_address(self):
+        with tempfile.TemporaryDirectory() as d:
+            d = Path(d)
+            saved = harness.HERE
+            try:
+                harness.HERE = d / 'evidence'
+                run_dir = harness.HERE / '20261020T000000Z-abc1234'; run_dir.mkdir(parents=True)
+                package = d / 'pkg'; package.mkdir()
+                token = 'a' * 32
+                (package / 'session.json').write_text(json.dumps({'token': token}))
+                (run_dir / 'prepare.json').write_text(json.dumps({'address': '192.168.1.5', 'head': 'f' * 40}))
+                (run_dir / 'x4lan-debug.txt').write_text(f'token {token} lease {"b" * 32} at 192.168.1.5 head {"c" * 40}\n')
+                archive = harness.bundle(run_dir, package)
+                import zipfile
+                with zipfile.ZipFile(archive) as z:
+                    text = z.read(run_dir.name + '/x4lan-debug.txt').decode()
+                    names = z.namelist()
+                self.assertNotIn(token, text); self.assertNotIn('b' * 32, text); self.assertNotIn('192.168.1.5', text)
+                self.assertIn('c' * 40, text, 'a 40-hex commit SHA is kept')
+                self.assertIn(run_dir.name + '/SHA256SUMS.txt', names)
+                with self.assertRaises(RuntimeError):
+                    harness.bundle(d, package)
+            finally:
+                harness.HERE = saved
 
     def test_observed_mismatch_is_reported_not_hidden(self):
         bad = (probe_line('apply_requested', 'apply=1 wrev=1 requested[ship1=50.00/50.00 ship2=100.00/100.00 target1=- target2=-]') +
