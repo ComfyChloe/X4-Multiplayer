@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Unshipped damage-sync probe companion (D-task step 1): hands the two LAN target ships to
+     dev/damage_probe.lua once the bubble arena exists. Changes no game state. -->
+<mdscript name="X4LAN_DamageProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Targets" checkinterval="1s">
+   <conditions><check_value value="md.X4LAN_Bubble.Arena.$targets? and md.X4LAN_Bubble.Arena.$targets.count == 2"/></conditions>
+   <actions>
+    <raise_lua_event name="'X4LAN_DamageProbe.Targets'" param="md.X4LAN_Bubble.Arena.$targets"/>
+    <debug_text text="'[X4LAN] DAMAGE_PROBE_MD targets=%s,%s'.[md.X4LAN_Bubble.Arena.$targets.{1},md.X4LAN_Bubble.Arena.$targets.{2}]"/>
+   </actions>
+  </cue>
+ </cues>
+</mdscript>
