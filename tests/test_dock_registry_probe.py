@@ -10,8 +10,8 @@ SOURCE=Path(__file__).resolve().parents[1]/'dev/dock_registry_probe.lua'
 def trace(mode):
     finish=f'SEED_PROBE saved success=true id={SEED}' if mode=='capture' else f'SEED_PROBE loaded id={SEED}'
     return '\n'.join([f'SEED_DOCKS begin mode={mode} id={SEED} count=2',
-        'SEED_DOCKS row index=1 object=0x11 container=0x10 macro=dock_a_macro containerMacro=ship_a_macro external=1 storage=0 capacity=0 reverse=1',
-        'SEED_DOCKS row index=2 object=0x12 container=0x10 macro=dock_b_macro containerMacro=ship_a_macro external=0 storage=1 capacity=40 reverse=1',
+        'SEED_DOCKS row index=1 object=0x11 container=0x10 macro=dock_a_macro containerMacro=ship_a_macro external=1 storage=0 capacity=0 parent=0x10 expectedParent=0x10 expectedContainer=0x10 poseError=0 reverse=1',
+        'SEED_DOCKS row index=2 object=0x12 container=0x10 macro=dock_b_macro containerMacro=ship_a_macro external=0 storage=1 capacity=40 parent=0x10 expectedParent=0x10 expectedContainer=0x10 poseError=0 reverse=1',
         f'SEED_DOCKS end mode={mode} id={SEED} count=2',f'SEED_DOCKS complete mode={mode} id={SEED} count=2',finish])
 
 
@@ -53,6 +53,15 @@ reject(function() D.frame(61) end);assert(done==0 and D.stage=='failed')
 
     def test_matching_native_capture_reload(self):
         self.assertEqual(validate(trace('capture'),trace('load'),SEED)['saved_docks'],2)
+
+    def test_local_handle_renumbering_requires_a_bijective_saved_component_graph(self):
+        loaded=trace('load').replace('0x10','0x30').replace('0x11','0x31').replace('0x12','0x32')
+        result=validate(trace('capture'),loaded,SEED)
+        self.assertEqual(result['locally_renumbered_docks'],2)
+        for bad in (loaded.replace('expectedParent=0x30','expectedParent=0x40',1),
+                    loaded.replace('container=0x30','container=0x40',1).replace('expectedContainer=0x30','expectedContainer=0x40',1),
+                    loaded.replace('poseError=0','poseError=0.06',1),loaded.replace('poseError=0','poseError=nan',1)):
+            with self.assertRaises(ValueError):validate(trace('capture'),bad,SEED)
 
     def test_missing_unresolved_changed_or_reordered_native_evidence_rejected(self):
         capture=trace('capture');loaded=trace('load');lines=loaded.splitlines()

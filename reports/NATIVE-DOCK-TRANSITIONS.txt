@@ -94,3 +94,28 @@ Use dev/native_dock_registry_test.py capture/load --run <owned-run> with the exi
 guarded seed harness for launch/transfer/cleanup. The optional hook delays saving
 until native dock readback finishes; regular seed experiments are unchanged unless
 dock_registry_probe is enabled. No gameplay/wire path or937262c joint fixture changes.
+
+FIRST REGISTRY SAVE/RELOAD — RETAINED FAILURE
+docks-first at2239302 captures/reloads51,331 docks on10,035 native containers.
+Every macro, container macro, external/storage flag and capacity agrees, and all
+reverse component lookups resolve. However, ALL dock and container numeric handles
+change after native reload, so the original exact-handle validator correctly
+reports FAIL against its stated condition. That condition was an incorrect identity
+assumption: these are process-local runtime handles, not shared persistent IDs.
+The unchanged station validator separately passes1,407 stations (maximum position
+error0.0160075m) and explicitly reports local_component_ids_equal=false. Seed
+5bbe57ec23d160f74bb5e49a571514ae,26,368,473 bytes, SHA256
+e5decd4df9a3d96186b184d1c6a7a25ad0ec2f9b4c82377aae5cc4118f268b07.
+Raw failure/validator/source/difference diagnosis are retained. Both native sessions
+closed, exact owned save removed, normal saves unchanged and clean33 restored with
+full per-stage manifests. This run is not relabeled as a dock-registry pass.
+
+A NEW registry-version2 experiment adds independently saved immediate-parent and
+container references, original macro and container-relative position. Native
+readback must match those witnesses and the reverse lookup. The validator requires
+the complete saved component graph to map bijectively across local renumbering,
+unchanged definitions and relative-position error no greater than0.05m; it rejects
+split/merged mappings, wrong saved parents, missing witnesses and unresolved rows.
+Old captures lack these new witnesses and cannot satisfy the new gate. A fresh
+engine-created seed and reload are required.330 tests and MD schema pass; native
+version2 is PENDING. No production attachment identity/transport is activated.
