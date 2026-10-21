@@ -65,6 +65,9 @@
      <set_value name="State.$appliedOperation" exact="$request.$operation"/><set_value name="State.$appliedOutcome" exact="$outcome"/>
     </do_elseif>
     <debug_text text="'[X4LAN] ATTACH_EXEC applied operation=%s outcome=%s'.[$request.$operation,$outcome]"/>
+    <do_if value="$allowed">
+     <debug_text text="'[X4LAN] ATTACH_EXEC action operation=%s action=%s state=%s dock=%s shipIndex=%s code=%s'.[$request.$operation,$v.$action,$v.$state,$v.$dock,$v.$ship,$ship.idcode]"/>
+    </do_if>
     <raise_lua_event name="'X4LAN_Attachment.Applied'" param="'%s|%s|%s|%s'.[$request.$seed,$request.$epoch,$request.$operation,$outcome]"/>
    </actions>
   </cue>

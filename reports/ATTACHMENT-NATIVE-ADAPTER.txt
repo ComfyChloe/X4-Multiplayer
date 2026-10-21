@@ -58,3 +58,25 @@ operation never returns a false no-mutation rejection. 'applied' means the MD
 consumer invoked the operation; engine completion still requires actual readback.
 Schema validation passes; native execution-window qualification remains pending.
 No Lua engine/session adapter or transport registration exists in this foundation.
+
+OPTIONAL NATIVE EXECUTION QUALIFICATION PATH
+The unshipped controller probe can now drive the production native consumer via
+attachment_execution.lua. Native Ready is required before the first phase; the
+prepare/window/consume/ack exchange replaces the old direct diagnostic Apply.
+The target query witness is retained only for the one prepared capability and
+can be reused by the controller only inside that matching native Window callback.
+The MD consumer repeats saved identity, parent/dock, permission and player guards.
+Default probe behavior and shipped registration remain unchanged.
+
+The separate execution validator audits every ordered preparation, native window,
+controller dispatch, native consumption outcome/action and correlated acknowledgment.
+A complete confirmed no-mutation rejection is counted as a rejected attempt;
+unknown outcomes, missing actions, unrelated actors and unexpected evidence fail.
+After auditing the full raw exchange, successful actions are projected into the
+existing strict eight-state controller gate. Raw captures are retained unchanged;
+this projection never removes engine errors or permits a missing native action.
+The report exposes rejected/unissued attempt counts alongside the nine successful
+actions. Functional success alone does not claim deliberate stale/pause injection.
+419 Linux/Python/LuaJIT tests PASS/no skips, including coupling checks and removed,
+reordered, wrong-actor, rejection-with-action and post-completion evidence variants.
+Changed consumer MD schema VALID. Native result pending.
