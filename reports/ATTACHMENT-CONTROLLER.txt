@@ -1,0 +1,109 @@
+SAVED DOCK LEDGER AND ATTACHMENT TRANSITION CONTROLLER
+21 October2026 | primary-owned pure modules, not activated in gameplay
+
+Native observations showed independent dock/storage transitions moving otherwise
+correctly bound ships away from host poses. A sector-position write cannot repair
+that parent relationship. The new pure modules define local identity and ordered
+transition gates before an engine adapter can consume host attachment state.
+There is no UI registration, native call, wire hook or package activation here.
+Humans own finished-version playtests. The21Oct21:29 clarification permits the
+primary agent to continue isolated local native engine/function tests. No game
+was launched for this pure-module change.
+
+seed_docks.lua
+X4LAN_SEED_DOCKS_LEDGER.registry(seed, count, inspect) collects exactly the ordered
+saved indices1..count (maximum250000), then seal() publishes a complete ledger.
+observe(index, definition) requires rehydrated object/parent/container references,
+macro/container_macro, external/storage flags and capacity. inspect(object) must
+independently return the current native values, alive=true and the relative pose
+error from the independently saved witness. Error must be finite and <=0.05m.
+Repeated native references, missing rows, changed witnesses or invalid types stop
+the ledger; no partial mapping is published. resolve(index, EXTERNAL/STORED)
+repeats the live witness checks and requires the exact requested dock type. A
+wrong requested type rejects that request without poisoning an intact registry;
+changed live witnesses still invalidate the registry.
+
+Opaque64-bit component references are keyed without passing through Lua double
+conversion. Numeric input above2^53-1 is rejected; uint64 cdata/canonical decimal
+strings preserve distinct larger references. Returned descriptors/maps are copies.
+fingerprints() records the seed/index, native definitions and deterministic first-
+encounter labels of the saved component graph. Equivalent local renumbering has
+the same labels; split/merged parent/container graphs change them. This model is
+not a substitute for native validation of saved references across reload/PCs.
+The retained registry-v2 capture now passes a separate local native reload after
+comparing saved macro IDs instead of macro values. All50538 dock indices/graphs
+agree; see NATIVE-DOCK-TRANSITIONS.txt for exact source, failures and limits. This
+pure ledger/controller itself is still not activated or natively tested.
+
+attachment_controller.lua
+X4LAN_ATTACHMENT_CONTROLLER.new(options) requires an admitted host epoch, explicit
+freshness TTL(0,60]s, transition timeout(0,120]s and inspect/target/dispatch callbacks.
+It copies its options. The caller first authenticates host traffic and uses the
+separate UATTACH receiver's admitted identity maps. The controller is not a network
+authentication boundary and never invents missing IDs or native objects.
+
+desire(ship, observation, now) consumes epoch, sequence, state, dock, received_at
+and a stable ship identity fingerprint. All times are finite local monotonic time.
+Duplicate/stale observations cannot refresh freshness; conflicting same-sequence
+intentions do not apply. At most4096 active jobs and249999 historical saved-ship
+watermarks exist. Idle expired jobs release capacity during prepare or bounded
+capacity admission; replay marks remain. Issued/uncertain native operations are
+never evicted for freshness or capacity. The adapter still cancels ships leaving
+its view and polls retained issued fences. Cancellation preserves replay protection. Clock rollback stops
+the controller. Old host epochs require a separately admitted new controller.
+
+inspect(ship) returns object, identity, alive, protected, state, dock and container.
+Protection must include actual pilot/occupant/service objects, not just faction.
+Unresolved or replaced saved objects and protected ships stop the affected job.
+target(ship,dock,state) resolves the saved bay and returns its native object,
+container and fingerprint plus explicit alive/protected/compatible/available/
+cycle_free and external/storage facts. The eventual engine adapter must check
+current occupants/reservations and parent ancestry. No other occupant is evicted.
+
+prepare(ship, now, paused) requires an explicit pause flag and yields a status and
+opaque queued ticket. An attached ship first receives UNDOCK; only native free-
+flight readback permits the next ATTACH to a different exact saved bay. Repeated
+render polling preserves a valid ticket. New intentions, pause, cancellation or
+changed native state revoke old queued tickets. describe(ticket) returns a copy.
+
+execute(ticket, now, paused) repeats identity/protection/native-state and target
+checks at consumption. Queue-then-dock, target replacement and new occupancy
+cannot use stale preparation results. Tickets are consumed before dispatch,
+including exceptions. dispatch(command)==true means accepted for execution;
+actual state is still unknown until inspect confirms it. False/exception is an
+uncertain outcome and fails without automatic retry. The command contains ship,
+object, sequence, action, target, container, desired state and dock index.
+
+An issued asynchronous action keeps its readback fence even if a newer intention
+or cancellation arrives. Its deadline is not extended by retries or new packets.
+Native completion is required before the next operation; timeout fails the job.
+allow_pose only returns true for a fresh desired FREE state independently observed
+as free, with no queued/issued transition and no pause/failure. It does not create
+or revoke a ticket. Native MD must still recheck attachment immediately before any
+queued sector warp, as required by the existing SeedMove guard.
+
+The future asynchronous MD consumer must independently repeat seed/epoch/index,
+reference, player/occupant, occupancy and generation checks when it executes. A
+Lua-side execute check alone cannot close a later MD queue race. Completion/abort
+tokens must refer to that exact operation. No such shipping consumer is enabled
+by this change. Cancellation cannot cancel an already executing engine action;
+the adapter must keep polling its retained readback fence after view removal.
+
+VALIDATION
+355 Linux/Python/LuaJIT tests pass, no skips;25 focused ledger/controller tests.
+Claude independently reviewed0e7f700/4adf428 and identified request-type poisoning
+and stale active-capacity obligations. The follow-up rejects wrong type per request
+and reaps only idle expired jobs while keeping replay marks and issued fences.
+They cover opaque64-bit identity, renumbered/split/merged graphs, complete registry
+admission, mutated witnesses, stale/conflicting packets, queue-then-dock, player
+takeover, occupancy/cycles, repeated-frame queue retention, fresh-intention/timeout
+interaction, pause, cancellation, uncertain dispatch and bounded active state.
+These are pure model/adapter-contract tests, not native docking acceptance.
+
+NEXT
+Integrate the reviewed UATTACH codec behind opt-in gates, connect native saved
+reference/readback events, and preserve the asynchronous execution fences.
+Validate the saved references in an isolated local capture/reload, then prepare
+human instructions for the eventual two-PC carrier-transition playtest. Do not relabel the earlier native failures or add direct
+docked-child pose writes. Dynamic creation/destruction, arbitrary NPC commands,
+health, station production and complete universe authority remain separate work.

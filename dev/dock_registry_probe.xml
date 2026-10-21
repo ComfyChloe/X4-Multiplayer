@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_DockRegistry" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="State" namespace="this"><conditions><event_ui_triggered screen="'X4LAN_DockRegistry'" control="'Mark'"/></conditions><actions>
+   <do_if value="md.X4LAN_Seed.State.$id? and md.X4LAN_Seed.State.$id == event.param3 and not md.X4LAN_Seed.State.$loads? and not md.X4LAN_Bubble.Arena.$ships? and not md.X4LAN_Bubble.PrepareShips.$own?">
+    <find_ship name="$ships" space="player.galaxy" multiple="true" recursive="true"/>
+    <find_station name="$stations" space="player.galaxy" multiple="true"/>
+    <!-- Each object is visited directly. Recursive component search would also
+         visit docked children and can duplicate components in an object list. -->
+    <find_object_component name="$raw" object="$ships" class="class.dockingbay" multiple="true" recursive="false" includeobjects="false"/>
+    <find_object_component name="$raw" object="$stations" class="class.dockingbay" multiple="true" recursive="false" includeobjects="false" append="true"/>
+    <set_value name="$docks" exact="[]"/><set_value name="$indices" exact="table[]"/>
+    <set_value name="$parents" exact="[]"/><set_value name="$containers" exact="[]"/><set_value name="$positions" exact="[]"/><set_value name="$macros" exact="[]"/>
+    <do_if value="$raw.count gt 0 and $raw.count le 250000">
+     <do_all exact="$raw.count" counter="$i">
+      <set_value name="$dock" exact="$raw.{$i}"/>
+      <do_if value="not $indices.{$dock}?">
+       <append_to_list name="$parents" exact="$dock.parent"/><append_to_list name="$containers" exact="$dock.container"/>
+       <append_to_list name="$positions" exact="$dock.relativeposition.{$dock.container}"/><append_to_list name="$macros" exact="$dock.macro"/><append_to_list name="$docks" exact="$dock"/><set_value name="$indices.{$dock}" exact="$docks.count"/></do_if>
+     </do_all>
+     <set_value name="$registryVersion" exact="2"/><set_value name="$id" exact="event.param3"/>
+     <raise_lua_event name="'X4LAN_DockRegistry.Ready'" param="'%s|%s'.[$id,$docks.count]"/>
+    </do_if>
+    <do_else><raise_lua_event name="'X4LAN_DockRegistry.Error'" param="'empty or oversized native dock collection'"/></do_else>
+   </do_if>
+   <do_else><raise_lua_event name="'X4LAN_DockRegistry.Error'" param="'registry mark outside pristine capture'"/></do_else>
+  </actions></cue>
+  <cue name="Dump" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_DockRegistry'" control="'Dump'"/></conditions><actions>
+   <set_value name="$v" exact="event.param3"/>
+   <do_if value="State.$id? and State.$id == $v.$seed and State.$registryVersion == 2 and State.$docks.count gt 0 and State.$docks.count le 250000 and (($v.$mode == 'capture' and not md.X4LAN_Seed.State.$loads?) or ($v.$mode == 'load' and md.X4LAN_Seed.State.$loads == 1))">
+    <set_value name="$valid" exact="true"/>
+    <debug_text text="'[X4LAN] SEED_DOCKS begin mode=%s id=%s count=%s'.[$v.$mode,State.$id,State.$docks.count]"/>
+    <do_all exact="State.$docks.count" counter="$i">
+     <set_value name="$dock" exact="State.$docks.{$i}"/>
+     <!-- Native macro values restored from a save can compare unequal to the
+          live macro value despite identical IDs. Compare the saved stable ID;
+          parent/container component references and reverse lookup remain exact. -->
+     <do_if value="$dock.exists and $dock.container.exists and $dock.parent.exists and State.$indices.{$dock}? and State.$indices.{$dock} == $i and $dock.parent == State.$parents.{$i} and $dock.container == State.$containers.{$i} and $dock.macro.id == State.$macros.{$i}.id">
+      <debug_text text="'[X4LAN] SEED_DOCKS row index=%s object=%s container=%s macro=%s containerMacro=%s external=%s storage=%s capacity=%s parent=%s expectedParent=%s expectedContainer=%s poseError=%s reverse=1'.[$i,$dock,$dock.container,$dock.macro.id,$dock.container.macro.id,$dock.external,$dock.isstorage,$dock.shipstorage.capacity,$dock.parent,State.$parents.{$i},State.$containers.{$i},$dock.distanceto.[State.$containers.{$i},State.$positions.{$i}] / 1m]"/>
+     </do_if>
+     <do_else>
+      <set_value name="$valid" exact="false"/>
+      <debug_text text="'[X4LAN] SEED_DOCKS failed unresolved reference index=%s'.[$i]"/>
+      <!-- Diagnostic only: retain the original failure and report each witness
+           separately. Do not dereference absent objects or change acceptance. -->
+      <do_if value="$i le 8">
+       <debug_text text="'[X4LAN] DOCK_WITNESS index=%s object=%s exists=%s savedParent=%s savedContainer=%s savedMacro=%s reversePresent=%s'.[$i,$dock,$dock.exists,State.$parents.{$i},State.$containers.{$i},State.$macros.{$i},State.$indices.{$dock}?]"/>
+       <do_if value="$dock.exists">
+        <debug_text text="'[X4LAN] DOCK_WITNESS_LIVE index=%s parent=%s container=%s macro=%s parentEqual=%s containerEqual=%s macroEqual=%s reverse=%s'.[$i,$dock.parent,$dock.container,$dock.macro,$dock.parent == State.$parents.{$i},$dock.container == State.$containers.{$i},$dock.macro == State.$macros.{$i},if State.$indices.{$dock}? then State.$indices.{$dock} else -1]"/>
+       </do_if>
+      </do_if>
+     </do_else>
+    </do_all>
+    <debug_text text="'[X4LAN] SEED_DOCKS end mode=%s id=%s count=%s'.[$v.$mode,State.$id,State.$docks.count]"/>
+    <raise_lua_event name="'X4LAN_DockRegistry.Done'" param="'%s|%s|%s'.[State.$id,State.$docks.count,if $valid then 1 else 0]"/>
+   </do_if>
+   <do_else><raise_lua_event name="'X4LAN_DockRegistry.Error'" param="'missing or incompatible saved dock references'"/></do_else>
+  </actions></cue>
+ </cues>
+</mdscript>

@@ -1,0 +1,42 @@
+OVERNIGHT PRIORITIES — 21/22 OCTOBER 2026
+User additions21Oct21:49 CEST; internal work only, no public package requested.
+Work stops22Oct08:00 Europe/Berlin after safe owned cleanup and status. Coordinate
+at :00/:15/:30/:45. Agents may run isolated local engine/function tests; humans
+perform finished-version playtests. Preserve normal saves, documents and mail;
+no spending. Other machines retain their own owner permissions.
+
+HIGH — SHARED HOST-AUTHORITATIVE UNIVERSE (existing main objective)
+Continue saved-object/dock identity, attachment state and native transition
+execution, then integrate reviewed foundations without losing ordinary freight,
+smooth movement or the existing Cooperative Trial. Local saved-dock reload now
+passes a bounded50538-reference experiment; network attachment authority remains
+unfinished. Preserve all earlier failed evidence and exact source boundaries.
+
+MEDIUM — ORDINARY/VANILLA SHARED MISSIONS (new user request)
+Work toward both players completing normal X4 missions together. The existing
+custom Cooperative Trial does not satisfy this requirement. First map the real
+engine mission/cue identity, ownership and event APIs; then implement a bounded
+representative ordinary mission path with explicit supported mission families.
+The host owns authoritative offer/acceptance, objectives, progress, cancellation,
+completion and reward commitment. Both players need consistent mission display
+and useful participation; forwarded text or two independently advanced missions
+are not a shared completion. Protect against duplicate actions/payouts, stale
+or reordered progress, reconnects, load state and incompatible mission content.
+Narrative/campaign branches may have additional engine restrictions; report actual
+limits rather than claiming arbitrary vanilla missions work. Keep an explicit
+source owner and interface before changes overlap universe/economy authority.
+
+LOW — IN-GAME CLIENT CHAT (new user request, if capacity remains)
+Provide an English in-game chat UI and communication between connected clients.
+Use the existing authenticated session, bounded message size/rate/history and
+validated text. Keep text separate from commands/scripts, display the actual
+sender, and handle reconnects without replay/duplicate floods. Normal typing must
+not fire weapons or trigger flight controls. Preserve game input after closing
+chat. This remains behind core universe work and ordinary shared missions.
+
+DELIVERY
+The primary coordinates implementation/integration; Claude's active scopes remain
+PR16/PR22 corrections, PR23 codec and controller review, then an explicitly agreed
+attachment relay task. The added priorities do not automatically reassign those
+files. Finished-version acceptance belongs to human playtesters; agents still
+record meaningful code/protocol/native-function evidence and remaining limits.

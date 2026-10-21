@@ -1,0 +1,206 @@
+NATIVE DOCKING / STORAGE TRANSITION FEASIBILITY
+21 October 2026 | A:primary | INTERNAL DEVELOPMENT
+
+RESUMED21 OCTOBER EVENING
+The user authorized implementation/review/automated code tests until22Oct08:00
+Europe/Berlin; coordination stays :00/:15/:30/:45. The21Oct21:29 clarification
+permits continued isolated local native tests; humans own finished-version
+playtests. Normal saves remain protected.
+The new pure saved-dock ledger and transition controller are described in
+reports/ATTACHMENT-CONTROLLER.txt. They are not registered in the native UI or
+network path. No new native test was run for these pure modules; historical evidence/limits
+below remain.
+
+PROBLEM
+The shared-seed ship experiment now avoids direct sector-position writes on
+attached ships. Its controlled comparison eliminates large stored-child offsets,
+but external-pad/internal-storage transitions still occur independently locally.
+Native dock.seed was zero for all68 observed bays of one carrier; it is not a
+usable unique dock identity. Shared attachment authority needs saved references
+and actual engine transitions, separately from position replication.
+
+BOUNDED PRIMITIVE
+dev/dock_state_probe.lua/.xml reads the macros of a non-player carrier and stored
+child, then creates an empty diagnostic carrier and child far from normal traffic.
+Original NPCs are left untouched. It selects exact native internal/external dock
+references on that new carrier, suspends only the diagnostic pair and holds the
+carrier transform. Six phases are measured:
+0 initial internal storage;1 spawn on the selected external pad;2 request storage;
+3 spawn on the same external pad;4 undock;5 spawn in the original internal bay.
+Each phase requires Lua and MD readbacks using unchanged native ship handles.
+The MD read acknowledgment must arrive before the next action. Requests are
+sequential, bounded to30 seconds per phase, and reject stale phases, protected
+ships or other occupants/reservations. The fresh disposable world is discarded
+without saving. This opt-in probe has no shipping UI entry or network protocol.
+
+EXECUTION
+Only the agreed primary native-PC owner runs it. With X4 closed, an empty45841
+save directory and autosave=false, use dev/native_dock_state_test.py install.
+Launch the isolated creative profile and native_world_test.py's synthetic p2 peer.
+Retain exact installed hashes, native logs, full normal-save before/after manifests
+and restored33-file hashes. Close the owned game/peer before restoring the known
+internal installation. Run dev/validate_dock_state.py on the full retained log.
+The validator rejects native parser/adapter errors, missing/unresolved readbacks,
+wrong dock references, changed ships, incomplete or reordered phase/action traces.
+
+STATUS / LIMITS
+325 Linux/Python/LuaJIT tests pass; LuaJIT syntax and installed-game MD schema
+validate. The isolated diagnostic-pair revision passes the bounded native cycle. Earlier
+selection failures remain below. API/schema presence is not execution acceptance.
+This does not establish dock reference persistence, network authorization,
+arbitrary ship/station compatibility, occupancy reconciliation, queued traffic,
+player docking, inventory/trading or whole-universe synchronization.
+Sealed7.1.1 packages and the separate937262c Windows/Linux bootstrap stay unchanged.
+Coordination remains :00/:15/:30/:45 Europe/Berlin; stop21 October08:00 CEST.
+
+The first native run dock-state-first at c8720eb FAILED before any transition:
+no compatible free external pad was selected, followed by the phase0 timeout.
+Exact installed source and raw failure are retained. The game/peer were closed,
+normal saves checked unchanged and all33 clean installation hashes restored.
+Candidate diagnostics are added to distinguish missing bays from occupied or
+incompatible pads; this remains dev-only and is not attachment acceptance.
+
+Diagnostic run7cdde0f also FAILED before transition. Its42 component records
+show eight compatible non-launch external small-ship pads, all reserved; four
+are physically empty. Selection now permits a reservation already owned by the
+selected ship, while preserving rejection of other ships and occupied pads.
+Explicit occupant count/reference checks replace list equality in phase actions.
+No native transition acceptance is inferred from this selection correction.
+
+The own-reservation run c1b3925 also FAILED before transition: the stored child
+has no assigned dock, and every compatible non-launch pad belongs to another
+ship. Its raw trace, validator, exact source and full cleanup manifests remain.
+The next probe creates its own empty carrier/child instead of changing or evicting
+that traffic. Validator hardening requires resolved nonzero native handles,
+matching Lua/native identities, action ship identity and causal read/action order.
+Missing/unresolved or additional malformed headers are rejected explicitly.
+
+BOUNDED NATIVE TRANSITION PASS
+dock-state-fixture at9fa0267 PASSES the full validator: six ordered Lua/MD states,
+five ordered native actions, unchanged child/carrier handles, the exact external
+pad for phases1/3, free flight for phase4 and the original internal dock for phase5.
+request_store_ship took about13 seconds; undock took about8 seconds in this run.
+All phase timeouts remain30 seconds. This is one newly created carrier/child pair,
+not arbitrary station/ship compatibility or shared-world authority. Both diagnostic
+objects exist only in the discarded unsaved world. Native game/peer closed, exact
+source/raw logs/validator retained, normal saves unchanged and clean33 restored
+with full manifests. The coordinator's all-actions-after-completion mutation is
+also explicitly rejected by the combined causal-order regression.
+
+SAVED DOCK REFERENCES — NEXT DEV EXPERIMENT, NATIVE PENDING
+The optional native_dock_registry_test overlay adds a registry to the disposable
+seed probe only. Before saving, it enumerates native ship/station docking bays,
+deduplicates component references and stores both an ordered reference list and
+a component-to-index table in saved MD state. Component search is nonrecursive
+across contained objects because every ship is visited directly; recursive search
+would also visit docked children's components. Maximum collection size is250000.
+The marker is published only after collection. Reload reads existing references;
+it never enumerates again to infer identity. Native readback records every dock's
+index, handle, container, macros, external/storage flags and storage capacity, and
+checks the reverse lookup. The strict validator requires full ordered captures,
+resolved headers, matching definitions/handles, successful save/load completion
+and no native parser/probe error. These are acceptance conditions, not yet results.
+Use dev/native_dock_registry_test.py capture/load --run <owned-run> with the existing
+guarded seed harness for launch/transfer/cleanup. The optional hook delays saving
+until native dock readback finishes; regular seed experiments are unchanged unless
+dock_registry_probe is enabled. No gameplay/wire path or937262c joint fixture changes.
+
+FIRST REGISTRY SAVE/RELOAD — RETAINED FAILURE
+docks-first at2239302 captures/reloads51,331 docks on10,035 native containers.
+Every macro, container macro, external/storage flag and capacity agrees, and all
+reverse component lookups resolve. However, ALL dock and container numeric handles
+change after native reload, so the original exact-handle validator correctly
+reports FAIL against its stated condition. That condition was an incorrect identity
+assumption: these are process-local runtime handles, not shared persistent IDs.
+The unchanged station validator separately passes1,407 stations (maximum position
+error0.0160075m) and explicitly reports local_component_ids_equal=false. Seed
+5bbe57ec23d160f74bb5e49a571514ae,26,368,473 bytes, SHA256
+e5decd4df9a3d96186b184d1c6a7a25ad0ec2f9b4c82377aae5cc4118f268b07.
+Raw failure/validator/source/difference diagnosis are retained. Both native sessions
+closed, exact owned save removed, normal saves unchanged and clean33 restored with
+full per-stage manifests. This run is not relabeled as a dock-registry pass.
+
+A NEW registry-version2 experiment adds independently saved immediate-parent and
+container references, original macro and container-relative position. Native
+readback must match those witnesses and the reverse lookup. The validator requires
+the complete saved component graph to map bijectively across local renumbering,
+unchanged definitions and relative-position error no greater than0.05m; it rejects
+split/merged mappings, wrong saved parents, missing witnesses and unresolved rows.
+Old captures lack these new witnesses and cannot satisfy the new gate. A fresh
+engine-created seed and reload are required.330 tests and MD schema pass; native
+version2 is PENDING. No production attachment identity/transport is activated.
+
+MORNING CLOSEOUT — 21 OCTOBER, STOPPED
+The workflow has an observed gap between01:13 and08:48 CEST; the user reports the
+PC was switched off. The pending launch command resumed at08:48:42, after the
+08:00 deadline. On the next time check this was noticed; the task-owned native game
+was closed at about08:50 and no further engine run was started. This was not an
+uninterrupted overnight test session.
+
+The new docks-graph capture at952e379 records50,538 docks. All new independent
+parent/container witnesses and reverse lookups pass the capture-only parser, with
+maximum relative-position error0m. Saving completed; the exact owned snapshot was
+archived/sealed and the profile slot cleared during cleanup. RELOAD WAS NOT RUN:
+this is INCOMPLETE, not native registry acceptance. Raw source/logs/validator and
+full normal-save/restored33-file manifests are retained under
+.local/evidence-136-withheld The shader/schema helper and native peers are
+closed, ports45843/45844 have no listeners, and the existing15-minute timer is
+inactive after coordinator deadline cleanup. Installed internal version is7.1.1;
+no new test/public package was prepared. PR21 newer registry work awaits review.
+
+Claude's final delivery is PR16 096b498 and PR22 4639744, independently unreviewed
+at closeout. Claude reported an idle gap23:00-06:40. Joint Windows/Linux play did
+not run: the pinned seed includes ego_dlc_ventures127, absent from the Windows
+installation. Read-only Windows checks refused before mutation. A later authorized
+rendezvous needs matching enabled game content and review of that Windows harness.
+
+EVENING REGISTRY-V2 RELOAD — RETAINED FAILURE
+The user clarified that local engine/function tests remain authorized; humans
+perform the finished-version playtest. At21:34 CEST the exact952e379 production
+and probe source loaded the retained docks-graph seed c1d00bbcc9246a1f768bfdf41162821a
+(SHA256 c5b96a44090bc0c37215934a737ab310f436aaf66f984fd323e29eb0edf9a2d9).
+All50538 rows failed the added witness predicate. No successful native dock row,
+completion or station-after-load sample exists. The unchanged validator rejects
+the full raw trace. This does not establish that all docks disappeared: the
+predicate combines existence, reverse lookup, parent, container and macro checks.
+A diagnostic-only delta prints the first eight failed rows' separate witnesses;
+it retains the failure, acceptance predicate and bounded completion unchanged.
+The owned game was closed, exact staged seed removed, seven actual normal saves
+checked unchanged by bytes/timestamps, and the clean33 installation/profile files
+restored against THIS run's fresh before inventory. Historical morning evidence
+is retained separately. Run: .local/evidence-135-withheld
+in the exact-source x4-native-dock-reload worktree. No gameplay package changed.
+
+The subsequent witness-only run (same seed/production, dev XML d299e03) also FAILS
+all50538 rows. First8 records independently expose exists=1, exact saved/live
+parent and container equality, and correct reverse indices. Only direct macro
+value equality is0, despite identical printed macro IDs. The saved XML contains
+proper type=macro values, not missing or truncated witnesses. A new comparison
+uses live.macro.id == savedMacro.id; it preserves every component graph and pose
+check and the original definition identity requirement. The prior failures stay
+FAIL. A new native run is required; no successful reload is inferred from this
+source correction. Owned witness game/seed were closed/removed and fresh per-run
+normal-save, clean33 and profile restoration inventories are retained separately.
+
+REGISTRY-V2 STABLE-MACRO RELOAD — BOUNDED NATIVE PASS
+The new docks-graph-macro-id-20261021 run passes the unchanged full graph/pose
+validator:50538 saved indices, dock definitions, exact independently saved
+parent/container references, bijective component graph and reverse lookup. All
+50538 process-local dock handles changed after reload, as expected. Maximum
+relative-position error is0.00184751m (gate remains0.05m). The separate unchanged
+station validator also passes1390 stations with maximum position error0.031m
+and angle error0.00000110547785rad. These are one-PC native reload measurements,
+not shared runtime handles, two-PC dock transitions or whole-universe authority.
+
+Production source and captured snapshot remain952e379/digest74382d15...03fcf2d.
+Only the unshipped dock-registry XML comes from1c281e3 (SHA256
+1f53af351158d8bc6ad2cdd11f6bafe5c962ed3966898da6eb2ee3fccf2708a4).
+The run journal explicitly records this diagnostic overlay; it does not falsely
+attribute those bytes to the older production checkout. Both earlier failed
+reloads remain preserved. The owned game was closed, exact staged save removed,
+all seven actual normal save hashes/timestamps preserved, and clean33/profile
+files restored with current-run inventories. Eighteen raw/result/manifest/source
+and restoration artifacts are hashed in evidence-hashes.json in the private run.
+No new package or transport path was activated. Cross-PC dock identity and shared
+attachment transitions remain pending; the successful local saved-reference
+foundation permits the next bounded native adapter work.
