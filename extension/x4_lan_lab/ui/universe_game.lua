@@ -351,7 +351,11 @@ local function frame(now)
 end
 function u.frame(now)
  local ok,err=pcall(frame,now)
- if not ok then u.failed=true;log('STOPPED '..tostring(err)) end
+ if not ok then
+  u.failed=true
+  if u.attachments then u.attachments:stop(err) end
+  log('STOPPED '..tostring(err))
+ end
 end
 RegisterEvent('X4LAN_Universe.Exclude',function(_,object) u.excluded[key(ConvertIDTo64Bit(object))]=true end)
 RegisterEvent('X4LAN_Universe.Ready',function() u.ready=true;log('READY mode='..cfg.world_mode..' slot='..cfg.slot) end)

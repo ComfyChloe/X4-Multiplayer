@@ -49,3 +49,27 @@ warp arbitration, explicit opt-in launcher/relay config and native-session
 qualification remain next. Default UI registration/packages are unchanged.
 
 442 Linux/Python/LuaJIT checks PASS/no skips, including10 new world/UDP tests.
+
+PHYSICAL EXECUTION WIRING (NATIVE QUALIFICATION PENDING)
+The separate explicit attachment_execute flag now instantiates the production
+controller/bridge after a trusted baseline, starts the native consumer once per
+epoch, and waits for its correlated Ready event. Target queries are serialized
+and matched to the current view/intent. Prepare/Window/Apply/ACK and independent
+actual state all participate in the pose fence. View departure cancels unissued
+work while retaining issued readback fences. Stale metadata/unknown transit
+blocks work with a30s bound; missing target queries fail at5s. Admission loss or
+foreign/malformed native events stop the session and queue native Stop.
+
+A liveness regression reproduced equal fresh20Hz observations invalidating an
+asynchronous query before it could prepare an action. Identical goals now retain
+the local in-flight intent; its ORIGINAL received_at and native expiry margin
+never refresh. Changed goals invalidate it. Both progress across equal updates
+and expiry despite a newer equal observation are tested. Native Windows/Linux
+frame timing remains unqualified.
+
+454 Linux/Python/LuaJIT checks PASS/no skips. The12 additional tests combine the
+real receiver/controller/bridge and world adapter with injected native events,
+including startup, target witness, explicit ACK plus actual readback, departure,
+missing query, pause, admission loss and update churn. The actual X4 experiment
+for this connected physical path is next. Cross-sector arbitration is still held;
+UI/launcher/default package activation remains unchanged.
