@@ -1,0 +1,79 @@
+ATTACHMENT STATE PROTOCOL v1 (UATTACH) - DRAFT CONTRACT FOR AGREEMENT
+21 October 2026 | dev scope, original code | x4lan/attachment.py + ui/attachment_protocol.lua
+
+PURPOSE
+Host observations of whether a saved seed ship is free, docked externally, or stored inside a
+saved seed dock, encoded canonically and admitted by a bounded receiver model. Codec and model
+only: no UI registration, UniverseSession changes, MD/native calls, packages or activation.
+Native dock-registry reload and attachment transition acceptance remain PENDING HUMAN TESTS.
+
+WIRE RECORD (one ASCII datagram, exactly 9 fields, '|' separated)
+  UATTACH|1|recipientLease|hostEpoch|baselineRevision|sequence|shipSeedIndex|dockSeedIndex|state
+  field              rule
+  tag                exactly UATTACH
+  version            exactly 1
+  recipientLease     32 lowercase hex (the receiving peer's lease; the session authenticates it)
+  hostEpoch          32 lowercase hex (the host lease that owns the universe epoch)
+  baselineRevision   canonical integer 1..2147483647 (committed W01 baseline it refers to)
+  sequence           canonical integer 1..2147483647, strictly increasing per hostEpoch across
+                     ALL UATTACH records of that host (one host-wide counter)
+  shipSeedIndex      canonical integer 1..249999: saved index of the ship in the pristine seed
+  dockSeedIndex      canonical integer 0..250000: saved index of the dock reference in the same
+                     seed; 0 only with FREE, 1..250000 only with EXTERNAL or STORED
+  state              exactly FREE, EXTERNAL or STORED
+Canonical integer: "0" or [1-9][0-9]{0,9}; no sign, spaces, leading zeros or exponent.
+Whole record: ASCII, no whitespace or control characters, no empty field, at most 768 bytes
+(transport MTU). Anything else (unknown tag/version, extra or missing field, out-of-range,
+noncanonical, truncated, oversized, nonfinite) is rejected atomically: decode returns no
+record and changes nothing. There is no legacy fallback.
+Indices identify references saved in the same pristine seed. They are NEVER numeric runtime
+handles or dock.seed values, and new objects (not in the seed) are outside v1.
+
+PYTHON API (x4lan/attachment.py; Lua mirrors names in X4LAN_ATTACHMENT_PROTOCOL)
+  Attachment(recipient, epoch, revision, sequence, ship, dock, state)   frozen record
+  encode(Attachment) -> str        validates, returns the canonical record
+  decode(str) -> Attachment        raises AttachmentError (Lua: returns nil, reason)
+  Receiver(lease, ttl)             ttl > 0 seconds, explicit; no default and no time
+                                   inference from sequence
+  .admit(epoch, revision, ships, docks)
+                                   ships/docks: {seed index: descriptor string} from the
+                                   COMMITTED baseline identity map. A new epoch clears all
+                                   records and sequence high-water marks; a new revision in
+                                   the same epoch keeps high-water marks and drops records whose
+                                   ship or dock descriptor changed or disappeared.
+  .receive(text_or_record, now) -> outcome (records only on 'applied')
+  .current(ship, now) -> (state, dock, sequence, received_at) or None (absent or older
+                                   than ttl at `now`)
+  .remove_ship(ship) / .remove_dock(dock)
+                                   removal invalidates retained records (for remove_dock:
+                                   every record referencing that dock)
+  .update_descriptor(kind, index, descriptor)
+                                   a changed descriptor invalidates retained records of
+                                   that ship (or referencing that dock)
+  .expire(now)                     drops records older than ttl
+
+RECEIVE ORDERING (first failing check wins; outcomes are strings in both languages)
+  1 invalid           decode failed
+  2 wrong-recipient   recipientLease != own lease
+  3 unadmitted        nothing admitted, or hostEpoch != admitted epoch
+  4 future-baseline   baselineRevision > admitted revision (never applied or buffered)
+  5 stale-baseline    baselineRevision < admitted revision
+  6 unknown-ship      ship not in the admitted identity map
+  7 unknown-dock      dock != 0 and not in the admitted identity map
+  8 duplicate         sequence == ship high-water mark and record identical
+  9 conflict          sequence == ship high-water mark but record differs (not applied)
+ 10 stale             sequence < ship high-water mark
+ 11 applied           record retained with received_at=now; high-water mark = sequence
+High-water marks are per ship and survive removal/descriptor invalidation within an epoch, so
+an old in-flight record can never resurrect invalidated state. Bounded: at most 249999
+retained records (one per ship index), all keyed by validated integers.
+
+TESTS (tests/test_attachment_protocol.py, LuaJIT via lupa)
+Python/Lua parity over a shared corpus of valid and invalid records (same accept/reject and
+fields) and over scripted receiver timelines (same outcome strings and current() results):
+stale, duplicate, conflict, reordered across ships, future and stale baseline, wrong epoch and
+recipient, unknown ship/dock, FREE/attached dock rules, ttl expiry, removal and descriptor
+change invalidation, epoch change reset.
+
+NOT ESTABLISHED
+No native dock-registry reload, transition or gameplay acceptance; HUMAN tests pending.
