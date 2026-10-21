@@ -1,11 +1,36 @@
 SHARED NATIVE SEED - OPT-IN WINDOWS/LINUX TEST HANDOFF
 20 October 2026 | internal development, no new release package
 
-The user authorized overnight universe work and attempted joint playtests until
-21 October 2026, 08:00 Europe/Berlin. Coordinate every fifteen minutes (:00/:15/:30/:45). Stop new work
-at that deadline and preserve a clear morning handoff. Normal saves stay untouched.
+The overnight work ended on 21 October 2026 at 08:00 Europe/Berlin. The existing
+quarter-hour monitor is stopped. Native activity was closed and normal saves
+and the clean internal 7.1.1 installation were preserved.
 
-CURRENT INPUT
+21 OCTOBER CONTENT ALIGNMENT
+The user subsequently authorized disabling Ventures for the multiplayer tests.
+On the primary PC, ego_dlc_ventures is now disabled in isolated profile 45841.
+Only that extension flag changed; its previous configuration was backed up.
+The 33 installed mod files and all eight save-manifest records (seven actual
+saves plus Steam metadata) were unchanged by this configuration edit. Normal
+profiles and the installed Ventures assets were not modified. No game was
+launched and no replacement seed was created as part of this change.
+
+Windows lacks ego_dlc_ventures version127, while the retained shared seed lists
+it as enabled. Capture a NEW disposable seed with Ventures disabled before the
+next joint test, and verify the complete enabled-content list on both machines.
+Keep historical snapshots and manifests intact; removing a DLC entry from an old
+manifest cannot prove a compatible save. Source, content and checksum admission
+checks remain required. The old manifest/commands below describe retained
+evidence and the transfer workflow, not a ready replacement joint-test input.
+
+dev/native_seed_test.py reads the existing profile's enabled content and preserves
+that configuration. The general dev/native_world_test.py install currently
+enables installed official DLCs, so reapply/verify the Ventures exclusion after
+any such installation and BEFORE capturing the new seed or recording its
+manifest. Do not assume that a prior profile setting survived an installer.
+Claude's Windows seed harness is submitted in PR22 at4639744 and awaits independent
+review. Its delivery does not establish Windows loading or a matched native run.
+
+RETAINED HISTORICAL INPUT
 reports/native-seed-admission-manifest.json pins the existing disposable host
 snapshot. It contains no session credential or save payload. Both computers must
 use matching production bytes; the manifest also lists the enabled DLC versions.
@@ -42,7 +67,7 @@ the guest's receive-result.json. The guest compares the complete pinned manifest
 including size/hash, before publishing received/. Unexpected data stays outside
 that staging path. An interrupted attempt uses a new run directory after audit.
 
-NATIVE START - STILL COORDINATED, WINDOWS HARNESS PENDING
+NATIVE START - STILL COORDINATED, WINDOWS HARNESS REVIEW PENDING
 Linux uses dev/native_seed_play_test.py install/launch/finish against the new run:
   python dev/native_seed_play_test.py install --run .local/evidence-141-withheld --slot p1 --host 192.0.2.109
   python -m x4lan.host --session .local/evidence-142-withheld --bind 192.0.2.109 --bubble-actions --trading
@@ -55,8 +80,8 @@ then use the established Steam arguments for profile 45841/custom_creative. The
 production gate loads the seed before multiplayer setup. This exception never
 permits a personal save. Do not change the normal installer's empty-save guard.
 
-Windows harness ownership will be assigned separately to Claude: one dev-only
-file, portable source tests and native Windows evidence. It must protect/restore
+Windows harness ownership remains with Claude: one dev-only file, portable
+source tests and native Windows evidence. It must protect/restore
 the prior installation and profile, use Windows Known Folder lookup, persist
 atomic recovery state before mutations, and remove only exact run-owned data.
 The shared transport, native gate and Linux harness remain primary-owned.
