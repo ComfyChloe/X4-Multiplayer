@@ -119,3 +119,27 @@ split/merged mappings, wrong saved parents, missing witnesses and unresolved row
 Old captures lack these new witnesses and cannot satisfy the new gate. A fresh
 engine-created seed and reload are required.330 tests and MD schema pass; native
 version2 is PENDING. No production attachment identity/transport is activated.
+
+MORNING CLOSEOUT — 21 OCTOBER, STOPPED
+The workflow has an observed gap between01:13 and08:48 CEST; the user reports the
+PC was switched off. The pending launch command resumed at08:48:42, after the
+08:00 deadline. On the next time check this was noticed; the task-owned native game
+was closed at about08:50 and no further engine run was started. This was not an
+uninterrupted overnight test session.
+
+The new docks-graph capture at952e379 records50,538 docks. All new independent
+parent/container witnesses and reverse lookups pass the capture-only parser, with
+maximum relative-position error0m. Saving completed; the exact owned snapshot was
+archived/sealed and the profile slot cleared during cleanup. RELOAD WAS NOT RUN:
+this is INCOMPLETE, not native registry acceptance. Raw source/logs/validator and
+full normal-save/restored33-file manifests are retained under
+.local/evidence-136-withheld The shader/schema helper and native peers are
+closed, ports45843/45844 have no listeners, and the existing15-minute timer is
+inactive after coordinator deadline cleanup. Installed internal version is7.1.1;
+no new test/public package was prepared. PR21 newer registry work awaits review.
+
+Claude's final delivery is PR16 096b498 and PR22 4639744, independently unreviewed
+at closeout. Claude reported an idle gap23:00-06:40. Joint Windows/Linux play did
+not run: the pinned seed includes ego_dlc_ventures127, absent from the Windows
+installation. Read-only Windows checks refused before mutation. A later authorized
+rendezvous needs matching enabled game content and review of that Windows harness.
