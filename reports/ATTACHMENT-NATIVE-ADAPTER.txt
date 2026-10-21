@@ -131,3 +131,22 @@ The underlying exchange gate now requires a separate fresh exact target query fo
 every ATTACH preparation, including retries. The retained7594515 positive raw run
 still passes this stricter validator; its original validator/result is retained.
 422 Linux/Python/LuaJIT tests PASS/no skips; deliberate native timing result pending.
+
+DELIBERATE NATIVE STALE/PAUSE + RECOVERY PASS — SOURCE8309164
+attachment-execution-faults-20261021 uses fresh seed30f91dbbbc857a016d7e1df5944ef8f0.
+All50931 dock references and1378 native station identities/topology pass reload;
+max dock error0.00196838m,station position0.03100387m/angle0.00000125773rad.
+Selected ship7 UPU-851/container13/storage26/external30 remains FREE/dock0 after
+both rejected attempts, independently read by Lua and MD with the same native code:
+- operation1 held2.503309144s, unpaused, native outcome rejected/reason expired;
+- operation2 held0.063696888s, actual game paused, rejected/reason paused.
+Only after both correlated unchanged-state readbacks does a fresh command run.
+The complete8-state cycle then passes9 native actions/9 acknowledgments with
+7 fresh target queries. Total11 prepare/consume attempts,2 definite rejections,
+zero unissued windows. The strict fault, exchange, settled-state, dock-import and
+station gates all PASS; no native MD errors. This is isolated single-engine
+negative-timing evidence with synthetic desired states, not a network playtest.
+Game closed,owned seed removed,7 actual normal-save bytes/mtimes unchanged,33
+installation files/profile restored including original shaderquality2. Capture
+and load source/installed inventories, raw validators and per-run cleanup hashes
+are retained.422 source tests PASS/no skips; both MD schemas VALID.
