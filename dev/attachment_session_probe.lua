@@ -33,14 +33,14 @@ X4LAN_ATTACHMENT_DRIVER.new=function(options)
  local prepare,apply=options.prepare,options.apply
  options.prepare=function(operation,command)
   S.operations[operation]={phase=S.phase,action=command.action,state=command.state,dock=command.dock,sequence=command.sequence}
-  log(string.format('prepare phase=%d operation=%d sequence=%d action=%s state=%s dock=%d ship=%d',
-   S.phase,operation,command.sequence,command.action,command.state,command.dock,command.ship))
+  log(string.format('prepare phase=%d operation=%d sequence=%d action=%s state=%s dock=%d ship=%d at=%.6f',
+   S.phase,operation,command.sequence,command.action,command.state,command.dock,command.ship,GetCurRealTime()))
   return prepare(operation,command)
  end
  options.apply=function(operation)
   assert(S.operations[operation],'apply without recorded preparation');S.pending[operation]=true
   local command=S.operations[operation]
-  log(string.format('dispatch phase=%d operation=%d sequence=%d action=%s state=%s dock=%d',S.phase,operation,command.sequence,command.action,command.state,command.dock))
+  log(string.format('dispatch phase=%d operation=%d sequence=%d action=%s state=%s dock=%d at=%.6f',S.phase,operation,command.sequence,command.action,command.state,command.dock,GetCurRealTime()))
   return apply(operation)
  end
  local driver=factory(options);local window,acknowledge=driver.window,driver.acknowledge
@@ -115,7 +115,7 @@ RegisterEvent('X4LAN_AttachmentProbe.Selected',function(_,value) guard(function(
    return true
   elseif fields[1]=='UATTACH' then
    local result=W:receive(fields,now)
-   log('wire result='..result..' value='..table.concat(fields,'|'))
+   log(string.format('wire at=%.6f result=%s value=%s',now,result,table.concat(fields,'|')))
    if result=='applied' then S.lastWire=now;S.wantedState=fields[9];S.wantedDock=tonumber(fields[8]) end
    return true
   end
@@ -163,6 +163,6 @@ X4LAN_ADMISSION_AFTER={frame=function(now) guard(function()
   or now-S.lastWire>2 or (wanted=='FREE' and not allowed) then S.stableAt=nil;return end
  assert(not allowed or wanted=='FREE','attached ship admitted a pose write')
  S.stableAt=S.stableAt or now;if now-S.stableAt<.5 then return end
- log(string.format('read phase=%d ship=%d code=%s state=%s dock=%d allowPose=%s',S.phase,S.shipIndex,S.code,actual,index,tostring(allowed)))
+ log(string.format('read phase=%d ship=%d code=%s state=%s dock=%d allowPose=%s at=%.6f',S.phase,S.shipIndex,S.code,actual,index,tostring(allowed),now))
  S.reading=true;AddUITriggeredEvent('X4LAN_AttachmentProbe','Read',S.phase)
 end) end}

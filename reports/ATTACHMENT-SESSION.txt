@@ -87,3 +87,13 @@ not a full native world/session or host-authoritative carrier movement test.
 Post-admission dock query events retain raw ATTACH_SESSION_DOCK records; they are
 separate from the completed bootstrap import, not removed from evidence.
 Native run and its strict end-to-end evidence gate are pending.
+
+The component evidence validator additionally audits exact peer transmissions,
+real recipient/host epoch, baseline descriptor, accepted-observation replay marks,
+and the original receive-time margin at Prepare and dispatch. Native events and
+each Lua/MD phase read must be causally ordered. Only after this audit is the raw
+trace projected to the unchanged prior native execution/transition gates. The
+legacy epoch placeholder in that projection is not an alternate network identity;
+the actual host epoch is checked independently against both peer and native logs.
+457 checks PASS/no skips; adversarial removed/reordered/forged/expired records
+are rejected. Native capture b529003 completed50,491 dock references; load pending.
