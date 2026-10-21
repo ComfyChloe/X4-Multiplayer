@@ -57,12 +57,23 @@ class NativeSeedObjectsValidatorTests(unittest.TestCase):
         capture['rows'].append('250001,ship,new_ship_macro,argon,0,0,0,0,0,0,none,0')
         capture['identities']['250001']={'code':'NEW-001'}
         with self.assertRaises(ValueError): validate(host,guest,capture,replay)
+
         replay.update(seed_only=True,omitted_host_created_ids=[250001])
         result=validate(host,guest,capture,replay)
         self.assertEqual(result['explicitly_omitted_host_created_ids'],[250001])
         self.assertTrue(result['seed_only'])
         replay['omitted_host_created_ids']=[1,250001]
         with self.assertRaises(ValueError): validate(host,guest,capture,replay)
+
+    def test_early_convergence_does_not_hide_later_phase_drift(self):
+        host,guest,capture,replay=self.fixture()
+        late_object='SEED_OBJECT_PROBE object slot=p2 revision=2 id=1 handle=2002 code=ABC-123 macro=ship_test_macro owner=argon original=true sameHandle=true pose=405,200,300\n'
+        late_summary='SEED_OBJECT_PROBE summary slot=p2 revision=2 count=1 live=1 matching=1 retained=0 maxError=305.000000 failed=nil\n'
+        split=guest.index('SEED_OBJECT_PROBE object slot=p2 revision=4')
+        for late in (late_object,late_summary,late_object+late_summary):
+            with self.subTest(late=late),self.assertRaises(ValueError):
+                validate(host,guest[:split]+late+guest[split:],capture,replay)
+
 
 
 if __name__=='__main__': unittest.main()
