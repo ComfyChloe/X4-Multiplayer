@@ -73,3 +73,17 @@ including startup, target witness, explicit ACK plus actual readback, departure,
 missing query, pause, admission loss and update churn. The actual X4 experiment
 for this connected physical path is next. Cross-sector arbitration is still held;
 UI/launcher/default package activation remains unchanged.
+
+BOUNDED NATIVE COMPONENT HARNESS
+The next experiment uses a synthetic host through real UDP/client/relay and the
+production world/driver/consumer modules against one saved native ship/carrier
+pair. It runs AFTER the existing production admission comparison. Its read-only
+selection/phase MD probe has no direct Apply cue (schema VALID,sha256
+58f2b9ffe774e438eff7a7c2352c1139d87e0e838be2888d65297f71d83ca3d6).
+Full universe_game and gameplay fixtures are absent; a diagnostic API context
+provides the one canonical native selected binding. The carrier is held still
+and selected AI/children are disabled. This is component/network qualification,
+not a full native world/session or host-authoritative carrier movement test.
+Post-admission dock query events retain raw ATTACH_SESSION_DOCK records; they are
+separate from the completed bootstrap import, not removed from evidence.
+Native run and its strict end-to-end evidence gate are pending.

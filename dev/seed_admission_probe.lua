@@ -14,6 +14,7 @@ uint32_t GetNumAllFactionStations(const char*);uint32_t GetAllFactionStations(Un
 local function id(object) return ConvertStringToLuaID((tostring(object):gsub('ULL$',''))) end
 local function log(text) DebugError('[X4LAN] SEED_PROBE '..text) end
 local function admission(text) DebugError('[X4LAN] SEED_ADMISSION '..text) end
+local finished
 local pauseCalls,resumeCalls=0,0
 local nativePause,nativeUnpause=Pause,Unpause
 Pause=function() pauseCalls=pauseCalls+1;nativePause() end
@@ -21,7 +22,7 @@ Unpause=function() resumeCalls=resumeCalls+1;nativeUnpause() end
 local trigger=AddUITriggeredEvent
 local importPaused=false
 AddUITriggeredEvent=function(screen,control,value)
- if (screen=='X4LAN_Seed' and control=='Inspect') or (screen=='X4LAN_SeedDocks' and control=='Read') then
+ if not (finished and X4LAN_ADMISSION_AFTER) and ((screen=='X4LAN_Seed' and control=='Inspect') or (screen=='X4LAN_SeedDocks' and control=='Read')) then
   assert(C.IsGamePaused(),'native admission read requested while simulation runs')
   if screen=='X4LAN_SeedDocks' and not importPaused then
    DebugError('[X4LAN] DOCK_IMPORT_PAUSE mode=load paused=true')
@@ -35,7 +36,8 @@ local newImporter=X4LAN_SEED_DOCK_IMPORT.new
 X4LAN_SEED_DOCK_IMPORT.new=function(...)
  local importer=newImporter(...);local receive=importer.receive
  importer.receive=function(self,kind,value,now)
-  DebugError('[X4LAN] DOCK_IMPORT event mode=load kind='..kind..' value='..tostring(value))
+  local prefix=finished and X4LAN_ADMISSION_AFTER and 'ATTACH_SESSION_DOCK' or 'DOCK_IMPORT'
+  DebugError('[X4LAN] '..prefix..' event mode=load kind='..kind..' value='..tostring(value))
   return receive(self,kind,value,now)
  end
  return importer
@@ -69,7 +71,7 @@ local function stations()
  for _,row in ipairs(rows) do log('station '..row) end
  log('end mode='..cfg.seed_probe..' id='..cfg.seed_id..' count='..#rows)
 end
-local started,failed,finished,released,begun,queries,querying,waitingMarker,count,releaseWait
+local started,failed,released,begun,queries,querying,waitingMarker,count,releaseWait
 local function guard(fn)
  if failed or finished then return end
  local ok,why=pcall(fn)
@@ -82,7 +84,9 @@ RegisterEvent('X4LAN_Seed.State',function(_,value) guard(function()
  admission('complete seed='..cfg.seed_id..' count='..count..' pristine=1 loads=1')
  finished=true
 end) end)
-SetScript('onUpdate',function() guard(function()
+SetScript('onUpdate',function()
+ if finished and X4LAN_ADMISSION_AFTER then X4LAN_ADMISSION_AFTER.frame(GetCurRealTime());return end
+ guard(function()
  local now=GetCurRealTime();started=started or now;assert(now-started<240,'native admission diagnostic timeout')
  local G=assert(X4LAN_SEED_GATE);local D=assert(X4LAN_SEED_DOCK_GATE)
  local ready=G.frame(now);assert(not G.failed,G.failed)

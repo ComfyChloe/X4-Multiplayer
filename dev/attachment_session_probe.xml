@@ -1,0 +1,61 @@
+<?xml version='1.0' encoding='utf-8'?>
+<mdscript xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" name="X4LAN_AttachmentProbe" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="State" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_AttachmentProbe'" control="'Select'" /></conditions>
+   <actions>
+    <set_value name="$seed" exact="event.param3" />
+    <do_if value="md.X4LAN_Seed.State.$id? and $seed == md.X4LAN_Seed.State.$id and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and $seed == md.X4LAN_SeedDocks.State.$id and not md.X4LAN_Bubble.Arena.$ships? and not md.X4LAN_Bubble.PrepareShips.$own?">
+     <set_value name="$ship" exact="null" /><set_value name="$carrier" exact="null" /><set_value name="$outside" exact="null" />
+     
+     <do_all exact="md.X4LAN_Seed.State.$ships.count" counter="$i">
+      <set_value name="$container" exact="md.X4LAN_Seed.State.$ships.{$i}" />
+      <do_if value="not $carrier and $container.isoperational and $container.isclass.ship_xl and not $container.dock.exists and $container != player.ship and $container != player.occupiedship and $container != player.container">
+        <set_value name="$inside" exact="null" /><set_value name="$outside" exact="null" />
+        <find_object_component name="$bays" object="$container" class="class.dockingbay" multiple="true" recursive="false" includeobjects="false" />
+        <do_all exact="$bays.count" counter="$b">
+         <set_value name="$bay" exact="$bays.{$b}" />
+         <do_if value="not $inside and $bay.isstorage and $bay.docksize.indexof.{tag.dock_s} and $bay.shipstorage.free gt 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
+          <set_value name="$inside" exact="$bay" />
+         </do_if>
+         <do_if value="not $outside and $bay.external and not $bay.islaunchtube and $bay.docksize.indexof.{tag.dock_s} and not $bay.assignedship.exists and $bay.docked.count == 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
+          <set_value name="$outside" exact="$bay" />
+         </do_if>
+        </do_all>
+        <do_if value="$inside and $outside">
+         <set_value name="$carrier" exact="$container" /><set_value name="$carrierIndex" exact="$i" />
+         <set_value name="$insideIndex" exact="md.X4LAN_SeedDocks.State.$indices.{$inside}" /><set_value name="$outsideIndex" exact="md.X4LAN_SeedDocks.State.$indices.{$outside}" />
+        </do_if>
+      </do_if>
+     </do_all>
+     <do_if value="$carrier">
+      <do_all exact="md.X4LAN_Seed.State.$ships.count" counter="$i">
+       <set_value name="$candidate" exact="md.X4LAN_Seed.State.$ships.{$i}" />
+       <do_if value="not $ship and $candidate.isoperational and $candidate.isclass.ship_s and not $candidate.isinternallystored and not $candidate.dock.exists and $candidate != player.ship and $candidate != player.occupiedship and $candidate != player.container and $carrier.dockingallowed.{$candidate} and $inside.docksize.indexof.{$candidate.docksize} and $outside.docksize.indexof.{$candidate.docksize}">
+        <set_value name="$ship" exact="$candidate" /><set_value name="$shipIndex" exact="$i" />
+       </do_if>
+      </do_all>
+     </do_if>
+     <do_if value="$ship and $carrier and $outside">
+      <set_value name="$operation" exact="0" /><set_value name="$phase" exact="0" /><set_value name="$readNext" exact="0" /><set_value name="$faultReads" exact="0" /><set_value name="$code" exact="$ship.idcode" /><set_value name="$macro" exact="$ship.macro.id" /><set_value name="$owner" exact="$ship.owner" />
+      <debug_text text="'[X4LAN] ATTACH_NATIVE selected seed=%s shipIndex=%s carrierIndex=%s ship=%s carrier=%s code=%s inside=%s outside=%s'.[$seed,$shipIndex,$carrierIndex,$ship,$carrier,$code,$insideIndex,$outsideIndex]" />
+      <raise_lua_event name="'X4LAN_AttachmentProbe.Selected'" param="'%s|%s|%s|%s|%s|%s'.[$shipIndex,$carrierIndex,$insideIndex,$outsideIndex,$ship,$carrier]" />
+     </do_if>
+     <do_else><raise_lua_event name="'X4LAN_AttachmentProbe.Error'" param="'no safe saved free ship/carrier pair with available storage and external bay'" /></do_else>
+    </do_if>
+    <do_else><raise_lua_event name="'X4LAN_AttachmentProbe.Error'" param="'selection outside isolated loaded seed'" /></do_else>
+   </actions>
+  </cue>
+  <cue name="Read" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_AttachmentProbe'" control="'Read'" /></conditions>
+   <actions>
+    <set_value name="$ship" exact="State.$ship" />
+    <do_if value="event.param3 == State.$readNext and event.param3 ge 0 and event.param3 le 7 and $ship.isoperational and $ship == md.X4LAN_Seed.State.$ships.{State.$shipIndex} and $ship.idcode == State.$code">
+     <debug_text text="'[X4LAN] ATTACH_NATIVE read phase=%s shipIndex=%s code=%s stored=%s docked=%s dock=%s'.[State.$readNext,State.$shipIndex,State.$code,$ship.isinternallystored,$ship.dock.exists,if $ship.dock.exists and md.X4LAN_SeedDocks.State.$indices.{$ship.dock}? then md.X4LAN_SeedDocks.State.$indices.{$ship.dock} else 0]" />
+     <raise_lua_event name="'X4LAN_AttachmentProbe.Read'" param="State.$readNext" />
+     <set_value name="State.$readNext" operation="add" exact="1" />
+    </do_if>
+   </actions>
+  </cue>
+ </cues>
+</mdscript>
