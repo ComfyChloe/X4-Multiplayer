@@ -199,6 +199,11 @@ class PrepareSafetyTests(unittest.TestCase):
         summary = json.loads((Path(state['run']) / 'restore.json').read_text())
         self.assertEqual((summary['mod'], summary['saves_changed'], summary['problems']),
                          ('removed by the package setup.ps1', 0, []))
+        before = json.loads((Path(state['run']) / 'saves-before.json').read_text())
+        after = json.loads((Path(state['run']) / 'saves-after.json').read_text())
+        self.assertIn(str(self.save), before, 'the pre-install inventory survives the deleted journal')
+        self.assertEqual(before, after, 'same saves, bytes and timestamps after restore')
+        self.assertEqual(summary['save_inventories'], ['saves-before.json', 'saves-after.json'])
         self.assertFalse(harness.STATE.exists())
 
     def test_changed_run_owned_mod_is_not_removed_and_its_record_is_kept(self):

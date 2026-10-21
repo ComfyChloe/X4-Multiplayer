@@ -254,6 +254,9 @@ def prepare(package):
             shutil.copy2(profile / name, backup / name)
             present.append(name)
     before_saves = saves(profile)
+    # The pre-install save inventory also stays in the run folder: the journal holding it is
+    # deleted once restore succeeds, and the evidence must still show both sides.
+    (run / 'saves-before.json').write_text(json.dumps(before_saves, indent=2))
     if had_record:
         shutil.copy2(record_before, backup / 'package-installation.json')
     address = local_ipv4()
@@ -519,8 +522,10 @@ def restore():
     problems += ['profile file not restored: ' + name for name in mismatched]
     summary['profile_files_exact'] = [name for name in state['profile_files'] if name not in mismatched]
     current = saves(profile)
+    (Path(state['run']) / 'saves-after.json').write_text(json.dumps(current, indent=2))
     changed = saves_changed(state['saves'], current)
-    summary.update(saves_checked=len(state['saves']), saves_changed=len(changed))
+    summary.update(saves_checked=len(state['saves']), saves_changed=len(changed),
+                   save_inventories=['saves-before.json', 'saves-after.json'])
     if changed:
         problems.append('saves changed: ' + ', '.join(changed))
     summary['problems'] = problems
