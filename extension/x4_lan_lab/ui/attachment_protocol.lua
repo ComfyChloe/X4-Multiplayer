@@ -71,7 +71,19 @@ end
 function P.receiver(lease,ttl)
  assert(P.hex(lease),'recipient lease')
  assert(type(ttl)=='number' and ttl==ttl and ttl>0 and ttl<math.huge,'ttl must be an explicit positive number of seconds')
- local self={lease=lease,ttl=ttl,ships={},docks={},records={},marks={},active=0}
+ local self={lease=lease,ttl=ttl,ships={},docks={},records={},marks={},active=0,cache={ships={},docks={}}}
+ -- Validation of an identity map is reused while the caller passes the SAME table with the SAME
+ -- contents (interned strings make that comparison cheap); any change is validated again in full.
+ -- A saved-dock map of ~50000 fingerprints is re-admitted with every W01 baseline commit.
+ local function validated(values,high,limit,cache)
+  if values~=nil and cache.input==values and cache.snapshot and equal(values,cache.snapshot) then
+   return cache.snapshot,cache.count
+  end
+  local snapshot,count=identities(values,high,limit)
+  cache.input,cache.snapshot,cache.count=values,snapshot,count
+  return snapshot,count
+ end
+ local function copy(map) local out={};for k,v in pairs(map) do out[k]=v end;return out end
  -- Receiver time advances only by forward steps of the caller's clock: a rollback never
  -- extends a record's lifetime.
  function self:tick(now)
@@ -83,11 +95,13 @@ function P.receiver(lease,ttl)
  end
  function self:admit(epoch,revision,ships,docks)
   if not P.hex(epoch) or not whole(revision,1,P.maxSequence) then error('baseline identity') end
-  local count;ships,count=identities(ships,P.maxShip,P.maxActiveShips);docks=identities(docks,P.maxDock,P.maxDock)
+  local count;ships,count=validated(ships,P.maxShip,P.maxActiveShips,self.cache.ships)
+  docks=validated(docks,P.maxDock,P.maxDock,self.cache.docks)
   if epoch==self.epoch then
    if revision<self.revision then error('baseline revision moved backwards') end
    if revision==self.revision then
-    if not equal(ships,self.admittedShips) or not equal(docks,self.admittedDocks) then
+    if not (ships==self.admittedShips or equal(ships,self.admittedShips)) or
+       not (docks==self.admittedDocks or equal(docks,self.admittedDocks)) then
      error('a different identity map at the same revision')
     end
     return
@@ -101,10 +115,9 @@ function P.receiver(lease,ttl)
     end
    end
   end
-  self.epoch,self.revision,self.ships,self.docks,self.active=epoch,revision,ships,docks,count
-  self.admittedShips,self.admittedDocks={},{}
-  for k,v in pairs(ships) do self.admittedShips[k]=v end
-  for k,v in pairs(docks) do self.admittedDocks[k]=v end
+  -- The validated snapshots stay immutable; removals and descriptor updates change live copies.
+  self.epoch,self.revision,self.ships,self.docks,self.active=epoch,revision,copy(ships),copy(docks),count
+  self.admittedShips,self.admittedDocks=ships,docks
  end
  function self:receive(record,now)
   now=self:tick(now)

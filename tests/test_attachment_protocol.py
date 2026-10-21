@@ -329,6 +329,25 @@ class ParityTests(unittest.TestCase):
          return applied,replay,state''')
         self.assertEqual(tuple(out), ('applied', 'conflict', 'EXTERNAL'))
 
+    def test_lua_reuses_validation_only_for_an_unchanged_identity_map(self):
+        out = self.lua.execute(f'''
+         local P=X4LAN_ATTACHMENT_PROTOCOL
+         local r=P.receiver("{ME}",10)
+         local docks={{[1]="d1",[2]="d2"}}
+         r:admit("{EPOCH}",5,{{[1]="s1"}},docks)
+         local applied=r:receive("UATTACH|1|{ME}|{EPOCH}|5|1|1|2|EXTERNAL",0)
+         r:admit("{EPOCH}",6,{{[1]="s1"}},docks)            -- same table, same contents: record kept
+         local kept=r:current(1,0)
+         docks[2]="d2:moved"                                -- the caller changes its own table
+         r:admit("{EPOCH}",7,{{[1]="s1"}},docks)            -- revalidated: dependent record dropped
+         local dropped=r:current(1,0)
+         docks[1]="bad descriptor"
+         local ok=pcall(r.admit,r,"{EPOCH}",8,{{[1]="s1"}},docks)
+         r:remove_dock(1)                                   -- live copy only; the snapshot is untouched
+         local same=pcall(r.admit,r,"{EPOCH}",7,{{[1]="s1"}},{{[1]="d1",[2]="d2:moved"}})
+         return applied,kept,dropped,ok,same,r.revision''')
+        self.assertEqual(tuple(out), ('applied', 'EXTERNAL', None, False, True, 7))
+
     def test_safeguard_parity(self):
         self.assertEqual(safeguards(LuaReceiver(self.lua, self.P)), SAFEGUARDS)
 
