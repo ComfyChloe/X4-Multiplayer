@@ -49,6 +49,16 @@ class AttachmentRelay:
         self.live = {}           # ship -> accepted fresh observation of the current view
         self.view = None         # (guest lease, sector) the live records belong to
         self.cursor = 0
+        self._baseline, self._ships = None, {}
+
+    def ships(self, baseline):
+        """Parse each immutable committed baseline once, retaining only one view's map."""
+        # Baseline is frozen and owns a tuple of immutable row strings. Object
+        # identity avoids an O(n) equality comparison on every observation.
+        if baseline is not self._baseline:
+            self._ships = saved_ships(baseline)
+            self._baseline = baseline
+        return self._ships
 
     def current_view(self):
         """(guest, sector, committed baseline of that sector) or None."""
@@ -65,10 +75,12 @@ class AttachmentRelay:
         key = (view[0].lease, view[1]) if view else None
         if key != self.view:
             self.live, self.view, self.cursor = {}, key, 0
+            self._baseline, self._ships = None, {}
 
     def reset(self):
         """Host loss: stop output and forget everything of this epoch."""
         self.epoch, self.marks, self.live, self.view, self.cursor = None, {}, {}, None, 0
+        self._baseline, self._ships = None, {}
 
     def receive(self, raw, address, now):
         """Admit one host observation. Never replies; returns [] in every case."""
@@ -94,7 +106,7 @@ class AttachmentRelay:
         # Only the committed baseline of the guest's current view, and only its saved ships.
         if record.revision != baseline.revision:
             return []
-        descriptor = saved_ships(baseline).get(record.ship)
+        descriptor = self.ships(baseline).get(record.ship)
         if descriptor is None:
             return []
         mark = self.marks.get(record.ship)
@@ -122,10 +134,11 @@ class AttachmentRelay:
         if not view or not self.live:
             return []
         guest, sector, baseline = view
+        current_ships = self.ships(baseline)
         ready = []
         for ship in sorted(self.live):
             entry = self.live[ship]
-            current = saved_ships(baseline).get(ship) if baseline.revision == entry['revision'] else entry['descriptor']
+            current = current_ships.get(ship) if baseline.revision == entry['revision'] else entry['descriptor']
             if (entry['sector'] == sector and entry['revision'] == s.delivered and current == entry['descriptor']
                     and now - entry['sent'] >= self.retry):
                 ready.append(ship)

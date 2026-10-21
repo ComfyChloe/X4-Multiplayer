@@ -1,8 +1,10 @@
 """Opt-in UATTACH relay inside UniverseSession: authentication, view, acknowledgement and bounds."""
 import unittest
+from unittest.mock import patch
 
 from x4lan.attachment import decode
 from x4lan.attachment_relay import ATTACH_BUDGET, ATTACH_TTL, AttachmentRelay
+import x4lan.attachment_relay as relay_module
 from x4lan.universe import Baseline, Receiver, UniverseSession
 from test_host import TOKEN, P1, P2, FOREIGN
 
@@ -177,6 +179,35 @@ class RelayTests(unittest.TestCase):
         for kwargs in (dict(ttl=0), dict(ttl=float('inf')), dict(retry=-1), dict(budget=0), dict(budget=True)):
             with self.subTest(kwargs), self.assertRaises(ValueError):
                 AttachmentRelay(self.s, **kwargs)
+
+    def test_baseline_parsing_is_linear_across_observations_and_send_ticks(self):
+        self.ready([row(i) for i in range(1,129)])
+        with patch.object(relay_module, 'saved_ships', wraps=relay_module.saved_ships) as parse:
+            for i in range(1,129):
+                self.observe(i,i,1)
+            served=set()
+            for step in range(4):
+                served.update(r.ship for r in self.delivered(1+step*.05))
+            self.assertEqual(served,set(range(1,129)))
+            self.assertLessEqual(parse.call_count,1,
+                'one immutable baseline must not be parsed for every ship or send tick')
+            # A replacement baseline in the same sector must invalidate the map.
+            self.ready([row(129)],revision=2,now=1.2)
+            self.observe(999,1,2,now=1.3)  # no longer in the committed baseline
+            self.observe(1,129,2,now=1.3)
+            self.assertEqual([r.ship for r in self.delivered(1.3)],[129])
+            self.assertLessEqual(parse.call_count,2)
+            # The single cached map must follow the active view, not old sectors.
+            self.ready([row(130)],revision=3,sector=OTHER,now=1.4)
+            self.observe(2,129,3,now=1.5)
+            self.observe(1,130,3,now=1.5)
+            self.assertEqual([r.ship for r in self.delivered(1.5)],[130])
+            self.assertLessEqual(parse.call_count,3)
+            before=parse.call_count
+            self.s.attachments.reset()
+            self.observe(2,130,3,now=1.6)
+            self.assertEqual([r.ship for r in self.delivered(1.6)],[130])
+            self.assertEqual(parse.call_count,before+1,'epoch reset must discard its cached map')
 
 
 if __name__ == '__main__':
