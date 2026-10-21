@@ -54,11 +54,13 @@ local function stations()
  for _,row in ipairs(rows) do log('station '..row) end
  log('end mode='..cfg.seed_probe..' id='..cfg.seed_id..' count='..#rows)
 end
-local started,asked,finished,loading,saveRequested
+local started,asked,finished,loading,saveRequested,captureBoundaryReady
 local function freezeImportBoundary()
- -- The disposable world must not evolve during the initial readiness delay,
- -- including the first frames after native reload. Dock-import start is too late.
- if cfg.seed_dock_import_probe and not finished and C.IsPlayerValid() and not C.IsGamePaused() then Pause() end
+ -- Reload must freeze immediately, before any import/readiness delay. A fresh
+ -- capture instead allows the existing startup readiness delay before freezing:
+ -- freezing at age zero can save pending universe-initialization work.
+ if cfg.seed_dock_import_probe and (cfg.seed_probe=='load' or captureBoundaryReady)
+  and not finished and C.IsPlayerValid() and not C.IsGamePaused() then Pause() end
 end
 RegisterEvent('X4LAN_Seed.Loaded',freezeImportBoundary)
 RegisterEvent('X4LAN.Loaded',function() started=GetCurRealTime();asked=false;C.ReloadSaveList() end)
@@ -99,7 +101,7 @@ SetScript('onUpdate',function()
  freezeImportBoundary()
  if X4LAN_SEED_DOCKS then X4LAN_SEED_DOCKS.frame(GetCurRealTime()) end
  if finished or asked or not C.IsPlayerValid() then return end
- if cfg.seed_dock_import_probe and not started then
+ if cfg.seed_dock_import_probe and cfg.seed_probe=='load' and not started then
   -- Frozen diagnostics cannot wait for the gameplay ReadyRequest's player.age>1s
   -- condition. Native player validity plus a refreshed save list is the read-only
   -- bootstrap boundary; the saved MD marker is still checked before admission.
@@ -110,6 +112,10 @@ SetScript('onUpdate',function()
   return
  end
  if GetCurRealTime()-started<3 or not C.IsSaveListLoadingComplete() then return end
+ if cfg.seed_dock_import_probe and cfg.seed_probe=='capture' then
+  captureBoundaryReady=true;freezeImportBoundary()
+  if not C.IsGamePaused() then return end
+ end
  local saves=GetSaveList({save_010=true})
  local exists=false
  for _,entry in pairs(saves or {}) do
