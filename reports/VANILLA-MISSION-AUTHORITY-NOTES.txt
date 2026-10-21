@@ -1,0 +1,77 @@
+ORDINARY SHARED MISSIONS — INITIAL ENGINE SOURCE AUDIT
+21 October2026 | medium-priority follow-up; no mission gameplay enabled
+
+The user's requirement is cooperation on ordinary X4 missions, including useful
+guest participation and one authoritative completion/reward. The existing custom
+Cooperative Trial is a separate regression and does not satisfy this requirement.
+This audit was prepared while the isolated dock capture/reload was running; core
+universe work retains priority. Source examined: installed X4 9.00 content build
+23660954, local extracted engine-reference MD/UI files. No third-party multiplayer
+implementation is copied or used.
+
+OBSERVED ENGINE INTERFACES
+- The game's map UI enumerates accepted missions with GetNumMissions and
+  GetMissionDetails(index). GetMissionObjective(index) supplies the objective
+  text, timeout and current/maximum progress. Native mission IDs are local uint64
+  references; copying their numeric values to another process is not a valid
+  shared identity mechanism.
+- The mission briefing UI accepts an offer by signalling its local offer actor
+  with the local mission reference. It obtains offer data through
+  GetMissionOfferDetails. This is an action requiring host-side offer validation,
+  not a transferable arbitrary SignalObject call from a remote client.
+- Native APIs expose objective steps, associated components and mission threads.
+  A guest display can mirror those descriptions after translating shared object
+  references. It must not instantiate a second independently advancing mission
+  and then mistake matching display text for shared completion.
+- GM_KillMasstraffic counts native event_player_killed_object events through its
+  mission cue and commits reward_player, faction relation, inventory items and
+  mission-completion statistics in its success path. GM_Destroy_Matching_Objects
+  delegates targets/progress to RML_Destroy_Matching_Objects. That library handles
+  matching native destruction/player-kill events and avoids duplicate credit for
+  the same killed target. Merely injecting a UI progress number would bypass the
+  actual mission logic and is insufficient.
+
+IMPLEMENTATION CONSEQUENCES
+The host should retain the original native mission/cue and receive real
+host-authoritative world events from both players. Guest combat, trade, cargo and
+other interactions must first be applied to the corresponding host objects with
+verified actor attribution. Whether a remote player's authoritative proxy damage
+causes the existing player-kill event must be measured; source inspection alone
+does not establish this. No client should directly assert mission completion or
+request an arbitrary payout.
+
+Use a shared mission key assigned by the host within its admitted session epoch,
+with an explicit mapping to its local mission reference. Mirror ordered revisioned
+mission snapshots, objective targets via shared object IDs, lifecycle state and
+supported actions. Reconnect must receive current state; removed/completed missions
+must not revive from stale packets. A host save/reload requires persisting the
+mission mapping/reward commitment or deliberately rejecting session continuation;
+local mission handles must not become durable wire IDs.
+
+Reward ownership needs to follow the existing shared-faction/economy model. The
+native host success path must execute once; any guest wallet/reputation/inventory
+mirror must be an idempotent state update derived from that commitment. Paying
+both independent native mission instances would duplicate credits and items.
+Timeout, cancellation, actor death, unsupported branches and narrative choices
+must be explicit states, not silently rewritten as success.
+
+FIRST BOUNDED IMPLEMENTATION TARGET
+Prefer one ordinary generic destroy-matching-target mission after authoritative
+combat attribution is proven. Record host offer/acceptance and native objective,
+then let each player contribute one independently identified target. Require the
+original host cue to complete once, consistent guest display and exactly one
+reward commitment. Test repeated/reordered contribution packets, simultaneous
+kills, reconnect after completion, cancelled/expired mission and stale target IDs.
+Keep story/campaign branches outside acceptance until their player-location,
+conversation and branch-selection semantics are separately implemented.
+
+READ-ONLY SOURCE LOCATIONS USED
+ui/addons/ego_detailmonitor/menu_map.lua: getMissionInfoHelper
+ui/addons/ego_detailmonitor/menu_missionbriefing.lua: buttonAccept/getMissionData
+md/gm_killmasstraffic.xml: OnShipDestroyed/MissionEndedFly
+md/gm_destroy_matching_objects.xml: DestroyMatchingObjects/ObjectsDestroyed
+md/rml_destroy_matching_objects.xml: DestroyedObject
+
+No vanilla mission has been newly playtested or synchronized by this audit.
+Assign implementation ownership and the combat/economy interface explicitly before
+parallel work touches those paths. In-game client chat remains lower priority.

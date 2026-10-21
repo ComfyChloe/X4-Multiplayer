@@ -113,7 +113,7 @@ human instructions for the eventual two-PC carrier-transition playtest. Do not r
 docked-child pose writes. Dynamic creation/destruction, arbitrary NPC commands,
 health, station production and complete universe authority remain separate work.
 
-PRODUCTION SAVED-DOCK IMPORT — 3cd3f1d, LOCAL QUALIFICATION IN PROGRESS
+PRODUCTION SAVED-DOCK IMPORT — 3cd3f1d, FROZEN HARNESS3c00551
 x4lan_seed_docks.xml captures ordered component references and independent saved
 parent/container/relative-position/macro-ID/type/capacity witnesses only when
 explicitly marked in a pristine seed. Read returns at most64 rows per request;
@@ -137,7 +137,7 @@ a storage bay, and then uses the existing native seed save/transfer/load harness
 validate_dock_import.py independently checks causal batch/query order, complete
 coverage, each native relative-pose error, both query types and the full canonical
 component graph, then compares capture and reload under handle renumbering.
-363 independent Linux/Python/LuaJIT tests pass without skips; new production MD
+364 independent Linux/Python/LuaJIT tests pass without skips; new production MD
 validates against the installed game schema. The native run remains separate
 from network attachment or complete-universe acceptance.
 
@@ -155,3 +155,27 @@ it will create a fresh seed, not repair this snapshot or relax the registry gate
 Evidence .local/evidence-133-withheld Game closed, exact
 owned seed removed; all seven normal-save bytes/timestamps and clean33/profile
 restorations verified. Station reload gate remains FAIL/incomplete as expected.
+
+FROZEN IMPORTER NATIVE REPEAT — PASS, BOUNDED LOCAL ACCEPTANCE
+Head3c00551e3724b812e6afecc76f085a3345121e6f; production digest
+98e89cc39065f2bd8a14fdb452ac57719df8513048144be1486a46b958f9ff83.
+Fresh seeda738bb8908dacbc146570ded65ac7cae, no Ventures; full independent gate
+passes50656 ordered native saved references and canonical component graph. All
+50656 local handles renumbered on reload. Maximum relative saved-position error
+0.0019722m. Both correlated EXTERNAL and STORED follow-up queries pass with the
+same saved identities. Capture and load explicitly report the frozen boundary
+before any registry event. The earlier unfrozen run remains FAIL.
+
+The unchanged station gate independently matches1387 station identities/topology,
+maximum position error0.01600000000325963m and angle1.3293637302069783e-06rad.
+Evidence .local/evidence-134-withheld contains complete raw
+capture/load, exact47-file installed inventories/trees, sealed/received snapshot,
+independent validators/results, per-run before/after normal-save manifests and
+actual33 restored file hashes plus profile hashes. Game closed; owned seed removed;
+seven actual normal-save bytes/timestamps preserved; Steam metadata bytes preserved.
+
+This qualifies local native saved-reference capture/import/reload and correlated
+readback. It does not activate attachment networking, mutate native docking through
+the controller, qualify Windows or replace a finished-version human playtest.
+The shared bootstrap must keep its capture/import boundary frozen; permitting
+world evolution between capture and save would recreate the demonstrated failure.
