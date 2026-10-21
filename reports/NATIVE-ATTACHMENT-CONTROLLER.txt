@@ -161,3 +161,26 @@ before readiness/import. The updated lifecycle regression checks both boundaries
 405 Linux/Python/LuaJIT tests PASS, no skips. Production bytes and station gate are
 unchanged. A fresh capture/reload will test this narrower hypothesis. A readiness
 delay alone is not general suppression of the guest universe simulation.
+
+STARTUP-READY CAPTURE/RELOAD PASS — SOURCEe37f6b9
+attachment-controller-ready-capture-20261021 and ready-retry both fail native
+startup with p1_cubemap fatal1119 (shaderquality2/high textures). The second fatal
+window initially painted black; an owned-window redraw exposed the same shader
+message, and its owned child stack waits in SDL_ShowMessageBox. Both raw failures
+and seven-save/33-file restorations are retained. No capture occurred in either.
+
+attachment-controller-shader1-20261021 changes only shaderquality2→1 in isolated
+profile45841 after preserving its before-config. Capture and reload complete with
+sourcee37f6b9, seed93d9360041de9a132b9a513911f378d7, productionSHA
+ae5295d5f7dbb71b1af6cffb8def804eaacba68b89e5fdeb2d0f4837e145408b.
+The exact saved XML records game time4.332s. All50986 saved docks pass after local
+handles renumber; maximum relative error0.00189519m. All1407 native station
+identities/topology match; maximum position error0.01600750m, angle0.00000171219rad.
+Ship3 DRM-074/container20/storage49/external59 passes8 phases/9 actual actions,
+9 correlated acknowledgments and5 fresh target queries. All three gates PASS.
+This supports allowing startup before capture; it does not prove which initial
+engine cue produced the prior8 stations or suppress ongoing guest simulation.
+Game closed, owned save removed,7 actual normal-save bytes/mtimes unchanged,33
+installation files and profile restored, including original shaderquality2.
+Shaderquality1 is a recorded local diagnostic result, not a distribution change,
+general shader/PiP fix, Windows evidence or network attachment acceptance.
