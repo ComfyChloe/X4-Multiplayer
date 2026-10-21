@@ -42,7 +42,7 @@ class SeedWindowsTests(unittest.TestCase):
         self.old_record = json.dumps({'game': str(self.game), 'profile': str(self.profile), 'steam': 'steam.exe', 'v': 0})
         (self.package / 'installation.json').write_text(self.old_record)
         self.run = d / 'run'; self.make_run()
-        self.calls, self.launched, self.install = [], [], 'ok'
+        self.calls, self.args, self.launched, self.install = [], [], [], 'ok'
         names = ('HERE', 'STATE', 'is_windows', 'x4_running', 'documents_folder', 'git_head', 'setup_ps1')
         self.saved = {k: getattr(harness, k) for k in names}
         self.popen = harness.subprocess.Popen
@@ -81,9 +81,14 @@ class SeedWindowsTests(unittest.TestCase):
 
     def setup_ps1(self, package_dir, *args):
         self.calls.append(args[1])
+        self.args.append(args)
         if args[1] == 'Install':
             if self.install == 'fail':
                 raise RuntimeError('install failed')
+            if self.install == 'target-first':                  # real order: mod copied, record not yet written
+                (self.target / 'ui').mkdir(parents=True)
+                (self.target / '.x4lan-package-id').write_text('lan-x-p2')
+                raise RuntimeError('install failed before its record')
             if self.install == 'partial':                       # mod and record written, then a failure
                 (self.target / 'ui').mkdir(parents=True)
                 (self.target / '.x4lan-package-id').write_text('lan-x-p2')
@@ -137,6 +142,8 @@ class SeedWindowsTests(unittest.TestCase):
 
     def test_full_cycle_installs_exact_source_launches_finishes_and_restores(self):
         harness.install(self.run, self.package, '192.0.2.109')
+        self.assertEqual(self.args[0], ('-Action', 'Install', '-GamePath', str(self.game), '-ServerIP', '192.0.2.109'),
+                         'Install uses the preflight-selected game')
         state = json.loads(harness.STATE.read_text())
         self.assertEqual((state['stage'], state['owned_target']), ('prepared', str(self.target)))
         self.assertFalse((self.target / 'md/old_package_only.xml').exists(), 'stale package files removed')
@@ -186,6 +193,8 @@ class SeedWindowsTests(unittest.TestCase):
         harness.restore()
         self.assertEqual(self.calls, ['Install'])
         self.assertEqual((self.package / 'installation.json').read_text(), self.old_record)
+        summary = json.loads((self.run / 'windows-restore.json').read_text())
+        self.assertEqual(summary['install_outcome'], 'no install effects found', 'early refusal')
 
     def test_partial_install_keeps_the_unproven_mod_record_and_journal_until_resolved(self):
         self.install = 'partial'
@@ -203,11 +212,41 @@ class SeedWindowsTests(unittest.TestCase):
         self.assertTrue(harness.STATE.exists(), 'journal kept')
         summary = json.loads((self.run / 'windows-restore.json').read_text())
         self.assertEqual((summary['mod'], summary['installation_json']), ('unproven, kept', 'kept: Install outcome unproven'))
+        self.assertEqual(summary['install_outcome'], 'partial: mod folder and new record')
         self.assertEqual((self.profile / 'config.xml').read_text(), '<root/>', 'profile files still restored')
         self.target.rename(self.game / 'removed-by-5-REMOVE-MOD')  # the tester resolves it with the package
         harness.restore()
         self.assertEqual((self.package / 'installation.json').read_text(), self.old_record)
         self.assertFalse(harness.STATE.exists())
+
+    def test_target_created_before_the_record_is_kept_with_the_journal(self):
+        self.install = 'target-first'
+        with self.assertRaises(RuntimeError):
+            harness.install(self.run, self.package, '192.0.2.109')
+        with self.assertRaises(RuntimeError) as caught:
+            harness.restore()
+        self.assertIn('outcome unproven', str(caught.exception))
+        self.assertEqual(self.calls, ['Install'])
+        self.assertTrue(self.target.exists() and harness.STATE.exists())
+        self.assertEqual((self.package / 'installation.json').read_text(), self.old_record, 'record untouched')
+        summary = json.loads((self.run / 'windows-restore.json').read_text())
+        self.assertEqual(summary['install_outcome'], 'partial: mod folder without a new record')
+
+    def test_install_record_naming_another_game_fails_closed(self):
+        def install_elsewhere(package_dir, *args):
+            self.calls.append(args[1])
+            other = self.d / 'other-game/extensions/x4_lan_lab'; (other / 'ui').mkdir(parents=True)
+            (other / '.x4lan-package-id').write_text('lan-x-p2')
+            (package_dir / 'installation.json').write_text(
+                json.dumps({'game': str(self.d / 'other-game'), 'profile': str(self.profile)}))
+        harness.setup_ps1 = install_elsewhere
+        with self.assertRaises(RuntimeError):
+            harness.install(self.run, self.package, '192.0.2.109')
+        state = json.loads(harness.STATE.read_text())
+        self.assertEqual((state['stage'], state['owned_target']), ('backed-up', None), 'never claimed as run-owned')
+        with self.assertRaises(RuntimeError):
+            harness.restore()                               # the mod named by the current record stays
+        self.assertTrue((self.d / 'other-game/extensions/x4_lan_lab').exists())
 
     def test_remove_is_not_delegated_for_another_record_and_the_record_is_kept(self):
         harness.install(self.run, self.package, '192.0.2.109')

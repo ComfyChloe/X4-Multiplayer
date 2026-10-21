@@ -285,7 +285,9 @@ def install(run, package, host, game=None):
                  owned_target=None, owned_save=None, stage='backed-up')
     write_state(state)
     try:
-        setup_ps1(package, '-Action', 'Install', '-ServerIP', host)
+        # The preflight-selected game is passed explicitly, so the content checks and the actual
+        # Install use the same location; a record naming another game still fails closed below.
+        setup_ps1(package, '-Action', 'Install', '-GamePath', str(facts['game']), '-ServerIP', host)
     except Exception:
         state.update(stage='install-failed')            # nothing at the mod path belongs to this run
         write_state(state)
@@ -428,6 +430,14 @@ def unproven_targets(state, package):
                   if g and (Path(g) / 'extensions' / 'x4_lan_lab').exists())
 
 
+def record_changed(state, package):
+    """Whether the package installation.json differs from the one backed up before Install."""
+    record = Path(package) / 'installation.json'
+    if not state['had_installation_json']:
+        return record.exists()
+    return not record.is_file() or sha256(record) != sha256(Path(state['run']) / 'windows-before/package-installation.json')
+
+
 def restore():
     if not STATE.exists():
         raise RuntimeError('Nothing to restore.')
@@ -470,12 +480,17 @@ def restore():
         # install of this run or someone else's: never remove it, and keep the current record
         # (the package's 5-REMOVE-MOD needs it) and this journal until that folder is gone.
         present = unproven_targets(state, package)
+        changed = record_changed(state, package)
         if present:
             keep_record = True
             problems.append('Install outcome unproven and a mod folder exists at ' + ', '.join(present) +
                             ': nothing removed; check it, remove the test install with the package 5-REMOVE-MOD.cmd, '
                             'then run restore again')
             summary['mod'] = 'unproven, kept'
+        # The real installer copies the mod before it writes its record, so each outcome differs.
+        summary['install_outcome'] = (('partial: mod folder and new record' if changed else
+                                       'partial: mod folder without a new record') if present else
+                                      ('record changed without a mod folder' if changed else 'no install effects found'))
     backup = run / 'windows-before'
     log = profile / 'x4lan-debug.txt'
     if log.is_file() and not (run / 'native.log').is_file():
