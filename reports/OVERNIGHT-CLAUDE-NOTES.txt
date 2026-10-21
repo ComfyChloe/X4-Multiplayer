@@ -32,5 +32,23 @@ FINDINGS FOR THE INTEGRATION OWNER (not fixed here; Astra-owned files)
    fingerprint the controller's inspect() reports, or desire()/read() will reject every row
    as 'ship identity changed'.
 
+PR21 CONTROLLER/LEDGER REVIEW (attachment_controller.lua, seed_docks.lua at 0e7f700/4adf428)
+Read-only source review on request; no Astra file edited.
+4. Capacity: a job whose desired state expired is never evicted. prepare() returns
+   'expired' but keeps the job, and failed jobs are permanent too; only cancel() frees a
+   slot (the 4096/full test relies on cancel()). If the adapter does not cancel() every ship
+   that leaves the W01 view or stays expired, distinct ships accumulate until desire()
+   answers 'full' for all newcomers. Either evict idle expired jobs (no pending ticket, no
+   awaiting fence, no failure) in prepare(), or make cancel-on-leave an explicit adapter
+   obligation in the report and test it.
+5. Clock: any now < last_time stops the controller permanently. That is a sound fail-closed
+   rule, but it makes the adapter's clock source critical: use a monotonic real-time clock,
+   never a wall clock that NTP or the user can adjust. (UATTACH already tolerates rollback
+   without extending lifetimes, so the two modules stay consistent on a monotonic source.)
+6. Checked and fine: duplicate/conflict/stale ordering mirrors UATTACH; duplicates never
+   refresh freshness; tickets are consumed before dispatch; queued-then-changed destinations
+   fail instead of re-targeting; awaiting fences survive cancel(); cyclic destinations
+   (container == ship) are refused; identity changes are caught on every read().
+
 NOT ESTABLISHED
 No native run; dock-registry reload and transition acceptance remain pending HUMAN tests.
