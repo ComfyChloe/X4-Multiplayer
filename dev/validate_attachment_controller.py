@@ -20,10 +20,15 @@ def validate(text,seed):
     query_serial=2  # the import qualification already completed two native queries
     target_readback=None
     queries=0
+    imported=False
     for line in text.splitlines():
+        if f'[X4LAN] DOCK_IMPORT complete mode=load seed={seed} count={registry["count"]}' in line:
+            imported=True
         if '[X4LAN] ATTACH_' not in line:
             continue
         value=line.split('[X4LAN] ',1)[1]
+        if not imported:
+            raise ValueError('controller evidence precedes completed saved dock import')
         if completed or 'STOPPED' in value:
             raise ValueError('controller failed or emitted evidence after completion')
         if value.startswith('ATTACH_NATIVE selected '):

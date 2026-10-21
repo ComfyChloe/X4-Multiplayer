@@ -90,3 +90,20 @@ resume, but the official UI uses separate Pause()/Unpause() functions. The raw
 phase0 timeout is retained. The next dev-only correction uses Unpause() and adds
 a scheduling regression with separate pause/resume semantics;397 full tests PASS.
 Normal-save/owned-seed/33-file restoration checks pass for this repeat too.
+
+NATIVE CONTROLLER PASS — SOURCE6f04402
+Run .local/evidence-131-withheld reuses the
+exact frozen capture with unchanged production content. All50304 saved dock
+references and1356 stations pass again. Selected saved ship3 JKO-044 / carrier20
+uses storage45 and external55. All eight states, nine native actions and five
+correlated target queries pass, including direct internal-storage release.
+External undocking takes approximately8 seconds in this case; the controller
+waits for actual completion while fresh desired-state observations continue.
+This is single-engine functional evidence with synthetic host observations.
+
+The stricter follow-up validator also requires full import completion before
+selection/actions; moving import evidence after the cycle is rejected.398 full
+Linux/LuaJIT tests PASS, no skips. This validator-only follow-up did not alter the
+installed native source. Both validators are retained with the raw run. Game is
+closed; owned seed removed; seven actual normal saves and33 restored installation
+files/profile match per-run backups. No relay or two-native acceptance yet.

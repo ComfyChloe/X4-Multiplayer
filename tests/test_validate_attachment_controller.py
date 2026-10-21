@@ -58,5 +58,12 @@ class NativeControllerValidatorTests(unittest.TestCase):
             with self.subTest(variant=variant),self.assertRaises(ValueError):
                 validate('\n'.join(variant),SEED)
 
+    def test_completed_import_must_precede_selection_and_native_actions(self):
+        original=trace()
+        import_lines=[s for s in original if 'ATTACH_' not in s]
+        controller_lines=[s for s in original if 'ATTACH_' in s]
+        with self.assertRaisesRegex(ValueError,'precedes completed saved dock import'):
+            validate('\n'.join(controller_lines+import_lines),SEED)
+
 
 if __name__=='__main__':unittest.main()
