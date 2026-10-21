@@ -98,3 +98,16 @@ independently of the mutating consumer, and rechecks selected saved reference/co
 The actual native state still must match the unchanged causal eight-state gate.
 Changed probe MD schema VALID. Same-seed controlled repeat pending; no timing or
 network acceptance is claimed from the single successful first action.
+
+NATIVE EXECUTION CYCLE PASS — SOURCE7594515
+attachment-execution-observer-20261021 reloads the same472234d3a3966c7ad48b3b2d4c19139b
+seed with unchanged production bytes and the independent diagnostic read counter.
+All50948 dock references and1399 stations PASS again (max dock error0.00196838m,
+station position0.01600744m/angle0.00000143994rad). Ship17 KXP-387/container21,
+storage38/external42 completes8 states/9 production native actions/9 acknowledgments
+and5 fresh target queries. All9 native prepare windows are consumed successfully;
+zero rejection/unissued windows occurred. The full exchange and settled-state gate
+PASS. This proves the ordinary native consumer path, not stale/pause timing cases
+or authenticated network attachment.419 source tests PASS/no skips. Raw validators
+and per-run inventories retained. Game closed,owned seed removed,7 actual normal
+save bytes/mtimes unchanged,33 installation files/profile restored to originals.
