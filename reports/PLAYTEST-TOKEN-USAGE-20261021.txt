@@ -1,0 +1,56 @@
+PLAYTEST TOKEN USAGE — 21 OCTOBER 2026
+Measured Codex chat only; Claude has no exact token counters available.
+
+Snapshot through 2026-10-21T19:02:53.465Z (UTC).
+The native game interval was20:36:09–21:00:32 CEST (24m23s).
+Preparation began20:06:39 CEST (about29m30s before the Linux launch).
+
+Phase | Uncached input | Cached input | Output incl. reasoning | Total
+------|----------------|--------------|------------------------|------
+preparation_and_review | 190,473 | 7,315,968 | 48,147 | 7,554,588
+native_test_and_coordination | 218,192 | 8,302,464 | 36,424 | 8,557,080
+cleanup_and_evaluation | 8,642 | 598,784 | 5,083 | 612,509
+TOTAL THROUGH SNAPSHOT | 417,307 | 16,217,216 | 89,654 | 16,724,177
+
+METHOD AND LIMITS
+Exact differences of recorded cumulative token_count values in this Codex chat.
+Model: gpt-6-astra. The baseline is the last counter before the resumed user
+instruction; the earlier lifetime totals were subtracted, not included.
+Repeated cumulative notifications were deduplicated; counters are monotonic.
+Input already includes cached input; output already includes reasoning. Do not
+add these subsets again. The cached portion reflects repeated context reuse,
+not millions of newly generated words. These are token accounting values, not
+an invoice, subscription-quota percentage, or unique project information.
+
+Wall-clock boundaries classify work only approximately. Preparation includes
+fresh seed capture, coordination, Windows harness review/recovery fixes and
+installation. The native interval includes UI operation, screenshots, waiting,
+coordination and early analysis. After the20:50 usage question it also includes
+some work to measure tokens. That overhead cannot be exactly separated from
+the remaining test. Cleanup/evaluation includes report writing. Later work and
+the final response are outside the recorded snapshot. Other Codex chats are
+not included. A complete exact two-agent total is therefore unavailable.
+
+CLAUDE — REPORTED, DIFFERENT UNITS
+At20:03: five-hour usage7%, weekly35%, context331k tokens.
+At20:54: five-hour usage29%, weekly38%, context457k tokens.
+Reported change: +22 percentage points of the five-hour window and +3 weekly.
+These readings stop before Windows cleanup at20:59. They are not a measured
+full-run endpoint. Context size is not consumed tokens; no conversion to an
+invented token total or price is made. Exact input/output/cache data unavailable.
+
+PRACTICAL CONCLUSION
+Use humans for routine native gameplay input and observations, with agents
+preparing reproducible builds/checklists, collecting logs, analyzing failures
+and programming fixes. This run exposed substantial overhead from keyboard
+mapping, map targeting, screenshots and rendezvous timing. Human operation is
+the likely more efficient use of agent tokens for those steps. Keep automated
+unit/protocol/validator/recovery tests and narrowly instrumented engine probes.
+No numerical percentage saving is claimed without a matched human-operated
+comparison. Compare the same checklist, source/build, evidence quality and
+number of reproduced failures; measure agent tokens and human minutes.
+
+Raw counters and phase boundaries remain in the private run directory:
+token-usage-boundaries.json; token-usage-final-snapshot.json.
+Reference for subset accounting:
+https://developers.openai.com/api/docs/guides/agents-api/observability

@@ -13,15 +13,18 @@ restoration evidence are in .local/evidence-143-withheld
 The engine captured1,364 stations and confirmed save completion. Exact bytes were
 sealed and verified through a real loopback TCP transfer; the owned save was
 removed and all33 clean installation files restored. The seven actual normal
-saves retain their bytes/timestamps. Native reload and Windows/Linux joint
-acceptance remain pending. Source production remains937262c (digest866d17da...61947).
+saves retain their bytes/timestamps. The subsequent real Windows/Linux run loaded
+this same seed on both PCs and recorded identified Windows-to-Linux HUD motion.
+See reports/SHARED-SEED-JOINT-20261021.txt for bounded results, omissions and
+cleanup. Complete ongoing-universe acceptance remains pending. Source production
+remains937262c (digest866d17da...61947).
 
 For the resumed rendezvous, use this NEW manifest and a new run directory such
 as .local/evidence-144-withheld in the workflow below.
 The host bundle is joint-no-ventures-20261021/sealed, not historical gate-third.
-Both PCs have reported matching source/installed DLC versions and reciprocal
-ZeroTier reachability. PR22 current3e23d5c changes only documentation over4639744;
-its Windows harness source still requires independent review before installation.
+Both PCs reported matching source/installed DLC versions and reciprocal
+ZeroTier reachability. PR22 3c156b0 received independent source/recovery review
+with309 Linux/Python/LuaJIT tests passing, no skips, before the matched launch.
 Only begin native launch after both owners/agents confirm the exact source,
 content, seed hash, role and READY state. A capture or network ping is not a
 shared native loading/gameplay result.
@@ -89,7 +92,7 @@ the guest's receive-result.json. The guest compares the complete pinned manifest
 including size/hash, before publishing received/. Unexpected data stays outside
 that staging path. An interrupted attempt uses a new run directory after audit.
 
-NATIVE START - STILL COORDINATED, WINDOWS HARNESS REVIEW PENDING
+NATIVE START - COORDINATED DEVELOPMENT WORKFLOW
 Linux uses dev/native_seed_play_test.py install/launch/finish against the new run:
   python dev/native_seed_play_test.py install --run .local/evidence-141-withheld --slot p1 --host 192.0.2.109
   python -m x4lan.host --session .local/evidence-142-withheld --bind 192.0.2.109 --bubble-actions --trading

@@ -1,0 +1,114 @@
+REAL WINDOWS/LINUX SHARED-SEED RENDEZVOUS
+21 October 2026 | Internal development evidence; no release package
+
+The fresh host-created seed was transferred unchanged and loaded by two real
+X4 instances over ZeroTier. Linux p1 and Windows p2 reached native admission,
+reported the intended authority roles, and exchanged live player/NPC state.
+Linux screenshots identify the Windows player by its native target header and
+show the receiver HUD following acceleration, braking and rest. These results
+establish a bounded shared-seed startup and movement observation, not complete
+ongoing universe authority.
+
+PINNED INPUT
+Manifest: native-seed-admission-no-ventures-20261021.json, commit b3d15f0.
+Seed: 33dccd2fba9f45873b3ae28468d47f61; 25,654,998 bytes.
+SHA256: b9b99cee4fb4cd072a9eb2116901566ffb7be589b38eeb219fa28867bcbcfa94.
+Production reference: 937262c.
+Production digest: 866d17da72f543e34822a948f7b2bda36d7f90f27ace04cf6fa5d28307961947.
+Windows development harness: PR22 3c156b024373970ded22b4761f193e8286dce59e.
+Its independent Linux/Python/LuaJIT suite passed all 309 tests with no skips.
+Partial-install recovery and explicit GamePath alignment were corrected before
+installation. No production multiplayer source was changed during this run.
+The capture contains 1,364 station rows and seven enabled official DLCs at 900,
+plus x4_lan_lab 8. Ventures is disabled in the disposable profile. Historical
+patch metadata was preserved; no old save or manifest was rewritten to match.
+
+NATIVE SETUP AND OBSERVATIONS
+Linux launched at about20:36:09 CEST, owned PID24348, profile45841. Windows
+launched at20:37:12, owned PID14616, its isolated profile45841. Each installation
+contained the 38 production files plus package marker and two seed-play probes.
+The recorder observed both real peers from20:38:51.988; no synthetic peer ran.
+Linux readback reports one native load, READY p1, correct pilot, all four host
+flags true, two Shuttles and two markets. Claude reports the corresponding raw
+Windows readback with p2 and all four host flags false, two Shuttles/two markets.
+Windows raw evidence is subject to the separate retained-artifact audit below.
+The production relay continuously accepted player NAV2 and sector baselines;
+these relay observations alone are not native receiver-position measurements.
+
+CONTROLLED MOVEMENT (ALL TIMES CEST)
+- Linux forward:20:40:08.908 to20:40:13.984, then stop. Source position moved
+  from(-1000,10000,0) to settled(-1001.195,10001.329,494.797).
+  A transient shield decrease to98.2823 was recorded near the fixture freighter;
+  hull stayed100. This is not a controlled damage-synchronization test.
+- Windows forward:20:41:49.998 to20:41:55.125, stop20:41:55.359.
+  Source settled around(999.277,9997.957,524.309). Claude retained native
+  before/during/after screenshots and reported possible close contact/clipping
+  with the object ahead. Linux selected LAN Player2(TWS-231) through native map
+  and Target Object; its resolved HUD showed full hull/shields.
+- Windows reverse:20:44:58.267 to20:45:03.375, stop20:45:03.610.
+  Source z524.309 to-602.006, peak speed about194.9m/s. Seventeen Linux frames
+  from20:44:53.372 to20:45:11.643 retain timestamps, hashes and nearby sanitized
+  relay rows. The SAME named receiver target shows2.0km/0m/s before,
+  2.1km/-194m/s during,2.2km/-26m/s while braking, and2.2km/0m/s after.
+  This is actual receiver HUD evidence, with rounded UI values; no sub-meter
+  accuracy or complete ship-model visual comparison is claimed.
+- Linux reverse binding validation at20:55 moved z494.797 to89.735. The Linux
+  keyboard mapping required Y for native reverse; earlier Z attempts changed
+  view zoom without moving the ship. These failed input attempts are retained.
+- Linux reverse:20:58:00.004 to20:58:06.341, then stop; source
+  (-996.791,10018.843,89.735) to(-982.110,10077.230,-1260.632).
+  Local input/trajectory/screenshots retained. Windows shots were actually taken
+  at20:57:55.202,20:58:13.581 and20:58:26.195; tool latency missed the moving
+  interval. Claude reported a shifted edge/radar marker but did not select
+  JCL-640. Identity remains unconfirmed; reciprocal visual acceptance is open.
+
+OMISSIONS AND FAILED PREPARATION
+Ordinary jettison/magnet collection was not exercised. Two attempts to obtain
+initial cargo with the normal magnet left both inventories at zero. Initial
+fixture containers disappeared around native600s; lifetime expiry is plausible
+but not proven here. No new freely jettisoned drop existed, so this does not
+establish a regression of the user's earlier successful 7.1.1 freight test.
+The shared mission HUD was visible; no delivery/completion was tested.
+No native station-by-station comparison, NPC command authority, hull damage,
+station economy, docking/attachment roundtrip, late join or ongoing save resume
+was accepted in this run. PR19's historical docking failures remain open.
+Windows Defender blocked a background screenshot script before any frame. That
+attempt remains outside accepted evidence. The Windows owner authorized a few
+individual screenshots; no antivirus bypass or disabling was performed.
+The proposed20:53 movement did not occur; those frames are stationary baseline.
+
+RETAINED EVIDENCE
+Primary private run: .local/evidence-145-withheld
+Capture private run: .local/evidence-143-withheld
+The primary run holds play-p1 input records, native logs, source inventories,
+save manifests, receiver screenshots and relay-observations.jsonl. Generated
+config/session credentials and save payloads remain private and uncommitted.
+Windows run: .local/evidence-146-withheld on Claude's PC.
+Remote statements are identified as reported until raw artifacts are audited.
+Linux closed only its owned game PID at21:00:32.117 and then passed the unchanged
+local admission validator. The exact owned seed was removed; seven actual normal
+saves retain bytes/timestamps, Steam metadata retains bytes, and all33 previous
+mod files were restored with exact hashes. The owned relay closed at21:01;
+port45843 is free. The complete unfiltered native log has no STOPPED, Lua error
+or X4LAN MD cue error. The isolated save directory is empty.
+Claude reports Windows owned PID14616 exited by20:59:05, native finish PASS,
+exact owned seed removal, mod removal,7/7 profile files restored,13 saves
+unchanged, prior installation.json restored, and recovery journal cleared.
+Those remote cleanup findings await the sanitized retained-artifact audit.
+Both local-role validators deliberately retain two_native_acceptance=false and
+ongoing_world_authority=false. Do not rewrite these flags based on this report.
+The relay recorded1,193 samples containing both registered peers and108 distinct
+sector revisions. Registered-peer counts include stale intervals and must not
+be presented as uninterrupted real-time delivery or receiver correctness.
+
+TEST EFFICIENCY
+For regular playtests, humans should control the ships and report explicit
+steps, timestamps and before/after screenshots; agents should prepare matched
+builds, collect machine logs, analyze failures and implement fixes. This run
+spent substantial time on keyboard mappings, map selection, screenshot timing
+and inter-agent rendezvous. Those are practical candidates for human operation.
+Deterministic protocol/validator/recovery tests and narrowly instrumented native
+probes still benefit from automation. A direct numerical saving cannot be
+claimed without a comparable human-operated run. Token counters are separately
+reported by wall-clock phase; preparation includes source review and repairs,
+so this is not a pure gameplay-versus-programming benchmark.
