@@ -1,7 +1,7 @@
 PLAYTEST TOKEN USAGE — 21 OCTOBER 2026
 Measured Codex chat only; Claude has no exact token counters available.
 
-Snapshot through 2026-10-21T19:02:53.465Z (UTC).
+Snapshot through 2026-10-21T19:04:40.426Z (UTC).
 The native game interval was20:36:09–21:00:32 CEST (24m23s).
 Preparation began20:06:39 CEST (about29m30s before the Linux launch).
 
@@ -9,8 +9,8 @@ Phase | Uncached input | Cached input | Output incl. reasoning | Total
 ------|----------------|--------------|------------------------|------
 preparation_and_review | 190,473 | 7,315,968 | 48,147 | 7,554,588
 native_test_and_coordination | 218,192 | 8,302,464 | 36,424 | 8,557,080
-cleanup_and_evaluation | 8,642 | 598,784 | 5,083 | 612,509
-TOTAL THROUGH SNAPSHOT | 417,307 | 16,217,216 | 89,654 | 16,724,177
+cleanup_and_evaluation | 16,249 | 1,027,840 | 8,845 | 1,052,934
+TOTAL THROUGH SNAPSHOT | 424,914 | 16,646,272 | 93,416 | 17,164,602
 
 METHOD AND LIMITS
 Exact differences of recorded cumulative token_count values in this Codex chat.
