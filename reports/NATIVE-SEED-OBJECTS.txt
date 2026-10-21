@@ -138,3 +138,12 @@ The independent Windows/Linux bootstrap rendezvous stays pinned to 937262c and
 its existing seed manifest. This branch changes production bytes and needs its
 own fresh disposable seed. Coordination: :00/:15/:30/:45 Europe/Berlin; overnight
 work ends 21 October 2026 at 08:00 CEST. No package rebuilt or public release.
+
+MORNING CLOSEOUT — 21 OCTOBER
+The final-observation validator correction also rejects a phase that first
+converges and later diverges, using both actual object positions and the final
+summary.323 tests pass; the three retained trace/skip/production-guard runs remain
+FAIL under revalidation. This strengthens evidence validation only, not gameplay.
+The source/test edits were already completed when the resumed workflow observed
+that the08:00 deadline had passed; they are preserved for review, with no new native
+race or full-world acceptance claimed. Production remains f330732.

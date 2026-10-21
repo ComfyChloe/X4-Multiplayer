@@ -33,6 +33,7 @@ def validate(host, guest, capture, replay):
     if set(phases) != {'initial', 'absent', 'return'} or not phases['initial'] < phases['absent'] < phases['return']:
         raise ValueError('Missing or unordered exercised phases')
     handles = {}; covered = {'initial':set(), 'return':set()}
+    final_errors = {'initial':{}, 'return':{}}
     def phase(rev):
         return 'return' if rev >= phases['return'] else 'absent' if rev >= phases['absent'] else 'initial'
     for m in OBJECT.finditer(guest):
@@ -51,9 +52,12 @@ def validate(host, guest, capture, replay):
         p = phase(rev)
         error = max(abs(coords[i]-float(rows[id][4+i])) for i in range(3))
         if p in covered and error <= 1: covered[p].add(id)
+        if p in final_errors: final_errors[p][id]=error
     if any(found != set(rows) for found in covered.values()) or len(set(handles.values())) != len(rows):
         raise ValueError('Not all original components observed before and after view release')
-    settled = set(); retained = False
+    if any(set(errors)!=set(rows) or max(errors.values())>1 for errors in final_errors.values()):
+        raise ValueError('Original positions diverge again before the end of an observed phase')
+    settled = set(); retained = False; final_summaries={}
     for m in SUMMARY.finditer(guest):
         slot, rev, count, live, matching, kept, error, failed = m.groups()
         rev, count, live, matching, kept = map(int, (rev,count,live,matching,kept))
@@ -61,11 +65,14 @@ def validate(host, guest, capture, replay):
         if slot != 'p2' or failed != 'nil' or not math.isfinite(error):
             raise ValueError('Failed/invalid native summary')
         p = phase(rev)
+        if p in covered: final_summaries[p]=(count,live,matching,error)
         if p in covered and count == live == matching == len(rows) and error <= 1:
             settled.add(p)
         if p == 'absent' and count == live == matching == 0 and kept == len(rows): retained = True
     if settled != {'initial', 'return'} or not retained:
         raise ValueError('Missing complete settled views or retained originals during absence')
+    if any(value[:3]!=(len(rows),)*3 or value[3]>1 for value in final_summaries.values()):
+        raise ValueError('Final observed phase summary is incomplete or divergent')
     specs = {}
     for text, role in ((host,'p1'),(guest,'p2')):
         by_id = {}; spec_phases = {'initial':set(),'return':set()}
@@ -95,6 +102,7 @@ def validate(host, guest, capture, replay):
         raise ValueError('Native equipment/pilot state differs between loaded copies')
     return dict(original_ships=len(rows), native_identity_and_equipment_equal=True,
                 original_handles_retained_across_view_absence=True, settled_pose_error_limit_m=1,
+                final_observed_pose_within_limit=True,
                 explicitly_omitted_host_created_ids=omitted, seed_only=bool(replay.get('seed_only')),
                 synthetic_counterparts=True, two_native_acceptance=False, ongoing_universe_authority=False)
 
