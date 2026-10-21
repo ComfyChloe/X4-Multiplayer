@@ -30,10 +30,12 @@ function D.new(options)
     assert(time(options.timeout) and options.timeout > 0 and options.timeout <= 120, 'invalid transition timeout')
     assert(type(options.inspect) == 'function' and type(options.target) == 'function'
         and type(options.dispatch) == 'function', 'transition callbacks required')
+    assert(options.requires_ack == nil or type(options.requires_ack) == 'boolean', 'invalid native acknowledgment mode')
     -- Copy configuration so changing the caller's options cannot widen a live gate.
     local epoch, ttl, timeout = options.epoch, options.ttl, options.timeout
     local inspect, target, dispatch = options.inspect, options.target, options.dispatch
-    local jobs, marks, tickets = {}, {}, {}
+    local requires_ack = options.requires_ack == true
+    local jobs, marks, tickets, receipts = {}, {}, {}, {}
     local count, last_time, stopped = 0, 0, false
     local self = {}
 
@@ -45,6 +47,7 @@ function D.new(options)
         if job.pending then tickets[job.pending] = nil; job.pending = nil end
     end
     local function failed(job, why)
+        if job.awaiting then receipts[job.awaiting.receipt] = nil end
         invalidate(job); job.failure = why; return 'failed', why
     end
     local function current(job, now)
@@ -126,7 +129,10 @@ function D.new(options)
         local actual, why = read(ship, job)
         if not actual then return failed(job, why) end
         if job.awaiting then
-            if same(actual, job.awaiting.goal) then job.awaiting = nil
+            -- An identical native state can arise before a queued MD action is
+            -- consumed. Readback alone must not release that unconsumed command.
+            if job.awaiting.acknowledged and same(actual, job.awaiting.goal) then
+                receipts[job.awaiting.receipt] = nil; job.awaiting = nil
             elseif now >= job.awaiting.deadline then return failed(job, 'native transition readback timed out')
             else return 'waiting' end
         end
@@ -198,10 +204,30 @@ function D.new(options)
         end
         local command = self:describe(ticket)
         invalidate(job) -- Consume before dispatch, including exceptions/unknown outcomes.
-        job.awaiting = {goal=copy(record.goal), deadline=now + timeout}
+        local receipt = {} -- Local opaque capability; never a network record.
+        command.receipt = receipt
+        job.awaiting = {goal=copy(record.goal), deadline=now + timeout,
+            receipt=receipt, acknowledged=not requires_ack}
+        if requires_ack then receipts[receipt] = job end
         local ok, applied = pcall(dispatch, command)
         if not ok or applied ~= true then return failed(job, 'native dispatch outcome uncertain') end
         return 'issued'
+    end
+
+    -- Only a trusted adapter's correlated native acknowledgment may call this.
+    -- false means the native consumer definitely did not mutate anything, not
+    -- a lost response, timeout or assumed cancellation. Unknown outcomes remain
+    -- fenced until their timeout and must never use this recovery path.
+    function self:acknowledge(receipt, applied, now)
+        if not clock(now) then return 'stopped' end
+        assert(type(applied) == 'boolean', 'native outcome must be explicit')
+        local job = receipts[receipt]
+        if not job or job.failure or not job.awaiting or job.awaiting.receipt ~= receipt then return 'stale' end
+        if now >= job.awaiting.deadline then return failed(job, 'native transition acknowledgment timed out') end
+        receipts[receipt] = nil
+        if applied then job.awaiting.acknowledged = true; return 'accepted' end
+        job.awaiting = nil
+        return 'rejected'
     end
 
     function self:allow_pose(ship, now, paused)
@@ -227,6 +253,7 @@ function D.new(options)
     function self:stop()
         stopped = true
         for _, job in pairs(jobs) do invalidate(job) end
+        receipts = {}
     end
 
     return self

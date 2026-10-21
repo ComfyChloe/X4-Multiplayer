@@ -179,3 +179,18 @@ readback. It does not activate attachment networking, mutate native docking thro
 the controller, qualify Windows or replace a finished-version human playtest.
 The shared bootstrap must keep its capture/import boundary frozen; permitting
 world evolution between capture and save would recreate the demonstrated failure.
+
+ASYNCHRONOUS NATIVE ACKNOWLEDGMENT MODE (21 October follow-up)
+A queued native command can observe its intended state before MD has consumed the
+command (for example an independent engine transition reaches the same bay).
+Optional requires_ack=true now requires BOTH a correlated native acknowledgment
+and matching state readback before releasing the issued fence. The native adapter
+receives an opaque local command.receipt and returns it via
+acknowledge(receipt, applied, now). true confirms execution but still waits for
+readback. false is permitted ONLY for a native consumer's definite no-mutation
+rejection, allowing a fresh retry. Lost responses, unknown outcomes and timeouts
+must never use the false path. Late/duplicate/foreign receipts cannot release a
+newer operation. Cancellation and changed intentions preserve the old fence.
+The opt-in native probe now uses this mode and logs each of nine correlated
+acknowledgments. New native qualification pending; historical6f04402 PASS used
+the preceding controller/probe and retains its original validator.

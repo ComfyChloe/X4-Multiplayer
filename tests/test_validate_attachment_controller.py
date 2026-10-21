@@ -27,6 +27,7 @@ def trace():
             operation+=1
             emit(f'ATTACH_CONTROLLER dispatch phase={phase} operation={operation} sequence={operation} action={action} state={goal} dock={target}')
             emit(f'ATTACH_NATIVE action operation={operation} phase={phase} action={action} state={goal} dock={target} allowed=true shipIndex=1 code=ABC-123')
+            emit(f'ATTACH_CONTROLLER acknowledged operation={operation}')
         emit(f'ATTACH_CONTROLLER read phase={phase} state={state} dock={dock} shipIndex=1')
         emit(f'ATTACH_NATIVE read phase={phase} shipIndex=1 code=ABC-123 stored={str(state=="STORED").lower()} docked={str(state!="FREE").lower()} dock={dock}')
     emit(f'ATTACH_CONTROLLER complete phases=8 operations={operation}')
@@ -37,11 +38,12 @@ class NativeControllerValidatorTests(unittest.TestCase):
     def test_full_ordered_cycle_requires_initial_store_and_nine_native_actions(self):
         result=validate('\n'.join(trace()),SEED)
         self.assertEqual((result['phases'],result['operations'],result['correlated_target_queries']),(8,9,5))
+        self.assertEqual(result['native_acknowledgments'],9)
 
     def test_missing_action_early_read_wrong_actor_or_target_never_passes(self):
         original=trace();variants=[]
         for i,s in enumerate(original):
-            if any(k in s for k in ('ATTACH_NATIVE action','ATTACH_NATIVE read','ATTACH_DOCK_EVENT kind=End')):
+            if any(k in s for k in ('ATTACH_NATIVE action','ATTACH_CONTROLLER acknowledged','ATTACH_NATIVE read','ATTACH_DOCK_EVENT kind=End')):
                 variants.append(original[:i]+original[i+1:])
         actions=[s for s in original if 'ATTACH_NATIVE action' in s]
         variants.append([s for s in original if 'ATTACH_NATIVE action' not in s]+actions)

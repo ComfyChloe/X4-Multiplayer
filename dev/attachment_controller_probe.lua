@@ -68,7 +68,7 @@ RegisterEvent('X4LAN_AttachmentProbe.Selected',function(_,value) guard(function(
  S.sector=C.GetContextByClass(S.carrier,'sector',false);local p=C.GetObjectPositionInSector(S.carrier)
  S.pose=ffi.new('UIPosRot',{x=p.x,y=p.y,z=p.z,yaw=p.yaw*180/math.pi,pitch=p.pitch*180/math.pi,roll=p.roll*180/math.pi})
  S.identity=inspect().identity;S.phaseStarted=GetCurRealTime();S.started=S.phaseStarted
- S.controller=X4LAN_ATTACHMENT_CONTROLLER.new({epoch=cfg.seed_id,ttl=2,timeout=30,inspect=inspect,
+ S.controller=X4LAN_ATTACHMENT_CONTROLLER.new({epoch=cfg.seed_id,ttl=2,timeout=30,requires_ack=true,inspect=inspect,
   target=function(_,index,state)
    local row=scoped_target
    if not row then return nil end
@@ -81,6 +81,7 @@ RegisterEvent('X4LAN_AttachmentProbe.Selected',function(_,value) guard(function(
   end,
   dispatch=function(command)
    local from=inspect();S.operation=S.operation+1;S.awaitingOperation=S.operation;S.issued=true
+   S.awaitingReceipt=command.receipt
    log(string.format('dispatch phase=%d operation=%d sequence=%d action=%s state=%s dock=%d',S.phase,S.operation,command.sequence,command.action,command.state,command.dock))
    AddUITriggeredEvent('X4LAN_AttachmentProbe','Apply',{seed=cfg.seed_id,phase=S.phase,operation=S.operation,
     ship=S.shipIndex,action=command.action,state=command.state,dock=command.dock,fromState=from.state,fromDock=from.dock})
@@ -91,7 +92,9 @@ end) end)
 RegisterEvent('X4LAN_AttachmentProbe.Applied',function(_,value) guard(function()
  local operation,ok=tostring(value):match('^(%d+)|([01])$')
  assert(tonumber(operation)==S.awaitingOperation and ok=='1','native action rejected or acknowledgment mismatched')
- S.awaitingOperation=nil
+ assert(S.controller:acknowledge(S.awaitingReceipt,true,GetCurRealTime())=='accepted','native acknowledgment lost its controller fence')
+ log('acknowledged operation='..operation)
+ S.awaitingOperation=nil;S.awaitingReceipt=nil
 end) end)
 RegisterEvent('X4LAN_AttachmentProbe.Read',function(_,phase) guard(function()
  assert(S.reading and tonumber(phase)==S.phase,'native phase readback mismatched');S.reading=nil

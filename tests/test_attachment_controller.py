@@ -32,6 +32,69 @@ end
 ''')
         return lua
 
+    def test_async_state_match_cannot_release_a_command_before_native_ack(self):
+        self.make().execute('''
+options.requires_ack=true;C=X4LAN_ATTACHMENT_CONTROLLER.new(options)
+desire(1,'EXTERNAL',1,0);C:execute(ready(0),0,false)
+local receipt=issued[1].receipt
+ship.state='EXTERNAL';ship.dock=1;ship.container=300
+assert(C:prepare(1,.1,false)=='waiting')
+desire(2,'FREE',0,.2)
+assert(C:prepare(1,.2,false)=='waiting' and #issued==1)
+assert(C:acknowledge({},true,.2)=='stale')
+assert(C:acknowledge(receipt,true,.3)=='accepted')
+assert(C:acknowledge(receipt,false,.3)=='stale')
+assert(C:describe(ready(.3)).action=='UNDOCK' and #issued==1)
+''')
+
+    def test_native_ack_alone_does_not_replace_actual_readback(self):
+        self.make().execute('''
+options.requires_ack=true;C=X4LAN_ATTACHMENT_CONTROLLER.new(options)
+desire(1,'EXTERNAL',1,0);C:execute(ready(0),0,false)
+assert(C:acknowledge(issued[1].receipt,true,.1)=='accepted')
+assert(C:prepare(1,.1,false)=='waiting')
+ship.state='EXTERNAL';ship.dock=1;ship.container=300
+assert(C:prepare(1,.2,false)=='settled')
+assert(not C:allow_pose(1,.2,false))
+''')
+
+    def test_confirmed_no_mutation_rejection_can_retry_but_late_ack_cannot_release_retry(self):
+        self.make().execute('''
+options.requires_ack=true;C=X4LAN_ATTACHMENT_CONTROLLER.new(options)
+desire(1,'EXTERNAL',1,0);C:execute(ready(0),0,false)
+local first=issued[1].receipt
+assert(C:acknowledge(first,false,.1)=='rejected')
+C:execute(ready(.2),.2,false)
+assert(#issued==2 and issued[2].receipt~=first)
+assert(C:acknowledge(first,true,.3)=='stale')
+assert(C:prepare(1,.3,false)=='waiting')
+ship.state='EXTERNAL';ship.dock=1;ship.container=300
+assert(C:prepare(1,.4,false)=='waiting')
+assert(C:acknowledge(issued[2].receipt,true,.5)=='accepted')
+assert(C:prepare(1,.5,false)=='settled')
+''')
+
+    def test_missing_or_late_native_ack_remains_fenced_and_times_out(self):
+        self.make().execute('''
+options.requires_ack=true;C=X4LAN_ATTACHMENT_CONTROLLER.new(options)
+desire(1,'EXTERNAL',1,0);C:execute(ready(0),0,false)
+ship.state='EXTERNAL';ship.dock=1;ship.container=300
+C:cancel(1)
+assert(C:prepare(1,29,false)=='waiting')
+assert(C:acknowledge(issued[1].receipt,false,30)=='failed')
+assert(desire(2,'FREE',0,31)=='failed' and #issued==1)
+''')
+
+    def test_async_mode_cannot_be_disabled_by_changing_the_callers_options(self):
+        self.make().execute('''
+options.requires_ack=true;C=X4LAN_ATTACHMENT_CONTROLLER.new(options)
+options.requires_ack=false
+desire(1,'EXTERNAL',1,0);C:execute(ready(0),0,false)
+ship.state='EXTERNAL';ship.dock=1;ship.container=300
+assert(C:prepare(1,.1,false)=='waiting')
+C:stop();assert(C:acknowledge(issued[1].receipt,true,.2)=='stopped')
+''')
+
     def test_expired_idle_views_release_capacity_without_resetting_replay_marks(self):
         self.make().execute('''
 for id=1,4096 do

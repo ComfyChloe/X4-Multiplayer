@@ -11,6 +11,8 @@ def validate(text,seed):
     lua_selected=False
     phase=0
     pending=None
+    pending_ack=None
+    acknowledgments=0
     operation=0
     sequence=0
     phase_actions=[]
@@ -74,7 +76,7 @@ def validate(text,seed):
                 query_serial=serial;target_readback=query['index'];query=None;queries+=1
         elif value.startswith('ATTACH_CONTROLLER dispatch '):
             m=re.fullmatch(r'ATTACH_CONTROLLER dispatch phase=(\d+) operation=(\d+) sequence=(\d+) action=(UNDOCK|ATTACH) state=(FREE|EXTERNAL|STORED) dock=(\d+)',value)
-            if not m or not lua_selected or pending or lua_read or int(m[1])!=phase or int(m[2])!=operation+1 or int(m[3])<max(1,sequence):
+            if not m or not lua_selected or pending or pending_ack or lua_read or int(m[1])!=phase or int(m[2])!=operation+1 or int(m[3])<max(1,sequence):
                 raise ValueError('controller dispatch order differs')
             action,state,dock=m[4],m[5],int(m[6])
             if action=='ATTACH' and (query or target_readback!=dock):
@@ -85,10 +87,15 @@ def validate(text,seed):
             actual=(int(m[1]),int(m[2]),m[3],m[4],int(m[5])) if m else None
             if not m or pending!=actual or m[6] not in ('true','1') or int(m[7])!=selected['ship'] or m[8]!=selected['code']:
                 raise ValueError('native mutation rejected or unrelated to pending dispatch')
-            operation=actual[0];phase_actions.append(actual[2:]);pending=None
+            operation=actual[0];phase_actions.append(actual[2:]);pending=None;pending_ack=operation
+        elif value.startswith('ATTACH_CONTROLLER acknowledged '):
+            m=re.fullmatch(r'ATTACH_CONTROLLER acknowledged operation=(\d+)',value)
+            if not m or int(m[1])!=pending_ack:
+                raise ValueError('controller acknowledgment differs from consumed native action')
+            pending_ack=None;acknowledgments+=1
         elif value.startswith('ATTACH_CONTROLLER read '):
             m=re.fullmatch(r'ATTACH_CONTROLLER read phase=(\d+) state=(FREE|EXTERNAL|STORED) dock=(\d+) shipIndex=(\d+)',value)
-            if not m or not lua_selected or pending or query or lua_read or int(m[1])!=phase or phase>=len(STATES) or m[2]!=STATES[phase] or int(m[4])!=selected['ship']:
+            if not m or not lua_selected or pending or pending_ack or query or lua_read or int(m[1])!=phase or phase>=len(STATES) or m[2]!=STATES[phase] or int(m[4])!=selected['ship']:
                 raise ValueError('Lua readback before completed native actions')
             wanted_dock=0 if m[2]=='FREE' else selected['inside' if m[2]=='STORED' else 'outside']
             if int(m[3])!=wanted_dock:
@@ -110,7 +117,7 @@ def validate(text,seed):
             phase+=1;lua_read=False;phase_actions=[]
         elif value.startswith('ATTACH_CONTROLLER complete '):
             m=re.fullmatch(r'ATTACH_CONTROLLER complete phases=8 operations=(\d+)',value)
-            if not m or phase!=8 or int(m[1])!=operation or operation!=9 or pending or query or lua_read:
+            if not m or phase!=8 or int(m[1])!=operation or operation!=9 or acknowledgments!=9 or pending or pending_ack or query or lua_read:
                 raise ValueError('native controller cycle incomplete')
             completed=True
         else:
@@ -118,4 +125,4 @@ def validate(text,seed):
     if not completed:
         raise ValueError('native controller cycle did not complete')
     return dict(passed=True,phases=phase,operations=operation,correlated_target_queries=queries,
-                selected=selected,network_attachment_acceptance=False)
+                native_acknowledgments=acknowledgments,selected=selected,network_attachment_acceptance=False)
