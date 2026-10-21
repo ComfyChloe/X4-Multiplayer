@@ -32,7 +32,10 @@
     <debug_text text="'[X4LAN] SEED_DOCKS begin mode=%s id=%s count=%s'.[$v.$mode,State.$id,State.$docks.count]"/>
     <do_all exact="State.$docks.count" counter="$i">
      <set_value name="$dock" exact="State.$docks.{$i}"/>
-     <do_if value="$dock.exists and $dock.container.exists and $dock.parent.exists and State.$indices.{$dock}? and State.$indices.{$dock} == $i and $dock.parent == State.$parents.{$i} and $dock.container == State.$containers.{$i} and $dock.macro == State.$macros.{$i}">
+     <!-- Native macro values restored from a save can compare unequal to the
+          live macro value despite identical IDs. Compare the saved stable ID;
+          parent/container component references and reverse lookup remain exact. -->
+     <do_if value="$dock.exists and $dock.container.exists and $dock.parent.exists and State.$indices.{$dock}? and State.$indices.{$dock} == $i and $dock.parent == State.$parents.{$i} and $dock.container == State.$containers.{$i} and $dock.macro.id == State.$macros.{$i}.id">
       <debug_text text="'[X4LAN] SEED_DOCKS row index=%s object=%s container=%s macro=%s containerMacro=%s external=%s storage=%s capacity=%s parent=%s expectedParent=%s expectedContainer=%s poseError=%s reverse=1'.[$i,$dock,$dock.container,$dock.macro.id,$dock.container.macro.id,$dock.external,$dock.isstorage,$dock.shipstorage.capacity,$dock.parent,State.$parents.{$i},State.$containers.{$i},$dock.distanceto.[State.$containers.{$i},State.$positions.{$i}] / 1m]"/>
      </do_if>
      <do_else>

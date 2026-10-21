@@ -170,3 +170,14 @@ checked unchanged by bytes/timestamps, and the clean33 installation/profile file
 restored against THIS run's fresh before inventory. Historical morning evidence
 is retained separately. Run: .local/evidence-135-withheld
 in the exact-source x4-native-dock-reload worktree. No gameplay package changed.
+
+The subsequent witness-only run (same seed/production, dev XML d299e03) also FAILS
+all50538 rows. First8 records independently expose exists=1, exact saved/live
+parent and container equality, and correct reverse indices. Only direct macro
+value equality is0, despite identical printed macro IDs. The saved XML contains
+proper type=macro values, not missing or truncated witnesses. A new comparison
+uses live.macro.id == savedMacro.id; it preserves every component graph and pose
+check and the original definition identity requirement. The prior failures stay
+FAIL. A new native run is required; no successful reload is inferred from this
+source correction. Owned witness game/seed were closed/removed and fresh per-run
+normal-save, clean33 and profile restoration inventories are retained separately.
