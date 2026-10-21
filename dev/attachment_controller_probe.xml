@@ -11,22 +11,16 @@
      <!-- A freshly frozen world need not contain any stored carrier children.
           Select an existing free S ship; the controller performs the first store. -->
      <do_all exact="md.X4LAN_Seed.State.$ships.count" counter="$i">
-      <set_value name="$candidate" exact="md.X4LAN_Seed.State.$ships.{$i}"/>
-      <do_if value="not $ship and $candidate.isoperational and $candidate.isclass.ship_s and not $candidate.isinternallystored and not $candidate.dock.exists and $candidate != player.ship and $candidate != player.occupiedship and $candidate != player.container">
-       <set_value name="$ship" exact="$candidate"/><set_value name="$shipIndex" exact="$i"/>
-      </do_if>
-     </do_all>
-     <do_all exact="md.X4LAN_Seed.State.$ships.count" counter="$i">
       <set_value name="$container" exact="md.X4LAN_Seed.State.$ships.{$i}"/>
-      <do_if value="$ship and not $carrier and $container.isoperational and $container.isclass.ship_xl and not $container.dock.exists and $container != player.ship and $container != player.occupiedship and $container != player.container">
+      <do_if value="not $carrier and $container.isoperational and $container.isclass.ship_xl and not $container.dock.exists and $container != player.ship and $container != player.occupiedship and $container != player.container">
         <set_value name="$inside" exact="null"/><set_value name="$outside" exact="null"/>
         <find_object_component name="$bays" object="$container" class="class.dockingbay" multiple="true" recursive="false" includeobjects="false"/>
         <do_all exact="$bays.count" counter="$b">
          <set_value name="$bay" exact="$bays.{$b}"/>
-         <do_if value="not $inside and $bay.isstorage and $bay.docksize.indexof.{$ship.docksize} and $bay.shipstorage.free gt 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
+         <do_if value="not $inside and $bay.isstorage and $bay.docksize.indexof.{tag.dock_s} and $bay.shipstorage.free gt 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
           <set_value name="$inside" exact="$bay"/>
          </do_if>
-         <do_if value="not $outside and $bay.external and not $bay.islaunchtube and $bay.docksize.indexof.{$ship.docksize} and not $bay.assignedship.exists and $bay.docked.count == 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
+         <do_if value="not $outside and $bay.external and not $bay.islaunchtube and $bay.docksize.indexof.{tag.dock_s} and not $bay.assignedship.exists and $bay.docked.count == 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
           <set_value name="$outside" exact="$bay"/>
          </do_if>
         </do_all>
@@ -36,6 +30,14 @@
         </do_if>
       </do_if>
      </do_all>
+     <do_if value="$carrier">
+      <do_all exact="md.X4LAN_Seed.State.$ships.count" counter="$i">
+       <set_value name="$candidate" exact="md.X4LAN_Seed.State.$ships.{$i}"/>
+       <do_if value="not $ship and $candidate.isoperational and $candidate.isclass.ship_s and not $candidate.isinternallystored and not $candidate.dock.exists and $candidate != player.ship and $candidate != player.occupiedship and $candidate != player.container and $carrier.dockingallowed.{$candidate} and $inside.docksize.indexof.{$candidate.docksize} and $outside.docksize.indexof.{$candidate.docksize}">
+        <set_value name="$ship" exact="$candidate"/><set_value name="$shipIndex" exact="$i"/>
+       </do_if>
+      </do_all>
+     </do_if>
      <do_if value="$ship and $carrier and $outside">
       <set_value name="$operation" exact="0"/><set_value name="$phase" exact="0"/><set_value name="$code" exact="$ship.idcode"/><set_value name="$macro" exact="$ship.macro.id"/><set_value name="$owner" exact="$ship.owner"/>
       <debug_text text="'[X4LAN] ATTACH_NATIVE selected seed=%s shipIndex=%s carrierIndex=%s ship=%s carrier=%s code=%s inside=%s outside=%s'.[$seed,$shipIndex,$carrierIndex,$ship,$carrier,$code,$insideIndex,$outsideIndex]"/>
@@ -75,7 +77,7 @@
         <do_if value="$ship.assigneddock"><remove_docking_request ship="$ship" container="$ship.assigneddock.container" immediate="true"/></do_if>
         <undock ship="$ship"/><set_value name="$allowed" exact="true"/>
        </do_if>
-       <do_elseif value="$v.$action == 'ATTACH' and not $ship.dock.exists and not $ship.isinternallystored and (($v.$state == 'STORED' and $v.$dock == State.$insideIndex) or ($v.$state == 'EXTERNAL' and $v.$dock == State.$outsideIndex))">
+       <do_elseif value="$v.$action == 'ATTACH' and not $ship.dock.exists and not $ship.isinternallystored and $carrier.dockingallowed.{$ship} and (($v.$state == 'STORED' and $v.$dock == State.$insideIndex) or ($v.$state == 'EXTERNAL' and $v.$dock == State.$outsideIndex))">
         <set_value name="$dock" exact="md.X4LAN_SeedDocks.State.$docks.{$v.$dock}"/>
         <do_if value="$dock.exists and $dock.container == $carrier and $dock.parent == md.X4LAN_SeedDocks.State.$parents.{$v.$dock} and $dock.macro.id == md.X4LAN_SeedDocks.State.$macros.{$v.$dock} and md.X4LAN_SeedDocks.State.$indices.{$dock} == $v.$dock and $dock.docksize.indexof.{$ship.docksize} and $dock.distanceto.[md.X4LAN_SeedDocks.State.$containers.{$v.$dock},md.X4LAN_SeedDocks.State.$positions.{$v.$dock}] le 0.05m">
          <do_if value="($v.$state == 'STORED' and $dock.isstorage and $dock.shipstorage.free gt 0) or ($v.$state == 'EXTERNAL' and $dock.external and not $dock.islaunchtube and (not $dock.assignedship.exists or $dock.assignedship == $ship) and $dock.docked.count == 0)">

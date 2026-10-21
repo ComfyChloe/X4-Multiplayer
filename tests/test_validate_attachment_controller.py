@@ -47,6 +47,7 @@ class NativeControllerValidatorTests(unittest.TestCase):
                 variants.append(original[:i]+original[i+1:])
         actions=[s for s in original if 'ATTACH_NATIVE action' in s]
         variants.append([s for s in original if 'ATTACH_NATIVE action' not in s]+actions)
+        variants.append(original[:-1]+['[=ERROR=] Error in MD cue md.X4LAN_AttachmentProbe.Apply: spawn_docked failed']+original[-1:])
         for old,new in (
             ('allowed=true','allowed=false'),
             ('ATTACH_NATIVE read phase=1 shipIndex=1','ATTACH_NATIVE read phase=1 shipIndex=2'),

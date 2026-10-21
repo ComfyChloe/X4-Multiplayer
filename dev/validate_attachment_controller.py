@@ -24,6 +24,8 @@ def validate(text,seed):
     queries=0
     imported=False
     for line in text.splitlines():
+        if 'Error in MD cue md.X4LAN_' in line:
+            raise ValueError('native MD action error during controller qualification')
         if f'[X4LAN] DOCK_IMPORT complete mode=load seed={seed} count={registry["count"]}' in line:
             imported=True
         if '[X4LAN] ATTACH_' not in line:

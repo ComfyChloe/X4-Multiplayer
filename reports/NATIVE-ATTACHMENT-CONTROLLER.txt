@@ -107,3 +107,27 @@ Linux/LuaJIT tests PASS, no skips. This validator-only follow-up did not alter t
 installed native source. Both validators are retained with the raw run. Game is
 closed; owned seed removed; seven actual normal saves and33 restored installation
 files/profile match per-run backups. No relay or two-native acceptance yet.
+
+ACKNOWLEDGMENT FOLLOW-UP — RETAINED FAILURES AND PERMISSION CORRECTION
+Source8b99a36 uses explicit controller native acknowledgments;405 tests PASS.
+Fresh seedc1a923da1ba00c09b8d3bcb951025a44 captures50963 docks. First load at
+attachment-controller-ack-20261021 fails before bootstrap with native fatal1119,
+shader xu_glasswithamb compilation. High texture/shader2 were already configured.
+The owned fatal-dialog child and main ignored SIGTERM and were force-closed after
+identity/start-time verification. Screenshot/logs retained; clean restoration.
+Identical attachment-controller-ack-retry-20261021 imports all50963 docks, then
+FAILS storing saved Xenon fighter4 JYK-805 in Split builder19 storage42. Engine
+rejects docking relations; geometric CanDockAtDockingBay alone had returned true.
+The MD cue continues after spawn_docked's native error and reports its attempt,
+but the controller correctly retains its actual-state fence and times out.
+The station validator also rejects the MD error. No phase1 success is inferred.
+Both runs preserve seven actual normal saves and the33-file/profile restoration.
+
+The next dev-only repeat first selects an XL container with S bays, then an
+existing free S ship for which native container.dockingallowed is true. The same
+permission is checked again at action execution; no faction relations are altered.
+The controller validator now independently rejects X4LAN MD action errors even
+if a later readback were to match. Native result pending. An acknowledgment means
+the MD consumer invoked an operation, not that the engine completed it; actual
+readback remains mandatory. The unshipped general native consumer adopts the same
+permission guard on its separate development branch.
