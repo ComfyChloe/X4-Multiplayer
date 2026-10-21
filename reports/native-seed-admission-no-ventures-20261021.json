@@ -1,0 +1,43 @@
+{
+  "extensions": [
+    {
+      "id": "ego_dlc_boron",
+      "version": "900"
+    },
+    {
+      "id": "ego_dlc_mini_01",
+      "version": "900"
+    },
+    {
+      "id": "ego_dlc_mini_02",
+      "version": "900"
+    },
+    {
+      "id": "ego_dlc_pirate",
+      "version": "900"
+    },
+    {
+      "id": "ego_dlc_split",
+      "version": "900"
+    },
+    {
+      "id": "ego_dlc_terran",
+      "version": "900"
+    },
+    {
+      "id": "ego_dlc_timelines",
+      "version": "900"
+    },
+    {
+      "id": "x4_lan_lab",
+      "version": "8"
+    }
+  ],
+  "format": "x4-xml-gzip",
+  "game_build": "world1-9.00-steam23660954",
+  "mod_sha256": "866d17da72f543e34822a948f7b2bda36d7f90f27ace04cf6fa5d28307961947",
+  "protocol": 1,
+  "seed_id": "33dccd2fba9f45873b3ae28468d47f61",
+  "sha256": "b9b99cee4fb4cd072a9eb2116901566ffb7be589b38eeb219fa28867bcbcfa94",
+  "size": 25654998
+}

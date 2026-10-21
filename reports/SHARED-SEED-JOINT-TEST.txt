@@ -1,9 +1,30 @@
 SHARED NATIVE SEED - OPT-IN WINDOWS/LINUX TEST HANDOFF
 20 October 2026 | internal development, no new release package
 
-The overnight authorization ended on 21 October 2026 at 08:00 Europe/Berlin. The existing
-quarter-hour monitor is stopped. Native activity was closed and normal saves
-and the clean internal 7.1.1 installation were preserved.
+The earlier overnight authorization ended on 21 October 2026 at 08:00
+Europe/Berlin, followed by recorded cleanup. At about20:05 the user explicitly
+resumed development and the joint playtest; both owners are present. The SAME
+quarter-hour monitor is active again (:00/:15/:30/:45). No new deadline was set.
+
+RESUMED JOINT INPUT — 21 OCTOBER EVENING
+reports/native-seed-admission-no-ventures-20261021.json pins the newly captured
+Ventures-free disposable seed. Its private bundle and full capture/install/save/
+restoration evidence are in .local/evidence-143-withheld
+The engine captured1,364 stations and confirmed save completion. Exact bytes were
+sealed and verified through a real loopback TCP transfer; the owned save was
+removed and all33 clean installation files restored. The seven actual normal
+saves retain their bytes/timestamps. Native reload and Windows/Linux joint
+acceptance remain pending. Source production remains937262c (digest866d17da...61947).
+
+For the resumed rendezvous, use this NEW manifest and a new run directory such
+as .local/evidence-144-withheld in the workflow below.
+The host bundle is joint-no-ventures-20261021/sealed, not historical gate-third.
+Both PCs have reported matching source/installed DLC versions and reciprocal
+ZeroTier reachability. PR22 current3e23d5c changes only documentation over4639744;
+its Windows harness source still requires independent review before installation.
+Only begin native launch after both owners/agents confirm the exact source,
+content, seed hash, role and READY state. A capture or network ping is not a
+shared native loading/gameplay result.
 
 21 OCTOBER CONTENT ALIGNMENT
 The user subsequently authorized disabling Ventures for the multiplayer tests.
@@ -12,7 +33,8 @@ Only that extension flag changed; its previous configuration was backed up.
 The 33 installed mod files and all eight save-manifest records (seven actual
 saves plus Steam metadata) were unchanged by this configuration edit. Normal
 profiles and the installed Ventures assets were not modified. No game was
-launched and no replacement seed was created as part of this change.
+launched and no replacement seed was created as part of that morning change;
+the separately authorized evening capture is recorded above.
 
 Windows lacks ego_dlc_ventures version127, while the retained shared seed lists
 it as enabled. Capture a NEW disposable seed with Ventures disabled before the
