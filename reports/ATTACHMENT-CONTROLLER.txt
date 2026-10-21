@@ -19,7 +19,9 @@ independently return the current native values, alive=true and the relative pose
 error from the independently saved witness. Error must be finite and <=0.05m.
 Repeated native references, missing rows, changed witnesses or invalid types stop
 the ledger; no partial mapping is published. resolve(index, EXTERNAL/STORED)
-repeats the live witness checks and requires the exact requested dock type.
+repeats the live witness checks and requires the exact requested dock type. A
+wrong requested type rejects that request without poisoning an intact registry;
+changed live witnesses still invalidate the registry.
 
 Opaque64-bit component references are keyed without passing through Lua double
 conversion. Numeric input above2^53-1 is rejected; uint64 cdata/canonical decimal
@@ -41,7 +43,10 @@ desire(ship, observation, now) consumes epoch, sequence, state, dock, received_a
 and a stable ship identity fingerprint. All times are finite local monotonic time.
 Duplicate/stale observations cannot refresh freshness; conflicting same-sequence
 intentions do not apply. At most4096 active jobs and249999 historical saved-ship
-watermarks exist. Cancellation preserves replay protection. Clock rollback stops
+watermarks exist. Idle expired jobs release capacity during prepare or bounded
+capacity admission; replay marks remain. Issued/uncertain native operations are
+never evicted for freshness or capacity. The adapter still cancels ships leaving
+its view and polls retained issued fences. Cancellation preserves replay protection. Clock rollback stops
 the controller. Old host epochs require a separately admitted new controller.
 
 inspect(ship) returns object, identity, alive, protected, state, dock and container.
@@ -82,7 +87,10 @@ by this change. Cancellation cannot cancel an already executing engine action;
 the adapter must keep polling its retained readback fence after view removal.
 
 VALIDATION
-353 Linux/Python/LuaJIT tests pass, no skips;23 new focused ledger/controller tests.
+355 Linux/Python/LuaJIT tests pass, no skips;25 focused ledger/controller tests.
+Claude independently reviewed0e7f700/4adf428 and identified request-type poisoning
+and stale active-capacity obligations. The follow-up rejects wrong type per request
+and reaps only idle expired jobs while keeping replay marks and issued fences.
 They cover opaque64-bit identity, renumbered/split/merged graphs, complete registry
 admission, mutated witnesses, stale/conflicting packets, queue-then-dock, player
 takeover, occupancy/cycles, repeated-frame queue retention, fresh-intention/timeout

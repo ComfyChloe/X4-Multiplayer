@@ -99,7 +99,8 @@ rejects(function() R:resolve(2,'STORED') end)
     def test_wrong_type_is_not_silently_substituted_for_another_bay(self):
         self.make().execute('''
 collect();rejects(function() R:resolve(1,'STORED') end)
-assert(not R:ready())
+assert(R:ready() and R:resolve(1,'EXTERNAL').object==11)
+assert(R:resolve(2,'STORED').object==12)
 ''')
 
     def test_unresolved_native_collection_never_publishes_a_partial_ledger(self):

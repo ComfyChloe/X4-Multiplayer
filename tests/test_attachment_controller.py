@@ -32,6 +32,38 @@ end
 ''')
         return lua
 
+    def test_expired_idle_views_release_capacity_without_resetting_replay_marks(self):
+        self.make().execute('''
+for id=1,4096 do
+ assert(C:desire(id,{epoch=epoch,sequence=1,state='FREE',dock=0,
+   identity='saved-ship-'..id,received_at=0},0)=='accepted')
+end
+-- No adapter prepare/cancel was made: capacity admission must reap idle expiry.
+assert(C:desire(4097,{epoch=epoch,sequence=1,state='FREE',dock=0,
+ identity='saved-ship-4097',received_at=11},11)=='accepted')
+assert(C:prepare(1,11,false)=='unknown')
+assert(desire(1,'FREE',0,11)=='duplicate')
+assert(desire(2,'FREE',0,11)=='accepted')
+assert(C:prepare(1,22,false)=='expired')
+assert(C:prepare(1,22,false)=='unknown')
+assert(desire(2,'FREE',0,22)=='duplicate')
+''')
+
+    def test_capacity_reaping_preserves_an_issued_expired_transition(self):
+        self.make().execute('''
+desire(1,'EXTERNAL',1,0);local ticket=ready(0)
+assert(C:execute(ticket,0,false)=='issued')
+for id=2,4096 do
+ assert(C:desire(id,{epoch=epoch,sequence=1,state='FREE',dock=0,
+  identity='saved-ship-'..id,received_at=0},0)=='accepted')
+end
+assert(C:desire(4097,{epoch=epoch,sequence=1,state='FREE',dock=0,
+ identity='saved-ship-4097',received_at=11},11)=='accepted')
+assert(C:prepare(1,11,false)=='waiting' and #issued==1)
+assert(C:prepare(1,30,false)=='failed' and #issued==1)
+assert(desire(2,'FREE',0,30)=='failed')
+''')
+
     def test_free_to_external_requires_native_readback_before_settling(self):
         self.make().execute('''
 assert(desire(1,'EXTERNAL',1,0)=='accepted')

@@ -50,6 +50,15 @@ function D.new(options)
     local function current(job, now)
         return job.desired and now - job.desired.received_at <= ttl
     end
+    -- Idle expired intentions are disposable; replay marks and any uncertain or
+    -- issued native operation are not. Reap only when admission needs capacity.
+    local function reap(now)
+        for ship, job in pairs(jobs) do
+            if not job.failure and not job.awaiting and not current(job, now) then
+                invalidate(job); jobs[ship] = nil; count = count - 1
+            end
+        end
+    end
     local function read(ship, job)
         local ok, value = pcall(inspect, ship)
         if not ok or type(value) ~= 'table' or value.alive ~= true or value.protected ~= false
@@ -98,6 +107,7 @@ function D.new(options)
         if mark and wanted.received_at < mark.received_at then return 'invalid' end
         local job = jobs[ship]
         if not job then
+            if count >= 4096 then reap(now) end
             if count >= 4096 then return 'full' end
             job = {}; jobs[ship] = job; count = count + 1
         elseif job.failure then return 'failed', job.failure end
@@ -122,8 +132,8 @@ function D.new(options)
         end
         if not current(job, now) then
             invalidate(job)
-            if not job.desired then jobs[ship] = nil; count = count - 1; return 'inactive' end
-            return 'expired'
+            jobs[ship] = nil; count = count - 1
+            return job.desired and 'expired' or 'inactive'
         end
         local wanted = job.desired
         if same(actual, wanted) then invalidate(job); return 'settled' end

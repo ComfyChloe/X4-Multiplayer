@@ -120,7 +120,7 @@ function D.registry(seed, count, inspect)
         assert(state == 'EXTERNAL' or state == 'STORED', 'invalid attached state')
         local saved = entries[index]
         if (state == 'EXTERNAL' and not saved.external) or (state == 'STORED' and not saved.storage) then
-            fail('requested attachment type differs from saved dock')
+            error('requested attachment type differs from saved dock')
         end
         local ok, observed = pcall(inspect, saved.object)
         if not ok or not matches(saved, observed) then fail('saved dock changed before use') end
