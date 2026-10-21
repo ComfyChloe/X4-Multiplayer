@@ -48,7 +48,7 @@ local function guard(fn)
  if not ok then S.failed=true;if S.controller then S.controller:stop() end;log('STOPPED '..tostring(why)) end
 end
 local function want()
- local state=({[0]='STORED','FREE','EXTERNAL','STORED','EXTERNAL','FREE','STORED'})[S.phase]
+ local state=({[0]='FREE','STORED','FREE','EXTERNAL','STORED','EXTERNAL','FREE','STORED'})[S.phase]
  return state,state=='STORED' and S.inside or (state=='EXTERNAL' and S.outside or 0)
 end
 RegisterEvent('X4LAN_AttachmentProbe.Selected',function(_,value) guard(function()
@@ -60,7 +60,7 @@ RegisterEvent('X4LAN_AttachmentProbe.Selected',function(_,value) guard(function(
  assert(S.ship~=S.carrier and not protected(S.ship) and not protected(S.carrier),'protected or aliased native pair')
  assert(C.IsComponentOperational(S.ship) and C.IsComponentOperational(S.carrier),'dead native pair')
  assert(not GetComponentData(id(S.carrier),'isdocked'),'carrier itself is attached')
- local count=tonumber(C.GetNumDockedShips(S.carrier,nil));assert(count>0 and count<=256,'carrier child bound')
+ local count=tonumber(C.GetNumDockedShips(S.carrier,nil));assert(count>=0 and count<=256,'carrier child bound')
  local children=ffi.new('UniverseID[?]',count+1);local actual=tonumber(C.GetDockedShips(children,count+1,S.carrier,nil))
  assert(actual==count,'carrier children changed during selection')
  for i=0,actual-1 do assert(not protected(children[i]),'player among carrier children');C.ActivateObject(children[i],false) end
@@ -95,8 +95,8 @@ RegisterEvent('X4LAN_AttachmentProbe.Applied',function(_,value) guard(function()
 end) end)
 RegisterEvent('X4LAN_AttachmentProbe.Read',function(_,phase) guard(function()
  assert(S.reading and tonumber(phase)==S.phase,'native phase readback mismatched');S.reading=nil
- if S.phase==6 then
-  S.complete=true;log('complete phases=7 operations='..S.operation)
+ if S.phase==7 then
+  S.complete=true;log('complete phases=8 operations='..S.operation)
   if not C.IsGamePaused() then Pause() end
  else S.phase=S.phase+1;S.phaseStarted=GetCurRealTime();S.nextObservation=nil;S.issued=nil end
 end) end)

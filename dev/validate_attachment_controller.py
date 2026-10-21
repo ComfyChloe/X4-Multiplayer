@@ -2,7 +2,7 @@
 import re
 from dev.validate_dock_import import capture
 
-STATES=('STORED','FREE','EXTERNAL','STORED','EXTERNAL','FREE','STORED')
+STATES=('FREE','STORED','FREE','EXTERNAL','STORED','EXTERNAL','FREE','STORED')
 
 
 def validate(text,seed):
@@ -104,8 +104,8 @@ def validate(text,seed):
                 raise ValueError('native readback does not match requested attachment')
             phase+=1;lua_read=False;phase_actions=[]
         elif value.startswith('ATTACH_CONTROLLER complete '):
-            m=re.fullmatch(r'ATTACH_CONTROLLER complete phases=7 operations=(\d+)',value)
-            if not m or phase!=7 or int(m[1])!=operation or operation!=8 or pending or query or lua_read:
+            m=re.fullmatch(r'ATTACH_CONTROLLER complete phases=8 operations=(\d+)',value)
+            if not m or phase!=8 or int(m[1])!=operation or operation!=9 or pending or query or lua_read:
                 raise ValueError('native controller cycle incomplete')
             completed=True
         else:

@@ -8,25 +8,32 @@
     <set_value name="$seed" exact="event.param3"/>
     <do_if value="md.X4LAN_Seed.State.$id? and $seed == md.X4LAN_Seed.State.$id and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and $seed == md.X4LAN_SeedDocks.State.$id and not md.X4LAN_Bubble.Arena.$ships? and not md.X4LAN_Bubble.PrepareShips.$own?">
      <set_value name="$ship" exact="null"/><set_value name="$carrier" exact="null"/><set_value name="$outside" exact="null"/>
+     <!-- A freshly frozen world need not contain any stored carrier children.
+          Select an existing free S ship; the controller performs the first store. -->
      <do_all exact="md.X4LAN_Seed.State.$ships.count" counter="$i">
       <set_value name="$candidate" exact="md.X4LAN_Seed.State.$ships.{$i}"/>
-      <do_if value="not $ship and $candidate.isoperational and $candidate.isinternallystored and $candidate.dock.exists and $candidate != player.ship and $candidate != player.occupiedship and $candidate != player.container">
-       <set_value name="$container" exact="$candidate.dock.container"/>
-       <do_if value="$container.isoperational and $container.isclass.ship_xl and not $container.dock.exists and $container != player.ship and $container != player.occupiedship and $container != player.container and md.X4LAN_Seed.State.$ships.indexof.{$container} and md.X4LAN_SeedDocks.State.$indices.{$candidate.dock}?">
+      <do_if value="not $ship and $candidate.isoperational and $candidate.isclass.ship_s and not $candidate.isinternallystored and not $candidate.dock.exists and $candidate != player.ship and $candidate != player.occupiedship and $candidate != player.container">
+       <set_value name="$ship" exact="$candidate"/><set_value name="$shipIndex" exact="$i"/>
+      </do_if>
+     </do_all>
+     <do_all exact="md.X4LAN_Seed.State.$ships.count" counter="$i">
+      <set_value name="$container" exact="md.X4LAN_Seed.State.$ships.{$i}"/>
+      <do_if value="$ship and not $carrier and $container.isoperational and $container.isclass.ship_xl and not $container.dock.exists and $container != player.ship and $container != player.occupiedship and $container != player.container">
+        <set_value name="$inside" exact="null"/><set_value name="$outside" exact="null"/>
         <find_object_component name="$bays" object="$container" class="class.dockingbay" multiple="true" recursive="false" includeobjects="false"/>
         <do_all exact="$bays.count" counter="$b">
          <set_value name="$bay" exact="$bays.{$b}"/>
-         <do_if value="not $outside and $bay.external and not $bay.islaunchtube and $bay.docksize.indexof.{$candidate.docksize} and not $bay.assignedship.exists and $bay.docked.count == 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
+         <do_if value="not $inside and $bay.isstorage and $bay.docksize.indexof.{$ship.docksize} and $bay.shipstorage.free gt 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
+          <set_value name="$inside" exact="$bay"/>
+         </do_if>
+         <do_if value="not $outside and $bay.external and not $bay.islaunchtube and $bay.docksize.indexof.{$ship.docksize} and not $bay.assignedship.exists and $bay.docked.count == 0 and md.X4LAN_SeedDocks.State.$indices.{$bay}?">
           <set_value name="$outside" exact="$bay"/>
          </do_if>
         </do_all>
-        <do_if value="$outside">
-         <set_value name="$ship" exact="$candidate"/><set_value name="$carrier" exact="$container"/>
-         <set_value name="$shipIndex" exact="$i"/><set_value name="$carrierIndex" exact="md.X4LAN_Seed.State.$ships.indexof.{$carrier}"/>
-         <set_value name="$inside" exact="$candidate.dock"/>
+        <do_if value="$inside and $outside">
+         <set_value name="$carrier" exact="$container"/><set_value name="$carrierIndex" exact="$i"/>
          <set_value name="$insideIndex" exact="md.X4LAN_SeedDocks.State.$indices.{$inside}"/><set_value name="$outsideIndex" exact="md.X4LAN_SeedDocks.State.$indices.{$outside}"/>
         </do_if>
-       </do_if>
       </do_if>
      </do_all>
      <do_if value="$ship and $carrier and $outside">
@@ -34,7 +41,7 @@
       <debug_text text="'[X4LAN] ATTACH_NATIVE selected seed=%s shipIndex=%s carrierIndex=%s ship=%s carrier=%s code=%s inside=%s outside=%s'.[$seed,$shipIndex,$carrierIndex,$ship,$carrier,$code,$insideIndex,$outsideIndex]"/>
       <raise_lua_event name="'X4LAN_AttachmentProbe.Selected'" param="'%s|%s|%s|%s|%s|%s'.[$shipIndex,$carrierIndex,$insideIndex,$outsideIndex,$ship,$carrier]"/>
      </do_if>
-     <do_else><raise_lua_event name="'X4LAN_AttachmentProbe.Error'" param="'no safe saved carrier/child pair with a free external bay'"/></do_else>
+     <do_else><raise_lua_event name="'X4LAN_AttachmentProbe.Error'" param="'no safe saved free ship/carrier pair with available storage and external bay'"/></do_else>
     </do_if>
     <do_else><raise_lua_event name="'X4LAN_AttachmentProbe.Error'" param="'selection outside isolated loaded seed'"/></do_else>
    </actions>
@@ -44,7 +51,7 @@
    <actions>
     <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="State.$ship"/><set_value name="$carrier" exact="State.$carrier"/>
     <set_value name="$allowed" exact="false"/>
-    <do_if value="$v.$seed == State.$seed and md.X4LAN_Seed.State.$loads == 1 and $v.$operation == State.$operation + 1 and $v.$phase ge State.$phase and $v.$phase le State.$phase + 1 and $v.$phase ge 1 and $v.$phase le 6 and $v.$ship == State.$shipIndex and $ship == md.X4LAN_Seed.State.$ships.{State.$shipIndex} and $carrier == md.X4LAN_Seed.State.$ships.{State.$carrierIndex} and not md.X4LAN_Bubble.Arena.$ships?">
+    <do_if value="$v.$seed == State.$seed and md.X4LAN_Seed.State.$loads == 1 and $v.$operation == State.$operation + 1 and $v.$phase ge State.$phase and $v.$phase le State.$phase + 1 and $v.$phase ge 1 and $v.$phase le 7 and $v.$ship == State.$shipIndex and $ship == md.X4LAN_Seed.State.$ships.{State.$shipIndex} and $carrier == md.X4LAN_Seed.State.$ships.{State.$carrierIndex} and not md.X4LAN_Bubble.Arena.$ships?">
      <!-- Consume before attempting any mutation; failures cannot retry the token. -->
      <set_value name="State.$operation" exact="$v.$operation"/>
      <set_value name="$safe" exact="true"/>

@@ -29,14 +29,14 @@ def trace():
             emit(f'ATTACH_NATIVE action operation={operation} phase={phase} action={action} state={goal} dock={target} allowed=true shipIndex=1 code=ABC-123')
         emit(f'ATTACH_CONTROLLER read phase={phase} state={state} dock={dock} shipIndex=1')
         emit(f'ATTACH_NATIVE read phase={phase} shipIndex=1 code=ABC-123 stored={str(state=="STORED").lower()} docked={str(state!="FREE").lower()} dock={dock}')
-    emit(f'ATTACH_CONTROLLER complete phases=7 operations={operation}')
+    emit(f'ATTACH_CONTROLLER complete phases=8 operations={operation}')
     return lines
 
 
 class NativeControllerValidatorTests(unittest.TestCase):
-    def test_full_ordered_cycle_requires_all_eight_native_actions_and_seven_reads(self):
+    def test_full_ordered_cycle_requires_initial_store_and_nine_native_actions(self):
         result=validate('\n'.join(trace()),SEED)
-        self.assertEqual((result['phases'],result['operations'],result['correlated_target_queries']),(7,8,4))
+        self.assertEqual((result['phases'],result['operations'],result['correlated_target_queries']),(8,9,5))
 
     def test_missing_action_early_read_wrong_actor_or_target_never_passes(self):
         original=trace();variants=[]
@@ -50,8 +50,8 @@ class NativeControllerValidatorTests(unittest.TestCase):
             ('ATTACH_NATIVE read phase=1 shipIndex=1','ATTACH_NATIVE read phase=1 shipIndex=2'),
             ('code=ABC-123 stored=false','code=ZZZ-999 stored=false'),
             ('state=FREE dock=0 shipIndex=1','state=FREE dock=2 shipIndex=1'),
-            ('sequence=1 action=UNDOCK','sequence=0 action=UNDOCK'),
-            ('operations=8','operations=7'),
+            ('sequence=1 action=ATTACH','sequence=0 action=ATTACH'),
+            ('operations=9','operations=8'),
         ):
             variants.append([s.replace(old,new) for s in original])
         for variant in variants:

@@ -9,15 +9,15 @@ independent review after his reported01:00 reset. Main is unchanged.
 
 The unshipped native_attachment_controller_test.py harness uses a fresh frozen
 pristine seed and the complete native saved-dock importer. Its MD probe selects
-one non-player stored ship and an undocked XL carrier already present in the saved
+one non-player free S ship and an undocked XL carrier already present in the saved
 ship registry, plus their exact saved storage/external bay indices. The diagnostic
 suspends the carrier and its docked children; it does not create a replacement pair
 or load a normal save. Normal-save manifests and the actual owned installation/
 profile backups are retained per run.
 
 The Lua probe drives the real pure controller with synthetic fresh host intentions
-for seven states: STORED, FREE, EXTERNAL, STORED, EXTERNAL, FREE, STORED. A successful
-cycle requires eight native actions. It independently reads native attachment state,
+for eight states: FREE, STORED, FREE, EXTERNAL, STORED, EXTERNAL, FREE, STORED.
+A successful cycle requires nine native actions, including the initial store. It independently reads native attachment state,
 uses fresh correlated saved-dock queries before attachments, retains native action
 fences, and confirms each phase through a separate MD readback. Carrier position
 is held in its existing undocked parent frame; no direct docked-child pose writes
@@ -51,7 +51,7 @@ All three gates remain FAIL/incomplete; no omitted row is called a success.
 Game closed, exact owned seed removed, seven actual normal-save bytes/timestamps
 and the recorded33-file installation/profile restoration verified.
 
-CONTROLLED REPEAT — PENDING
+CONTROLLED REPEATS — RETAINED FAILURES
 575c6db freezes the disposable world at the first valid onUpdate and at the native
 loaded notification, before the readiness delay or registry events. The seed probe
 releases this automatic freeze only after its capture/load qualification finishes,
@@ -59,6 +59,25 @@ so the controller experiment can then run unpaused. The regression checks that
 readiness/import callbacks cannot run before the freeze.
 Run .local/evidence-129-withheld reuses the
 exact50304-dock snapshot above, with identical production bytes and fresh owned
-before/after inventories. Only the dev harness freeze timing changed. Its actual
-native result remains pending; the earlier successful50656-dock importer run is
-not evidence that this controller cycle succeeds.
+before/after inventories. Only the dev harness freeze timing changed. This attempt never requested a load: the legacy gameplay ReadyRequest waits for
+player.age greater than1s, while the new harness froze at age0. The raw failure
+and cleanup inventories are retained; no importer or controller success.
+
+c02637d bootstraps frozen diagnostics from native player validity and the save
+list, retaining saved MD seed/load checks instead of waiting for gameplay age.
+Run attachment-controller-frozen-bootstrap-20261021 reuses the same seed and
+passes all50304 dock references plus1356 station identity/topology comparisons.
+All50304 local handles changed; maximum dock error0.00184751m and station error
+0.01603871m. The controller then safely FAILS selection before native actions.
+Inspection of the exact saved XML finds zero contained ships inside XL carriers.
+Both repeats closed the owned game, removed only the owned seed, preserved seven
+actual normal-save bytes/timestamps, and restored all33 installation files/profile.
+
+NEXT CONTROLLED REPEAT
+The dev probe now selects an existing free S ship and an undocked XL carrier with
+compatible saved storage and unoccupied external bays. The initial store is a
+controller operation with fresh query, native action and independent readbacks;
+it is not a preparatory teleport outside the gate. The eight-phase/nine-action
+validator replaces the previous seven-phase/eight-action experiment. Historical
+runs retain their own archived validators. Production bytes remain unchanged.
+Native result pending; no authenticated network or complete-universe acceptance.
