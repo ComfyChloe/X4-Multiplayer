@@ -81,3 +81,12 @@ it is not a preparatory teleport outside the gate. The eight-phase/nine-action
 validator replaces the previous seven-phase/eight-action experiment. Historical
 runs retain their own archived validators. Production bytes remain unchanged.
 Native result pending; no authenticated network or complete-universe acceptance.
+
+FREE-PAIR REPEAT — RETAINED FAIL BEFORE FIRST TRANSITION
+9e99ec4 / attachment-controller-free-pair-20261021 again passes the unchanged
+50304-dock/1356-station gates and selects saved ship3 JKO-044, carrier20, storage45
+and external55. No transition is issued: the probe mistakenly calls Pause() to
+resume, but the official UI uses separate Pause()/Unpause() functions. The raw
+phase0 timeout is retained. The next dev-only correction uses Unpause() and adds
+a scheduling regression with separate pause/resume semantics;397 full tests PASS.
+Normal-save/owned-seed/33-file restoration checks pass for this repeat too.

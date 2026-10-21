@@ -132,7 +132,7 @@ function D.frame(now)
   assert(now-S.phaseStarted<45,'native controller phase timeout '..S.phase)
   assert(not protected(S.ship) and not protected(S.carrier),'player entered diagnostic pair')
   assert(C.IsComponentOperational(S.carrier) and not GetComponentData(id(S.carrier),'isdocked'),'carrier disappeared or docked')
-  if C.IsGamePaused() then Pause();return end
+  if C.IsGamePaused() then Unpause();return end
   C.SetObjectSectorPos(S.carrier,S.sector,S.pose)
   local ok,why=D.importer:frame(now);assert(ok,why)
   if S.reading or S.querying then return end
