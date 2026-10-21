@@ -123,6 +123,32 @@ paused=false;D.frame(4);assert(pauses==2 and steps==1)
 paused=true;D.frame(5);assert(steps==2 and #sent==1)
 ''')
 
+    def test_seed_probe_freezes_before_ready_delay_and_on_native_load_notification(self):
+        for mode in ('capture','load'):
+            with self.subTest(mode=mode):
+                lua=LuaRuntime(unpack_returned_tuples=True)
+                lua.globals().mode=mode
+                lua.execute('''
+paused=false;pauses=0;handlers={};frames=0
+X4LAN_CONFIG={enabled=false,test_profile='45841',seed_probe=mode,seed_id=string.rep('a',32),seed_dock_import_probe=true}
+local C={GetSaveFolderPath=function() return '/isolated/45841/save' end,
+ IsPlayerValid=function() return true end,IsGamePaused=function() return paused end}
+function require(name) assert(name=='ffi');return {C=C,typeof=function() return true end,
+ cdef=function() end,string=function(v) return v end} end
+function RegisterEvent(name,fn) handlers[name]=fn end
+function SetScript(name,fn) assert(name=='onUpdate');update=fn end
+function GetCurRealTime() return 0 end
+function Pause() paused=true;pauses=pauses+1 end
+function AddUITriggeredEvent() assert(paused,'readiness must already be frozen') end
+X4LAN_SEED_DOCKS={frame=function() assert(paused);frames=frames+1 end}
+''')
+                lua.execute((ROOT/'dev/seed_probe.lua').read_text())
+                lua.execute('''
+update();assert(paused and pauses==1 and frames==1)
+paused=false;handlers['X4LAN_Seed.Loaded']();assert(paused and pauses==2)
+update();assert(pauses==2 and frames==2)
+''')
+
 
 if __name__ == '__main__':
     unittest.main()

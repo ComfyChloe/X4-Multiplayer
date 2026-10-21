@@ -55,6 +55,12 @@ local function stations()
  log('end mode='..cfg.seed_probe..' id='..cfg.seed_id..' count='..#rows)
 end
 local started,asked,finished,loading,saveRequested
+local function freezeImportBoundary()
+ -- The disposable world must not evolve during the initial readiness delay,
+ -- including the first frames after native reload. Dock-import start is too late.
+ if cfg.seed_dock_import_probe and not finished and C.IsPlayerValid() and not C.IsGamePaused() then Pause() end
+end
+RegisterEvent('X4LAN_Seed.Loaded',freezeImportBoundary)
 RegisterEvent('X4LAN.Loaded',function() started=GetCurRealTime();asked=false;C.ReloadSaveList() end)
 RegisterEvent('gameSaved',function(_,success)
  if saveRequested then log('saved success='..tostring(success)..' id='..cfg.seed_id);finished=true end
@@ -90,6 +96,7 @@ RegisterEvent('X4LAN_SeedProbe.State',function(_,value)
  else error('unexpected seed marker; refusing to use another world') end
 end)
 SetScript('onUpdate',function()
+ freezeImportBoundary()
  if X4LAN_SEED_DOCKS then X4LAN_SEED_DOCKS.frame(GetCurRealTime()) end
  if finished or asked or not C.IsPlayerValid() then return end
  if not started then
