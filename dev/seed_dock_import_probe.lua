@@ -16,7 +16,11 @@ RegisterEvent('X4LAN_SeedDocks.Marked',function(_,seed)
 end)
 for _,kind in ipairs({'Begin','Row','End','Error'}) do
  RegisterEvent('X4LAN_SeedDocks.'..kind,function(_,value)
-  assert(D.importer and not D.complete,'unexpected native dock event')
+  assert(D.importer,'unexpected native dock event')
+  if D.complete then
+   assert(type(D.afterCompleteReceive)=='function','dock event after completed qualification')
+   return D.afterCompleteReceive(kind,value)
+  end
   log('event mode='..D.mode..' kind='..kind..' value='..tostring(value))
   local ok,why=D.importer:receive(kind,tostring(value),GetCurRealTime())
   assert(ok,why)
