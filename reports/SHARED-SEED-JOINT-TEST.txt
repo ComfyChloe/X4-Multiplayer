@@ -1,7 +1,7 @@
 SHARED NATIVE SEED - OPT-IN WINDOWS/LINUX TEST HANDOFF
 20 October 2026 | internal development, no new release package
 
-The overnight work ended on 21 October 2026 at 08:00 Europe/Berlin. The existing
+The overnight authorization ended on 21 October 2026 at 08:00 Europe/Berlin. The existing
 quarter-hour monitor is stopped. Native activity was closed and normal saves
 and the clean internal 7.1.1 installation were preserved.
 
