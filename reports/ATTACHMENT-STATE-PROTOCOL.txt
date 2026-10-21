@@ -1,5 +1,7 @@
-ATTACHMENT STATE PROTOCOL v1 (UATTACH) - DRAFT CONTRACT FOR AGREEMENT
+ATTACHMENT STATE PROTOCOL v1 (UATTACH) - CONTRACT
 21 October 2026 | dev scope, original code | x4lan/attachment.py + ui/attachment_protocol.lua
+Agreed by A:primary at 21:17 (draft 1b628d4: 9-field order, per-ship high-water marks), with
+the safeguards below made explicit.
 
 PURPOSE
 Host observations of whether a saved seed ship is free, docked externally, or stored inside a
@@ -52,6 +54,27 @@ PYTHON API (x4lan/attachment.py; Lua mirrors names in X4LAN_ATTACHMENT_PROTOCOL)
                                    that ship (or referencing that dock)
   .expire(now)                     drops records older than ttl
 
+SAFEGUARDS (agreed 21:17)
+- Not source authentication: recipient/epoch checks only filter. The relay/adapter caller must
+  authenticate the host origin before receive() or admit(). A new epoch is adopted only by an
+  explicit trusted admit(), never by a packet.
+- admit() validates epoch, revision and BOTH maps before changing anything, and keeps copies,
+  so later caller mutation cannot bypass validation. Within an epoch the revision never moves
+  backwards; re-admitting the SAME revision is a no-op only with an identical map and an error
+  otherwise (no silent rebinding).
+- Descriptors are stable identity fingerprints (ships: macro/owner/native code; docks: saved
+  dock witnesses), never changing pose. A new revision keeps a record only while both its ship
+  and dock fingerprints are unchanged.
+- Duplicates and replays never refresh received_at or the ttl. The last accepted record stays
+  with the per-ship mark after expiry or removal, so a different record at that sequence is a
+  conflict.
+- Time: ttl must be finite and positive; every `now` must be finite and nonnegative. The
+  receiver clock advances only by forward steps of the caller's clock, so a clock rollback can
+  never extend a record's lifetime; received_at values are receiver-clock seconds.
+- Bounds: at most 4096 active ships (one W01 sector view, also enforced when
+  update_descriptor adds a ship), at most 250000 docks, historic marks bounded by the 249999
+  saved ship indices.
+
 RECEIVE ORDERING (first failing check wins; outcomes are strings in both languages)
   1 invalid           decode failed
   2 wrong-recipient   recipientLease != own lease
@@ -68,7 +91,8 @@ High-water marks are per ship and survive removal/descriptor invalidation within
 an old in-flight record can never resurrect invalidated state. Bounded: at most 249999
 retained records (one per ship index), all keyed by validated integers.
 
-TESTS (tests/test_attachment_protocol.py, LuaJIT via lupa)
+TESTS (tests/test_attachment_protocol.py, LuaJIT via lupa; a shared safeguard scenario runs
+step by step against both languages)
 Python/Lua parity over a shared corpus of valid and invalid records (same accept/reject and
 fields) and over scripted receiver timelines (same outcome strings and current() results):
 stale, duplicate, conflict, reordered across ships, future and stale baseline, wrong epoch and

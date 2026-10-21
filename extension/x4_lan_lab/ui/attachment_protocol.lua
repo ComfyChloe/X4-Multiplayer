@@ -1,9 +1,12 @@
 -- Original UATTACH v1 codec and bounded receiver model; mirrors x4lan/attachment.py.
 -- Codec/model only: not registered in ui.xml and never called from game adapters yet.
 -- Indices name references saved in the same pristine seed, never runtime handles or dock.seed.
+-- Recipient/epoch checks are NOT source authentication: the caller must authenticate the host
+-- origin before receive()/admit(). A new epoch is adopted only by an explicit trusted admit().
 X4LAN_ATTACHMENT_PROTOCOL = {}
 local P=X4LAN_ATTACHMENT_PROTOCOL
 P.tag='UATTACH';P.version='1';P.maxPacket=768;P.maxSequence=2147483647;P.maxShip=249999;P.maxDock=250000
+P.maxActiveShips=4096
 P.states={FREE=true,EXTERNAL=true,STORED=true}
 function P.split(s,separator)
  local out={};for v in (s..separator):gmatch('(.-)'..separator) do out[#out+1]=v end;return out
@@ -44,28 +47,52 @@ local function same(a,b)
  return a.recipient==b.recipient and a.epoch==b.epoch and a.revision==b.revision and a.sequence==b.sequence and
         a.ship==b.ship and a.dock==b.dock and a.state==b.state
 end
-local function identities(values,high)
- local out={}
+-- A validated copy; descriptors are stable identity fingerprints, never changing pose.
+local function identities(values,high,limit)
+ local out={};local count=0
  for index,descriptor in pairs(values or {}) do
+  count=count+1;if count>limit then error('identity map exceeds its bound') end
   if not whole(index,1,high) then error('identity map index') end
   if type(descriptor)~='string' or #descriptor==0 or #descriptor>512 or descriptor:find('[\128-\255]') then
    error('identity map descriptor')
   end
   out[index]=descriptor
  end
- return out
+ return out,count
+end
+local function equal(a,b)
+ for k,v in pairs(a) do if b[k]~=v then return false end end
+ for k in pairs(b) do if a[k]==nil then return false end end
+ return true
 end
 -- One recipient, one committed baseline identity map. Only 'applied' retains a record; per-ship
 -- sequence marks survive invalidation within an epoch. Time is always supplied by the caller.
 function P.receiver(lease,ttl)
  assert(P.hex(lease),'recipient lease')
  assert(type(ttl)=='number' and ttl==ttl and ttl>0 and ttl<math.huge,'ttl must be an explicit positive number of seconds')
- local self={lease=lease,ttl=ttl,ships={},docks={},records={},marks={}}
+ local self={lease=lease,ttl=ttl,ships={},docks={},records={},marks={},active=0}
+ -- Receiver time advances only by forward steps of the caller's clock: a rollback never
+ -- extends a record's lifetime.
+ function self:tick(now)
+  if type(now)~='number' or now~=now or now<0 or now==math.huge then
+   error('now must be a finite, nonnegative number of seconds')
+  end
+  if self.clock==nil then self.clock=now else self.clock=self.clock+math.max(0,now-self.last) end
+  self.last=now;return self.clock
+ end
  function self:admit(epoch,revision,ships,docks)
   if not P.hex(epoch) or not whole(revision,1,P.maxSequence) then error('baseline identity') end
-  ships=identities(ships,P.maxShip);docks=identities(docks,P.maxDock)
+  local count;ships,count=identities(ships,P.maxShip,P.maxActiveShips);docks=identities(docks,P.maxDock,P.maxDock)
+  if epoch==self.epoch then
+   if revision<self.revision then error('baseline revision moved backwards') end
+   if revision==self.revision then
+    if not equal(ships,self.admittedShips) or not equal(docks,self.admittedDocks) then
+     error('a different identity map at the same revision')
+    end
+    return
+   end
+  end
   if epoch~=self.epoch then self.records={};self.marks={}
-  elseif revision<self.revision then error('baseline revision moved backwards')
   else
    for ship,kept in pairs(self.records) do
     if ships[ship]~=self.ships[ship] or (kept.dock~=0 and docks[kept.dock]~=self.docks[kept.dock]) then
@@ -73,9 +100,13 @@ function P.receiver(lease,ttl)
     end
    end
   end
-  self.epoch,self.revision,self.ships,self.docks=epoch,revision,ships,docks
+  self.epoch,self.revision,self.ships,self.docks,self.active=epoch,revision,ships,docks,count
+  self.admittedShips,self.admittedDocks={},{}
+  for k,v in pairs(ships) do self.admittedShips[k]=v end
+  for k,v in pairs(docks) do self.admittedDocks[k]=v end
  end
  function self:receive(record,now)
+  now=self:tick(now)
   if type(record)=='string' then record=P.decode(record) elseif not P.check(record) then record=nil end
   if not record then return 'invalid' end
   if record.recipient~=self.lease then return 'wrong-recipient' end
@@ -85,6 +116,7 @@ function P.receiver(lease,ttl)
   if not self.ships[record.ship] then return 'unknown-ship' end
   if record.dock~=0 and not self.docks[record.dock] then return 'unknown-dock' end
   local mark=self.marks[record.ship]
+  -- Replays never refresh received_at; the last accepted record stays with the mark.
   if mark then
    if record.sequence==mark.sequence then return same(record,mark.record) and 'duplicate' or 'conflict' end
    if record.sequence<mark.sequence then return 'stale' end
@@ -94,11 +126,15 @@ function P.receiver(lease,ttl)
   return 'applied'
  end
  function self:current(ship,now)
+  now=self:tick(now)
   local kept=self.records[ship]
   if not kept or now-kept.at>self.ttl then return nil end
   return kept.state,kept.dock,kept.sequence,kept.at
  end
- function self:remove_ship(ship) self.records[ship]=nil;self.ships[ship]=nil end
+ function self:remove_ship(ship)
+  self.records[ship]=nil
+  if self.ships[ship] then self.ships[ship]=nil;self.active=self.active-1 end
+ end
  function self:remove_dock(dock)
   self.docks[dock]=nil
   for ship,kept in pairs(self.records) do if kept.dock==dock then self.records[ship]=nil end end
@@ -107,14 +143,19 @@ function P.receiver(lease,ttl)
   local table_,high
   if kind=='ship' then table_,high=self.ships,P.maxShip elseif kind=='dock' then table_,high=self.docks,P.maxDock
   else error('descriptor kind') end
-  local new=identities({[index]=descriptor},high)[index]
+  local new=identities({[index]=descriptor},high,1)[index]
   if table_[index]==new then return end
+  if kind=='ship' and not table_[index] then
+   if self.active>=P.maxActiveShips then error('identity map exceeds its bound') end
+   self.active=self.active+1
+  end
   table_[index]=new
   for ship,kept in pairs(self.records) do
    if (kind=='ship' and ship==index) or (kind=='dock' and kept.dock==index) then self.records[ship]=nil end
   end
  end
  function self:expire(now)
+  now=self:tick(now)
   for ship,kept in pairs(self.records) do if now-kept.at>self.ttl then self.records[ship]=nil end end
  end
  return self

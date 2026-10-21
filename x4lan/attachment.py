@@ -5,6 +5,10 @@ STORED (inside) at a saved seed dock reference. Indices name references saved in
 pristine seed, never runtime handles or dock.seed values. This module only encodes, decodes
 and admits records; it changes no game or session state. See
 reports/ATTACHMENT-STATE-PROTOCOL.txt for the agreed contract.
+
+The recipient and epoch checks are NOT source authentication: the relay/adapter caller must
+authenticate the host origin before calling receive() or admit(). A new epoch is adopted only
+by an explicit trusted admit(), never by a packet.
 """
 from dataclasses import dataclass
 import math
@@ -17,6 +21,7 @@ MAX_PACKET = 768
 MAX_REVISION = MAX_SEQUENCE = 2147483647
 MAX_SHIP = 249999
 MAX_DOCK = 250000
+MAX_ACTIVE_SHIPS = 4096          # one W01 sector view; historic marks stay bounded by MAX_SHIP
 HEX = re.compile(r'[a-f0-9]{32}\Z')
 CANONICAL = re.compile(r'(?:0|[1-9][0-9]{0,9})\Z')
 
@@ -80,10 +85,14 @@ def decode(text):
                       integer(f[6], 1, MAX_SHIP), integer(f[7], 0, MAX_DOCK), f[8])
 
 
-def identity_map(values, high):
-    """{seed index: descriptor} with validated integer keys and non-empty ASCII descriptors."""
+def identity_map(values, high, limit):
+    """A validated copy of {seed index: descriptor}. Descriptors are stable identity fingerprints
+    (ships: macro/owner/native code; docks: saved dock witnesses), never changing pose."""
+    values = dict(values)
+    if len(values) > limit:
+        raise AttachmentError('identity map exceeds its bound')
     out = {}
-    for index, descriptor in dict(values).items():
+    for index, descriptor in values.items():
         if type(index) is not int or not 1 <= index <= high:
             raise AttachmentError('identity map index')
         if not isinstance(descriptor, str) or not descriptor or len(descriptor) > 512 or not descriptor.isascii():
@@ -105,28 +114,46 @@ class Receiver:
         if isinstance(ttl, bool) or not isinstance(ttl, (int, float)) or not math.isfinite(ttl) or ttl <= 0:
             raise AttachmentError('ttl must be an explicit positive number of seconds')
         self.lease, self.ttl = lease, float(ttl)
-        self.epoch = self.revision = None
+        self.epoch = self.revision = self.admitted = None
         self.ships, self.docks = {}, {}
         self.records, self.marks = {}, {}
+        self.last = self.clock = None
+
+    def tick(self, now):
+        """Receiver time: advances only by forward steps of the caller's clock, so a clock rollback
+        can never extend a record's lifetime."""
+        if isinstance(now, bool) or not isinstance(now, (int, float)) or not math.isfinite(now) or now < 0:
+            raise AttachmentError('now must be a finite, nonnegative number of seconds')
+        self.clock = float(now) if self.clock is None else self.clock + max(0.0, now - self.last)
+        self.last = float(now)
+        return self.clock
 
     def admit(self, epoch, revision, ships, docks):
-        """Adopt the committed baseline identity map (ships/docks: {seed index: descriptor})."""
+        """Adopt the committed baseline identity map (ships/docks: {seed index: descriptor}).
+        Everything is validated before anything changes."""
         if not isinstance(epoch, str) or not HEX.fullmatch(epoch) or type(revision) is not int \
                 or not 1 <= revision <= MAX_REVISION:
             raise AttachmentError('baseline identity')
-        ships, docks = identity_map(ships, MAX_SHIP), identity_map(docks, MAX_DOCK)
+        ships, docks = identity_map(ships, MAX_SHIP, MAX_ACTIVE_SHIPS), identity_map(docks, MAX_DOCK, MAX_DOCK)
+        if epoch == self.epoch:
+            if revision < self.revision:
+                raise AttachmentError('baseline revision moved backwards')
+            if revision == self.revision:
+                if (ships, docks) != self.admitted:
+                    raise AttachmentError('a different identity map at the same revision')
+                return                                      # idempotent re-admission
         if epoch != self.epoch:
             self.records, self.marks = {}, {}
-        elif revision < self.revision:
-            raise AttachmentError('baseline revision moved backwards')
         else:
             for ship, kept in list(self.records.items()):
                 if ships.get(ship) != self.ships.get(ship) or (
                         kept[1] and docks.get(kept[1]) != self.docks.get(kept[1])):
                     del self.records[ship]
         self.epoch, self.revision, self.ships, self.docks = epoch, revision, ships, docks
+        self.admitted = (dict(ships), dict(docks))
 
     def receive(self, record, now):
+        now = self.tick(now)
         if isinstance(record, str):
             try:
                 record = decode(record)
@@ -148,6 +175,8 @@ class Receiver:
             return 'unknown-dock'
         mark = self.marks.get(record.ship)
         if mark is not None:
+            # Replays never refresh received_at; the last accepted record stays with the mark
+            # after expiry or removal for conflict detection.
             if record.sequence == mark[0]:
                 return 'duplicate' if record == mark[1] else 'conflict'
             if record.sequence < mark[0]:
@@ -157,6 +186,7 @@ class Receiver:
         return 'applied'
 
     def current(self, ship, now):
+        now = self.tick(now)
         kept = self.records.get(ship)
         if kept is None or now - kept[3] > self.ttl:
             return None
@@ -177,7 +207,9 @@ class Receiver:
         table, high = (self.ships, MAX_SHIP) if kind == 'ship' else (self.docks, MAX_DOCK) if kind == 'dock' else (None, 0)
         if table is None:
             raise AttachmentError('descriptor kind')
-        new = identity_map({index: descriptor}, high)[index]
+        new = identity_map({index: descriptor}, high, 1)[index]
+        if kind == 'ship' and index not in table and len(table) >= MAX_ACTIVE_SHIPS:
+            raise AttachmentError('identity map exceeds its bound')
         if table.get(index) == new:
             return
         table[index] = new
@@ -186,6 +218,7 @@ class Receiver:
                 del self.records[ship]
 
     def expire(self, now):
+        now = self.tick(now)
         for ship, kept in list(self.records.items()):
             if now - kept[3] > self.ttl:
                 del self.records[ship]

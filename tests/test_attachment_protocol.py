@@ -104,7 +104,64 @@ def timeline():
     ]
 
 
+SHIPS = {1: 'ship:argon:1', 2: 'ship:argon:2'}
+DOCKS = {10: 'dock:pad:10'}
+
+
+def safeguards(r):
+    """Astra's 21:17 safeguards as one scenario; r wraps either language and returns results
+    (an error is recorded as 'error' so both languages are compared step by step)."""
+    out = []
+    caller = dict(SHIPS)
+    out.append(r.call('admit', EPOCH, 5, caller, DOCKS))
+    caller[3] = 'ship:late:3'                                          # caller mutation after admit
+    out.append(r.call('receive', text(ship=3, dock=0, state='FREE'), 0.0))   # -> unknown-ship
+    out.append(r.call('receive', text(seq=1), 0.0))                   # applied at 0
+    out.append(r.call('receive', text(seq=1), 9.0))                   # duplicate, no refresh
+    out.append(r.call('current', 1, 10.5))                            # None: ttl measured from 0
+    out.append(r.call('admit', EPOCH, 5, SHIPS, DOCKS))               # identical map, same revision: no-op
+    out.append(r.call('admit', EPOCH, 5, {1: 'ship:argon:1:other'}, DOCKS))   # rebinding: error
+    out.append(r.call('admit', EPOCH, 6, SHIPS, {0: 'bad'}))          # invalid dock map: error, atomic
+    out.append(r.call('receive', text(seq=2, revision=5, ship=2), 11.0))    # still revision 5: applied
+    out.append(r.call('admit', EPOCH, 4, SHIPS, DOCKS))               # backwards: error
+    out.append(r.call('expire', 30.0))
+    out.append(r.call('receive', text(seq=2, revision=5, ship=2, state='STORED'), 30.0))  # mark kept: conflict
+    out.append(r.call('remove_ship', 2))
+    out.append(r.call('receive', text(seq=2, revision=5, ship=2), 30.0))    # ship gone: unknown-ship
+    out.append(r.call('update_descriptor', 'ship', 2, 'ship:argon:2'))
+    out.append(r.call('receive', text(seq=2, revision=5, ship=2), 30.0))    # re-added, mark kept: duplicate
+    out.append(r.call('receive', text(seq=3, revision=5, ship=2), 100.0))   # applied at receiver time 100
+    out.append(r.call('current', 2, 50.0))                            # clock rollback: still age 0
+    out.append(r.call('current', 2, 55.0))                            # receiver time 105
+    out.append(r.call('current', 2, 61.0))                            # receiver time 111: expired
+    for bad in (float('nan'), float('inf'), -1.0):
+        out.append(r.call('current', 2, bad))                         # invalid clock: error
+    out.append(r.call('admit', EPOCH2, 1, {i: 's%d' % i for i in range(1, 4098)}, {}))   # >4096 ships: error
+    out.append(r.call('admit', EPOCH2, 1, {i: 's%d' % i for i in range(1, 4097)}, {}))   # exactly 4096: ok
+    out.append(r.call('update_descriptor', 'ship', 5000, 's5000'))    # 4097th active ship: error
+    return out
+
+
+SAFEGUARDS = [None, 'unknown-ship', 'applied', 'duplicate', None, None, 'error', 'error', 'applied', 'error', None,
+              'conflict', None, 'unknown-ship', None, 'duplicate', 'applied', ('EXTERNAL', 10, 3, 100.0),
+              ('EXTERNAL', 10, 3, 100.0), None, 'error', 'error', 'error', 'error', None, 'error']
+
+
+class PyReceiver:
+    def __init__(self):
+        self.r = A.Receiver(ME, 10)
+
+    def call(self, method, *args):
+        try:
+            return getattr(self.r, method)(*args)
+        except A.AttachmentError:
+            return 'error'
+
+
 class ReceiverTests(unittest.TestCase):
+    def test_safeguards(self):
+        self.assertEqual(safeguards(PyReceiver()), SAFEGUARDS)
+
     def test_python_timeline(self):
         r = A.Receiver(ME, 10)
         for step, (method, args, expected) in enumerate(timeline()):
@@ -157,6 +214,23 @@ class ParityTests(unittest.TestCase):
                 if isinstance(result, tuple):
                     result = tuple(result)
                 self.assertEqual(result, expected)
+
+    def test_safeguard_parity(self):
+        lua, P = self.lua, self.P
+
+        class LuaReceiver:
+            def __init__(self):
+                self.r = P.receiver(ME, 10)
+
+            def call(self, method, *args):
+                args = [lua.table_from(a) if isinstance(a, dict) else a for a in args]
+                result = lua.globals().pcall(self.r[method], self.r, *args)
+                result = result if isinstance(result, tuple) else (result,)
+                if not result[0]:
+                    return 'error'
+                result = tuple(result[1:])
+                return None if not result or result == (None,) else result[0] if len(result) == 1 else result
+        self.assertEqual(safeguards(LuaReceiver()), SAFEGUARDS)
 
     def test_lua_rejects_implicit_ttl_and_bad_admission(self):
         for ttl in ('nil', '0', '-1', 'math.huge', '0/0', 'true'):
