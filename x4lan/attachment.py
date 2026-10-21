@@ -24,6 +24,7 @@ MAX_DOCK = 250000
 MAX_ACTIVE_SHIPS = 4096          # one W01 sector view; historic marks stay bounded by MAX_SHIP
 HEX = re.compile(r'[a-f0-9]{32}\Z')
 CANONICAL = re.compile(r'(?:0|[1-9][0-9]{0,9})\Z')
+DESCRIPTOR = re.compile(r'[!-~]{1,512}\Z')
 
 
 class AttachmentError(ValueError):
@@ -95,7 +96,8 @@ def identity_map(values, high, limit):
     for index, descriptor in values.items():
         if type(index) is not int or not 1 <= index <= high:
             raise AttachmentError('identity map index')
-        if not isinstance(descriptor, str) or not descriptor or len(descriptor) > 512 or not descriptor.isascii():
+        # Printable ASCII without spaces, as the attachment controller requires of identities.
+        if not isinstance(descriptor, str) or not DESCRIPTOR.fullmatch(descriptor):
             raise AttachmentError('identity map descriptor')
         out[index] = descriptor
     return out
@@ -184,6 +186,16 @@ class Receiver:
         self.marks[record.ship] = (record.sequence, record)
         self.records[record.ship] = (record.state, record.dock, record.sequence, now)
         return 'applied'
+
+    def observation(self, ship, now):
+        """The live record in the shape the attachment controller's desire() consumes, or None.
+        identity is the admitted ship fingerprint; received_at is receiver-clock time, equal to
+        the caller's clock while that clock never moves backwards."""
+        kept = self.current(ship, now)
+        if kept is None:
+            return None
+        return dict(epoch=self.epoch, sequence=kept[2], state=kept[0], dock=kept[1],
+                    identity=self.ships[ship], received_at=kept[3])
 
     def current(self, ship, now):
         now = self.tick(now)

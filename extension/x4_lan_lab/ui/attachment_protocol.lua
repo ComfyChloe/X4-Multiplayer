@@ -53,7 +53,8 @@ local function identities(values,high,limit)
  for index,descriptor in pairs(values or {}) do
   count=count+1;if count>limit then error('identity map exceeds its bound') end
   if not whole(index,1,high) then error('identity map index') end
-  if type(descriptor)~='string' or #descriptor==0 or #descriptor>512 or descriptor:find('[\128-\255]') then
+  -- Printable ASCII without spaces, as the attachment controller requires of identities.
+  if type(descriptor)~='string' or #descriptor==0 or #descriptor>512 or descriptor:find('[^%g]') then
    error('identity map descriptor')
   end
   out[index]=descriptor
@@ -130,6 +131,12 @@ function P.receiver(lease,ttl)
   local kept=self.records[ship]
   if not kept or now-kept.at>self.ttl then return nil end
   return kept.state,kept.dock,kept.sequence,kept.at
+ end
+ -- The live record in the shape the attachment controller's desire() consumes, or nil.
+ function self:observation(ship,now)
+  local state,dock,sequence,at=self:current(ship,now)
+  if not state then return nil end
+  return {epoch=self.epoch,sequence=sequence,state=state,dock=dock,identity=self.ships[ship],received_at=at}
  end
  function self:remove_ship(ship)
   self.records[ship]=nil

@@ -251,7 +251,8 @@ class ReceiverTests(unittest.TestCase):
             with self.subTest(ttl=ttl), self.assertRaises(A.AttachmentError):
                 A.Receiver(ME, ttl)
         r = A.Receiver(ME, 5)
-        for ships in ({0: 'x'}, {250000: 'x'}, {1: ''}, {1: 'x' * 513}, {True: 'x'}, {1: 'café'}):
+        for ships in ({0: 'x'}, {250000: 'x'}, {1: ''}, {1: 'x' * 513}, {True: 'x'}, {1: 'caf\u00e9'},
+                      {1: 'two words'}, {1: 'tab\there'}, {1: 'line\n'}):
             with self.subTest(ships=ships), self.assertRaises(A.AttachmentError):
                 r.admit(EPOCH, 5, ships, {})
         r.admit(EPOCH, 5, {1: 'x'}, {})
@@ -292,6 +293,27 @@ class ParityTests(unittest.TestCase):
                 if isinstance(result, tuple):
                     result = tuple(result)
                 self.assertEqual(result, expected)
+
+    def test_observation_matches_the_controller_shape_in_both_languages(self):
+        py, lua = A.Receiver(ME, 10), self.P.receiver(ME, 10)
+        ships = {1: 'seed:ship:1:argon', 2: 'seed:ship:2:argon'}
+        py.admit(EPOCH, 5, ships, {10: 'seed:dock:10'})
+        lua.admit(lua, EPOCH, 5, self.lua.table_from(ships), self.lua.table_from({10: 'seed:dock:10'}))
+        self.assertEqual(py.receive(text(seq=3), 2.0), 'applied')
+        self.assertEqual(lua.receive(lua, text(seq=3), 2.0), 'applied')
+        expected = dict(epoch=EPOCH, sequence=3, state='EXTERNAL', dock=10, identity='seed:ship:1:argon', received_at=2.0)
+        self.assertEqual(py.observation(1, 4.0), expected)
+        got = lua.observation(lua, 1, 4.0)
+        self.assertEqual({k: got[k] for k in expected}, expected)
+        self.assertIsNone(py.observation(2, 4.0))
+        self.assertIsNone(lua.observation(lua, 2, 4.0))
+        self.assertIsNone(py.observation(1, 13.0))                  # expired
+        self.assertIsNone(lua.observation(lua, 1, 13.0))
+        for descriptor in ('two words', 'tab\there'):
+            with self.subTest(descriptor=descriptor):
+                ok = self.lua.globals().pcall(lua.admit, lua, EPOCH, 6, self.lua.table_from({1: descriptor}),
+                                              self.lua.table_from({}))
+                self.assertFalse(ok[0] if isinstance(ok, tuple) else ok)
 
     def test_safeguard_parity(self):
         self.assertEqual(safeguards(LuaReceiver(self.lua, self.P)), SAFEGUARDS)

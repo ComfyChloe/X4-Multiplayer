@@ -46,6 +46,11 @@ PYTHON API (x4lan/attachment.py; Lua mirrors names in X4LAN_ATTACHMENT_PROTOCOL)
   .receive(text_or_record, now) -> outcome (records only on 'applied')
   .current(ship, now) -> (state, dock, sequence, received_at) or None (absent or older
                                    than ttl at `now`)
+  .observation(ship, now) -> {epoch, sequence, state, dock, identity, received_at} or None
+                                   the live record in the shape the attachment controller's
+                                   desire() consumes (PR21); identity is the admitted ship
+                                   fingerprint. PROPOSED accessor; drop if integration
+                                   prefers its own adapter.
   .remove_ship(ship) / .remove_dock(dock)
                                    removal invalidates retained records (for remove_dock:
                                    every record referencing that dock)
@@ -63,7 +68,8 @@ SAFEGUARDS (agreed 21:17)
   backwards; re-admitting the SAME revision is a no-op only with an identical map and an error
   otherwise (no silent rebinding).
 - Descriptors are stable identity fingerprints (ships: macro/owner/native code; docks: saved
-  dock witnesses), never changing pose. A new revision keeps a record only while both its ship
+  dock witnesses), never changing pose. They must be 1..512 printable ASCII characters without
+  spaces ([!-~]), which the attachment controller also requires of ship identities. A new revision keeps a record only while both its ship
   and dock fingerprints are unchanged.
 - Duplicates and replays never refresh received_at or the ttl. The last accepted record stays
   with the per-ship mark after expiry or removal, so a different record at that sequence is a

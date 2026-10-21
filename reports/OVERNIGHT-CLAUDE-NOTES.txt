@@ -1,0 +1,36 @@
+CLAUDE OVERNIGHT NOTES 21-22 OCTOBER 2026 (read-only cross-review, no Astra files edited)
+
+Cross-check of UATTACH v1 (PR23) against PR21 contrib/astra-attachment-authority 0e7f700
+(ui/seed_docks.lua, ui/attachment_controller.lua, reports/ATTACHMENT-CONTROLLER.txt).
+
+ALIGNED
+- Dock indices 1..250000 and ship indices 1..249999 match on both sides.
+- Saved dock fingerprints (seed:index:macros:flags:capacity:graph labels) are ASCII without
+  spaces and fit the UATTACH descriptor bound (512).
+- Both sides: duplicates never refresh freshness, same-sequence differences are conflicts,
+  callers authenticate the host before the pure modules see a record, 4096 active ships.
+
+CHANGED IN PR23 FOR ALIGNMENT
+- Descriptors are now [!-~]{1,512} (no spaces or control characters) in both languages. The
+  controller's identity() rejects such strings, so the receiver no longer admits them.
+- Proposed observation(ship, now) accessor returns exactly the fields desire() consumes.
+
+FINDINGS FOR THE INTEGRATION OWNER (not fixed here; Astra-owned files)
+1. seed_docks.lua resolve(index, state): a requested state that differs from the saved dock
+   type calls fail(), which marks the WHOLE registry failed. If the adapter's target() calls
+   resolve() directly, one authenticated but wrong
+   UATTACH row (for example STORED at an external-only pad after a host/guest divergence)
+   would then block every later attachment for the session. If that is not the intended
+   fail-closed policy, reject the single request instead, or pass saved dock kinds into the
+   UATTACH admission so the receiver can refuse a type mismatch before resolve().
+2. Time base: UATTACH received_at is receiver-clock time. It equals the caller's clock while
+   that clock never moves backwards; after a rollback it can be ahead of the caller clock, and
+   desire() would then see received_at > now as invalid (the controller also stops on a
+   rollback). The adapter should feed both modules the same monotonic clock.
+3. desire() expects observation.identity; UATTACH supplies the admitted ship descriptor via
+   observation(). The identity map passed to admit() should therefore be the same stable ship
+   fingerprint the controller's inspect() reports, or desire()/read() will reject every row
+   as 'ship identity changed'.
+
+NOT ESTABLISHED
+No native run; dock-registry reload and transition acceptance remain pending HUMAN tests.
