@@ -56,3 +56,17 @@ correction. Original raw failure, manifests and source/inventories are retained
 under .local/evidence-149-withheld Owned game
 closed/seed removed;7 actual normal saves bytes/timestamps and33 installation
 files plus recorded profile config/content/debug restoration verified.
+
+REPEATED NATIVE LOAD: ALL THREE UNCHANGED GATES PASS
+22 October00:16 CEST | sourcee611749 | same seed and production as first run
+Run seed-dock-admission-pause-evidence-20261022 passes dock comparison (50,692
+references; all native handles renumbered; maximum relative error0.00196838m),
+station equality (same1,366 and errors above), and production startup admission.
+The existing pause remains owned by the caller:0 Pause calls,0 Unpause calls.
+Thus this run qualifies preserving an existing native pause; actual owned-pause
+release remains covered by injected tests only, not this paused-save run. Full
+registry readiness precedes gameplay admission; real correlated EXTERNAL/STORED
+queries and final pristine/load1 marker pass. Networking/fixtures are excluded.
+7 actual normal save bytes/timestamps and33 restored installation hashes plus
+recorded profile files verify clean; owned game closed and isolated seed removed.
+The prior strict evidence FAIL is retained. No validator threshold was relaxed.
