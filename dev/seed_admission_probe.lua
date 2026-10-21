@@ -19,9 +19,14 @@ local nativePause,nativeUnpause=Pause,Unpause
 Pause=function() pauseCalls=pauseCalls+1;nativePause() end
 Unpause=function() resumeCalls=resumeCalls+1;nativeUnpause() end
 local trigger=AddUITriggeredEvent
+local importPaused=false
 AddUITriggeredEvent=function(screen,control,value)
  if (screen=='X4LAN_Seed' and control=='Inspect') or (screen=='X4LAN_SeedDocks' and control=='Read') then
   assert(C.IsGamePaused(),'native admission read requested while simulation runs')
+  if screen=='X4LAN_SeedDocks' and not importPaused then
+   DebugError('[X4LAN] DOCK_IMPORT_PAUSE mode=load paused=true')
+   importPaused=true
+  end
   admission('request control='..control..' paused=true ready='..tostring(X4LAN_SEED_GATE.ready))
  end
  return trigger(screen,control,value)
