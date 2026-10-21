@@ -51,11 +51,12 @@ class CodecTests(unittest.TestCase):
 
     def test_codec_is_not_registered_or_activated(self):
         self.assertNotIn('attachment_protocol', (ROOT / 'extension/x4_lan_lab/ui.xml').read_text())
-        users = [p.name for p in list((ROOT / 'x4lan').glob('*.py')) + list((ROOT / 'extension').rglob('*.lua'))
-                 if p.name not in ('attachment.py', 'attachment_protocol.lua') and any(
-                     needle in p.read_text(errors='replace')
-                     for needle in ('X4LAN_ATTACHMENT_PROTOCOL', 'from .attachment', 'x4lan.attachment', 'UATTACH'))]
-        self.assertEqual(users, [], 'codec only: nothing uses it yet')
+        users = sorted(p.name for p in list((ROOT / 'x4lan').glob('*.py')) + list((ROOT / 'extension').rglob('*.lua'))
+                       if p.name not in ('attachment.py', 'attachment_protocol.lua') and any(
+                           needle in p.read_text(errors='replace')
+                           for needle in ('X4LAN_ATTACHMENT_PROTOCOL', 'from .attachment', 'x4lan.attachment', 'UATTACH')))
+        # Only the agreed opt-in relay (disabled by default) uses the codec; no UI or Lua adapter does.
+        self.assertEqual(users, ['attachment_relay.py', 'universe.py'])
 
 
 def timeline():
