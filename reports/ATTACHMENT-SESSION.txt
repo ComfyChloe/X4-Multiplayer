@@ -18,3 +18,34 @@ pose admission requires fresh FREE state, verified native FREE state, and no
 pending attachment/warp operation. Then wire the execution controller with
 correlated target readback and test its real native session behavior. Existing
 seed admission and consumer native experiments do not qualify this missing path.
+
+OBSERVATION / POSE ADMISSION PATH
+The unregistered attachment_world.lua now reads actual native FREE, EXTERNAL or
+STORED state and publishes UATTACH only for saved IDs in the current baseline.
+Transit, unknown docks, changed native descriptors and protected player/carrier
+ancestry are excluded. At most128 candidates are inspected every0.05s; the cursor
+follows stable IDs across baseline refreshes. A4096-ship injected sweep completes
+every32 ticks even when every tick has a new baseline. This is a budget test, not
+a native FPS measurement or proof that native fleet enumeration includes every
+stored ship. Dynamic post-seed ships remain outside this bounded path.
+
+Guest observations enter through the existing connected native transport and
+client lease check. Only committed baseline/epoch/recipient/identity records are
+admitted. Pose requires fresh FREE observation, actual native FREE state, fresh
+IDENT and matching live saved descriptor; view departure clears observations
+without resetting replay marks. Player ancestry is protected even during the
+initial saved-ship import, before adapter construction. Unknown/attached/expired
+state holds pose; repeated packets cannot renew authority. Lease/epoch changes
+fail closed. Attachment mode holds all cross-sector SeedMove requests until
+queued-warp/attachment arbitration is implemented; there is no legacy fallback.
+
+Linux integration covers the actual transport .so, real UDP, UniverseSession,
+client.lua and both universe adapters with simulated X4 API readbacks. Host FREE
+permits guest pose, STORED fences it while the guest remains physically FREE,
+and stopping fresh observations expires authority despite relay retries. This
+is transport/adapter acceptance, not two native engines. The attachment state
+itself is not physically reconciled yet: native controller/execution wiring,
+warp arbitration, explicit opt-in launcher/relay config and native-session
+qualification remain next. Default UI registration/packages are unchanged.
+
+442 Linux/Python/LuaJIT checks PASS/no skips, including10 new world/UDP tests.

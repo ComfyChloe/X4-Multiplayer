@@ -23,6 +23,7 @@ local function send(p) s.transport:send(p) end
 local function playerOrFixture(object)
  local k=key(object)
  return u.excluded[k] or A.coop.entity(object)>0 or
+  (cfg.attachment_sync and assert(X4LAN_ATTACHMENT_WORLD,'attachment session module missing').protected(object)) or
   object==C.GetPlayerControlledShipID() or object==C.GetPlayerOccupiedShipID() or object==C.GetPlayerContainerID()
 end
 local function protected(object) return playerOrFixture(object) or u.replicaKeys[key(object)] end
@@ -135,7 +136,7 @@ local function removeReplica(r)
  local object=r.object
  if object and C.IsComponentOperational(object) then
   -- Recheck live player IDs; a player may have boarded since creation.
-  if A.coop.entity(object)>0 or object==C.GetPlayerControlledShipID() or object==C.GetPlayerOccupiedShipID() or object==C.GetPlayerContainerID() then
+  if playerOrFixture(object) then
    error('player entered an NPC replica; end this internal scene test')
   end
   if r.seedOriginal then
@@ -187,10 +188,14 @@ local function accept(b,now)
    if not r.at or now-r.at>=M.stale then r.track=nil;r.target=nil end
   end
  end
+ if u.attachments then u.attachments:commit(b) end
  log('COMMITTED revision='..b.revision..' sector='..b.sector..' objects='..#b.rows)
 end
 function u.receive(f,now)
- if f[1]=='UINTEREST' then
+ if f[1]=='UATTACH' then
+  if u.attachments and not u.failed then u.attachments:receive(f,now) end
+  return true
+ elseif f[1]=='UINTEREST' then
   if cfg.slot=='p1' and #f==5 and P.integer(f[4]) and P.atom(f[5],true) then u.wanted=f[5] end
   return true
  elseif f[1]=='UACK' then
@@ -247,7 +252,9 @@ local function render(now,sector)
    end
    if r.object and bindingReady then
     assert(not playerOrFixture(r.object),'player or fixture in NPC replica')
-    if r.seedOriginal and GetComponentData(A.id(r.object),'isdocked') then
+    if u.attachments and not u.attachments:allow_pose(r.entity.id,r.object,now) then
+     r.applied=nil
+    elseif r.seedOriginal and GetComponentData(A.id(r.object),'isdocked') then
      -- Attached ships inherit their container transform. A direct sector pose
      -- write can corrupt stored-child offsets without moving the child in that
      -- frame. Keep the native attachment; resume pose repair after undocking.
@@ -256,7 +263,9 @@ local function render(now,sector)
     elseif r.seedOriginal and C.GetContextByClass(r.object,'sector',false)~=sector then
      -- Moving between native sector parents is an MD operation. Do not write a
      -- pose in the wrong parent while that asynchronous operation is pending.
-     if not r.nextWarp or now>=r.nextWarp then
+     -- Attachment mode holds cross-sector writes until queued warp/attachment
+     -- arbitration is implemented; never use the legacy asynchronous path.
+     if not u.attachments and (not r.nextWarp or now>=r.nextWarp) then
       r.nextWarp=now+1
       AddUITriggeredEvent('X4LAN_Universe','SeedMove',{seed=cfg.seed_id,object=A.id(r.object),sector=A.id(sector),
        x=value.x,y=value.y,z=value.z,yaw=value.yaw,pitch=value.pitch,roll=value.roll})
@@ -282,10 +291,15 @@ local function frame(now)
  if not u.setup then u.setup=true;AddUITriggeredEvent('X4LAN_Universe','Setup',{seed=cfg.seed_binding and cfg.seed_id or ''});return end
  if not u.ready or A.paused() then return end
  if u.seedObjects and not seedRegistryFrame(now) then return end
+ if cfg.attachment_sync and not u.attachments then
+  u.attachments=assert(X4LAN_ATTACHMENT_WORLD,'attachment session module missing').new(cfg,A,u)
+ end
+ if u.attachments then u.attachments:frame(now) end
  local name,sector=currentSector();if not name then return end
  if cfg.slot=='p2' then
   if u.interest~=name then
    u.interest=name;u.scan=nil;u.receiver.pending=nil;u.latest=nil;u.nextScan=0
+   if u.attachments then u.attachments:clear_view() end
    for _,r in pairs(u.replicas) do removeReplica(r) end;u.replicas={}
   end
   if now>=(u.nextInterest or 0) then

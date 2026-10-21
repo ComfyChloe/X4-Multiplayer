@@ -55,8 +55,8 @@ class CodecTests(unittest.TestCase):
                        if p.name not in ('attachment.py', 'attachment_protocol.lua') and any(
                            needle in p.read_text(errors='replace')
                            for needle in ('X4LAN_ATTACHMENT_PROTOCOL', 'from .attachment', 'x4lan.attachment', 'UATTACH')))
-        # Only the agreed opt-in relay (disabled by default) uses the codec; no UI or Lua adapter does.
-        self.assertEqual(users, ['attachment_relay.py', 'universe.py'])
+        # Relay and explicit unregistered world adapter only; no default UI activation.
+        self.assertEqual(users, ['attachment_relay.py', 'attachment_world.lua', 'universe.py', 'universe_game.lua'])
 
 
 def timeline():
