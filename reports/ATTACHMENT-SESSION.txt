@@ -1,0 +1,20 @@
+INTERNAL ATTACHMENT SESSION INTEGRATION
+22 October2026 | A:primary | contrib/astra-attachment-session | starts8ad66af
+
+Scope: bind the reviewed relay/import/controller/execution modules to the actual
+universe adapter in an explicit saved-seed internal session. No default package
+activation or whole-universe acceptance. Native installation belongs to primary.
+
+The first integration review found a retained-object identity hole: bindSeedObject
+returned false for absent, expired or foreign-epoch IDENT, but render ignored its
+return value and still wrote through r.object. Respect the return value before
+both SetObjectSectorPos and asynchronous SeedMove. Six regression combinations
+(three identity failures, same/other sector) fail on prior source and pass with
+the correction; matching fresh metadata permits repair again. 432 Linux/LuaJIT
+checks PASS/no skips. This is injected adapter evidence, not a native session.
+
+Next: authenticated UATTACH routing and host native state publication; guest
+pose admission requires fresh FREE state, verified native FREE state, and no
+pending attachment/warp operation. Then wire the execution controller with
+correlated target readback and test its real native session behavior. Existing
+seed admission and consumer native experiments do not qualify this missing path.

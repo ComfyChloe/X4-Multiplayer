@@ -143,6 +143,28 @@ class UniverseAdapterTests(unittest.TestCase):
             else:
                 l.execute('assert(not U.failed and positions[101].x==1500 and #removed==0 and #spawns==1)')
 
+    def test_retained_seed_binding_waits_for_fresh_identity_before_pose_or_warp(self):
+        for update in ("I.rows.N1=nil", "I.rows.N1.at=now-3", "I.rows.N1.epoch=string.rep('c',32)"):
+            for other_sector in (False, True):
+                with self.subTest(update=update, other_sector=other_sector):
+                    l=self.make('p2',seed=True);l.execute('''
+                      tick(1);baseline(1,{testRow},true);tick(25)
+                      I=X4LAN_BUBBLE_API.identity
+                      I.rows.N1={code='NAT-101',epoch=U.latest.epoch,at=now}
+                      tick(1);assert(positions[101].x==1500)
+                      positions[101]={x=999,y=200,z=300,yaw=0,pitch=0,roll=0}
+                      moves={};AddUITriggeredEvent=function(_,event,payload)
+                       if event=='SeedMove' then moves[#moves+1]=payload end
+                      end
+                    '''+update)
+                    if other_sector:l.execute('sectors[101]=23')
+                    l.execute('''
+                      tick(1);assert(not U.failed and #moves==0 and positions[101].x==999)
+                      I.rows.N1={code='NAT-101',epoch=U.latest.epoch,at=now};tick(1)
+                    ''')
+                    l.execute('assert(#moves==1 and positions[101].x==999)' if other_sector
+                              else 'assert(#moves==0 and positions[101].x==1500)')
+
     def test_attached_original_keeps_parent_transform_then_resumes_after_undocking(self):
         l=self.make('p2',seed=True);l.execute('''
           tick(1);baseline(1,{testRow},true);tick(25)

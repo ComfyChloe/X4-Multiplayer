@@ -234,17 +234,18 @@ local function render(now,sector)
    local p=r.entity.pose
    if r.track then p=M.render(r.track,now,r.modern and M.delay or .1) or p end
    local value=ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
+   local bindingReady=true
    if u.seedObjects then
     if r.object then assert(C.IsComponentOperational(r.object),'bound seed object disappeared') end
     -- Fresh authenticated metadata must also validate retained bindings before
     -- any pose write. A previously resolved handle is not a descriptor bypass.
-    bindSeedObject(r,now)
+    bindingReady=bindSeedObject(r,now)
    elseif not r.object or not C.IsComponentOperational(r.object) then
      r.object=C.SpawnObjectAtPos2(r.entity.macro,sector,value,r.entity.owner)
      assert(r.object~=0,'NPC replica spawn failed');u.replicaKeys[key(r.object)]=true
      C.ActivateObject(r.object,false)
    end
-   if r.object then
+   if r.object and bindingReady then
     assert(not playerOrFixture(r.object),'player or fixture in NPC replica')
     if r.seedOriginal and GetComponentData(A.id(r.object),'isdocked') then
      -- Attached ships inherit their container transform. A direct sector pose
