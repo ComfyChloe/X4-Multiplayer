@@ -1,0 +1,64 @@
+SAVED-PAIR NATIVE ATTACHMENT CONTROLLER — DEVELOPMENT QUALIFICATION
+21 October2026 | internal diagnostic only; no shipping activation or package
+
+The opt-in attachment relay, saved-dock ledger/importer and transition controller
+are combined in contrib/astra-attachment-integration. The relay remains disabled
+by default; normal ui.xml does not register these new runtime modules. PR25's
+baseline-map complexity fix is included for development but still awaits Claude's
+independent review after his reported01:00 reset. Main is unchanged.
+
+The unshipped native_attachment_controller_test.py harness uses a fresh frozen
+pristine seed and the complete native saved-dock importer. Its MD probe selects
+one non-player stored ship and an undocked XL carrier already present in the saved
+ship registry, plus their exact saved storage/external bay indices. The diagnostic
+suspends the carrier and its docked children; it does not create a replacement pair
+or load a normal save. Normal-save manifests and the actual owned installation/
+profile backups are retained per run.
+
+The Lua probe drives the real pure controller with synthetic fresh host intentions
+for seven states: STORED, FREE, EXTERNAL, STORED, EXTERNAL, FREE, STORED. A successful
+cycle requires eight native actions. It independently reads native attachment state,
+uses fresh correlated saved-dock queries before attachments, retains native action
+fences, and confirms each phase through a separate MD readback. Carrier position
+is held in its existing undocked parent frame; no direct docked-child pose writes
+are made. The selected carrier/child and local player ancestors are checked before
+writes. Native MD repeats saved indices/references, identity, player ancestry,
+expected previous attachment, target type/capacity/relative witness, compatibility
+and occupancy checks at operation consumption. Tokens are consumed before mutation.
+
+validate_attachment_controller.py independently requires selection agreement,
+correct causal Lua dispatch/native action/Lua read/native read/complete order,
+exact selected ship code and saved dock IDs, all expected transitions and fresh
+correlated target readbacks. Missing/reordered actions, unrelated identities and
+callbacks before query completion are rejected. This is functional engine evidence,
+not an authenticated two-PC attachment test or complete-universe acceptance.
+
+SOURCE VALIDATION
+5c95fc7:395 Linux/Python/LuaJIT PASS, no skips; both probe Lua files compile and the
+new MD validates against the installed game schema. Follow-up575c6db:396PASS/no
+skips; it changes only the dev seed probe and its early-freeze regression.
+
+FIRST RUN — RETAINED FAIL BEFORE CONTROLLER SELECTION
+Run .local/evidence-130-withheld, source5c95fc7.
+Fresh seedf8e6385310141fb4644a9441694718ca; capture imported50304 saved docks and
+both query types while paused. Reload's importer failed at index1363 before the
+controller selected a pair or issued any native transition. The capture snapshot
+contains live dock0x9e9e1 and parent ship0x9e9e0 / ZLB-641, with capacity10 in the
+captured row; the later native read has changed storage witnesses and a null
+capacity on the companion bay. The first load paused only after the existing
+approximately3-second readiness delay. The complete raw failure is retained.
+All three gates remain FAIL/incomplete; no omitted row is called a success.
+Game closed, exact owned seed removed, seven actual normal-save bytes/timestamps
+and the recorded33-file installation/profile restoration verified.
+
+CONTROLLED REPEAT — PENDING
+575c6db freezes the disposable world at the first valid onUpdate and at the native
+loaded notification, before the readiness delay or registry events. The seed probe
+releases this automatic freeze only after its capture/load qualification finishes,
+so the controller experiment can then run unpaused. The regression checks that
+readiness/import callbacks cannot run before the freeze.
+Run .local/evidence-129-withheld reuses the
+exact50304-dock snapshot above, with identical production bytes and fresh owned
+before/after inventories. Only the dev harness freeze timing changed. Its actual
+native result remains pending; the earlier successful50656-dock importer run is
+not evidence that this controller cycle succeeds.
