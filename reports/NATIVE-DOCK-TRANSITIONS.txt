@@ -181,3 +181,26 @@ check and the original definition identity requirement. The prior failures stay
 FAIL. A new native run is required; no successful reload is inferred from this
 source correction. Owned witness game/seed were closed/removed and fresh per-run
 normal-save, clean33 and profile restoration inventories are retained separately.
+
+REGISTRY-V2 STABLE-MACRO RELOAD — BOUNDED NATIVE PASS
+The new docks-graph-macro-id-20261021 run passes the unchanged full graph/pose
+validator:50538 saved indices, dock definitions, exact independently saved
+parent/container references, bijective component graph and reverse lookup. All
+50538 process-local dock handles changed after reload, as expected. Maximum
+relative-position error is0.00184751m (gate remains0.05m). The separate unchanged
+station validator also passes1390 stations with maximum position error0.031m
+and angle error0.00000110547785rad. These are one-PC native reload measurements,
+not shared runtime handles, two-PC dock transitions or whole-universe authority.
+
+Production source and captured snapshot remain952e379/digest74382d15...03fcf2d.
+Only the unshipped dock-registry XML comes from1c281e3 (SHA256
+1f53af351158d8bc6ad2cdd11f6bafe5c962ed3966898da6eb2ee3fccf2708a4).
+The run journal explicitly records this diagnostic overlay; it does not falsely
+attribute those bytes to the older production checkout. Both earlier failed
+reloads remain preserved. The owned game was closed, exact staged save removed,
+all seven actual normal save hashes/timestamps preserved, and clean33/profile
+files restored with current-run inventories. Eighteen raw/result/manifest/source
+and restoration artifacts are hashed in evidence-hashes.json in the private run.
+No new package or transport path was activated. Cross-PC dock identity and shared
+attachment transitions remain pending; the successful local saved-reference
+foundation permits the next bounded native adapter work.

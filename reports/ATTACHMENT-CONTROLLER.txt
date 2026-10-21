@@ -30,7 +30,10 @@ fingerprints() records the seed/index, native definitions and deterministic firs
 encounter labels of the saved component graph. Equivalent local renumbering has
 the same labels; split/merged parent/container graphs change them. This model is
 not a substitute for native validation of saved references across reload/PCs.
-The earlier registry-v2 capture remains incomplete without its native reload test.
+The retained registry-v2 capture now passes a separate local native reload after
+comparing saved macro IDs instead of macro values. All50538 dock indices/graphs
+agree; see NATIVE-DOCK-TRANSITIONS.txt for exact source, failures and limits. This
+pure ledger/controller itself is still not activated or natively tested.
 
 attachment_controller.lua
 X4LAN_ATTACHMENT_CONTROLLER.new(options) requires an admitted host epoch, explicit
