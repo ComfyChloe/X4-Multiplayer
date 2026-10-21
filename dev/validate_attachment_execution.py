@@ -12,7 +12,7 @@ COMMAND=r'phase=(\d+) operation=(\d+) sequence=(\d+) action=(UNDOCK|ATTACH) stat
 
 def validate(text,seed):
     canonical=[];pending=None;last_operation=0;successful=0;rejected=0;unissued=0
-    imported=False;selected=False;ready=False;completed=False
+    imported=False;selected=False;ready=False;completed=False;target_readback=None
     def require(condition,reason):
         if not condition:raise ValueError(reason)
     for line in text.splitlines():
@@ -22,6 +22,8 @@ def validate(text,seed):
         value=line.split('[X4LAN] ',1)[1]
         require(imported and not completed,'execution evidence outside completed import/cycle boundary')
         if value.startswith('ATTACH_CONTROLLER selected '):selected=True
+        m_query=re.fullmatch(r'ATTACH_DOCK_EVENT kind=End value='+seed+r'\|\d+\|(\d+)\|\d+\|\d+\|1',value)
+        if m_query:target_readback=int(m_query[1])
         if value.startswith('ATTACH_CONTROLLER execution-ready '):
             require(selected and not ready and value=='ATTACH_CONTROLLER execution-ready epoch='+seed,'invalid native execution admission')
             ready=True
@@ -29,6 +31,8 @@ def validate(text,seed):
             m=re.fullmatch('ATTACH_CONTROLLER prepare '+COMMAND,value)
             require(m and ready and pending is None,'overlapping or invalid execution preparation')
             phase,operation,sequence,action,state,dock=m.groups()
+            require(action!='ATTACH' or target_readback==int(dock),'attachment prepare lacks a fresh exact target query')
+            target_readback=None
             require(int(operation)==last_operation+1,'execution operation is not the next local operation')
             last_operation=int(operation)
             pending=dict(phase=phase,operation=operation,sequence=sequence,action=action,state=state,dock=dock,stage='prepare')
@@ -53,8 +57,9 @@ def validate(text,seed):
                 require(valid,'window ended after dispatch or with unknown result')
                 pending=None;unissued+=1
         elif value.startswith('ATTACH_EXEC applied '):
-            m=re.fullmatch(r'ATTACH_EXEC applied operation=(\d+) outcome=(applied|rejected)',value)
+            m=re.fullmatch(r'ATTACH_EXEC applied operation=(\d+) outcome=(applied|rejected)(?: reason=(invoked|expired|paused|revalidation))?',value)
             require(m and pending and pending['stage']=='apply' and m[1]==pending['operation'],'native consumption has unknown or uncorrelated outcome')
+            require(m[3] is None or (m[3]=='invoked')==(m[2]=='applied'),'native outcome and reason disagree')
             pending['outcome']=m[2];pending['stage']='action' if m[2]=='applied' else 'ack'
         elif value.startswith('ATTACH_EXEC action '):
             m=re.fullmatch(r'ATTACH_EXEC action operation=(\d+) action=(UNDOCK|ATTACH) state=(FREE|EXTERNAL|STORED) dock=(\d+) shipIndex=(\d+) code=(\S+)',value)

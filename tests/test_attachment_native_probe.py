@@ -67,8 +67,9 @@ assert(unpauses==1 and poseWrites==1 and out[2].name=='Read' and out[2].value==0
 assert(logs[#logs]:find('read phase=0 state=FREE dock=0',1,true))
 ''')
 
-    def execution_ready(self):
+    def execution_ready(self, faults=False):
         lua=self.make(True)
+        lua.globals().X4LAN_CONFIG.attachment_execution_faults=faults
         lua.execute('''
 X4LAN_SEED_DOCKS.frame(now)
 events['X4LAN_AttachmentProbe.Selected'](nil,'1|2|3|4|0x65|0xc9')
@@ -101,6 +102,28 @@ assert(logs[#logs]:find('execution-ack operation=1 outcome=applied',1,true))
         ):
             with self.subTest(intervention=intervention):
                 self.execution_ready().execute('now=.5;'+intervention+";for _,event in ipairs(out) do assert(event.name~='Apply') end")
+
+    def test_injected_stale_and_pause_attempts_require_rejection_and_native_readback_before_retry(self):
+        self.execution_ready(True).execute('''
+local prefix=string.rep('a',32)..'|'..string.rep('a',32)..'|'
+now=.5;events['X4LAN_Attachment.Window'](nil,prefix..'1|1')
+assert(out[#out].name=='Prepare' and not paused)
+now=2.9;X4LAN_SEED_DOCKS.frame(now);assert(out[#out].name=='Prepare')
+now=3.01;X4LAN_SEED_DOCKS.frame(now);assert(out[#out].name=='Apply' and out[#out].value.operation==1)
+now=3.1;events['X4LAN_Attachment.Applied'](nil,prefix..'1|rejected')
+assert(out[#out].name=='FaultRead')
+now=3.2;X4LAN_SEED_DOCKS.frame(now);assert(out[#out].name=='FaultRead')
+events['X4LAN_AttachmentProbe.FaultRead'](nil,'1|stale')
+now=3.3;X4LAN_SEED_DOCKS.frame(now);assert(out[#out].name=='Prepare' and out[#out].value.operation==2)
+now=3.4;events['X4LAN_Attachment.Window'](nil,prefix..'2|1');assert(paused)
+now=3.46;X4LAN_SEED_DOCKS.frame(now);assert(paused and out[#out].name=='Apply' and out[#out].value.operation==2)
+now=3.5;events['X4LAN_Attachment.Applied'](nil,prefix..'2|rejected');assert(paused and out[#out].name=='FaultRead')
+events['X4LAN_AttachmentProbe.FaultRead'](nil,'2|paused')
+now=3.6;X4LAN_SEED_DOCKS.frame(now);assert(not paused)
+now=3.7;X4LAN_SEED_DOCKS.frame(now);assert(out[#out].name=='Prepare' and out[#out].value.operation==3)
+now=3.8;events['X4LAN_Attachment.Window'](nil,prefix..'3|1')
+assert(out[#out].name=='Apply' and out[#out].value.operation==3)
+''')
 
 
 if __name__ == '__main__':

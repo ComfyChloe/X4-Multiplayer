@@ -8,7 +8,7 @@
    <actions>
     <set_value name="$v" exact="event.param3"/>
     <set_value name="$active" exact="false"/><set_value name="$pending" exact="null"/><set_value name="$operation" exact="0"/>
-    <set_value name="$appliedOperation" exact="0"/><set_value name="$appliedOutcome" exact="'unknown'"/>
+    <set_value name="$appliedOperation" exact="0"/><set_value name="$appliedOutcome" exact="'unknown'"/><set_value name="$appliedReason" exact="'unknown'"/>
     <do_if value="$v.$role == 'p2' and md.X4LAN_Seed.State.$id? and $v.$seed == md.X4LAN_Seed.State.$id and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and $v.$seed == md.X4LAN_SeedDocks.State.$id and md.X4LAN_SeedDocks.State.$version == 1">
      <set_value name="$seed" exact="$v.$seed"/><set_value name="$epoch" exact="$v.$epoch"/><set_value name="$active" exact="true"/>
      <raise_lua_event name="'X4LAN_Attachment.Ready'" param="'%s|%s'.[$seed,$epoch]"/>
@@ -40,31 +40,33 @@
   <cue name="Apply" instantiate="true">
    <conditions><event_ui_triggered screen="'X4LAN_Attachment'" control="'Apply'"/></conditions>
    <actions>
-    <set_value name="$request" exact="event.param3"/><set_value name="$allowed" exact="false"/><set_value name="$outcome" exact="'unknown'"/>
+    <set_value name="$request" exact="event.param3"/><set_value name="$allowed" exact="false"/><set_value name="$outcome" exact="'unknown'"/><set_value name="$reason" exact="'unknown'"/>
     <do_if value="State.$active? and State.$active and $request.$seed == State.$seed and $request.$epoch == State.$epoch and $request.$operation == State.$appliedOperation">
      <!-- Replay the known outcome, never reinterpret a consumed success as a
           no-mutation rejection that could release an inflight Lua fence. -->
-     <set_value name="$outcome" exact="State.$appliedOutcome"/>
+     <set_value name="$outcome" exact="State.$appliedOutcome"/><set_value name="$reason" exact="State.$appliedReason"/>
     </do_if>
     <do_elseif value="State.$active? and State.$active and State.$pending and $request.$seed == State.$seed and $request.$epoch == State.$epoch and $request.$operation == State.$operation">
      <set_value name="$v" exact="State.$pending"/>
      <!-- Consume first. A rejection cannot leave a capability usable later. -->
      <set_value name="State.$pending" exact="null"/>
-     <do_if value="player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == State.$stamp and player.age ge State.$preparedAge and player.age le State.$preparedAge + 1s and player.timewarp.factor gt 0s">
-      <include_actions ref="Check"/>
+     <set_value name="$reason" exact="'expired'"/>
+     <do_if value="player.timewarp.factor le 0s"><set_value name="$reason" exact="'paused'"/></do_if>
+     <do_elseif value="player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == State.$stamp and player.age ge State.$preparedAge and player.age le State.$preparedAge + 1s">
+      <include_actions ref="Check"/><set_value name="$reason" exact="'revalidation'"/>
       <do_if value="$valid">
        <do_if value="$v.$action == 'UNDOCK'">
         <do_if value="$ship.assigneddock"><remove_docking_request ship="$ship" container="$ship.assigneddock.container" immediate="true"/></do_if>
         <undock ship="$ship"/>
        </do_if>
        <do_else><spawn_docked ship="$ship" dock="$dock"/></do_else>
-       <set_value name="$allowed" exact="true"/>
+       <set_value name="$allowed" exact="true"/><set_value name="$reason" exact="'invoked'"/>
       </do_if>
-     </do_if>
+     </do_elseif>
      <set_value name="$outcome" exact="if $allowed then 'applied' else 'rejected'"/>
-     <set_value name="State.$appliedOperation" exact="$request.$operation"/><set_value name="State.$appliedOutcome" exact="$outcome"/>
+     <set_value name="State.$appliedOperation" exact="$request.$operation"/><set_value name="State.$appliedOutcome" exact="$outcome"/><set_value name="State.$appliedReason" exact="$reason"/>
     </do_elseif>
-    <debug_text text="'[X4LAN] ATTACH_EXEC applied operation=%s outcome=%s'.[$request.$operation,$outcome]"/>
+    <debug_text text="'[X4LAN] ATTACH_EXEC applied operation=%s outcome=%s reason=%s'.[$request.$operation,$outcome,$reason]"/>
     <do_if value="$allowed">
      <debug_text text="'[X4LAN] ATTACH_EXEC action operation=%s action=%s state=%s dock=%s shipIndex=%s code=%s'.[$request.$operation,$v.$action,$v.$state,$v.$dock,$v.$ship,$ship.idcode]"/>
     </do_if>

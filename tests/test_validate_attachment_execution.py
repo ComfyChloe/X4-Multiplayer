@@ -22,6 +22,22 @@ def trace():
     return out
 
 
+def query(serial):
+    return [f'[X4LAN] ATTACH_DOCK_EVENT kind=Begin value={SEED}|{serial}|2|2|2',
+            f'[X4LAN] ATTACH_DOCK_EVENT kind=Row value={SEED}|{serial}|2|0xc|0xa|0xa|dock_a_macro|ship_carrier_macro|0|1|10|0.001',
+            f'[X4LAN] ATTACH_DOCK_EVENT kind=End value={SEED}|{serial}|2|2|2|1']
+
+
+def shift(lines,amount):
+    out=[]
+    for line in lines:
+        line=re.sub(r'operation=(\d+)',lambda m:'operation='+str(int(m[1])+amount),line)
+        if 'ATTACH_DOCK_EVENT ' in line:
+            line=re.sub('value='+SEED+r'\|(\d+)\|',lambda m:'value='+SEED+'|'+str(int(m[1])+amount)+'|',line)
+        out.append(line)
+    return out
+
+
 class NativeExecutionValidatorTests(unittest.TestCase):
     def test_full_cycle_requires_native_prepare_window_consume_action_and_ack(self):
         result=validate('\n'.join(trace()),SEED)
@@ -49,10 +65,11 @@ class NativeExecutionValidatorTests(unittest.TestCase):
         # Insert one consumed/no-mutation rejection before the first successful attempt.
         failed=original[first:first+4]+['[X4LAN] ATTACH_EXEC applied operation=1 outcome=rejected',
                                      '[X4LAN] ATTACH_CONTROLLER execution-ack operation=1 outcome=rejected']
-        tail=[re.sub(r'operation=(\d+)',lambda m:'operation='+str(int(m[1])+1),x) for x in original[first:]]
+        tail=query(4)+shift(original[first:],1)
         lines=original[:first]+failed+tail
         result=validate('\n'.join(lines),SEED)
         self.assertEqual((result['native_prepare_attempts'],result['native_rejected_consumptions'],result['operations']),(10,1,9))
+        with self.assertRaises(ValueError):validate('\n'.join(original[:first]+failed+shift(original[first:],1)),SEED)
         action='[X4LAN] ATTACH_EXEC action operation=1 action=ATTACH state=STORED dock=2 shipIndex=1 code=ABC-123'
         with self.assertRaises(ValueError):validate('\n'.join(original[:first]+failed[:5]+[action]+failed[5:]+tail),SEED)
 

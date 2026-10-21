@@ -39,7 +39,7 @@
       </do_all>
      </do_if>
      <do_if value="$ship and $carrier and $outside">
-      <set_value name="$operation" exact="0"/><set_value name="$phase" exact="0"/><set_value name="$readNext" exact="0"/><set_value name="$code" exact="$ship.idcode"/><set_value name="$macro" exact="$ship.macro.id"/><set_value name="$owner" exact="$ship.owner"/>
+      <set_value name="$operation" exact="0"/><set_value name="$phase" exact="0"/><set_value name="$readNext" exact="0"/><set_value name="$faultReads" exact="0"/><set_value name="$code" exact="$ship.idcode"/><set_value name="$macro" exact="$ship.macro.id"/><set_value name="$owner" exact="$ship.owner"/>
       <debug_text text="'[X4LAN] ATTACH_NATIVE selected seed=%s shipIndex=%s carrierIndex=%s ship=%s carrier=%s code=%s inside=%s outside=%s'.[$seed,$shipIndex,$carrierIndex,$ship,$carrier,$code,$insideIndex,$outsideIndex]"/>
       <raise_lua_event name="'X4LAN_AttachmentProbe.Selected'" param="'%s|%s|%s|%s|%s|%s'.[$shipIndex,$carrierIndex,$insideIndex,$outsideIndex,$ship,$carrier]"/>
      </do_if>
@@ -91,6 +91,21 @@
     <do_if value="$allowed"><set_value name="State.$phase" exact="$v.$phase"/></do_if>
     <debug_text text="'[X4LAN] ATTACH_NATIVE action operation=%s phase=%s action=%s state=%s dock=%s allowed=%s shipIndex=%s code=%s'.[$v.$operation,$v.$phase,$v.$action,$v.$state,$v.$dock,$allowed,State.$shipIndex,State.$code]"/>
     <raise_lua_event name="'X4LAN_AttachmentProbe.Applied'" param="'%s|%s'.[$v.$operation,if $allowed then 1 else 0]"/>
+   </actions>
+  </cue>
+  <cue name="FaultRead" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_AttachmentProbe'" control="'FaultRead'"/></conditions>
+   <actions>
+    <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="State.$ship"/>
+    <do_if value="$v.$operation == md.X4LAN_Attachment.State.$appliedOperation and md.X4LAN_Attachment.State.$appliedOutcome == 'rejected' and $ship.isoperational and $ship == md.X4LAN_Seed.State.$ships.{State.$shipIndex} and $ship.idcode == State.$code and (($v.$kind == 'stale' and State.$faultReads == 0) or ($v.$kind == 'paused' and State.$faultReads == 1))">
+     <debug_text text="'[X4LAN] ATTACH_FAULT native operation=%s kind=%s shipIndex=%s code=%s stored=%s docked=%s dock=%s paused=%s'.[$v.$operation,$v.$kind,State.$shipIndex,State.$code,$ship.isinternallystored,$ship.dock.exists,if $ship.dock.exists and md.X4LAN_SeedDocks.State.$indices.{$ship.dock}? then md.X4LAN_SeedDocks.State.$indices.{$ship.dock} else 0,player.timewarp.factor le 0s]"/>
+     <do_if value="not $ship.isinternallystored and not $ship.dock.exists">
+      <set_value name="State.$faultReads" operation="add" exact="1"/>
+      <raise_lua_event name="'X4LAN_AttachmentProbe.FaultRead'" param="'%s|%s'.[$v.$operation,$v.$kind]"/>
+     </do_if>
+     <do_else><raise_lua_event name="'X4LAN_AttachmentProbe.Error'" param="'fault changed native attachment'"/></do_else>
+    </do_if>
+    <do_else><raise_lua_event name="'X4LAN_AttachmentProbe.Error'" param="'uncorrelated fault readback'"/></do_else>
    </actions>
   </cue>
   <cue name="Read" instantiate="true">

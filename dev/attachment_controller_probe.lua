@@ -11,7 +11,8 @@ uint32_t GetNumDockedShips(UniverseID,const char*);
 uint32_t GetDockedShips(UniverseID*,uint32_t,UniverseID,const char*);
 void ActivateObject(UniverseID,bool);void SetObjectSectorPos(UniverseID,UniverseID,UIPosRot);
 ]]
-local S={phase=0,sequence=0,operation=0};local scoped_target
+local S={phase=0,sequence=0,operation=0,faultsIssued=0,faultsVerified=0};local scoped_target
+local function faultlog(v) DebugError('[X4LAN] ATTACH_FAULT '..v) end
 local function log(s) DebugError('[X4LAN] ATTACH_CONTROLLER '..s) end
 local function id(object) return ConvertStringToLuaID((tostring(object):gsub('ULL$',''))) end
 local function reference(text)
@@ -112,7 +113,15 @@ RegisterEvent('X4LAN_AttachmentProbe.Selected',function(_,value) guard(function(
     local command=assert(S.bridge:window_command())
     S.awaitingOperation=operation;S.issued=true
     log(string.format('dispatch phase=%d operation=%d sequence=%d action=%s state=%s dock=%d',S.phase,operation,command.sequence,command.action,command.state,command.dock))
-    AddUITriggeredEvent('X4LAN_Attachment','Apply',{seed=cfg.seed_id,epoch=cfg.seed_id,operation=operation})
+    local payload={seed=cfg.seed_id,epoch=cfg.seed_id,operation=operation}
+    if cfg.attachment_execution_faults and S.faultsIssued<2 then
+     local actual=inspect();assert(actual.state=='FREE' and actual.dock==0,'fault injection requires initial free ship')
+     S.faultsIssued=S.faultsIssued+1
+     local kind=S.faultsIssued==1 and 'stale' or 'paused'
+     S.fault={operation=operation,kind=kind,at=GetCurRealTime(),delay=kind=='stale' and 2.5 or .05,payload=payload}
+     faultlog(string.format('armed operation=%d kind=%s shipIndex=%d state=FREE dock=0',operation,kind,S.shipIndex))
+     if kind=='paused' then Pause() end
+    else AddUITriggeredEvent('X4LAN_Attachment','Apply',payload) end
    end})
   AddUITriggeredEvent('X4LAN_Attachment','Start',{seed=cfg.seed_id,epoch=cfg.seed_id,role='p2'})
  end
@@ -145,6 +154,19 @@ RegisterEvent('X4LAN_Attachment.Applied',function(_,value) guard(function()
  log('execution-ack operation='..operation..' outcome='..outcome)
  if status=='accepted' then S.operation=S.operation+1 else S.issued=nil end
  S.awaitingOperation=nil;S.targetWitness=nil
+ if S.fault then
+  assert(operation==S.fault.operation and outcome=='rejected','injected fault was not rejected')
+  local actual=inspect();assert(actual.state=='FREE' and actual.dock==0 and actual.identity==S.identity,'fault changed native attachment')
+  S.fault.awaitingRead=true
+  faultlog(string.format('lua operation=%d kind=%s shipIndex=%d state=FREE dock=0',operation,S.fault.kind,S.shipIndex))
+  AddUITriggeredEvent('X4LAN_AttachmentProbe','FaultRead',{operation=operation,kind=S.fault.kind})
+ end
+end) end)
+RegisterEvent('X4LAN_AttachmentProbe.FaultRead',function(_,value) guard(function()
+ local operation,kind=tostring(value):match('^(%d+)|([a-z]+)$')
+ assert(S.fault and S.fault.awaitingRead and tonumber(operation)==S.fault.operation and kind==S.fault.kind,'fault native readback mismatched')
+ faultlog('verified operation='..operation..' kind='..kind)
+ S.faultsVerified=S.faultsVerified+1;S.fault=nil;S.nextObservation=nil
 end) end)
 RegisterEvent('X4LAN_Attachment.Error',function(_,why) guard(function() error(tostring(why)) end) end)
 RegisterEvent('X4LAN_AttachmentProbe.Applied',function(_,value) guard(function()
@@ -157,6 +179,7 @@ end) end)
 RegisterEvent('X4LAN_AttachmentProbe.Read',function(_,phase) guard(function()
  assert(S.reading and tonumber(phase)==S.phase,'native phase readback mismatched');S.reading=nil
  if S.phase==7 then
+  assert(not cfg.attachment_execution_faults or S.faultsVerified==2,'missing fault qualification')
   S.complete=true;log('complete phases=8 operations='..S.operation)
   if S.bridge then S.bridge:stop();AddUITriggeredEvent('X4LAN_Attachment','Stop') end
   if not C.IsGamePaused() then Pause() end
@@ -202,6 +225,15 @@ function D.frame(now)
   assert(now-S.phaseStarted<45,'native controller phase timeout '..S.phase)
   assert(not protected(S.ship) and not protected(S.carrier),'player entered diagnostic pair')
   assert(C.IsComponentOperational(S.carrier) and not GetComponentData(id(S.carrier),'isdocked'),'carrier disappeared or docked')
+  if S.fault then
+   local status,why=S.bridge:frame(now);assert(status~='failed',why)
+   if S.fault.kind=='paused' and not C.IsGamePaused() then Pause();return end
+   if not S.fault.sent and now-S.fault.at>=S.fault.delay then
+    faultlog(string.format('sent operation=%d kind=%s elapsed=%.9f paused=%s',S.fault.operation,S.fault.kind,now-S.fault.at,tostring(C.IsGamePaused())))
+    S.fault.sent=true;AddUITriggeredEvent('X4LAN_Attachment','Apply',S.fault.payload)
+   end
+   return -- Keep the injected pause, and do not refresh the stale observation.
+  end
   if C.IsGamePaused() then Unpause();return end
   if S.bridge then
    assert(now-S.selectAt<5 or S.executionReady,'native execution readiness timeout')
