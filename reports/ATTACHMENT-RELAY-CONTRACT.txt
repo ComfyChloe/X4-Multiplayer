@@ -1,0 +1,45 @@
+ATTACHMENT RELAY CONTRACT — PROPOSED NEXT BOUNDED SCOPE
+21 October 2026 | A:primary | no transport activation in this document
+
+Use the reviewed PR23 UATTACH codec. The primary retains Lua/native adapter and
+seed capture/registry ownership. A separate Claude change may own a new Python
+attachment relay helper, focused tests and the minimal UniverseSession hooks,
+after the current review corrections and an explicit scope acknowledgment.
+
+REQUIREMENTS
+- Disabled by default: an explicit constructor option enables this development
+  path; existing sessions and packages continue rejecting UATTACH. No launcher,
+  config/package or native activation in this scope.
+- Authenticate endpoint plus lease using the existing session peer lookup before
+  accepting state. Only p1 may publish; hostEpoch must equal that authenticated
+  host's lease and the already established universe epoch. Never establish or
+  replace an epoch from UATTACH. Host reconnection needs a new relay, as W01 does.
+- Uplink recipientLease is the publisher lease, as with existing universe input;
+  downlink substitutes the current guest lease. All other validated fields are
+  preserved. This convention must be documented explicitly.
+- Require an already committed baseline with the exact claimed revision and a
+  matching ship row in that sector. Saved ship indices only1..249999, never drops
+  or dynamic indices. Dock indices remain bounded wire data; the receiving native
+  ledger validates existence/type/occupancy and never trusts remote handles.
+- Retain per-ship monotonic marks for one host epoch, including expiry/removal;
+  duplicate/conflict/stale packets cannot refresh accepted timestamps. Bound
+  memory by admitted W01 sector views and the fixed saved-ship index limit.
+- Deliver only for the guest's current interest and its acknowledged baseline
+  revision; never send state for an unseen/removed/replaced ship or a different
+  view. Recheck current ship descriptor and host identity before delivery. Newer
+  revisions require fresh observations at that revision rather than silently
+  rewriting a recorded revision.
+- Use a finite explicit freshness TTL and a bounded fair transmission budget.
+  No reliable command/action execution is implied: these are state observations.
+  Drop expired records and never revive them by retransmission. Guest lease
+  replacement, interest changes, sector eviction and baseline identity changes
+  must not leak stale state; host loss must stop output.
+- Demonstrate wrong endpoint/guest forgery, wrong epoch, malformed input, replay,
+  future/missing/obsolete baseline, unknown/drop/dynamic ship, descriptor change,
+  sector departure/return, removed ship, guest reconnect, expiry and fair budget
+  with actual session/UDP or deterministic protocol tests as appropriate.
+
+Open design choice: exact per-sector cache invalidation versus one active guest
+view. Prefer the smallest bounded model consistent with W01's current8-sector
+cache and monotonic baseline delivery. Agree constants/constructor spelling before
+implementation. No whole-universe or native attachment acceptance from relay tests.
