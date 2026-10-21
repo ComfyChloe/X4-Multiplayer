@@ -108,10 +108,13 @@ change invalidation, epoch change reset.
 INTEGRATION NOTES (for the integration owner)
 - ui/attachment_protocol.lua is not listed in ui.xml and nothing references the codec yet
   (a test enforces both).
-- Adding the file under extension/x4_lan_lab changes the production digest used by the
-  shared-seed manifests: 866d17da...61947 at fcbcf38 becomes 202dee88...841eb with this file.
-  A seed pinned to the old digest will not admit this tree; re-pin at integration time, or keep
-  the file out of the tree used for a pinned run.
+- Adding the file under extension/x4_lan_lab changes the production digest that pins a
+  shared seed (dev/shared_seed_session.py production_digest). Measured from the git trees
+  (identical with POSIX and Windows path ordering): 937262c 866d17da...61947 (the pinned
+  21 Oct seeds), fcbcf38 74382d15...fcf2d (this branch's base), 0875417 70da6ef4...31636;
+  every later edit of ui/attachment_protocol.lua changes it again. A seed pinned to an older
+  digest will not admit this tree: integration needs a FRESH native seed capture, never a
+  rewritten old manifest.
 - distribution/build_packages.py copies the whole extension folder, so a package built from
   this branch would ship the inert file; no package is built here.
 

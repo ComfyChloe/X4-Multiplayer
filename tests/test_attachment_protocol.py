@@ -315,6 +315,20 @@ class ParityTests(unittest.TestCase):
                                               self.lua.table_from({}))
                 self.assertFalse(ok[0] if isinstance(ok, tuple) else ok)
 
+    def test_lua_retains_a_private_copy_of_a_received_table(self):
+        # A:primary review of 0875417: receive(table) must not keep the caller-owned table.
+        out = self.lua.execute(f'''
+         local P=X4LAN_ATTACHMENT_PROTOCOL
+         local r=P.receiver("{ME}",10)
+         r:admit("{EPOCH}",5,{{[1]="s1"}},{{[1]="d1"}})
+         local row={{recipient="{ME}",epoch="{EPOCH}",revision=5,sequence=1,ship=1,dock=1,state="EXTERNAL"}}
+         local applied=r:receive(row,0)
+         row.state="STORED"                                    -- the caller changes its own table
+         local replay=r:receive("UATTACH|1|{ME}|{EPOCH}|5|1|1|1|STORED",1)
+         local state=r:current(1,1)
+         return applied,replay,state''')
+        self.assertEqual(tuple(out), ('applied', 'conflict', 'EXTERNAL'))
+
     def test_safeguard_parity(self):
         self.assertEqual(safeguards(LuaReceiver(self.lua, self.P)), SAFEGUARDS)
 

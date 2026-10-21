@@ -110,6 +110,10 @@ function P.receiver(lease,ttl)
   now=self:tick(now)
   if type(record)=='string' then record=P.decode(record) elseif not P.check(record) then record=nil end
   if not record then return 'invalid' end
+  -- Retain only a private copy of the validated scalars: a caller-owned table changed later
+  -- must never alter the replay fingerprint or the retained state.
+  record={recipient=record.recipient,epoch=record.epoch,revision=record.revision,sequence=record.sequence,
+          ship=record.ship,dock=record.dock,state=record.state}
   if record.recipient~=self.lease then return 'wrong-recipient' end
   if self.epoch==nil or record.epoch~=self.epoch then return 'unadmitted' end
   if record.revision>self.revision then return 'future-baseline' end
