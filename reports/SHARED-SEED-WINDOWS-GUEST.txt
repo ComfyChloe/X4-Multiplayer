@@ -1,0 +1,61 @@
+SHARED NATIVE SEED - WINDOWS GUEST HARNESS (p2) HANDOFF
+21 October 2026, 06:50 Europe/Berlin | dev-only, unshipped, no package changes
+
+SCOPE
+dev/native_seed_windows_test.py and tests/test_native_seed_windows.py only. Based on 937262c,
+checked out with `git -c core.autocrlf=false worktree add`. dev/shared_seed_session.py, the
+seed gate, transport, HUD, Linux harness and production files are unchanged and are used as is.
+
+STATUS: SOURCE FOR REVIEW. NOT LAUNCHED. BLOCKED ON CONTENT.
+Read-only check on the Windows guest PC with the pinned manifest
+(reports/native-seed-admission-manifest.json):
+  production digest of this checkout = 866d17da...61947 (matches the pin)
+  enabled content difference: ego_dlc_ventures: seed 127, here absent/disabled
+The Windows X4 installation has no ego_dlc_ventures extension at all; the other seven DLCs
+(900) and x4_lan_lab 8 match. `check`/`install` refuse before any change while this differs.
+Resolution needs a decision outside this harness: the user installs the Ventures extension
+on Windows (a change to the user's game installation), or a pristine seed is recaptured on
+Linux with Ventures disabled and a new manifest pinned. The harness never edits content.xml.
+
+FLOW (Windows guest; receive first with dev/shared_seed_session.py prepare/receive)
+  check   --run RUN --package <matched 7.1.1 p2 package> [--game G]
+          read-only: received seed equals the pinned manifest (size/SHA, receive-result.json),
+          checkout digest, enabled DLC ids/versions, no mod installed, empty save folder, X4 closed
+  install --run RUN --package <package> --host 192.0.2.109
+          1. preflight as above; Documents via the Windows Known Folder API
+          2. back up every top-level profile 45841 file and the package installation.json;
+             hash all saves of all profiles; atomic journal (.local/evidence-150-withheld)
+          3. the package's own setup.ps1 Install (its empty-save guard unchanged);
+             a refusal or failure is journaled as install-failed and nothing is removed later
+          4. run-owned only when the record names the preflight game/profile and the folder
+             carries this package marker; record bytes pinned for Remove
+          5. stale package files removed, the EXACT agreed source copied, production digest
+             re-checked against the pin, then config.lua (p2, host, play-session values as in
+             native_seed_play_test.py) and seed_play_probe.lua/xml added and registered
+          6. x4lan.seed.stage_test_save stages only the verified received bytes as save_010
+  launch  --confirm-rendezvous
+          opt-in direct Steam launch with the package's own arguments (profile 45841,
+          custom_creative) only after: installed tree unchanged, exactly the owned save_010 with
+          matching bytes, autosave=false, X4 closed, same commit; prior log moved into the run
+  finish  [--close]
+          readiness exactly as the Linux finish expects for p2 (SEED_GATE READY once,
+          SEED_PLAY_READY controlled/ownAlive/proxyAlive once, SEED_PLAY_NATIVE p2 flags false,
+          two Shuttles, two markets, no adapter/MD errors); save inventory unchanged apart from
+          the owned seed and Steam's new metadata; the owned seed is removed only on success
+  restore removes the owned seed only with its exact bytes, delegates setup.ps1 Remove only
+          for the unchanged run-owned folder named by the pinned record (otherwise nothing is
+          removed and records are kept), restores profile files and the package record
+          byte-exact, reports new game-written profile files without deleting them, checks saves
+
+TESTS
+tests/test_native_seed_windows.py (8, portable doubles, no game/Steam/PowerShell): preflight
+refusals (missing Ventures, existing mod, saves present, invalid host) without changes;
+received bytes must match; full install/launch/finish/restore cycle with stale-file removal,
+exact config, staged seed, retained raw log and exact restoration; failed readiness keeps the
+seed for audit; refused Install removes nothing; Remove not delegated for a repointed record;
+changed staged seed never launched or removed; atomic journal.
+
+NOT ESTABLISHED
+No Windows native load of seed dd3547009bbbc2d0848e8c4fb8abfccb, no two-native acceptance, no
+relay connection. Launch only at an agreed rendezvous after review and after the content
+difference above is resolved.
