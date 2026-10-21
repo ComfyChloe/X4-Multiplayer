@@ -13,6 +13,7 @@ from .coop import CoopSession, pose
 from .host import ATOM, HEX, MAX_PACKET, sequence
 from .cargo import CargoTransactions
 from .identity import Identities
+from .attachment_relay import AttachmentRelay
 
 MAX_OBJECTS = 4096
 MAX_RECORD = 512
@@ -198,7 +199,7 @@ class Sender:
 
 class UniverseSession(CoopSession):
     """Opt-in INTERNAL W01. Host lease owns the epoch for the whole relay life."""
-    def __init__(self, *args):
+    def __init__(self, *args, attachments=False):
         super().__init__(*args)
         if not self.build.startswith('world1-'):
             raise ValueError('world synchronization requires a world1- build label')
@@ -215,11 +216,15 @@ class UniverseSession(CoopSession):
         self.position_cursor = 0
         self.cargo = CargoTransactions(self)
         self.identities = Identities(self)
+        # Opt-in development relay for UATTACH observations; disabled sessions keep rejecting them.
+        self.attachments = AttachmentRelay(self) if attachments else None
 
     def busy(self, entity):
         return super().busy(entity) or self.cargo.busy(entity)
 
     def receive(self, raw, address, now):
+        if self.attachments and raw.startswith(b'UATTACH|'):
+            return self.attachments.receive(raw, address, now)
         if raw.startswith(b'IDENT|'):
             return self.identities.receive(raw, address, now)
         if raw.startswith((b'CARGOREQ|', b'CARGODONE|', b'CINV|')):
@@ -306,6 +311,8 @@ class UniverseSession(CoopSession):
         result = super().snapshots(now)
         result.extend(self.cargo.snapshots(now))
         result.extend(self.identities.snapshots(now))
+        if self.attachments:                        # before the early return: host loss must reset it
+            result.extend(self.attachments.snapshots(now))
         host, guest = self.peers.get('p1'), self.peers.get('p2')
         if not host or not guest or not self.interest or self.interest[0] != guest.lease:
             return result
