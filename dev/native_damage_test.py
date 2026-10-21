@@ -5,7 +5,9 @@ scripted WORLD health to ONE native Windows guest that runs the installed intern
 dev/damage_probe.lua/.xml overlaid. It proves request/readback correlation in the real engine;
 it cannot prove two-native multiplayer.
 
-  prepare --package DIR   install DIR's package with its own setup.ps1, pointed at THIS PC's own
+  prepare --package DIR [--game G]
+                          pin the game folder (from the package's earlier record or --game),
+                          install DIR's package with its own setup.ps1 -GamePath, pointed at THIS PC's own
                           LAN IPv4 (guest installs refuse loopback), back up profile files and the
                           package installation.json, hash saves, overlay the probe
   run [--minutes N]       start relay + synthetic host, launch X4 via setup.ps1 Start, play the
@@ -222,7 +224,7 @@ def overlay(target):
         ui.write_text(text, encoding='utf-8')
 
 
-def prepare(package):
+def prepare(package, game=None):
     if not is_windows():
         raise RuntimeError('prepare targets the Windows guest; on Linux use dev/native_world_test.py install')
     if STATE.exists():
@@ -236,13 +238,18 @@ def prepare(package):
         raise RuntimeError('Only an internal guest (p2) package may be used by this harness.')
     record_before = package / 'installation.json'
     had_record = record_before.is_file()          # sampled BEFORE Install rewrites it
-    if had_record:
-        # An earlier installation record names the game: a mod already there is not this run's,
-        # so refuse before anything is changed (a damaged record also refuses).
-        earlier = Path(json.loads(record_before.read_text(encoding='utf-8-sig'))['game']) / 'extensions' / 'x4_lan_lab'
-        if earlier.exists():
-            raise RuntimeError('Refusing: a mod is already installed at ' + str(earlier) +
-                               '; this harness removes only a mod it installed itself.')
+    # Pin the game BEFORE any change: the journal must name the exact folder Install may write,
+    # so an Install that creates the mod and then fails can never be mistaken for a clean run.
+    earlier = Path(json.loads(record_before.read_text(encoding='utf-8-sig'))['game']).resolve() if had_record else None
+    if game is None and earlier is None:
+        raise RuntimeError('Pass --game: no earlier installation record names the game folder.')
+    game = Path(game).resolve() if game is not None else earlier
+    if earlier is not None and earlier != game:
+        raise RuntimeError('Refusing: --game differs from the game named by the earlier installation record.')
+    pinned = game / 'extensions' / 'x4_lan_lab'
+    if pinned.exists():
+        raise RuntimeError('Refusing: a mod is already installed at ' + str(pinned) +
+                           '; this harness removes only a mod it installed itself.')
     # Profile files and saves before anything changes; Documents via the Known Folder API.
     profile = documents_folder() / 'Egosoft' / 'X4' / PROFILE_ID
     run = HERE / (time.strftime('%Y%m%dT%H%M%SZ', time.gmtime()) + '-' + head[:7])
@@ -264,19 +271,22 @@ def prepare(package):
     # owned_target stays None until this run's own Install is proven (see below).
     state = dict(run=str(run), head=head, package=str(package), package_id=pkg['package_id'],
                  version=(package / 'VERSION.txt').read_text(encoding='utf-8-sig').strip(),
-                 game=None, profile=str(profile), profile_files=present, saves=before_saves, address=address,
+                 game=str(game), profile=str(profile), profile_files=present, saves=before_saves, address=address,
                  had_installation_json=had_record, owned_target=None, stage='backed-up')
     write_state(state)
     try:
-        setup_ps1(package, '-Action', 'Install', '-ServerIP', address)
+        setup_ps1(package, '-Action', 'Install', '-GamePath', str(game), '-ServerIP', address)
     except Exception:
         # Install refused (e.g. a mod folder already exists) or rolled back: nothing at the mod
         # path belongs to this run, and restore must never remove it.
         state.update(stage='install-failed')
         write_state(state)
         raise
-    game, profile2, record = windows_paths(package)
-    target = game / 'extensions' / 'x4_lan_lab'
+    installed_game, profile2, record = windows_paths(package)
+    if installed_game.resolve() != game:
+        raise RuntimeError('Install recorded another game folder than the pinned one; nothing will be '
+                           'removed automatically (stage stays backed-up).')
+    target = pinned
     marker = target / '.x4lan-package-id'
     if not marker.is_file() or marker.read_text(encoding='utf-8-sig') != pkg['package_id']:
         raise RuntimeError('Install returned but ' + str(target) + ' does not carry this package marker; '
@@ -632,12 +642,13 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
     p = sub.add_parser('prepare'); p.add_argument('--package', type=Path, required=True)
+    p.add_argument('--game', type=Path, help='game folder; required when the package has no earlier installation record')
     r = sub.add_parser('run'); r.add_argument('--minutes', type=float, default=4)
     sub.add_parser('restore')
     b = sub.add_parser('bundle'); b.add_argument('--run', type=Path, required=True); b.add_argument('--package', type=Path)
     args = parser.parse_args(argv)
     if args.command == 'prepare':
-        prepare(args.package)
+        prepare(args.package, args.game)
     elif args.command == 'run':
         run(args.minutes)
     elif args.command == 'bundle':

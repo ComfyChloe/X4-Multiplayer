@@ -102,7 +102,7 @@ class PrepareSafetyTests(unittest.TestCase):
         self.save = self.documents / 'Egosoft/X4/111/save/save_001.xml.gz'; self.save.parent.mkdir(parents=True)
         self.save.write_bytes(b'normal save')
         self.game = d / 'game'; self.target = self.game / 'extensions/x4_lan_lab'
-        self.calls = []
+        self.calls, self.args = [], []
         self.saved = {k: getattr(harness, k) for k in ('HERE', 'STATE', 'git_head', 'x4_running', 'documents_folder',
                                                        'local_ipv4', 'setup_ps1', 'is_windows')}
         harness.HERE = d / 'evidence'; harness.STATE = harness.HERE / 'state.json'
@@ -130,7 +130,11 @@ class PrepareSafetyTests(unittest.TestCase):
     def setup_ps1(self, package_dir, *args):
         """Mock of the package setup.ps1 with the real installer's refusal of an existing mod folder."""
         self.calls.append(args[1])
+        self.args.append(args)
         if args[1] == 'Install':
+            if self.install == 'target-first':                  # real order: mod copied, record not yet written
+                self.make_mod()
+                raise RuntimeError('install failed before its record')
             if self.install == 'fail-after-record':
                 (package_dir / 'installation.json').write_text('{}')
                 raise RuntimeError('install failed')
@@ -151,7 +155,7 @@ class PrepareSafetyTests(unittest.TestCase):
     def test_failed_install_leaves_restorable_state_sampled_before_install(self):
         self.install = 'fail-after-record'
         with self.assertRaises(RuntimeError):
-            harness.prepare(self.package)
+            harness.prepare(self.package, self.game)
         state = json.loads(harness.STATE.read_text())
         self.assertEqual(state['stage'], 'install-failed')
         self.assertIsNone(state['owned_target'])
@@ -167,26 +171,73 @@ class PrepareSafetyTests(unittest.TestCase):
         self.make_mod()
         (self.package / 'installation.json').write_text(self.record())
         with self.assertRaises(RuntimeError) as caught:
-            harness.prepare(self.package)
+            harness.prepare(self.package, self.game)
         self.assertIn('already installed', str(caught.exception))
         self.assertEqual(self.calls, [])
         self.assertFalse(harness.HERE.exists(), 'no journal, no backup folder')
 
-    def test_preexisting_mod_refused_by_install_is_never_removed_by_restore(self):
+    def test_preexisting_mod_at_the_pinned_game_is_refused_before_any_change(self):
         self.make_mod()                                         # e.g. installed from another copy of the package
         marker = (self.target / '.x4lan-package-id').read_bytes()
-        with self.assertRaises(RuntimeError):
-            harness.prepare(self.package)
-        self.assertEqual(json.loads(harness.STATE.read_text())['stage'], 'install-failed')
-        harness.restore()
-        self.assertEqual(self.calls, ['Install'])
+        with self.assertRaises(RuntimeError) as caught:
+            harness.prepare(self.package, self.game)
+        self.assertIn('already installed', str(caught.exception))
+        self.assertEqual(self.calls, [])
+        self.assertFalse(harness.HERE.exists(), 'no journal, no backup folder')
         self.assertEqual((self.target / '.x4lan-package-id').read_bytes(), marker, 'pre-existing mod untouched')
-        self.assertEqual((self.profile / 'config.xml').read_text(), '<root/>')
+
+    def test_game_is_pinned_before_any_change_and_passed_to_install(self):
+        with self.assertRaises(RuntimeError) as caught:
+            harness.prepare(self.package)                       # no earlier record and no --game
+        self.assertIn('--game', str(caught.exception))
+        (self.package / 'installation.json').write_text(self.record())
+        with self.assertRaises(RuntimeError):
+            harness.prepare(self.package, self.d / 'other-game')  # contradicts the earlier record
+        self.assertEqual(self.calls, [])
+        self.assertFalse(harness.HERE.exists())
+        harness.prepare(self.package)                           # the earlier record names the game
+        self.assertEqual(self.args[0], ('-Action', 'Install', '-GamePath', str(self.game.resolve()),
+                                        '-ServerIP', '192.168.1.5'))
+
+    def test_folder_before_record_crash_keeps_mod_record_and_journal(self):
+        self.install = 'target-first'
+        with self.assertRaises(RuntimeError):
+            harness.prepare(self.package, self.game)
+        state = json.loads(harness.STATE.read_text())
+        self.assertEqual((state['stage'], state['owned_target'], state['game']),
+                         ('install-failed', None, str(self.game.resolve())), 'game journaled before Install')
+        with self.assertRaises(RuntimeError) as caught:
+            harness.restore()
+        self.assertIn('outcome unproven', str(caught.exception))
+        self.assertEqual(self.calls, ['Install'], 'an unproven mod is never removed')
+        self.assertTrue(self.target.exists() and harness.STATE.exists())
+        self.assertFalse((self.package / 'installation.json').exists(), 'no record was ever written')
+        summary = json.loads((Path(state['run']) / 'restore.json').read_text())
+        self.assertEqual(summary['mod'], 'unproven, kept')
+        self.target.rename(self.game / 'removed-by-5-REMOVE-MOD')  # the tester resolves it with the package
+        harness.restore()
+        self.assertFalse(harness.STATE.exists())
+
+    def test_install_recording_another_game_fails_closed(self):
+        def install_elsewhere(package_dir, *args):
+            self.calls.append(args[1])
+            other = self.d / 'other-game/extensions/x4_lan_lab'; (other / 'ui').mkdir(parents=True)
+            (other / '.x4lan-package-id').write_text('lan-x-p2')
+            (package_dir / 'installation.json').write_text(
+                json.dumps({'game': str(self.d / 'other-game'), 'profile': str(self.profile)}))
+        harness.setup_ps1 = install_elsewhere
+        with self.assertRaises(RuntimeError):
+            harness.prepare(self.package, self.game)
+        state = json.loads(harness.STATE.read_text())
+        self.assertEqual((state['stage'], state['owned_target']), ('backed-up', None), 'never claimed as run-owned')
+        with self.assertRaises(RuntimeError):
+            harness.restore()                                   # the mod named by the current record stays
+        self.assertTrue((self.d / 'other-game/extensions/x4_lan_lab').exists())
 
     def test_run_owned_mod_is_removed_and_everything_restored(self):
         old = json.dumps({'game': str(self.game), 'profile': str(self.profile), 'host': 'old'})
         (self.package / 'installation.json').write_text(old)
-        harness.prepare(self.package)
+        harness.prepare(self.package, self.game)
         state = json.loads(harness.STATE.read_text())
         self.assertEqual((state['stage'], state['owned_target']), ('prepared', str(self.target)))
         self.assertFalse(harness.STATE.with_name('state.json.tmp').exists(), 'atomic journal leaves no temp file')
@@ -207,7 +258,7 @@ class PrepareSafetyTests(unittest.TestCase):
         self.assertFalse(harness.STATE.exists())
 
     def test_changed_run_owned_mod_is_not_removed_and_its_record_is_kept(self):
-        harness.prepare(self.package)
+        harness.prepare(self.package, self.game)
         record = (self.package / 'installation.json').read_bytes()
         (self.target / 'ui.xml').write_text('<files/>')       # no longer what this run installed
         with self.assertRaises(RuntimeError):
@@ -221,7 +272,7 @@ class PrepareSafetyTests(unittest.TestCase):
         self.assertEqual(summary['installation_json'], 'kept: run-owned mod unresolved')
 
     def test_remove_is_not_delegated_when_the_record_names_another_installation(self):
-        harness.prepare(self.package)
+        harness.prepare(self.package, self.game)
         other_game = self.d / 'other-game'; other = other_game / 'extensions/x4_lan_lab'
         (other / 'ui').mkdir(parents=True); (other / '.x4lan-package-id').write_text('lan-x-p2')   # same marker
         changed = json.dumps({'game': str(other_game), 'profile': str(self.profile)})
@@ -235,7 +286,7 @@ class PrepareSafetyTests(unittest.TestCase):
         self.assertTrue(harness.STATE.exists())
 
     def test_unknown_install_outcome_removes_nothing_and_keeps_the_new_record(self):
-        harness.prepare(self.package)
+        harness.prepare(self.package, self.game)
         state = json.loads(harness.STATE.read_text())
         state.update(stage='backed-up', owned_target=None)    # as if the harness died inside Install
         harness.write_state(state)
@@ -249,7 +300,7 @@ class PrepareSafetyTests(unittest.TestCase):
     def test_partial_install_keeps_the_unproven_mod_record_and_journal_until_resolved(self):
         self.install = 'partial'
         with self.assertRaises(RuntimeError):
-            harness.prepare(self.package)
+            harness.prepare(self.package, self.game)
         state = json.loads(harness.STATE.read_text())
         self.assertEqual((state['stage'], state['owned_target']), ('install-failed', None))
         with self.assertRaises(RuntimeError) as caught:
@@ -267,7 +318,7 @@ class PrepareSafetyTests(unittest.TestCase):
         self.assertFalse(harness.STATE.exists())
 
     def test_changed_save_fails_restore(self):
-        harness.prepare(self.package)
+        harness.prepare(self.package, self.game)
         self.save.write_bytes(b'changed')
         with self.assertRaises(RuntimeError) as caught:
             harness.restore()
