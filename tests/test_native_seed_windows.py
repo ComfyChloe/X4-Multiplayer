@@ -179,6 +179,33 @@ class SeedWindowsTests(unittest.TestCase):
         self.assertEqual(summary['save_inventories'], ['saves-before.json', 'saves-after.json'])
         self.assertFalse(harness.STATE.exists())
 
+    def test_evidence_bundle_is_sanitized_complete_and_only_after_restore(self):
+        harness.install(self.run, self.package, '192.0.2.109')
+        harness.launch(True)
+        self.native_log()
+        with open(self.profile / 'x4lan-debug.txt', 'a') as log:
+            log.write(f'lease {"c" * 32} key {TOKEN} at {Path.home()}\\X4\n')
+        harness.finish()
+        with self.assertRaises(RuntimeError):
+            harness.bundle(self.run)                        # no restore summary yet
+        harness.restore()
+        path = harness.bundle(self.run)
+        raw = path.read_text()
+        evidence = json.loads(raw)
+        for secret in (TOKEN, 'c' * 32, str(Path.home()), json.dumps(str(Path.home()))[1:-1]):
+            self.assertNotIn(secret, raw)
+        self.assertIn(SEED_ID, raw, 'the seed id is kept')
+        self.assertIn('SEED_PLAY_READY', evidence['native_log_sanitized'])
+        self.assertEqual(evidence['native_log_sha256'], hashlib.sha256((self.run / 'native.log').read_bytes()).hexdigest())
+        keys = set(evidence['saves_before'])
+        self.assertTrue(keys and all(k.startswith('profile-') and '111' not in k for k in keys), keys)
+        self.assertEqual(evidence['saves_before'], evidence['saves_after'])
+        self.assertTrue(all(v['current_sha256'] == v['backup_sha256'] for v in evidence['profile_restoration'].values()))
+        self.assertEqual(evidence['package_record']['current_sha256'], evidence['package_record']['backup_sha256'])
+        self.assertEqual(evidence['inventories']['installed_after_overlay'], json.loads(
+            (self.run / 'windows-install.json').read_text())['overlaid'])
+        self.assertNotIn('token', json.dumps(evidence['install_record']))
+
     def test_failed_readiness_keeps_the_seed_for_audit(self):
         harness.install(self.run, self.package, '192.0.2.109')
         harness.launch(True)

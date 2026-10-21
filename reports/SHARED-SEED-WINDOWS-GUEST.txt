@@ -52,6 +52,11 @@ FLOW (Windows guest; receive first with dev/shared_seed_session.py prepare/recei
           removed and records are kept), restores profile files and the package record
           byte-exact, reports new game-written profile files without deleting them, checks saves
           against saves-before.json (written at install) and keeps saves-after.json in the run
+  bundle  --run RUN (after restore) writes RUN/evidence-bundle.json for review: identities,
+          production/probe/installed inventories, result/restore, aliased save inventories,
+          restoration hashes, screenshot hashes, usage readings and the sanitized native log
+          (session key, other 32-hex values and the home path removed; seed id kept). Session
+          and config files, save payloads, profile contents and backups are never included.
 
 TESTS
 tests/test_native_seed_windows.py (8, portable doubles, no game/Steam/PowerShell): preflight

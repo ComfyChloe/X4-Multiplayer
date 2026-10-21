@@ -10,6 +10,7 @@ only the verified received seed as the single run-owned save_010.
   launch  --run RUN --confirm-rendezvous       direct Steam launch (setup Start refuses saves)
   finish  --run RUN [--close]                  native readiness, save preservation, owned save
   restore --run RUN                            remove only run-owned data, restore exactly
+  bundle  --run RUN                            one sanitized JSON evidence file for review
 
 The recovery journal (.local/native-seed-windows/state.json) is replaced atomically before and
 after every mutation. A mod folder is run-owned only after this run's Install returned and the
@@ -533,6 +534,92 @@ def restore():
     print('Restored: mod', summary['mod'] + '; save', summary['save'] + '; profile files exact, saves unchanged.')
 
 
+BUNDLE_NAME = 'evidence-bundle.json'
+
+
+def sanitizer(run):
+    """Text cleaner for review evidence: the session key, every other 32-hex value (seed ids are
+    kept) and the home folder path (plain, JSON-escaped and with forward slashes)."""
+    token = read_json(Path(run) / 'play-session.json')['token']
+    keep = {read_json(Path(run) / 'manifest.json')['seed_id']}
+    home = str(Path.home())
+
+    def clean(text):
+        text = text.replace(token, '<session-key>')
+        text = re.sub(r'\b[0-9a-f]{32}\b', lambda m: m.group(0) if m.group(0) in keep else '<hex32>', text)
+        for form in {home, home.replace('\\', '\\\\'), home.replace('\\', '/')}:
+            text = text.replace(form, '<home>')
+        return text
+    return clean, token, home
+
+
+def save_alias(path, profiles):
+    """Save paths relative to the X4 profiles folder; profile folders other than the test profile
+    are Steam account ids and are replaced by stable aliases."""
+    try:
+        parts = Path(path).relative_to(profiles).parts
+    except ValueError:
+        return 'outside-profiles/' + Path(path).name
+    folder = parts[0] if parts[0] == PROFILE_ID else 'profile-' + hashlib.sha256(parts[0].encode()).hexdigest()[:8]
+    return '/'.join((folder,) + parts[1:])
+
+
+def bundle(run):
+    """One sanitized JSON evidence file: identities, inventories, results, save and restoration
+    hashes and the sanitized native log. Session/config files, save payloads, profile contents
+    and profile backups are never included."""
+    run = Path(run).resolve()
+    if not (run / 'windows-restore.json').is_file():
+        raise RuntimeError('Restore first: the evidence bundle includes the restore summary.')
+    clean, token, home = sanitizer(run)
+    install_record = read_json(run / 'windows-install.json')
+    profile, package = Path(install_record['profile']), Path(install_record['package'])
+    profiles = profile.parent
+
+    def inventory(name):
+        path = run / name
+        if not path.is_file():
+            return None
+        return {save_alias(p, profiles): v for p, v in read_json(path).items()}
+
+    evidence = dict(
+        head=install_record['head'], package_id=install_record['package_id'], slot='p2', host=install_record['host'],
+        seed_manifest=read_json(run / 'manifest.json'), receive_result=read_json(run / 'receive-result.json'),
+        received_seed_sha256=sha256(run / 'received/seed.bin'),
+        inventories=dict(production_source=tree_hashes(SOURCE),
+                         probes={name: sha256(ROOT / 'dev' / Path(name).name) for name in PROBES},
+                         harness=sha256(Path(__file__)),
+                         installed_after_package_install=install_record.get('installed'),
+                         installed_after_overlay=install_record.get('overlaid')),
+        install_record=json.loads(clean(json.dumps({k: v for k, v in install_record.items()
+                                                    if k not in ('installed', 'overlaid')}))),
+        result=read_json(run / 'windows-result.json') if (run / 'windows-result.json').is_file() else None,
+        restore=json.loads(clean(json.dumps(read_json(run / 'windows-restore.json')))),
+        saves_before=inventory('saves-before.json'), saves_after=inventory('saves-after.json'),
+        profile_restoration={name: dict(current_sha256=sha256(profile / name) if (profile / name).is_file() else None,
+                                        backup_sha256=sha256(run / 'windows-before' / name))
+                             for name in install_record['profile_files']},
+        package_record=dict(current_sha256=sha256(package / 'installation.json') if (package / 'installation.json').is_file() else None,
+                            backup_sha256=sha256(run / 'windows-before/package-installation.json')
+                            if (run / 'windows-before/package-installation.json').is_file() else None),
+        inputs=read_json(run / 'inputs.json') if (run / 'inputs.json').is_file() else None,
+        screenshots={p.name: sha256(p) for p in sorted((run / 'screenshots').glob('*'))} if (run / 'screenshots').is_dir() else {},
+        usage=read_json(run / 'usage-readings.json') if (run / 'usage-readings.json').is_file() else None,
+        native_log_sha256=sha256(run / 'native.log') if (run / 'native.log').is_file() else None,
+        native_log_sanitized=clean((run / 'native.log').read_text(encoding='utf-8', errors='replace'))
+        if (run / 'native.log').is_file() else None,
+        sanitized=['session key', 'other 32-hex values (seed id kept)', 'home folder path', 'Steam profile folder names'],
+        excluded=['play-session.json', 'ui/config.lua', 'save payloads', 'profile file contents and backups',
+                  'screenshot images (hashes only)'])
+    data = json.dumps(evidence, indent=1).encode('utf-8')
+    for secret in (token, home, home.replace('\\', '\\\\')):
+        if secret and secret.encode() in data:
+            raise RuntimeError('Sanitization failed; no bundle written.')
+    (run / BUNDLE_NAME).write_bytes(data)
+    print('Evidence bundle', run / BUNDLE_NAME, len(data), 'bytes, sha256', hashlib.sha256(data).hexdigest())
+    return run / BUNDLE_NAME
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     sub = parser.add_subparsers(dest='command', required=True)
@@ -544,6 +631,7 @@ def main(argv=None):
     l = sub.add_parser('launch'); l.add_argument('--confirm-rendezvous', action='store_true')
     f = sub.add_parser('finish'); f.add_argument('--close', action='store_true')
     sub.add_parser('restore')
+    b = sub.add_parser('bundle'); b.add_argument('--run', type=Path, required=True)
     args = parser.parse_args(argv)
     if args.command == 'check':
         facts = preflight(args.run, args.package, args.game)
@@ -554,6 +642,8 @@ def main(argv=None):
         launch(args.confirm_rendezvous)
     elif args.command == 'finish':
         finish(args.close)
+    elif args.command == 'bundle':
+        bundle(args.run)
     else:
         restore()
 
