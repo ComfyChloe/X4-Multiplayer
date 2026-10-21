@@ -80,3 +80,21 @@ actions. Functional success alone does not claim deliberate stale/pause injectio
 419 Linux/Python/LuaJIT tests PASS/no skips, including coupling checks and removed,
 reordered, wrong-actor, rejection-with-action and post-completion evidence variants.
 Changed consumer MD schema VALID. Native result pending.
+
+FIRST NATIVE CONSUMER RUN — OVERALL FAIL, SOURCE78d88a2
+.local/evidence-132-withheld captures seed
+472234d3a3966c7ad48b3b2d4c19139b after startup readiness. All50948 dock references
+and1399 stations pass native reload comparison. Saved ship17 KXP-387/container21
+enters storage38 through the actual production Prepare/Window/Apply/ACK path.
+The first consumption succeeds and Lua reads STORED, but the full cycle remains
+FAIL/incomplete: the diagnostic MD Read required State.$phase, which only the old
+direct diagnostic Apply advanced. The production consumer correctly does not
+mutate another script's diagnostic counter. Raw evidence is retained unchanged.
+Owned game closed,seed removed,7 actual normal saves unchanged,33-file/profile
+restoration verified. Shaderquality1 was local and restored to original2.
+
+The dev-only Read correction now advances its own ordered phase-read counter,
+independently of the mutating consumer, and rechecks selected saved reference/code.
+The actual native state still must match the unchanged causal eight-state gate.
+Changed probe MD schema VALID. Same-seed controlled repeat pending; no timing or
+network acceptance is claimed from the single successful first action.

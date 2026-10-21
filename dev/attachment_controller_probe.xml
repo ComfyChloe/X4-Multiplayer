@@ -39,7 +39,7 @@
       </do_all>
      </do_if>
      <do_if value="$ship and $carrier and $outside">
-      <set_value name="$operation" exact="0"/><set_value name="$phase" exact="0"/><set_value name="$code" exact="$ship.idcode"/><set_value name="$macro" exact="$ship.macro.id"/><set_value name="$owner" exact="$ship.owner"/>
+      <set_value name="$operation" exact="0"/><set_value name="$phase" exact="0"/><set_value name="$readNext" exact="0"/><set_value name="$code" exact="$ship.idcode"/><set_value name="$macro" exact="$ship.macro.id"/><set_value name="$owner" exact="$ship.owner"/>
       <debug_text text="'[X4LAN] ATTACH_NATIVE selected seed=%s shipIndex=%s carrierIndex=%s ship=%s carrier=%s code=%s inside=%s outside=%s'.[$seed,$shipIndex,$carrierIndex,$ship,$carrier,$code,$insideIndex,$outsideIndex]"/>
       <raise_lua_event name="'X4LAN_AttachmentProbe.Selected'" param="'%s|%s|%s|%s|%s|%s'.[$shipIndex,$carrierIndex,$insideIndex,$outsideIndex,$ship,$carrier]"/>
      </do_if>
@@ -97,9 +97,10 @@
    <conditions><event_ui_triggered screen="'X4LAN_AttachmentProbe'" control="'Read'"/></conditions>
    <actions>
     <set_value name="$ship" exact="State.$ship"/>
-    <do_if value="event.param3 == State.$phase and $ship.isoperational">
-     <debug_text text="'[X4LAN] ATTACH_NATIVE read phase=%s shipIndex=%s code=%s stored=%s docked=%s dock=%s'.[State.$phase,State.$shipIndex,State.$code,$ship.isinternallystored,$ship.dock.exists,if $ship.dock.exists and md.X4LAN_SeedDocks.State.$indices.{$ship.dock}? then md.X4LAN_SeedDocks.State.$indices.{$ship.dock} else 0]"/>
-     <raise_lua_event name="'X4LAN_AttachmentProbe.Read'" param="State.$phase"/>
+    <do_if value="event.param3 == State.$readNext and event.param3 ge 0 and event.param3 le 7 and $ship.isoperational and $ship == md.X4LAN_Seed.State.$ships.{State.$shipIndex} and $ship.idcode == State.$code">
+     <debug_text text="'[X4LAN] ATTACH_NATIVE read phase=%s shipIndex=%s code=%s stored=%s docked=%s dock=%s'.[State.$readNext,State.$shipIndex,State.$code,$ship.isinternallystored,$ship.dock.exists,if $ship.dock.exists and md.X4LAN_SeedDocks.State.$indices.{$ship.dock}? then md.X4LAN_SeedDocks.State.$indices.{$ship.dock} else 0]"/>
+     <raise_lua_event name="'X4LAN_AttachmentProbe.Read'" param="State.$readNext"/>
+     <set_value name="State.$readNext" operation="add" exact="1"/>
     </do_if>
    </actions>
   </cue>
