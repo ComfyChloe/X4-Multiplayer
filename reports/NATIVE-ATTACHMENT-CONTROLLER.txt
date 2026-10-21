@@ -131,3 +131,15 @@ if a later readback were to match. Native result pending. An acknowledgment mean
 the MD consumer invoked an operation, not that the engine completed it; actual
 readback remains mandatory. The unshipped general native consumer adopts the same
 permission guard on its separate development branch.
+
+ACKNOWLEDGMENT + DOCKING PERMISSION NATIVE PASS — SOURCEbea2dd5
+Run attachment-controller-permission-20261021 reuses the exact50963-dock capture
+with unchanged production bytes and a dev-only selection/permission correction.
+Saved ship13 QBE-228, container19, storage42/external46 complete all eight states,
+nine invoked native actions, nine correlated controller acknowledgments and five
+fresh target queries. Both importer and station gates pass without MD errors.
+All50963 handles renumbered; max dock relative error0.00208616m. Actual station
+counts/residuals are in the retained station-validation.json. Owned game closed,
+owned seed removed, seven actual normal saves and33-file/profile restoration
+verified.405 source tests PASS, no skips. This remains one native game driven by
+synthetic host observations; network/native execution windows are separate work.
