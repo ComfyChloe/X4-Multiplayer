@@ -1,5 +1,6 @@
 """UATTACH v1: canonical codec and receiver model, with Python/LuaJIT parity. No game simulation."""
 from pathlib import Path
+import random
 import unittest
 
 from x4lan import attachment as A
@@ -158,6 +159,83 @@ class PyReceiver:
             return 'error'
 
 
+class LuaReceiver:
+    def __init__(self, lua, protocol):
+        self.lua, self.r = lua, protocol.receiver(ME, 10)
+
+    def call(self, method, *args):
+        args = [self.lua.table_from(a) if isinstance(a, dict) else a for a in args]
+        result = self.lua.globals().pcall(self.r[method], self.r, *args)
+        result = result if isinstance(result, tuple) else (result,)
+        if not result[0]:
+            return 'error'
+        result = tuple(result[1:])
+        return None if not result or result == (None,) else result[0] if len(result) == 1 else result
+
+
+def mutations(seed, count):
+    """Deterministic near-miss records: character edits, field swaps and boundary numbers."""
+    rng = random.Random(seed)
+    alphabet = 'UATCHERFOSXD|0123456789abcdef-+ .eE\t'
+    numbers = ['0', '1', '01', '9', '249999', '250000', '250001', '2147483647', '2147483648', '12345678901', '-1']
+    for _ in range(count):
+        record = rng.choice(VALID)
+        kind = rng.randrange(5)
+        if kind == 0:                                               # replace one character
+            i = rng.randrange(len(record))
+            record = record[:i] + rng.choice(alphabet) + record[i + 1:]
+        elif kind == 1:                                             # insert one character
+            i = rng.randrange(len(record) + 1)
+            record = record[:i] + rng.choice(alphabet) + record[i:]
+        elif kind == 2:                                             # delete one character
+            i = rng.randrange(len(record))
+            record = record[:i] + record[i + 1:]
+        elif kind == 3:                                             # boundary number in a numeric field
+            f = record.split('|')
+            f[rng.randrange(4, 8)] = rng.choice(numbers)
+            record = '|'.join(f)
+        else:                                                       # swap two fields
+            f = record.split('|')
+            a, b = rng.sample(range(len(f)), 2)
+            f[a], f[b] = f[b], f[a]
+            record = '|'.join(f)
+        yield record
+
+
+def random_operations(seed, count):
+    """Deterministic receiver operations over a small domain, including clock rollbacks."""
+    rng = random.Random(seed)
+    ops = [('admit', EPOCH, 5, {1: 's1', 2: 's2', 3: 's3'}, {10: 'd10', 11: 'd11'}),
+           ('receive', text(seq=1, ship=1), 0.0), ('receive', text(seq=1, ship=1), 0.0),        # fixed opening:
+           ('receive', text(seq=1, ship=1, state='STORED'), 0.0), ('current', 1, 0.0)]          # each outcome once
+    now, last = 0.0, {1: (1, 5)}
+    for _ in range(count):
+        kind = rng.random()
+        now = max(0.0, now + rng.choice((0.0, 0.5, 1.0, 3.0, 7.0, -4.0)))
+        if kind < 0.6:
+            state = rng.choice(('FREE', 'EXTERNAL', 'STORED'))
+            dock = 0 if state == 'FREE' else rng.choice((10, 11, 12))
+            ship, seq, revision = rng.randint(1, 4), rng.randint(1, 12), rng.choice((5, 5, 5, 6, 4))
+            if ship in last and rng.random() < .3:
+                seq, revision = last[ship]                          # replay a sequence, maybe with other content
+            last[ship] = (seq, revision)
+            ops.append(('receive', text(seq=seq, ship=ship, dock=dock, state=state, revision=revision), now))
+            if rng.random() < .3:
+                ops.append(('current', ship, now))                  # read back while possibly live
+        elif kind < 0.75:
+            ops.append(('current', rng.randint(1, 4), now))
+        elif kind < 0.82:
+            ops.append(('expire', now))
+        elif kind < 0.87:
+            ops.append(('update_descriptor', rng.choice(('ship', 'dock')), rng.choice((1, 2, 10, 11)),
+                        rng.choice(('s1', 's2', 'd10', 'changed'))))
+        elif kind < 0.92:
+            ops.append(('remove_ship', rng.randint(1, 3)) if rng.random() < .5 else ('remove_dock', rng.choice((10, 11))))
+        else:
+            ops.append(('admit', EPOCH, rng.choice((5, 6)), {1: 's1', 2: rng.choice(('s2', 'changed'))}, {10: 'd10'}))
+    return ops
+
+
 class ReceiverTests(unittest.TestCase):
     def test_safeguards(self):
         self.assertEqual(safeguards(PyReceiver()), SAFEGUARDS)
@@ -216,21 +294,34 @@ class ParityTests(unittest.TestCase):
                 self.assertEqual(result, expected)
 
     def test_safeguard_parity(self):
-        lua, P = self.lua, self.P
+        self.assertEqual(safeguards(LuaReceiver(self.lua, self.P)), SAFEGUARDS)
 
-        class LuaReceiver:
-            def __init__(self):
-                self.r = P.receiver(ME, 10)
+    def test_differential_fuzz_of_the_codec(self):
+        accepted = 0
+        for record in mutations(20261021, 3000):
+            try:
+                py = A.decode(record).__dict__
+            except A.AttachmentError:
+                py = None
+            lua = self.P.decode(record)
+            lua = lua[0] if isinstance(lua, tuple) else lua
+            lua = None if lua is None else {k: lua[k] for k in py or {}} if py else {}
+            self.assertEqual(py is None, lua is None, record)
+            if py is not None:
+                accepted += 1
+                self.assertEqual(lua, py, record)
+        self.assertGreater(accepted, 50, 'the corpus also exercises accepted near-misses')
 
-            def call(self, method, *args):
-                args = [lua.table_from(a) if isinstance(a, dict) else a for a in args]
-                result = lua.globals().pcall(self.r[method], self.r, *args)
-                result = result if isinstance(result, tuple) else (result,)
-                if not result[0]:
-                    return 'error'
-                result = tuple(result[1:])
-                return None if not result or result == (None,) else result[0] if len(result) == 1 else result
-        self.assertEqual(safeguards(LuaReceiver()), SAFEGUARDS)
+    def test_differential_fuzz_of_the_receiver(self):
+        py, lua = PyReceiver(), LuaReceiver(self.lua, self.P)
+        outcomes = set()
+        for step, (method, *args) in enumerate(random_operations(1021, 2500)):
+            a, b = py.call(method, *args), lua.call(method, *args)
+            self.assertEqual(a, b, (step, method, args))
+            outcomes.add(a if isinstance(a, str) else type(a).__name__)
+        for expected in ('applied', 'duplicate', 'conflict', 'stale', 'future-baseline', 'stale-baseline',
+                         'unknown-ship', 'unknown-dock', 'error', 'tuple'):
+            self.assertIn(expected, outcomes, 'fuzz coverage')
 
     def test_lua_rejects_implicit_ttl_and_bad_admission(self):
         for ttl in ('nil', '0', '-1', 'math.huge', '0/0', 'true'):
