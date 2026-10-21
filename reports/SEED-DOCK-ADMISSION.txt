@@ -40,3 +40,33 @@ early, unpaused, post-completion or malformed readiness evidence. This is bounde
 startup qualification, not a live session or a native fixture-spawn test.
 431 Linux/Python/LuaJIT tests PASS/no skips, new probe LuaJIT syntax PASS. Native
 capture/load result pending. Source remains opt-in and unregistered by default.
+
+FIRST NATIVE LOAD: STRICT EVIDENCE FAILURE RETAINED
+22 October00:12 CEST | source8ad66af | seed e8a4fc8d6ffbd0313271363a33b59ee9
+Run seed-dock-admission-first-20261022 reached native admission completion with
+50,692 imported dock references and an existing pause preserved (0 Pause/Unpause
+calls). The station gate passes all1,366 stations, maximum position error
+0.01655295m / angle1.172579e-6rad. Dock/admission validators correctly FAIL: the
+new probe omitted their mandatory DOCK_IMPORT_PAUSE boundary. Recorded paused
+requests are not substituted retroactively for that missing marker. The next
+diagnostic emits the marker only after native IsGamePaused succeeds, before its
+first Read dispatch. Production and validators are unchanged; repeat the exact
+sealed seed to obtain complete evidence. 431 tests PASS/no skips after the probe
+correction. Original raw failure, manifests and source/inventories are retained
+under .local/evidence-149-withheld Owned game
+closed/seed removed;7 actual normal saves bytes/timestamps and33 installation
+files plus recorded profile config/content/debug restoration verified.
+
+REPEATED NATIVE LOAD: ALL THREE UNCHANGED GATES PASS
+22 October00:16 CEST | sourcee611749 | same seed and production as first run
+Run seed-dock-admission-pause-evidence-20261022 passes dock comparison (50,692
+references; all native handles renumbered; maximum relative error0.00196838m),
+station equality (same1,366 and errors above), and production startup admission.
+The existing pause remains owned by the caller:0 Pause calls,0 Unpause calls.
+Thus this run qualifies preserving an existing native pause; actual owned-pause
+release remains covered by injected tests only, not this paused-save run. Full
+registry readiness precedes gameplay admission; real correlated EXTERNAL/STORED
+queries and final pristine/load1 marker pass. Networking/fixtures are excluded.
+7 actual normal save bytes/timestamps and33 restored installation hashes plus
+recorded profile files verify clean; owned game closed and isolated seed removed.
+The prior strict evidence FAIL is retained. No validator threshold was relaxed.
