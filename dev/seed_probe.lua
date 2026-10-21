@@ -99,6 +99,12 @@ SetScript('onUpdate',function()
  freezeImportBoundary()
  if X4LAN_SEED_DOCKS then X4LAN_SEED_DOCKS.frame(GetCurRealTime()) end
  if finished or asked or not C.IsPlayerValid() then return end
+ if cfg.seed_dock_import_probe and not started then
+  -- Frozen diagnostics cannot wait for the gameplay ReadyRequest's player.age>1s
+  -- condition. Native player validity plus a refreshed save list is the read-only
+  -- bootstrap boundary; the saved MD marker is still checked before admission.
+  started=GetCurRealTime();C.ReloadSaveList()
+ end
  if not started then
   if not loading then AddUITriggeredEvent('X4LAN','Ready') end
   return

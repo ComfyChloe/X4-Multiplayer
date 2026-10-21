@@ -129,24 +129,28 @@ paused=true;D.frame(5);assert(steps==2 and #sent==1)
                 lua=LuaRuntime(unpack_returned_tuples=True)
                 lua.globals().mode=mode
                 lua.execute('''
-paused=false;pauses=0;handlers={};frames=0
+paused=false;pauses=0;handlers={};frames=0;now=0;reloads=0
 X4LAN_CONFIG={enabled=false,test_profile='45841',seed_probe=mode,seed_id=string.rep('a',32),seed_dock_import_probe=true}
 local C={GetSaveFolderPath=function() return '/isolated/45841/save' end,
- IsPlayerValid=function() return true end,IsGamePaused=function() return paused end}
+ IsPlayerValid=function() return true end,IsGamePaused=function() return paused end,
+ IsSaveListLoadingComplete=function() return true end,
+ ReloadSaveList=function() assert(paused);reloads=reloads+1 end}
 function require(name) assert(name=='ffi');return {C=C,typeof=function() return true end,
  cdef=function() end,string=function(v) return v end} end
 function RegisterEvent(name,fn) handlers[name]=fn end
 function SetScript(name,fn) assert(name=='onUpdate');update=fn end
-function GetCurRealTime() return 0 end
+function GetCurRealTime() return now end
 function Pause() paused=true;pauses=pauses+1 end
-function AddUITriggeredEvent() assert(paused,'readiness must already be frozen') end
+function AddUITriggeredEvent(screen,control) assert(paused,'readiness must already be frozen');sent={screen,control} end
+function GetSaveList() return mode=='load' and {{filename='save_010'}} or {} end
 X4LAN_SEED_DOCKS={frame=function() assert(paused);frames=frames+1 end}
 ''')
                 lua.execute((ROOT/'dev/seed_probe.lua').read_text())
                 lua.execute('''
-update();assert(paused and pauses==1 and frames==1)
+update();assert(paused and pauses==1 and frames==1 and reloads==1)
 paused=false;handlers['X4LAN_Seed.Loaded']();assert(paused and pauses==2)
-update();assert(pauses==2 and frames==2)
+now=3.1;update();assert(pauses==2 and frames==2)
+assert(sent[1]=='X4LAN_SeedProbe' and sent[2]=='Read','bootstrap must not wait for simulation age>1s')
 ''')
 
 
