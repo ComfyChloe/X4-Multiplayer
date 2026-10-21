@@ -29,9 +29,9 @@ launched at20:37:12, owned PID14616, its isolated profile45841. Each installatio
 contained the 38 production files plus package marker and two seed-play probes.
 The recorder observed both real peers from20:38:51.988; no synthetic peer ran.
 Linux readback reports one native load, READY p1, correct pilot, all four host
-flags true, two Shuttles and two markets. Claude reports the corresponding raw
-Windows readback with p2 and all four host flags false, two Shuttles/two markets.
-Windows raw evidence is subject to the separate retained-artifact audit below.
+flags true, two Shuttles and two markets. Independent review of the sanitized
+Windows native log confirms p2, all four host flags false, two Shuttles/two markets.
+The retained-artifact audit and its limits are described below.
 The production relay continuously accepted player NAV2 and sector baselines;
 these relay observations alone are not native receiver-position measurements.
 
@@ -84,7 +84,7 @@ The primary run holds play-p1 input records, native logs, source inventories,
 save manifests, receiver screenshots and relay-observations.jsonl. Generated
 config/session credentials and save payloads remain private and uncommitted.
 Windows run: .local/evidence-146-withheld on Claude's PC.
-Remote statements are identified as reported until raw artifacts are audited.
+Remote findings not supported by the retained artifact set remain reported.
 Linux closed only its owned game PID at21:00:32.117 and then passed the unchanged
 local admission validator. The exact owned seed was removed; seven actual normal
 saves retain bytes/timestamps, Steam metadata retains bytes, and all33 previous
@@ -94,7 +94,22 @@ or X4LAN MD cue error. The isolated save directory is empty.
 Claude reports Windows owned PID14616 exited by20:59:05, native finish PASS,
 exact owned seed removal, mod removal,7/7 profile files restored,13 saves
 unchanged, prior installation.json restored, and recovery journal cleared.
-Those remote cleanup findings await the sanitized retained-artifact audit.
+The sanitized Windows bundle from private PR22 comment6324203695 was independently
+audited on21Oct evening. Its258690 JSON bytes have SHA256
+7b5ad2eb90eb558f6db4177d5d9868501eddd5cd7ae1af04dce789b6efb89d4c.
+All38 production,2 probe and2 harness/test source hashes match exact3c156b0.
+The41 installed names agree, with generated credentials excluded. The installed
+UI registration hash is reproduced with Windows CRLF serialization; the initial
+LF-only reconstruction failed and was corrected explicitly. The unchanged
+readiness validator accepts the sanitized native log without native/probe errors.
+Seven profile restoration hash pairs and the package-record pair match. Thirteen
+post-restore save hashes are available, but the historical BEFORE inventory was
+not retained after journal deletion. Their unchanged status remains reported,
+not an independently reproduced before/after comparison. Later live files cannot
+reconstruct that missing evidence. Screenshot images are excluded; only hashes
+and timestamps were supplied. The original unsanitized log hash is reported, not
+recomputed from sanitized text. Local windows-independent-audit.json records these
+bounds. PR22 later adds durable before/after manifests for future runs.
 Both local-role validators deliberately retain two_native_acceptance=false and
 ongoing_world_authority=false. Do not rewrite these flags based on this report.
 The relay recorded1,193 samples containing both registered peers and108 distinct

@@ -7,9 +7,11 @@ Identified Windows-to-Linux target-HUD motion is retained; reverse-direction
 visual identity remains unconfirmed. Ordinary cargo, damage, station comparison
 and ongoing universe authority were not accepted by this run. Both owned games
 and the primary relay are closed. Linux normal saves and clean33 restoration
-were verified; Windows cleanup is reported by Claude, with raw artifact audit
-pending. No new release package was produced. Production reference remains
-937262c; reviewed Windows harness PR22 is3c156b0. Both PRs remain draft.
+were verified. Independent sanitized Windows artifact review confirms native
+admission and source/restoration hash pairs; historical before-save hashes are
+missing, so its unchanged-save claim remains reported. No release package was
+produced. Production reference remains937262c; actual Windows native source was
+3c156b0. PR18 remains draft; PR22 source has advanced separately after that run.
 Read reports/SHARED-SEED-JOINT-20261021.txt and the user's requested efficiency
 measurement in reports/PLAYTEST-TOKEN-USAGE-20261021.txt. The latter distinguishes
 exact local token counters from Claude's usage-window percentages.
