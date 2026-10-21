@@ -23,3 +23,20 @@ separate PR27 controlled importer/consumer evidence is not that acceptance.
 UI registration, launcher configuration, native host publisher, authenticated
 receiver integration and pose/queued-warp arbitration remain follow-up work.
 Ordinary missions remain medium priority and chat conditional low priority.
+
+NATIVE QUALIFICATION PATH AND OBSERVED-PAUSE CORRECTION
+An asynchronous-Pause regression exposed that a second pre-marker frame could
+inspect the seed before the requested pause was actually observed. The gate now
+waits for native IsGamePaused before every pre-admission inspection, with its
+existing timeout covering a pause that never completes. The regression fails on
+the prior source and passes after the correction.
+The explicit dev harness installs only the production seed/dock gates and their
+probe in the load UI, with networking and gameplay fixture adapters excluded.
+It traces real native requests before dispatch, complete registry events, gate
+readiness and actual pause release/preservation; then freezes the comparison,
+checks both dock query types, station equality and a fresh pristine/load marker.
+The validator requires complete import before admission and rejects missing,
+early, unpaused, post-completion or malformed readiness evidence. This is bounded
+startup qualification, not a live session or a native fixture-spawn test.
+431 Linux/Python/LuaJIT tests PASS/no skips, new probe LuaJIT syntax PASS. Native
+capture/load result pending. Source remains opt-in and unregistered by default.

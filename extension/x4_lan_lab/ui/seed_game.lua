@@ -69,8 +69,11 @@ RegisterEvent('X4LAN_Seed.State',function(_,payload)
  LoadGame('save_010')
 end)
 function G.frame(now)
+ G.started=G.started or now
  freezeAdmission()
  if G.failed then return false end
+ if not G.ready and now-G.started>180 then fail('native seed load timed out');return false end
+ if cfg.attachment_sync and not G.ready and C.IsPlayerValid() and not C.IsGamePaused() then return false end
  if cfg.attachment_sync and G.markerReady then
   if not G.ready and (not C.IsPlayerValid() or not C.IsGamePaused()) then return false end
   local docks=X4LAN_SEED_DOCK_GATE
@@ -85,8 +88,6 @@ function G.frame(now)
   return true
  end
  if G.ready then return true end
- G.started=G.started or now
- if now-G.started>180 then fail('native seed load timed out');return false end
  if not C.IsPlayerValid() or G.pending or now<(G.nextInspect or 0) then return false end
  if not G.refreshed then G.refreshed=true;C.ReloadSaveList();return false end
  if not C.IsSaveListLoadingComplete() then return false end

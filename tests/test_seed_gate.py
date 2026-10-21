@@ -188,6 +188,15 @@ X4LAN_SEED_DOCK_GATE.failed='query witness changed';g.frame(3)
 assert(g.failed and not g.ready);g.frame(4);assert(paused)
 ''')
 
+    def test_attachment_does_not_inspect_until_native_pause_is_observed(self):
+        self.attachment('function Pause() pauseCalls=pauseCalls+1 end').execute('''
+local g=X4LAN_SEED_GATE;g.frame(0)
+assert(not paused and pauseCalls==1 and count('Inspect')==0 and dockFrames==0)
+g.frame(.5);assert(not paused and count('Inspect')==0 and dockFrames==0)
+paused=true;g.frame(1);g.frame(2)
+assert(count('Inspect')==1 and dockFrames==0)
+''')
+
 
 if __name__ == "__main__":
     unittest.main()
