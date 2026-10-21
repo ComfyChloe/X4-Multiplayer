@@ -1,6 +1,13 @@
 NATIVE DOCKING / STORAGE TRANSITION FEASIBILITY
 21 October 2026 | A:primary | INTERNAL DEVELOPMENT
 
+RESUMED21 OCTOBER EVENING
+The user authorized implementation/review/automated code tests until22Oct08:00
+Europe/Berlin; coordination stays :00/:15/:30/:45. Humans now own gameplay tests.
+The new pure saved-dock ledger and transition controller are described in
+reports/ATTACHMENT-CONTROLLER.txt. They are not registered in the native UI or
+network path. No new native test is run; historical evidence/limits below remain.
+
 PROBLEM
 The shared-seed ship experiment now avoids direct sector-position writes on
 attached ships. Its controlled comparison eliminates large stored-child offsets,
