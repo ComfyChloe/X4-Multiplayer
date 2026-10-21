@@ -171,6 +171,12 @@ class SeedWindowsTests(unittest.TestCase):
         self.assertEqual((self.profile / 'x4lan-debug.txt').read_text(), 'older log')
         self.assertIn('SEED_PLAY_READY', (self.run / 'native.log').read_text(), 'raw native log retained')
         self.assertEqual(self.normal.read_bytes(), b'normal save')
+        before = json.loads((self.run / 'saves-before.json').read_text())
+        after = json.loads((self.run / 'saves-after.json').read_text())
+        self.assertIn(str(self.normal), before, 'the pre-install inventory survives the deleted journal')
+        self.assertEqual(before, after, 'same saves, bytes and timestamps after restore')
+        summary = json.loads((self.run / 'windows-restore.json').read_text())
+        self.assertEqual(summary['save_inventories'], ['saves-before.json', 'saves-after.json'])
         self.assertFalse(harness.STATE.exists())
 
     def test_failed_readiness_keeps_the_seed_for_audit(self):

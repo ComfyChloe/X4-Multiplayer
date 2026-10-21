@@ -283,6 +283,9 @@ def install(run, package, host, game=None):
                  game=str(facts['game']), profile=str(profile), host=host, profile_files=present,
                  save_dir_existed=(profile / 'save').is_dir(), saves=saves(profile), had_installation_json=had_record,
                  owned_target=None, owned_save=None, stage='backed-up')
+    # The pre-install save inventory also stays in the run folder: the journal holding it is
+    # deleted once restore succeeds, and the evidence must still show both sides.
+    (run / 'saves-before.json').write_text(json.dumps(state['saves'], indent=2))
     write_state(state)
     try:
         # The preflight-selected game is passed explicitly, so the content checks and the actual
@@ -515,8 +518,11 @@ def restore():
     mismatched = [n for n in state['profile_files'] if sha256(profile / n) != sha256(backup / n)]
     problems += ['profile file not restored: ' + n for n in mismatched]
     summary['profile_files_exact'] = len(state['profile_files']) - len(mismatched)
-    changed = saves_changed(state['saves'], run_saves(state))
-    summary.update(saves_checked=len(state['saves']), saves_changed=changed)
+    current = run_saves(state)
+    (run / 'saves-after.json').write_text(json.dumps(current, indent=2))
+    changed = saves_changed(state['saves'], current)
+    summary.update(saves_checked=len(state['saves']), saves_changed=changed,
+                   save_inventories=['saves-before.json', 'saves-after.json'])
     if changed:
         problems.append('saves changed: ' + ', '.join(changed))
     summary['problems'] = problems

@@ -51,6 +51,7 @@ FLOW (Windows guest; receive first with dev/shared_seed_session.py prepare/recei
           for the unchanged run-owned folder named by the pinned record (otherwise nothing is
           removed and records are kept), restores profile files and the package record
           byte-exact, reports new game-written profile files without deleting them, checks saves
+          against saves-before.json (written at install) and keeps saves-after.json in the run
 
 TESTS
 tests/test_native_seed_windows.py (8, portable doubles, no game/Steam/PowerShell): preflight
