@@ -1,0 +1,31 @@
+ATTACHMENT RELAY — BOUNDED WORK AND FAIR DELIVERY
+21 October2026 | internal opt-in source; independent review pending
+
+PR24 a242ca1 repeatedly parsed every baseline row for each observation and each
+live delivery candidate. A4096-row public UniverseSession reproduction read
+16777216 rows per receive burst and per snapshot; measured Linux snapshot4.59s.
+0b9cf77 caches one immutable Baseline by object identity, clearing it on view/epoch
+reset and replacement. Same reproduction:4096 parsed rows per receive burst,
+zero per subsequent snapshot; measured0.042s receive burst and0.00125s snapshot.
+These timings are local observations; the regression uses deterministic parse
+counts, not timing thresholds.
+
+A subsequent20Hz scheduling audit found a separate fairness failure. With512
+ships,32-packet budget and new observations every0.5s, a cursor into the changing
+retry-eligible list delays some first deliveries2.5s. This exceeds the2s receiver
+TTL despite sufficient aggregate capacity. The new cursor records the last served
+ship ID and scans forward through the stable sorted live set; eligibility changes
+cannot move the cursor past ships that have not been served. The regression fails
+against exact0b9cf77 with2.5s delay and passes after correction with at most0.8s.
+
+The former32-packet budget also cannot cover4096 ships at20Hz within2s, even with
+perfect scheduling. The opt-in default is now128 packets/tick, permitting a full
+view sweep in1.6s. The finite2s expiry gate, replay marks, identity/baseline checks
+and default-disabled constructor remain unchanged. A public-API deterministic
+4096-ship test with fresh observations every0.5s verifies initial delivery and
+recurring gaps below2s at20Hz. Baseline handshaking is established separately at
+a fixed test clock; this is not a UDP congestion or native FPS measurement.
+
+386 Linux/Python/LuaJIT tests PASS, no skips. The native host publisher must also
+refresh observations within its agreed bound; this relay test does not establish
+that adapter, packet-loss tolerance at full capacity or two-native acceptance.
