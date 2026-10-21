@@ -131,3 +131,33 @@ if a later readback were to match. Native result pending. An acknowledgment mean
 the MD consumer invoked an operation, not that the engine completed it; actual
 readback remains mandatory. The unshipped general native consumer adopts the same
 permission guard on its separate development branch.
+
+ACKNOWLEDGMENT + DOCKING PERMISSION NATIVE PASS — SOURCEbea2dd5
+Run attachment-controller-permission-20261021 reuses the exact50963-dock capture
+with unchanged production bytes and a dev-only selection/permission correction.
+Saved ship13 QBE-228, container19, storage42/external46 complete all eight states,
+nine invoked native actions, nine correlated controller acknowledgments and five
+fresh target queries. The importer passes without MD errors, but the unchanged
+station gate FAILS: native station identity set changed. Overall seed qualification
+therefore remains FAIL; controller functional success does not override it.
+All50963 dock handles renumbered; max dock relative error0.00208616m. The station
+identity difference is being investigated against the raw capture/load records. Owned game closed,
+owned seed removed, seven actual normal saves and33-file/profile restoration
+verified.405 source tests PASS, no skips. This remains one native game driven by
+synthetic host observations; network/native execution windows are separate work.
+
+CAPTURE STARTUP BOUNDARY — CONTROLLED FOLLOW-UP
+The station difference is exactly eight added Khaak stations in
+cluster_605_sector001_macro: two landmarks_kha_nest_02_macro and six
+landmarks_kha_weaponplatform_01_macro. No captured stations are missing. None of
+the eight added codes occurs as a component in the exact sealed save. Raw rows
+and snapshot audit are retained in station-set-difference.json for the permission
+run. The age-zero capture may have preserved pending initial-world work; this is
+an inference, not yet a verified explanation of the engine sequence.
+The dev seed probe now applies immediate freeze/bootstrap only to load. Capture
+uses its existing startup readiness delay before freezing, then stays frozen
+before seed marking, complete dock enumeration and saving. Reload remains frozen
+before readiness/import. The updated lifecycle regression checks both boundaries;
+405 Linux/Python/LuaJIT tests PASS, no skips. Production bytes and station gate are
+unchanged. A fresh capture/reload will test this narrower hypothesis. A readiness
+delay alone is not general suppression of the guest universe simulation.
