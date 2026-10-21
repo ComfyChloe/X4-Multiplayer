@@ -75,5 +75,15 @@ stale, duplicate, conflict, reordered across ships, future and stale baseline, w
 recipient, unknown ship/dock, FREE/attached dock rules, ttl expiry, removal and descriptor
 change invalidation, epoch change reset.
 
+INTEGRATION NOTES (for the integration owner)
+- ui/attachment_protocol.lua is not listed in ui.xml and nothing references the codec yet
+  (a test enforces both).
+- Adding the file under extension/x4_lan_lab changes the production digest used by the
+  shared-seed manifests: 866d17da...61947 at fcbcf38 becomes 202dee88...841eb with this file.
+  A seed pinned to the old digest will not admit this tree; re-pin at integration time, or keep
+  the file out of the tree used for a pinned run.
+- distribution/build_packages.py copies the whole extension folder, so a package built from
+  this branch would ship the inert file; no package is built here.
+
 NOT ESTABLISHED
 No native dock-registry reload, transition or gameplay acceptance; HUMAN tests pending.
