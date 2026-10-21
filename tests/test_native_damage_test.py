@@ -140,8 +140,9 @@ class PrepareSafetyTests(unittest.TestCase):
             (package_dir / 'installation.json').write_text(self.record())
             (self.profile / 'config.xml').write_text('<root><autosave>false</autosave></root>')
         elif args[1] == 'Remove':
-            (self.game / 'archive').mkdir(parents=True, exist_ok=True)
-            self.target.rename(self.game / 'archive/x4_lan_lab')
+            game = Path(json.loads((package_dir / 'installation.json').read_text())['game'])
+            (game / 'archive').mkdir(parents=True, exist_ok=True)
+            (game / 'extensions/x4_lan_lab').rename(game / 'archive/x4_lan_lab')
 
     def test_failed_install_leaves_restorable_state_sampled_before_install(self):
         self.install = 'fail-after-record'
@@ -196,14 +197,33 @@ class PrepareSafetyTests(unittest.TestCase):
                          ('removed by the package setup.ps1', 0, []))
         self.assertFalse(harness.STATE.exists())
 
-    def test_changed_run_owned_mod_is_not_removed(self):
+    def test_changed_run_owned_mod_is_not_removed_and_its_record_is_kept(self):
         harness.prepare(self.package)
+        record = (self.package / 'installation.json').read_bytes()
         (self.target / 'ui.xml').write_text('<files/>')       # no longer what this run installed
         with self.assertRaises(RuntimeError):
             harness.restore()
         self.assertEqual(self.calls, ['Install'])
         self.assertTrue(self.target.exists())
         self.assertTrue(harness.STATE.exists(), 'journal kept for a manual decision')
+        self.assertEqual((self.package / 'installation.json').read_bytes(), record,
+                         'the record stays so the package Remove can still recover the mod')
+        summary = json.loads((Path(json.loads(harness.STATE.read_text())['run']) / 'restore.json').read_text())
+        self.assertEqual(summary['installation_json'], 'kept: run-owned mod unresolved')
+
+    def test_remove_is_not_delegated_when_the_record_names_another_installation(self):
+        harness.prepare(self.package)
+        other_game = self.d / 'other-game'; other = other_game / 'extensions/x4_lan_lab'
+        (other / 'ui').mkdir(parents=True); (other / '.x4lan-package-id').write_text('lan-x-p2')   # same marker
+        changed = json.dumps({'game': str(other_game), 'profile': str(self.profile)})
+        (self.package / 'installation.json').write_text(changed)
+        with self.assertRaises(RuntimeError) as caught:
+            harness.restore()
+        self.assertIn('not the record this run installed', str(caught.exception))
+        self.assertEqual(self.calls, ['Install'], 'Remove would have archived the other installation')
+        self.assertTrue(other.exists() and self.target.exists())
+        self.assertEqual((self.package / 'installation.json').read_text(), changed, 'records untouched')
+        self.assertTrue(harness.STATE.exists())
 
     def test_unknown_install_outcome_removes_nothing_and_keeps_the_new_record(self):
         harness.prepare(self.package)
@@ -308,6 +328,8 @@ class EvaluateTests(unittest.TestCase):
             'no MD markers': (req(4, 4, 31, 10) + req(5, 5, 32, 10) + req(6, 6, 31, 10) +
                               back(4, 4, 31, 31, 11, None) + back(5, 5, 32, 31, 11, None) + back(6, 6, 31, 31, 11, None), 'FAIL'),
             'paused': (ONE_UPDATE.replace('paused=false', 'paused=true'), 'FAIL'),
+            # Requests unpaused, all three readbacks paused: a frozen MD clock is no update evidence.
+            'paused readbacks only': (ONE_UPDATE.replace('md=1000/1016 paused=false', 'md=1000/1016 paused=true'), 'FAIL'),
             'absent frame numbers': (ONE_UPDATE.replace(' frame=10 ', ' ').replace(' frame=11 ', ' '), 'FAIL'),
         }
         for name, (text, expected) in cases.items():

@@ -278,7 +278,8 @@ def prepare(package):
     if not marker.is_file() or marker.read_text(encoding='utf-8-sig') != pkg['package_id']:
         raise RuntimeError('Install returned but ' + str(target) + ' does not carry this package marker; '
                            'ownership unproven, nothing will be removed automatically.')
-    state.update(game=str(game), owned_target=str(target), installed=tree_hashes(target), stage='installed')
+    state.update(game=str(game), owned_target=str(target), installed=tree_hashes(target),
+                 installed_record_sha256=sha256(package / 'installation.json'), stage='installed')
     write_state(state)
     if profile2.resolve() != profile.resolve():
         raise RuntimeError('Installed profile differs from the backed-up test profile; run restore.')
@@ -463,17 +464,27 @@ def restore():
     owned = Path(state['owned_target']) if state.get('owned_target') else None
     keep_record = False
     if owned is not None:
-        # Remove only the folder this run installed, and only while it is still what was installed.
+        # Remove only the folder this run installed, only while it is still what was installed,
+        # and only while setup.ps1 Remove will select exactly that folder: Remove takes its
+        # target from the CURRENT installation.json, so that record must be the one this run's
+        # Install wrote (same bytes, game, profile and target). Until the owned mod is gone, the
+        # current record is kept so the package's normal Remove can still recover it.
         if not owned.exists():
             summary['mod'] = 'already absent'
-        elif tree_hashes(owned) not in (state.get('installed'), state.get('overlaid')):
-            problems.append('mod at ' + str(owned) + ' differs from what this run installed; not removed')
-            summary['mod'] = 'changed, not removed'
         else:
-            setup_ps1(package, '-Action', 'Remove')
-            summary['mod'] = 'removed by the package setup.ps1'
-            if owned.exists():
-                problems.append('mod still installed at ' + str(owned))
+            keep_record = True
+            reason = removal_mismatch(state, package, owned)
+            if reason:
+                problems.append(reason + '; nothing removed, records kept')
+                summary['mod'] = 'not removed: ' + reason
+            else:
+                setup_ps1(package, '-Action', 'Remove')
+                if owned.exists():
+                    problems.append('mod still installed at ' + str(owned))
+                    summary['mod'] = 'Remove left the mod installed'
+                else:
+                    keep_record = False
+                    summary['mod'] = 'removed by the package setup.ps1'
     elif state.get('stage') == 'backed-up':
         # Install started but its outcome was never journaled: a mod folder may be this run's or
         # may have existed before. Nothing is removed; the new record stays for 5-REMOVE-MOD.
@@ -491,7 +502,7 @@ def restore():
             (profile / name).unlink()
     record = package / 'installation.json'
     if keep_record:
-        summary['installation_json'] = 'kept (outcome unknown)'
+        summary['installation_json'] = 'kept: run-owned mod unresolved' if owned else 'kept: Install outcome unknown'
     elif state.get('had_installation_json'):
         shutil.copy2(backup / 'package-installation.json', record)
         summary['installation_json'] = 'restored'
@@ -515,6 +526,23 @@ def restore():
         raise RuntimeError('Restore incomplete: ' + '; '.join(problems))
     STATE.unlink()
     print('Restored: mod', summary['mod'] + '; profile files exact, saves unchanged.')
+
+
+def removal_mismatch(state, package, owned):
+    """Why delegating to setup.ps1 Remove could touch anything but this run's mod (None if safe)."""
+    if tree_hashes(owned) not in (state.get('installed'), state.get('overlaid')):
+        return 'mod at ' + str(owned) + ' differs from what this run installed'
+    record = package / 'installation.json'
+    if not record.is_file() or sha256(record) != state.get('installed_record_sha256'):
+        return 'package installation.json is not the record this run installed'
+    try:
+        game, profile, _ = windows_paths(package)
+    except (OSError, KeyError, ValueError, RuntimeError):
+        return 'package installation.json is unreadable'
+    if (str(game) != state.get('game') or str(profile) != state.get('profile')
+            or game / 'extensions' / 'x4_lan_lab' != owned):
+        return 'package installation.json names another game, profile or mod folder'
+    return None
 
 
 BUNDLE_FILES = ('prepare.json', 'schedule.json', 'report.json', 'restore.json')

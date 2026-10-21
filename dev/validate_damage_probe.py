@@ -58,7 +58,7 @@ def summarise(rows, late=.5, tolerance=.5):
             'requested': {}, 'confirmed': 0, 'missing': [], 'late': [], 'mismatched': [],
             'unmatched': 0, 'invalid': 0, 'echo_mismatch': [], 'orphan': [], 'candidate_drift': [], 'last_confirmed': None,
             'frameless': [], 'frames': {}, 'frame_of': {}, 'readback_frame': {}, 'observed': {}, 'wanted': {},
-            'md': {}, 'paused': {}})
+            'md': {}, 'paused': {}, 'readback_paused': {}})
         reason, detail = row.get('reason'), row['detail_text']
         frame = row.get('frame') if re.fullmatch(r'\d+', row.get('frame') or '') else None
         if reason == 'apply_requested':
@@ -112,6 +112,7 @@ def summarise(rows, late=.5, tolerance=.5):
             wanted = [health(req.group(1)), health(req.group(2))]
             run['observed'][ident], run['wanted'][ident] = observed, wanted
             run['readback_frame'][ident] = frame
+            run['readback_paused'][ident] = row.get('paused')
             md = re.search(r' md=(\d+)/(\d+)', detail)
             run['md'][ident] = md.groups() if md else (None, None)
             if not close(observed, wanted, tolerance):
@@ -162,7 +163,10 @@ def summarise(rows, late=.5, tolerance=.5):
                 markers = [run['md'].get(i, (None, None)) for i in ids]
                 batches.append({'frame': frame, 'requests': ids,
                                 'confirmed': all(i in run['wanted'] for i in ids),
-                                'unpaused': all(run['paused'].get(i) == 'false' for i in ids),
+                                # The MD game clock is frozen while paused: both the request and
+                                # its readback must be logged unpaused (unknown counts as paused).
+                                'unpaused': all(run['paused'].get(i) == 'false' and
+                                                run['readback_paused'].get(i) == 'false' for i in ids),
                                 'readback_frames': sorted({str(run['readback_frame'].get(i)) for i in ids}),
                                 'md_seen': sorted({str(m[0]) for m in markers}),
                                 'md_read': sorted({str(m[1]) for m in markers}),
