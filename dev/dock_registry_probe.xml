@@ -35,7 +35,18 @@
      <do_if value="$dock.exists and $dock.container.exists and $dock.parent.exists and State.$indices.{$dock}? and State.$indices.{$dock} == $i and $dock.parent == State.$parents.{$i} and $dock.container == State.$containers.{$i} and $dock.macro == State.$macros.{$i}">
       <debug_text text="'[X4LAN] SEED_DOCKS row index=%s object=%s container=%s macro=%s containerMacro=%s external=%s storage=%s capacity=%s parent=%s expectedParent=%s expectedContainer=%s poseError=%s reverse=1'.[$i,$dock,$dock.container,$dock.macro.id,$dock.container.macro.id,$dock.external,$dock.isstorage,$dock.shipstorage.capacity,$dock.parent,State.$parents.{$i},State.$containers.{$i},$dock.distanceto.[State.$containers.{$i},State.$positions.{$i}] / 1m]"/>
      </do_if>
-     <do_else><set_value name="$valid" exact="false"/><debug_text text="'[X4LAN] SEED_DOCKS failed unresolved reference index=%s'.[$i]"/></do_else>
+     <do_else>
+      <set_value name="$valid" exact="false"/>
+      <debug_text text="'[X4LAN] SEED_DOCKS failed unresolved reference index=%s'.[$i]"/>
+      <!-- Diagnostic only: retain the original failure and report each witness
+           separately. Do not dereference absent objects or change acceptance. -->
+      <do_if value="$i le 8">
+       <debug_text text="'[X4LAN] DOCK_WITNESS index=%s object=%s exists=%s savedParent=%s savedContainer=%s savedMacro=%s reversePresent=%s'.[$i,$dock,$dock.exists,State.$parents.{$i},State.$containers.{$i},State.$macros.{$i},State.$indices.{$dock}?]"/>
+       <do_if value="$dock.exists">
+        <debug_text text="'[X4LAN] DOCK_WITNESS_LIVE index=%s parent=%s container=%s macro=%s parentEqual=%s containerEqual=%s macroEqual=%s reverse=%s'.[$i,$dock.parent,$dock.container,$dock.macro,$dock.parent == State.$parents.{$i},$dock.container == State.$containers.{$i},$dock.macro == State.$macros.{$i},if State.$indices.{$dock}? then State.$indices.{$dock} else -1]"/>
+       </do_if>
+      </do_if>
+     </do_else>
     </do_all>
     <debug_text text="'[X4LAN] SEED_DOCKS end mode=%s id=%s count=%s'.[$v.$mode,State.$id,State.$docks.count]"/>
     <raise_lua_event name="'X4LAN_DockRegistry.Done'" param="'%s|%s|%s'.[State.$id,State.$docks.count,if $valid then 1 else 0]"/>

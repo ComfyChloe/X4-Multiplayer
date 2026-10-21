@@ -153,3 +153,20 @@ at closeout. Claude reported an idle gap23:00-06:40. Joint Windows/Linux play di
 not run: the pinned seed includes ego_dlc_ventures127, absent from the Windows
 installation. Read-only Windows checks refused before mutation. A later authorized
 rendezvous needs matching enabled game content and review of that Windows harness.
+
+EVENING REGISTRY-V2 RELOAD — RETAINED FAILURE
+The user clarified that local engine/function tests remain authorized; humans
+perform the finished-version playtest. At21:34 CEST the exact952e379 production
+and probe source loaded the retained docks-graph seed c1d00bbcc9246a1f768bfdf41162821a
+(SHA256 c5b96a44090bc0c37215934a737ab310f436aaf66f984fd323e29eb0edf9a2d9).
+All50538 rows failed the added witness predicate. No successful native dock row,
+completion or station-after-load sample exists. The unchanged validator rejects
+the full raw trace. This does not establish that all docks disappeared: the
+predicate combines existence, reverse lookup, parent, container and macro checks.
+A diagnostic-only delta prints the first eight failed rows' separate witnesses;
+it retains the failure, acceptance predicate and bounded completion unchanged.
+The owned game was closed, exact staged seed removed, seven actual normal saves
+checked unchanged by bytes/timestamps, and the clean33 installation/profile files
+restored against THIS run's fresh before inventory. Historical morning evidence
+is retained separately. Run: .local/evidence-135-withheld
+in the exact-source x4-native-dock-reload worktree. No gameplay package changed.
