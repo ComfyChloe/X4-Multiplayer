@@ -84,6 +84,11 @@ class SeedWindowsTests(unittest.TestCase):
         if args[1] == 'Install':
             if self.install == 'fail':
                 raise RuntimeError('install failed')
+            if self.install == 'partial':                       # mod and record written, then a failure
+                (self.target / 'ui').mkdir(parents=True)
+                (self.target / '.x4lan-package-id').write_text('lan-x-p2')
+                (package_dir / 'installation.json').write_text(json.dumps({'game': str(self.game), 'profile': str(self.profile)}))
+                raise RuntimeError('install failed after publishing')
             if self.target.exists():
                 raise RuntimeError('The mod folder already exists.')
             (self.target / 'md').mkdir(parents=True); (self.target / 'ui').mkdir()
@@ -181,6 +186,28 @@ class SeedWindowsTests(unittest.TestCase):
         harness.restore()
         self.assertEqual(self.calls, ['Install'])
         self.assertEqual((self.package / 'installation.json').read_text(), self.old_record)
+
+    def test_partial_install_keeps_the_unproven_mod_record_and_journal_until_resolved(self):
+        self.install = 'partial'
+        with self.assertRaises(RuntimeError):
+            harness.install(self.run, self.package, '192.0.2.109')
+        state = json.loads(harness.STATE.read_text())
+        self.assertEqual((state['stage'], state['owned_target']), ('install-failed', None))
+        new_record = (self.package / 'installation.json').read_text()
+        with self.assertRaises(RuntimeError) as caught:
+            harness.restore()
+        self.assertIn('outcome unproven', str(caught.exception))
+        self.assertEqual(self.calls, ['Install'], 'an unproven mod is never removed')
+        self.assertTrue(self.target.exists())
+        self.assertEqual((self.package / 'installation.json').read_text(), new_record, 'record kept for 5-REMOVE-MOD')
+        self.assertTrue(harness.STATE.exists(), 'journal kept')
+        summary = json.loads((self.run / 'windows-restore.json').read_text())
+        self.assertEqual((summary['mod'], summary['installation_json']), ('unproven, kept', 'kept: Install outcome unproven'))
+        self.assertEqual((self.profile / 'config.xml').read_text(), '<root/>', 'profile files still restored')
+        self.target.rename(self.game / 'removed-by-5-REMOVE-MOD')  # the tester resolves it with the package
+        harness.restore()
+        self.assertEqual((self.package / 'installation.json').read_text(), self.old_record)
+        self.assertFalse(harness.STATE.exists())
 
     def test_remove_is_not_delegated_for_another_record_and_the_record_is_kept(self):
         harness.install(self.run, self.package, '192.0.2.109')
