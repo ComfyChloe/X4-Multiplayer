@@ -112,8 +112,12 @@ Host baselines127/128/127;120 originals replayed,7 new-host IDs omitted. Every
 original is observed within1m early in the initial phase, but ID7451 changes from
 external pad to storage locally and is already305.09326m off at the end of that
 initial phase. It remains off during return; early convergence is not sustained
-agreement. Overall strict
-validation remains FAILED; the large stored-child offset is absent in this run.
+agreement. Independent audit of report19b7db9 distinguishes these final errors
+from transient peaks across all observed originals: 351.60596m in the initial
+phase and 19024.438m during return. The final maximum is 305.09326m in BOTH
+phases. Overall strict validation remains FAILED. The final stored-child error
+is smaller than in the direct-write comparison, but transient offsets remain;
+neither settled readbacks nor early convergence prove sustained agreement.
 Both native admissions and all cleanup/save/hash manifests are retained.
 
 The read-only docking-key experiment found dock.seed=0 on all68 inspected bays
