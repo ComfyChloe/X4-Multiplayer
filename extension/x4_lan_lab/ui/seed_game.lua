@@ -5,17 +5,28 @@ if not cfg or not cfg.enabled or cfg.seed_id==nil then return end
 local G={ready=false};X4LAN_SEED_GATE=G
 local ffi=require('ffi');local C=ffi.C
 ffi.cdef[[
-bool IsPlayerValid(void);bool IsSaveListLoadingComplete(void);
+bool IsPlayerValid(void);bool IsGamePaused(void);bool IsSaveListLoadingComplete(void);
 void ReloadSaveList(void);const char* GetSaveFolderPath(void);
 ]]
 local function log(text) DebugError('[X4LAN] SEED_GATE '..text) end
 local function fail(reason) G.failed=reason;G.ready=false;log('STOPPED '..reason) end
+local function freezeAdmission()
+ if cfg.attachment_sync and not G.ready and C.IsPlayerValid() and not C.IsGamePaused() then
+  G.ownsPause=true;Pause()
+ end
+end
+local function ready()
+ G.ready=true;log('READY seed='..cfg.seed_id..' slot='..cfg.slot)
+ if G.ownsPause then G.ownsPause=nil;if C.IsGamePaused() then Unpause() end end
+end
 local function valid()
  assert(cfg.test_profile=='45841' and cfg.bubble_actions and cfg.coop and cfg.world_sync,
   'seed admission requires isolated cooperative world mode')
  assert(type(cfg.seed_id)=='string' and #cfg.seed_id==32 and cfg.seed_id:match('^[a-f0-9]+$'),
   'invalid seed identity')
  assert(cfg.bubble==cfg.seed_id and cfg.seed_verified==true,'unverified seed or relay session mismatch')
+ assert(not cfg.attachment_sync or (cfg.attachment_sync==true and cfg.seed_binding==true),
+  'attachment admission requires explicit saved-object binding')
  local path=ffi.string(C.GetSaveFolderPath()):gsub('\\','/'):gsub('/+$','')
  assert(path:sub(-#'/45841/save')=='/45841/save','seed admission outside isolated profile')
 end
@@ -24,6 +35,7 @@ if not ok then fail(tostring(err));return end
 RegisterEvent('X4LAN_Seed.Loaded',function()
  -- Reloading an active multiplayer game would retain stale Lua/network state.
  if G.ready then fail('active session reload is unsupported');return end
+ freezeAdmission()
  G.loaded=true;G.pending=false;G.started=GetCurRealTime();C.ReloadSaveList()
 end)
 RegisterEvent('X4LAN_Seed.State',function(_,payload)
@@ -44,7 +56,9 @@ RegisterEvent('X4LAN_Seed.State',function(_,payload)
   end
   if loads~=1 then fail('snapshot has unexpected native load count '..loads);return end
   G.loaded=true
-  G.ready=true;log('READY seed='..marker..' slot='..cfg.slot);return
+  G.markerReady=true
+  if not cfg.attachment_sync then ready() end
+  return
  end
  if marker~='' or loads~=0 then
   fail('loaded world differs from the staged session');return
@@ -55,7 +69,22 @@ RegisterEvent('X4LAN_Seed.State',function(_,payload)
  LoadGame('save_010')
 end)
 function G.frame(now)
- if G.failed or G.ready then return G.ready end
+ freezeAdmission()
+ if G.failed then return false end
+ if cfg.attachment_sync and G.markerReady then
+  if not G.ready and (not C.IsPlayerValid() or not C.IsGamePaused()) then return false end
+  local docks=X4LAN_SEED_DOCK_GATE
+  if not docks or type(docks.frame)~='function' then fail('saved dock admission module unavailable');return false end
+  local ok,complete=pcall(docks.frame,now)
+  if not ok or docks.failed then fail('saved dock admission failed: '..tostring(docks.failed or complete));return false end
+  if not complete then
+   if G.ready then fail('saved dock admission lost after startup') end
+   return false
+  end
+  if not G.ready then ready() end
+  return true
+ end
+ if G.ready then return true end
  G.started=G.started or now
  if now-G.started>180 then fail('native seed load timed out');return false end
  if not C.IsPlayerValid() or G.pending or now<(G.nextInspect or 0) then return false end

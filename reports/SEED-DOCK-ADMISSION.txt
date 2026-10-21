@@ -1,0 +1,25 @@
+OPTIONAL SAVED-DOCK STARTUP ADMISSION
+21 October2026 | A:primary | contrib/astra-seed-dock-admission | starts8309164
+
+The seed marker alone currently admits gameplay before the full dock registry is
+rehydrated. For explicitly configured attachment_sync + seed_binding, hold the
+startup world paused from the first valid player/native Loaded event, validate
+its saved marker/load count, then require the complete dock importer before
+setting SEED_GATE.ready. Bubble fixture creation remains blocked during this
+prerequisite. Preserve a pause that was already active before the gate took over.
+
+The new seed_dock_game.lua module is unregistered. Missing/failed import support
+fails admission instead of silently falling back to independent simulation. The
+module keeps routing correlated native dock events and servicing importer health
+checks after startup; lost identity/query health revokes admission. Default seed
+mode is unchanged. Capture must already contain the saved dock registry; this
+change does not manufacture missing references on a client.
+
+428 Linux/Python/LuaJIT tests PASS/no skips, including admission-before-fixture,
+first-frame/native-load freeze, preserving prior pause, and missing/failed/lost
+registry cases. The module event-routing tests use the real importer and reject
+changed live-query witnesses, unsolicited events and missing responses. Native startup with this production gate is still pending; the
+separate PR27 controlled importer/consumer evidence is not that acceptance.
+UI registration, launcher configuration, native host publisher, authenticated
+receiver integration and pose/queued-warp arbitration remain follow-up work.
+Ordinary missions remain medium priority and chat conditional low priority.

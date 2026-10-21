@@ -131,6 +131,63 @@ assert(g.ready and not g.failed and #loads==0)
         lua.execute((UI / "game.lua").read_text())
         lua.execute("assert(frames.onUpdate==nil and positions[42]==nil and #loads==0)")
 
+    def attachment(self, extra=''):
+        return self.make('''
+X4LAN_CONFIG.attachment_sync=true;X4LAN_CONFIG.seed_binding=true
+pauseCalls=0;resumeCalls=0;dockReady=false;dockFrames=0
+function Pause() paused=true;pauseCalls=pauseCalls+1 end
+function Unpause() paused=false;resumeCalls=resumeCalls+1 end
+X4LAN_SEED_DOCK_GATE={frame=function()
+ dockFrames=dockFrames+1
+ if not dockReady then assert(paused,'import must remain frozen') end
+ return dockReady
+end}
+'''+extra)
+
+    def test_attachment_marker_alone_does_not_release_pause_or_spawn_fixtures(self):
+        lua=self.attachment()
+        lua.execute((UI/'bubble_game.lua').read_text())
+        lua.execute('''
+events['X4LAN.Loaded']();now=10;frames.onUpdate();now=11;frames.onUpdate()
+assert(paused and pauseCalls==1)
+events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|1')
+now=12;frames.onUpdate();assert(not X4LAN_SEED_GATE.ready and count('SetupHost')==0 and positions[42]==nil)
+assert(dockFrames==1 and paused)
+dockReady=true;now=13;frames.onUpdate()
+assert(X4LAN_SEED_GATE.ready and not paused and resumeCalls==1 and count('SetupHost')==1)
+now=14;frames.onUpdate();assert(resumeCalls==1 and dockFrames==3)
+''')
+
+    def test_attachment_load_notification_and_first_valid_frame_freeze_before_inspection(self):
+        self.attachment().execute('''
+events['X4LAN_Seed.Loaded']();assert(paused and pauseCalls==1)
+paused=false;X4LAN_SEED_GATE.frame(1);assert(paused and pauseCalls==2 and dockFrames==0)
+''')
+
+    def test_attachment_admission_preserves_preexisting_pause(self):
+        self.attachment('paused=true').execute('''
+local g=X4LAN_SEED_GATE;g.frame(0);g.frame(1)
+events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|1');dockReady=true;g.frame(2)
+assert(g.ready and paused and pauseCalls==0 and resumeCalls==0)
+''')
+
+    def test_attachment_missing_failed_or_lost_registry_never_admits_gameplay(self):
+        for change in ('X4LAN_SEED_DOCK_GATE=nil',
+                       "X4LAN_SEED_DOCK_GATE.failed='changed witness'",
+                       "X4LAN_SEED_DOCK_GATE.frame=function() error('bad import') end"):
+            with self.subTest(change=change):
+                self.attachment().execute('''
+local g=X4LAN_SEED_GATE;g.frame(0);g.frame(1)
+events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|1')
+'''+change+";g.frame(2);assert(g.failed and not g.ready and paused and resumeCalls==0)")
+        self.attachment().execute('''
+local g=X4LAN_SEED_GATE;g.frame(0);g.frame(1)
+events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|1');dockReady=true;g.frame(2)
+assert(g.ready and not paused);dockReady=false
+X4LAN_SEED_DOCK_GATE.failed='query witness changed';g.frame(3)
+assert(g.failed and not g.ready);g.frame(4);assert(paused)
+''')
+
 
 if __name__ == "__main__":
     unittest.main()
