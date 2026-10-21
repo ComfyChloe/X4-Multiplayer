@@ -1,14 +1,18 @@
 SAVED DOCK LEDGER AND ATTACHMENT TRANSITION CONTROLLER
-21 October2026 | primary-owned pure modules, not activated in gameplay
+21 October2026 | primary-owned ledger/controller and opt-in native dock import
 
 Native observations showed independent dock/storage transitions moving otherwise
 correctly bound ships away from host poses. A sector-position write cannot repair
 that parent relationship. The new pure modules define local identity and ordered
 transition gates before an engine adapter can consume host attachment state.
-There is no UI registration, native call, wire hook or package activation here.
+The ledger/controller have no shipping UI registration or wire hook. The optional
+production MD registry responds only to explicit seed-dock events; a separate
+unshipped harness registers its Lua importer for local engine qualification.
+No package or live attachment authority is activated.
 Humans own finished-version playtests. The21Oct21:29 clarification permits the
 primary agent to continue isolated local native engine/function tests. No game
-was launched for this pure-module change.
+was launched for the initial pure-module change; later importer qualification
+uses an isolated native capture and reload.
 
 seed_docks.lua
 X4LAN_SEED_DOCKS_LEDGER.registry(seed, count, inspect) collects exactly the ordered
@@ -33,7 +37,8 @@ not a substitute for native validation of saved references across reload/PCs.
 The retained registry-v2 capture now passes a separate local native reload after
 comparing saved macro IDs instead of macro values. All50538 dock indices/graphs
 agree; see NATIVE-DOCK-TRANSITIONS.txt for exact source, failures and limits. This
-pure ledger/controller itself is still not activated or natively tested.
+pure ledger is also exercised by the new native importer below. The transition
+controller is still unregistered and has not yet driven native actions.
 
 attachment_controller.lua
 X4LAN_ATTACHMENT_CONTROLLER.new(options) requires an admitted host epoch, explicit
@@ -107,3 +112,46 @@ Validate the saved references in an isolated local capture/reload, then prepare
 human instructions for the eventual two-PC carrier-transition playtest. Do not relabel the earlier native failures or add direct
 docked-child pose writes. Dynamic creation/destruction, arbitrary NPC commands,
 health, station production and complete universe authority remain separate work.
+
+PRODUCTION SAVED-DOCK IMPORT — 3cd3f1d, LOCAL QUALIFICATION IN PROGRESS
+x4lan_seed_docks.xml captures ordered component references and independent saved
+parent/container/relative-position/macro-ID/type/capacity witnesses only when
+explicitly marked in a pristine seed. Read returns at most64 rows per request;
+all native witnesses are checked before a row is emitted. Capture/load counts,
+seed identity and saved version are checked on every request. No docking command
+exists in this MD file. New production bytes require a fresh seed capture.
+
+seed_dock_import.lua consumes correlated Begin/Row/End events, preserves uint64
+references, and publishes its ledger only after every saved index arrives in
+order. Missing/duplicate/reordered rows, changed bounds, failed MD predicates,
+clock rollback and bounded response/import timeouts fail closed. A later query
+uses a unique local serial and one exact saved index. Only the current native
+response supplies the ledger witness; no cached row can resolve another dock
+later. An asynchronous mutation must STILL repeat native execution-time guards.
+Wrong requested dock type is rejected per request without corrupting the ledger.
+
+The unshipped native_dock_import_test.py / seed_dock_import_probe.lua harness
+registers these modules only in isolated disabled-gameplay profile45841. It logs
+full raw events and every Lua graph fingerprint, queries both an external bay and
+a storage bay, and then uses the existing native seed save/transfer/load harness.
+validate_dock_import.py independently checks causal batch/query order, complete
+coverage, each native relative-pose error, both query types and the full canonical
+component graph, then compares capture and reload under handle renumbering.
+363 independent Linux/Python/LuaJIT tests pass without skips; new production MD
+validates against the installed game schema. The native run remains separate
+from network attachment or complete-universe acceptance.
+
+FIRST IMPORTER NATIVE RUN — RETAINED FAILURE
+Source3cd3f1d; seedfe679bdba4e7a2a97f689f81bf793f8d; no Ventures content.
+Capture imported50980 references and both queries, then saved after the scan.
+Reload correctly rejected saved witness1959. The owned native snapshot contains
+component0x98fb9 (shipstorage_gen_xs_01_macro) as state="wreck", on ship0x98fb8
+YJO-261 with a selfdestructed kill event. Its earlier imported row had capacity10.
+Thus the simulation changed during the multi-frame capture before SaveGame;
+normalizing the null capacity or dropping the wreck would conceal inconsistency.
+Both raw phases and the failed gates remain retained. The next diagnostic freezes
+the disposable simulation before marking/import and keeps it paused through save;
+it will create a fresh seed, not repair this snapshot or relax the registry gate.
+Evidence .local/evidence-133-withheld Game closed, exact
+owned seed removed; all seven normal-save bytes/timestamps and clean33/profile
+restorations verified. Station reload gate remains FAIL/incomplete as expected.

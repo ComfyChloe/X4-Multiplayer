@@ -2,13 +2,14 @@
 local cfg=X4LAN_CONFIG
 if not cfg or not cfg.seed_dock_import_probe then return end
 assert(cfg.enabled==false and cfg.test_profile=='45841','isolated disabled gameplay required')
+local C=require('ffi').C
 local D={};X4LAN_SEED_DOCKS=D
 local function log(s) DebugError('[X4LAN] DOCK_IMPORT '..s) end
 function D.start(mode,seed,done)
  assert(not D.importer and type(done)=='function','duplicate native dock import')
  D.mode=mode;D.seed=seed;D.done=done;D.started=GetCurRealTime()
  D.importer=X4LAN_SEED_DOCK_IMPORT.new(seed,mode,function(v) AddUITriggeredEvent('X4LAN_SeedDocks','Read',v) end)
- if mode=='capture' then AddUITriggeredEvent('X4LAN_SeedDocks','Mark',seed) else D.marked=true end
+ if mode=='load' then D.marked=true end
 end
 RegisterEvent('X4LAN_SeedDocks.Marked',function(_,seed)
  assert(D.mode=='capture' and seed==D.seed and not D.marked,'unexpected dock capture marker');D.marked=true
@@ -24,7 +25,16 @@ end
 function D.frame(now)
  if not D.importer or D.complete then return end
  assert(now-D.started<120,'native dock import probe timed out')
- if not D.marked then return end
+ -- A multi-frame scan must remain in the exact simulation state that is saved.
+ -- Otherwise a ship may be destroyed after its row was admitted but before SaveGame.
+ if not C.IsGamePaused() then Pause();return end
+ if not D.pauseLogged then
+  DebugError('[X4LAN] DOCK_IMPORT_PAUSE mode='..D.mode..' paused=true');D.pauseLogged=true
+ end
+ if not D.marked then
+  if not D.markRequested then D.markRequested=true;AddUITriggeredEvent('X4LAN_SeedDocks','Mark',D.seed) end
+  return
+ end
  local ok,why=D.importer:frame(now);assert(ok,why)
  if not D.importer:ready() then return end
  if not D.fingerprints then
