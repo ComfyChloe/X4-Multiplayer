@@ -47,10 +47,14 @@ readbacks and stable component handles; all101 remain alive through view absence
 The first run explicitly omitted7 unregistered host IDs, the follow-up10.
 This does not exercise the missing new-object lifecycle path.
 
-objects-second FAILS the unchanged position gate on five initial-view ships and
-six return-view ships (including7539, which initially converged). Its older probe
-also logged expired identity metadata after the synthetic peer ended; that raw
-failure remains preserved. Diagnostic-only1d34f58 caches observed identities and
+objects-second FAILS the unchanged position gate on five initial-view ships:
+7530, 7536, 7540, 7542 and 7546. The return phase has SIX failing ships: those five
+plus 7539. Independent review5592019489 of diagnostic head1d34f58 confirms that
+7539 reaches 0.004m error in initial revisions3-17, but remains 24557.83589m off
+target in return revisions23-30 while original=true. Initial convergence must not
+hide this later failure when investigating dock/parent state or reporting phases.
+Its older probe also logged expired identity metadata after the synthetic peer
+ended; that raw failure remains preserved. Diagnostic-only1d34f58 caches observed identities and
 bounds observations to fresh baselines, and adds native parent/storage readbacks.
 objects-parent still FAILS the pose gate: four initial and seven return-phase
 ships remain off target. All are attached to carrier7527/RVA-846 on BOTH peers,
