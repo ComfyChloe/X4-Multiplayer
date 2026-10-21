@@ -485,15 +485,18 @@ def restore():
                 else:
                     keep_record = False
                     summary['mod'] = 'removed by the package setup.ps1'
-    elif state.get('stage') == 'backed-up':
-        # Install started but its outcome was never journaled: a mod folder may be this run's or
-        # may have existed before. Nothing is removed; the new record stays for 5-REMOVE-MOD.
-        record = package / 'installation.json'
-        if record.is_file() and (not state.get('had_installation_json') or
-                                 sha256(record) != sha256(Path(state['run']) / 'profile-before' / 'package-installation.json')):
+    else:
+        # Ownership was never proven (Install refused, failed part-way or was interrupted). A mod
+        # folder at the journaled game or at the game of the CURRENT record may be a partial
+        # install of this run or someone else's: never remove it, and keep the current record
+        # (the package's 5-REMOVE-MOD needs it) and this journal until that folder is gone.
+        present = unproven_targets(state, package)
+        if present:
             keep_record = True
-            problems.append('Install outcome unknown and a new installation record exists: check the mod folder '
-                            'and remove it with the package 5-REMOVE-MOD.cmd if it is the test install')
+            problems.append('Install outcome unproven and a mod folder exists at ' + ', '.join(present) +
+                            ': nothing removed; check it, remove the test install with the package 5-REMOVE-MOD.cmd, '
+                            'then run restore again')
+            summary['mod'] = 'unproven, kept'
     backup = Path(state['run']) / 'profile-before'
     for name in PROFILE_FILES:
         if name in state['profile_files']:
@@ -502,7 +505,7 @@ def restore():
             (profile / name).unlink()
     record = package / 'installation.json'
     if keep_record:
-        summary['installation_json'] = 'kept: run-owned mod unresolved' if owned else 'kept: Install outcome unknown'
+        summary['installation_json'] = 'kept: run-owned mod unresolved' if owned else 'kept: Install outcome unproven'
     elif state.get('had_installation_json'):
         shutil.copy2(backup / 'package-installation.json', record)
         summary['installation_json'] = 'restored'
@@ -526,6 +529,17 @@ def restore():
         raise RuntimeError('Restore incomplete: ' + '; '.join(problems))
     STATE.unlink()
     print('Restored: mod', summary['mod'] + '; profile files exact, saves unchanged.')
+
+
+def unproven_targets(state, package):
+    """Existing mod folders that may stem from an Install whose outcome this run never proved."""
+    games = {state.get('game')}
+    try:
+        games.add(str(windows_paths(package)[0]))
+    except (OSError, KeyError, ValueError, RuntimeError):
+        pass
+    return sorted(str(Path(g) / 'extensions' / 'x4_lan_lab') for g in games
+                  if g and (Path(g) / 'extensions' / 'x4_lan_lab').exists())
 
 
 def removal_mismatch(state, package, owned):

@@ -134,6 +134,10 @@ class PrepareSafetyTests(unittest.TestCase):
             if self.install == 'fail-after-record':
                 (package_dir / 'installation.json').write_text('{}')
                 raise RuntimeError('install failed')
+            if self.install == 'partial':                       # mod and record written, then a failure
+                self.make_mod()
+                (package_dir / 'installation.json').write_text(self.record())
+                raise RuntimeError('install failed after publishing')
             if self.target.exists():
                 raise RuntimeError('The mod folder already exists.')
             self.make_mod()
@@ -232,10 +236,30 @@ class PrepareSafetyTests(unittest.TestCase):
         harness.write_state(state)
         with self.assertRaises(RuntimeError) as caught:
             harness.restore()
-        self.assertIn('outcome unknown', str(caught.exception))
+        self.assertIn('outcome unproven', str(caught.exception))
         self.assertEqual(self.calls, ['Install'])
         self.assertTrue(self.target.exists() and (self.package / 'installation.json').exists())
         self.assertEqual((self.profile / 'config.xml').read_text(), '<root/>', 'profile files still restored')
+
+    def test_partial_install_keeps_the_unproven_mod_record_and_journal_until_resolved(self):
+        self.install = 'partial'
+        with self.assertRaises(RuntimeError):
+            harness.prepare(self.package)
+        state = json.loads(harness.STATE.read_text())
+        self.assertEqual((state['stage'], state['owned_target']), ('install-failed', None))
+        with self.assertRaises(RuntimeError) as caught:
+            harness.restore()
+        self.assertIn('outcome unproven', str(caught.exception))
+        self.assertEqual(self.calls, ['Install'], 'an unproven mod is never removed')
+        self.assertTrue(self.target.exists())
+        self.assertEqual((self.package / 'installation.json').read_text(), self.record(), 'record kept for 5-REMOVE-MOD')
+        self.assertTrue(harness.STATE.exists(), 'journal kept')
+        summary = json.loads((Path(state['run']) / 'restore.json').read_text())
+        self.assertEqual((summary['mod'], summary['installation_json']), ('unproven, kept', 'kept: Install outcome unproven'))
+        self.target.rename(self.game / 'removed-by-5-REMOVE-MOD')  # the tester resolves it with the package
+        harness.restore()
+        self.assertFalse((self.package / 'installation.json').exists(), 'absent before the run, absent again')
+        self.assertFalse(harness.STATE.exists())
 
     def test_changed_save_fails_restore(self):
         harness.prepare(self.package)
