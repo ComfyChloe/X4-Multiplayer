@@ -137,9 +137,11 @@ Run attachment-controller-permission-20261021 reuses the exact50963-dock capture
 with unchanged production bytes and a dev-only selection/permission correction.
 Saved ship13 QBE-228, container19, storage42/external46 complete all eight states,
 nine invoked native actions, nine correlated controller acknowledgments and five
-fresh target queries. Both importer and station gates pass without MD errors.
-All50963 handles renumbered; max dock relative error0.00208616m. Actual station
-counts/residuals are in the retained station-validation.json. Owned game closed,
+fresh target queries. The importer passes without MD errors, but the unchanged
+station gate FAILS: native station identity set changed. Overall seed qualification
+therefore remains FAIL; controller functional success does not override it.
+All50963 dock handles renumbered; max dock relative error0.00208616m. The station
+identity difference is being investigated against the raw capture/load records. Owned game closed,
 owned seed removed, seven actual normal saves and33-file/profile restoration
 verified.405 source tests PASS, no skips. This remains one native game driven by
 synthetic host observations; network/native execution windows are separate work.
