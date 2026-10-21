@@ -96,6 +96,33 @@ assert(begin(1,1,1,2));assert(not row(1,1,'0xff',2));assert(not I:ready())
             with self.subTest(pose_error=error):
                 self.make().execute("assert(I:frame(0));assert(begin(1,2));assert(not event('Row','0|1|0xb|0xa|0xa|dock_a_macro|ship_carrier_macro|1|0|0|" + error + "'))")
 
+    def test_native_probe_waits_for_pause_before_mark_and_each_import_step(self):
+        lua=LuaRuntime(unpack_returned_tuples=True)
+        lua.execute('''
+paused=false;pauses=0;sent={};handlers={};steps=0
+X4LAN_CONFIG={enabled=false,test_profile='45841',seed_dock_import_probe=true}
+function require(name) assert(name=='ffi');return {C={IsGamePaused=function() return paused end}} end
+function Pause() pauses=pauses+1 end
+function DebugError() end
+function GetCurRealTime() return 0 end
+function AddUITriggeredEvent(screen,event,value) sent[#sent+1]={screen,event,value} end
+function RegisterEvent(name,fn) handlers[name]=fn end
+X4LAN_SEED_DOCK_IMPORT={new=function() return {
+ frame=function() assert(paused);steps=steps+1;return true end,
+ ready=function() return false end} end}
+''')
+        lua.execute((ROOT/'dev/seed_dock_import_probe.lua').read_text())
+        lua.execute('''
+local D=X4LAN_SEED_DOCKS
+D.start('capture',string.rep('a',32),function() error('not complete') end)
+assert(#sent==0);D.frame(1);assert(pauses==1 and #sent==0 and steps==0)
+paused=true;D.frame(2);assert(#sent==1 and sent[1][2]=='Mark' and steps==0)
+handlers['X4LAN_SeedDocks.Marked'](nil,string.rep('a',32))
+D.frame(3);assert(steps==1)
+paused=false;D.frame(4);assert(pauses==2 and steps==1)
+paused=true;D.frame(5);assert(steps==2 and #sent==1)
+''')
+
 
 if __name__ == '__main__':
     unittest.main()

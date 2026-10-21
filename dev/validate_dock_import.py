@@ -8,11 +8,20 @@ def capture(text, mode, seed):
     pending = None
     total = None
     complete = False
+    paused = False
     for line in text.splitlines():
+        pause_marker = '[X4LAN] DOCK_IMPORT_PAUSE '
+        if pause_marker in line:
+            if paused or total is not None or line.split(pause_marker,1)[1] != f'mode={mode} paused=true':
+                raise ValueError('missing or late frozen-simulation boundary')
+            paused = True
+            continue
         marker = '[X4LAN] DOCK_IMPORT '
         if marker not in line:
             continue
         value = line.split(marker, 1)[1]
+        if not paused:
+            raise ValueError('native dock import was not frozen before capture/read')
         if complete:
             raise ValueError('dock events after completion')
         if value.startswith('event '):

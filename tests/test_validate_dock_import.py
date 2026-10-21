@@ -5,7 +5,7 @@ SEED='a'*32
 
 
 def log(mode, offset=0):
-    result=[]
+    result=[f'[X4LAN] DOCK_IMPORT_PAUSE mode={mode} paused=true']
     def emit(s): result.append('[X4LAN] DOCK_IMPORT '+s)
     def event(kind, serial, rest): emit(f'event mode={mode} kind={kind} value={SEED}|{serial}|{rest}')
     def row(index, serial):
@@ -32,12 +32,12 @@ class DockImportValidatorTests(unittest.TestCase):
     def test_missing_reordered_early_callback_and_tampered_graph_rejected(self):
         original=log('capture')
         changes=[]
-        for index in (0,1,2,3,4,5,6,7,8,9,10,11,12,13,14):
+        for index in range(16):
             changed=log('load',100);changed.pop(index);changes.append(changed)
-        changed=log('load',100);changed[8],changed[9]=changed[9],changed[8];changes.append(changed)
-        changed=log('load',100);changed[1],changed[2]=changed[2],changed[1];changes.append(changed)
-        changed=log('load',100);changed[4]=changed[4].replace(':1:2:2',':1:3:2');changes.append(changed)
-        changed=log('load',100);changed[11]=changed[11].replace('|0.001','|0.051');changes.append(changed)
+        changed=log('load',100);changed[9],changed[10]=changed[10],changed[9];changes.append(changed)
+        changed=log('load',100);changed[2],changed[3]=changed[3],changed[2];changes.append(changed)
+        changed=log('load',100);changed[5]=changed[5].replace(':1:2:2',':1:3:2');changes.append(changed)
+        changed=log('load',100);changed[12]=changed[12].replace('|0.001','|0.051');changes.append(changed)
         for changed in changes:
             with self.subTest(changed=changed):
                 with self.assertRaises(ValueError):validate('\n'.join(original),'\n'.join(changed),SEED)
