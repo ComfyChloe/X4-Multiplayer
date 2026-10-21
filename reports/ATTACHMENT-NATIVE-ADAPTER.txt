@@ -1,0 +1,60 @@
+NETWORK / NATIVE ATTACHMENT ADAPTER — ACTIVE DEVELOPMENT SCOPE
+21 October2026 | owner A:primary | starts8b99a36 | no activation/package
+
+The native controller cycle is qualified separately on PR26. This branch owns
+the opt-in Lua/native adapter and execution-time guards. Claude retains independent
+review of PR25, PR21 importer and PR26 evidence after01:00; no duplicate assignment.
+
+The adapter must admit observations only through the authenticated session client
+and a committed saved-ship identity map. Native saved indices name both ship and
+dock; remote process handles are never accepted. Every ship binding rechecks fresh
+host metadata and protected player ancestry. A guest retains native docked-parent
+transforms and permits pose/sector writes only after a fresh FREE observation,
+no queued/inflight attachment work and confirmed native FREE state.
+
+Before an asynchronous native mutation, a local prepare/consume exchange validates
+saved references, current identity/attachment, target witness/compatibility,
+occupancy/reservation and player ancestry. Native operations have monotonic local
+IDs; consuming a denied operation cannot later mutate or be reused. Explicit
+controller requires_ack mode prevents an early matching state from releasing an
+unconsumed operation. Only an exact native no-mutation rejection permits retry;
+a missing reply remains an unknown outcome and retains its fence.
+
+Execution freshness design under qualification: the native prepare records the
+local full calendar second (player.systemtime with standard strftime fields) and
+game age. Consumption requires the same second, a nondecreasing game age within
+one second, and an unpaused engine. The Lua callback may enqueue consumption only
+with at least1.25s left on its2s observation lifetime. Native checks run again at
+consumption, and a crossed window produces an explicit no-mutation rejection.
+This avoids treating simulation age alone as real elapsed time during pauses.
+The clock/queue behavior still requires native evidence before use, especially
+pause/resume and boundary rejection. No engine timing acceptance is inferred from
+schema validity or a mock. A changed system clock is not a supported test condition.
+
+Host observation scheduling must also fit the admitted4096-ship/2s receiver bound;
+relay fairness alone does not prove native publisher capacity. Baseline/view/lease
+changes revoke pending capabilities without dropping already issued readback fences.
+Source will stay unregistered/disabled until the bounded path is reviewed and
+native behavior demonstrated. Ordinary missions remain medium priority; ingame
+chat remains conditional low priority behind the shared-universe work.
+
+INITIAL SOURCE FOUNDATION
+attachment_execution.lua couples an existing controller ticket to one correlated
+native prepare/consume exchange. It copies callback configuration, limits the
+prepare wait to0.5s, rechecks observation sequence/epoch and1.25s freshness margin
+at both queue and consume, and permits dispatch only within that exact window.
+Native acknowledgments must match the operation/opaque receipt within5s. Unknown
+or missing outcomes stop further execution; a known pre-mutation rejection can
+retry. Nine focused LuaJIT cases cover these order/expiry/cancel/pause boundaries.
+The full combined suite passes414 tests without skips.
+
+x4lan_attachment.xml is inert without explicit local Start. Prepare and Apply
+share the full native identity/attachment/dock/player checks. Docking permission
+uses native container.dockingallowed; CanDockAtDockingBay alone admitted a Xenon
+fighter to a Split builder in a separate diagnostic, whose real spawn_docked
+then failed. Native Apply consumes before attempting mutation and remembers its
+last outcome. Duplicate consumption replays that outcome; an older or unknown
+operation never returns a false no-mutation rejection. 'applied' means the MD
+consumer invoked the operation; engine completion still requires actual readback.
+Schema validation passes; native execution-window qualification remains pending.
+No Lua engine/session adapter or transport registration exists in this foundation.
