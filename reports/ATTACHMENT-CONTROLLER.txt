@@ -6,7 +6,9 @@ correctly bound ships away from host poses. A sector-position write cannot repai
 that parent relationship. The new pure modules define local identity and ordered
 transition gates before an engine adapter can consume host attachment state.
 There is no UI registration, native call, wire hook or package activation here.
-Humans own gameplay testing under the21Oct user instruction; no game was launched.
+Humans own finished-version playtests. The21Oct21:29 clarification permits the
+primary agent to continue isolated local native engine/function tests. No game
+was launched for this pure-module change.
 
 seed_docks.lua
 X4LAN_SEED_DOCKS_LEDGER.registry(seed, count, inspect) collects exactly the ordered
@@ -26,7 +28,7 @@ fingerprints() records the seed/index, native definitions and deterministic firs
 encounter labels of the saved component graph. Equivalent local renumbering has
 the same labels; split/merged parent/container graphs change them. This model is
 not a substitute for native validation of saved references across reload/PCs.
-The earlier registry-v2 capture remains incomplete without its human reload test.
+The earlier registry-v2 capture remains incomplete without its native reload test.
 
 attachment_controller.lua
 X4LAN_ATTACHMENT_CONTROLLER.new(options) requires an admitted host epoch, explicit
@@ -90,7 +92,7 @@ These are pure model/adapter-contract tests, not native docking acceptance.
 NEXT
 Integrate the reviewed UATTACH codec behind opt-in gates, connect native saved
 reference/readback events, and preserve the asynchronous execution fences.
-Prepare human instructions for a fresh disposable capture/reload and two-PC
-carrier transitions. Do not relabel the earlier native failures or add direct
+Validate the saved references in an isolated local capture/reload, then prepare
+human instructions for the eventual two-PC carrier-transition playtest. Do not relabel the earlier native failures or add direct
 docked-child pose writes. Dynamic creation/destruction, arbitrary NPC commands,
 health, station production and complete universe authority remain separate work.

@@ -3,10 +3,13 @@ NATIVE DOCKING / STORAGE TRANSITION FEASIBILITY
 
 RESUMED21 OCTOBER EVENING
 The user authorized implementation/review/automated code tests until22Oct08:00
-Europe/Berlin; coordination stays :00/:15/:30/:45. Humans now own gameplay tests.
+Europe/Berlin; coordination stays :00/:15/:30/:45. The21Oct21:29 clarification
+permits continued isolated local native tests; humans own finished-version
+playtests. Normal saves remain protected.
 The new pure saved-dock ledger and transition controller are described in
 reports/ATTACHMENT-CONTROLLER.txt. They are not registered in the native UI or
-network path. No new native test is run; historical evidence/limits below remain.
+network path. No new native test was run for these pure modules; historical evidence/limits
+below remain.
 
 PROBLEM
 The shared-seed ship experiment now avoids direct sector-position writes on
