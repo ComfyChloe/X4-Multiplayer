@@ -200,11 +200,49 @@ class SeedWindowsTests(unittest.TestCase):
         keys = set(evidence['saves_before'])
         self.assertTrue(keys and all(k.startswith('profile-') and '111' not in k for k in keys), keys)
         self.assertEqual(evidence['saves_before'], evidence['saves_after'])
-        self.assertTrue(all(v['current_sha256'] == v['backup_sha256'] for v in evidence['profile_restoration'].values()))
-        self.assertEqual(evidence['package_record']['current_sha256'], evidence['package_record']['backup_sha256'])
+        restoration = evidence['restoration_hashes']
+        self.assertTrue(all(v['restored_sha256'] == v['backup_sha256'] for v in restoration['profile'].values()))
+        self.assertEqual(restoration['package_record']['restored_sha256'], restoration['package_record']['backup_sha256'])
         self.assertEqual(evidence['inventories']['installed_after_overlay'], json.loads(
             (self.run / 'windows-install.json').read_text())['overlaid'])
         self.assertNotIn('token', json.dumps(evidence['install_record']))
+
+    def test_bundle_keeps_run_time_evidence_after_later_changes(self):
+        # A:primary review of 3e405cc: the bundle must not describe a later checkout or later files.
+        harness.install(self.run, self.package, '192.0.2.109')
+        harness.launch(True)
+        self.native_log()
+        harness.finish()
+        harness.restore()
+        recorded = json.loads((self.run / 'windows-install.json').read_text())['inventories']
+        restored = json.loads((self.run / 'windows-restore.json').read_text())['restoration_hashes']
+        later = self.d / 'later-tree'; (later / 'ui').mkdir(parents=True)
+        (later / 'ui/later_only.lua').write_text('-- a file the run never had')
+        saved_source = harness.SOURCE
+        try:
+            harness.SOURCE = later                          # the checkout moves on after the run
+            (self.profile / 'config.xml').write_text('<root><changed/></root>')
+            (self.package / 'installation.json').write_text('{"changed": true}')
+            evidence = json.loads(harness.bundle(self.run).read_text())
+        finally:
+            harness.SOURCE = saved_source
+        self.assertEqual(evidence['inventories']['recorded_at_install'], recorded)
+        self.assertNotIn('ui/later_only.lua', json.dumps(evidence['inventories']))
+        self.assertIn('ui/seed_play_probe.lua', recorded['probes'])
+        self.assertEqual(evidence['restoration_hashes'], restored, 'restoration hashes from restore time')
+
+    def test_bundle_labels_evidence_a_run_never_recorded(self):
+        harness.install(self.run, self.package, '192.0.2.109')
+        harness.launch(True)
+        self.native_log()
+        harness.finish()
+        harness.restore()
+        for name, key in (('windows-install.json', 'inventories'), ('windows-restore.json', 'restoration_hashes')):
+            path = self.run / name
+            data = json.loads(path.read_text()); data.pop(key); path.write_text(json.dumps(data))   # older harness
+        evidence = json.loads(harness.bundle(self.run).read_text())
+        self.assertEqual(evidence['inventories']['recorded_at_install'], harness.UNAVAILABLE)
+        self.assertEqual(evidence['restoration_hashes'], harness.UNAVAILABLE)
 
     def test_failed_readiness_keeps_the_seed_for_audit(self):
         harness.install(self.run, self.package, '192.0.2.109')

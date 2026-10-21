@@ -260,6 +260,14 @@ def overlay(target, manifest, session, host):
     tree.write(target / 'ui.xml', encoding='utf-8', xml_declaration=True)
 
 
+def source_inventories():
+    """Exact source, probe and harness hashes of THIS run's checkout, recorded at install so
+    later evidence never describes a different tree."""
+    return dict(production_source=tree_hashes(SOURCE),
+                probes={name: sha256(ROOT / 'dev' / Path(name).name) for name in PROBES},
+                harness={'dev/native_seed_windows_test.py': sha256(Path(__file__))})
+
+
 def install(run, package, host, game=None):
     if STATE.exists():
         raise RuntimeError('A previous run is not restored yet: run restore first.')
@@ -283,7 +291,7 @@ def install(run, package, host, game=None):
     state = dict(run=str(run), head=head, package=str(package), package_id=facts['pkg']['package_id'],
                  game=str(facts['game']), profile=str(profile), host=host, profile_files=present,
                  save_dir_existed=(profile / 'save').is_dir(), saves=saves(profile), had_installation_json=had_record,
-                 owned_target=None, owned_save=None, stage='backed-up')
+                 owned_target=None, owned_save=None, inventories=source_inventories(), stage='backed-up')
     # The pre-install save inventory also stays in the run folder: the journal holding it is
     # deleted once restore succeeds, and the evidence must still show both sides.
     (run / 'saves-before.json').write_text(json.dumps(state['saves'], indent=2))
@@ -519,6 +527,13 @@ def restore():
     mismatched = [n for n in state['profile_files'] if sha256(profile / n) != sha256(backup / n)]
     problems += ['profile file not restored: ' + n for n in mismatched]
     summary['profile_files_exact'] = len(state['profile_files']) - len(mismatched)
+    # The restoration evidence is these hashes at restore time, never a later re-read.
+    summary['restoration_hashes'] = dict(
+        profile={n: dict(restored_sha256=sha256(profile / n) if (profile / n).is_file() else None,
+                         backup_sha256=sha256(backup / n)) for n in state['profile_files']},
+        package_record=dict(restored_sha256=sha256(record) if record.is_file() else None,
+                            backup_sha256=sha256(backup / 'package-installation.json')
+                            if state['had_installation_json'] else None))
     current = run_saves(state)
     (run / 'saves-after.json').write_text(json.dumps(current, indent=2))
     changed = saves_changed(state['saves'], current)
@@ -535,6 +550,7 @@ def restore():
 
 
 BUNDLE_NAME = 'evidence-bundle.json'
+UNAVAILABLE = 'unavailable: not recorded at run time by this harness version'
 
 
 def sanitizer(run):
@@ -586,22 +602,16 @@ def bundle(run):
         head=install_record['head'], package_id=install_record['package_id'], slot='p2', host=install_record['host'],
         seed_manifest=read_json(run / 'manifest.json'), receive_result=read_json(run / 'receive-result.json'),
         received_seed_sha256=sha256(run / 'received/seed.bin'),
-        inventories=dict(production_source=tree_hashes(SOURCE),
-                         probes={name: sha256(ROOT / 'dev' / Path(name).name) for name in PROBES},
-                         harness=sha256(Path(__file__)),
-                         installed_after_package_install=install_record.get('installed'),
-                         installed_after_overlay=install_record.get('overlaid')),
+        # Only what was recorded at run time: the checkout and live files may have changed since.
+        inventories=dict(recorded_at_install=install_record.get('inventories', UNAVAILABLE),
+                         installed_after_package_install=install_record.get('installed', UNAVAILABLE),
+                         installed_after_overlay=install_record.get('overlaid', UNAVAILABLE)),
         install_record=json.loads(clean(json.dumps({k: v for k, v in install_record.items()
-                                                    if k not in ('installed', 'overlaid')}))),
+                                                    if k not in ('installed', 'overlaid', 'inventories')}))),
         result=read_json(run / 'windows-result.json') if (run / 'windows-result.json').is_file() else None,
         restore=json.loads(clean(json.dumps(read_json(run / 'windows-restore.json')))),
         saves_before=inventory('saves-before.json'), saves_after=inventory('saves-after.json'),
-        profile_restoration={name: dict(current_sha256=sha256(profile / name) if (profile / name).is_file() else None,
-                                        backup_sha256=sha256(run / 'windows-before' / name))
-                             for name in install_record['profile_files']},
-        package_record=dict(current_sha256=sha256(package / 'installation.json') if (package / 'installation.json').is_file() else None,
-                            backup_sha256=sha256(run / 'windows-before/package-installation.json')
-                            if (run / 'windows-before/package-installation.json').is_file() else None),
+        restoration_hashes=read_json(run / 'windows-restore.json').get('restoration_hashes', UNAVAILABLE),
         inputs=read_json(run / 'inputs.json') if (run / 'inputs.json').is_file() else None,
         screenshots={p.name: sha256(p) for p in sorted((run / 'screenshots').glob('*'))} if (run / 'screenshots').is_dir() else {},
         usage=read_json(run / 'usage-readings.json') if (run / 'usage-readings.json').is_file() else None,
