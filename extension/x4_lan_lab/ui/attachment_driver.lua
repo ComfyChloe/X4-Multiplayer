@@ -75,6 +75,12 @@ function X4LAN_ATTACHMENT_DRIVER.new(options)
    return 'unavailable'
   end
   tracked[ship].unavailable=nil
+  -- The target witness is intentionally available only during its query and
+  -- execution window. Replanning between those callbacks would revoke the
+  -- queued ticket merely because that witness is out of scope. Observation
+  -- changes/cancellation above still invalidate obsolete goals; the bridge
+  -- owns the pending operation's deadline and acknowledgement.
+  if bridge:busy() and pendingShip==ship then return 'pending' end
   local status,ticket=controller:prepare(ship,now,paused)
   if status=='inactive' or status=='expired' or status=='unknown' then
    tracked[ship]=nil;intents[ship]=nil;dirty=true;return status

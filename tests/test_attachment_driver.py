@@ -93,6 +93,14 @@ queries[2].callback(dock,.85);assert(#prepares==2)
 assert(D:window(2,true,.9,false)=='issued' and #applies==1)
 ''')
 
+    def test_render_frames_between_prepare_and_window_preserve_the_queued_ticket(self):
+        self.make().execute('''
+observe(1,'EXTERNAL',1,0);D:frame(0,false);queries[1].callback(dock,.05)
+D:frame(.06,false);D:frame(.07,false)
+assert(#prepares==1 and #queries==1 and not D:allow_pose(1,.08,false))
+assert(D:window(1,true,.1,false)=='issued' and #applies==1)
+''')
+
     def test_missing_query_response_stops_instead_of_reusing_a_cached_target(self):
         self.make().execute('''
 observe(1,'EXTERNAL',1,0);D:frame(0,false);D:frame(5.01,false)

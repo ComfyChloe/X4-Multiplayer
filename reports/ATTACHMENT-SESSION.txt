@@ -97,3 +97,26 @@ legacy epoch placeholder in that projection is not an alternate network identity
 the actual host epoch is checked independently against both peer and native logs.
 457 checks PASS/no skips; adversarial removed/reordered/forged/expired records
 are rejected. Native capture b529003 completed50,491 dock references; load pending.
+
+FIRST NATIVE NETWORK COMPONENT — FAILED, RETAINED
+Run attachment-session-first-20261022 used capture b529003 and load52b19e9
+(seed841d1b6eff978f9ea31af891cd594608). All bootstrap gates passed:
+50,491 dock references with all handles renumbered, max relative error0.00220108m;
+1,352 stations, max position error0.0160018m; existing pause preserved. The
+component completed only phase0. Hundreds of accepted native Prepare callbacks
+were followed by stale Window results; no full transition-cycle acceptance.
+Raw capture/load, peer history/stats and validators remain in the local run.
+
+The real scheduling failure is reproduced by an additional LuaJIT regression:
+a render frame between target-query Prepare and asynchronous native Window
+re-entered controller.prepare without its deliberately scoped target witness,
+revoking the queued ticket. The driver now leaves planning of that ship to the
+busy bridge until Window/ACK. Fresh observations still invalidate changed goals,
+cancellation still runs and native deadlines still expire. A new capture/load is
+required because this changes production code. 458 Linux/Python/LuaJIT checks
+PASS/no skips, including the regression that failed before this correction.
+
+The failed run is closed: owned game/peer stopped, owned seed removed,7 actual
+normal saves preserve bytes/timestamps,33 installation files and recorded profile
+config/content/debug restored by hash. Steam metadata bytes are preserved; its
+timestamp is not counted as a normal save timestamp.
