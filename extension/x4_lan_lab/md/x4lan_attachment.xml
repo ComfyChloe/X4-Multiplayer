@@ -4,21 +4,32 @@
 <mdscript name="X4LAN_Attachment" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
  <cues>
   <cue name="State" namespace="this">
+   <actions>
+    <set_value name="$active" exact="false"/><set_value name="$started" exact="false"/><set_value name="$stopped" exact="false"/>
+    <set_value name="$pending" exact="null"/><set_value name="$operation" exact="0"/>
+    <set_value name="$appliedOperation" exact="0"/><set_value name="$appliedOutcome" exact="'unknown'"/><set_value name="$appliedReason" exact="'unknown'"/>
+   </actions>
+  </cue>
+  <cue name="Start" instantiate="true">
    <conditions><event_ui_triggered screen="'X4LAN_Attachment'" control="'Start'"/></conditions>
    <actions>
     <set_value name="$v" exact="event.param3"/>
-    <set_value name="$active" exact="false"/><set_value name="$pending" exact="null"/><set_value name="$operation" exact="0"/>
-    <set_value name="$appliedOperation" exact="0"/><set_value name="$appliedOutcome" exact="'unknown'"/><set_value name="$appliedReason" exact="'unknown'"/>
-    <do_if value="$v.$role == 'p2' and md.X4LAN_Seed.State.$id? and $v.$seed == md.X4LAN_Seed.State.$id and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and $v.$seed == md.X4LAN_SeedDocks.State.$id and md.X4LAN_SeedDocks.State.$version == 1">
-     <set_value name="$seed" exact="$v.$seed"/><set_value name="$epoch" exact="$v.$epoch"/><set_value name="$active" exact="true"/>
-     <raise_lua_event name="'X4LAN_Attachment.Ready'" param="'%s|%s'.[$seed,$epoch]"/>
+    <!-- Invalid early requests cannot consume the only session startup. A valid
+         epoch is still immutable; Stop is terminal until a fresh native load. -->
+    <do_if value="State.$started or State.$stopped">
+     <raise_lua_event name="'X4LAN_Attachment.Error'" param="'native attachment session already started or stopped'"/>
     </do_if>
+    <do_elseif value="$v.$role == 'p2' and md.X4LAN_Seed.State.$id? and $v.$seed == md.X4LAN_Seed.State.$id and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and $v.$seed == md.X4LAN_SeedDocks.State.$id and md.X4LAN_SeedDocks.State.$version == 1">
+     <set_value name="State.$seed" exact="$v.$seed"/><set_value name="State.$epoch" exact="$v.$epoch"/>
+     <set_value name="State.$started" exact="true"/><set_value name="State.$active" exact="true"/>
+     <raise_lua_event name="'X4LAN_Attachment.Ready'" param="'%s|%s'.[State.$seed,State.$epoch]"/>
+    </do_elseif>
     <do_else><raise_lua_event name="'X4LAN_Attachment.Error'" param="'native attachment session requires verified saved references'"/></do_else>
    </actions>
   </cue>
   <cue name="Stop" instantiate="true">
    <conditions><event_ui_triggered screen="'X4LAN_Attachment'" control="'Stop'"/></conditions>
-   <actions><set_value name="State.$active" exact="false"/><set_value name="State.$pending" exact="null"/></actions>
+   <actions><set_value name="State.$stopped" exact="true"/><set_value name="State.$active" exact="false"/><set_value name="State.$pending" exact="null"/></actions>
   </cue>
   <cue name="Prepare" instantiate="true">
    <conditions><event_ui_triggered screen="'X4LAN_Attachment'" control="'Prepare'"/></conditions>

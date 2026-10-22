@@ -150,3 +150,27 @@ Game closed,owned seed removed,7 actual normal-save bytes/mtimes unchanged,33
 installation files/profile restored including original shaderquality2. Capture
 and load source/installed inventories, raw validators and per-run cleanup hashes
 are retained.422 source tests PASS/no skips; both MD schemas VALID.
+
+22 OCTOBER REVIEW FOLLOW-UP
+Claude's premature-Start finding is confirmed: the original non-instantiated
+State handler completed even after rejection, consuming the one allowed startup.
+A persistent State now stores session data and a separate instantiated Start
+handler permits a later valid initial request after an invalid early request.
+An admitted epoch remains immutable. Stop deliberately remains terminal for this
+bounded adapter: resuming a stopped or failed world requires a fresh native load;
+re-Start must not reset operation counters or reactivate an old capability.
+The next PR29 native component experiment will inject an invalid Start followed
+by the normal production Start and require rejection-before-readiness evidence.
+
+The calendar-second rule is deliberately conservative: simulation age alone does
+not count a pause between queued Apply and execution. A pause/resume within the
+same second is bounded by that wall-clock second; crossing its boundary rejects
+without mutation and permits a new attempt. This can cause false expiry near a
+second boundary. It is not described as a smooth one-second elapsed-time window.
+Do not replace it with game age alone without an independently qualified native
+monotonic elapsed-time or queue-expiry primitive.
+
+Changed startup source passes422 Linux/Python/LuaJIT checks without skips.
+The installed9.00 MD schema validates the consumer (sha256
+74c0c1d635370f07a744cd792b0636bdab7e94d98ca4cb49aed3a9a8f62f1292).
+The rejected-then-valid native startup regression remains pending on PR29.
