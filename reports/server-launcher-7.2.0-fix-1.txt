@@ -1,0 +1,26 @@
+Internal7.2.0 server launcher correction,22 October2026
+
+Cause: the role-neutral launcher bypassed the former Linux terminal dispatch.
+Desktop execution started a working relay invisibly. Its session lock also
+prevented subsequent starts from reaching the existing status viewer.
+
+Fix: open a supported Linux terminal through the packaged shell wrapper.
+Use --console to avoid recursion and permit intentional unattended execution.
+Detach the terminal standard streams from the calling launcher. Before taking
+the setup lock, authenticate an existing relay with PING/PONG and validate the
+local status session/build/port. Attach a read-only viewer if they match.
+Configuration and new relay startup still take the exclusive setup lock.
+
+Validation:18 focused session/monitor tests pass, including desktop dispatch,
+missing-terminal refusal, existing-lock viewer and mismatched status rejection.
+Actual packaged runtime authenticates the original relay. Original PID163713
+remains the only UDP45841 listener; new viewer PID164921 runs in Konsole pts/1.
+4649 packaged-file checksum verification passes after the explicit local update.
+An initial capture harness timed out because the terminal inherited its pipe;
+viewer startup itself succeeded. Final source detaches all standard streams.
+No new game process or gameplay test. Windows runtime remains untested here.
+
+Deployment: only extracted Linux launcher.py and its checksum updated. Originals
+are backed up in that package under backups/server-launcher-fix-1. Session,
+invitation, installation records, game mod and original ZIPs are unchanged.
+The original distribution ZIPs do not contain this launcher correction.

@@ -1,3 +1,13 @@
+SERVER LAUNCHER FIX — 22 OCTOBER 2026, AFTER DELIVERY
+User reported server would not start. It was running without a terminal.
+Linux desktop server launch now opens a visible console; reopening a matching
+running relay attaches a read-only viewer without taking its setup lock.
+18 focused session/monitor checks pass. Local packaged PING/PONG and4649-file
+verification pass. Existing user relay PID163713 was preserved; viewer opened.
+Only the extracted Linux launcher/checksum were patched, with originals backed
+up under backups/server-launcher-fix-1. Release ZIPs remain unchanged and do not
+contain this correction. No game/mod/session/invitation changes or native tests.
+
 CURRENT DELIVERY — INTERNAL 7.2.0, 22 OCTOBER 2026
 User requested a human-test package by20:00, lower model usage and Windows hosting.
 Delivered folder: Desktop/X4 Online/Internal Tests/7.2.0-2026-10-22.

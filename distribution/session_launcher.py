@@ -204,11 +204,37 @@ def test_connection():
     raise RuntimeError('No matching server reply. Check the host address, session file, server and UDP 45841 firewall rule.')
 
 
-def server():
+def server(console=False):
+    # File managers launch scripts without a TTY. Re-enter through the wrapper
+    # in a real terminal, which also keeps errors visible until Enter is pressed.
+    if sys.platform == 'linux' and not console and not sys.stdout.isatty():
+        terminals = [('konsole', ['--separate', '-e']),
+                     ('gnome-terminal', ['--title=X4 LAN Server', '--']),
+                     ('xfce4-terminal', ['--title=X4 LAN Server', '-x']),
+                     ('xterm', ['-T', 'X4 LAN Server', '-e'])]
+        for terminal, options in terminals:
+            executable = shutil.which(terminal)
+            if executable:
+                subprocess.Popen([executable, *options, 'bash', str(ROOT / '2-START-SERVER.sh'), '--console'],
+                                 cwd=ROOT, start_new_session=True, stdin=subprocess.DEVNULL,
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                print('Opened the X4 LAN Server window.')
+                return
+        raise RuntimeError('No supported terminal found. Open a terminal in this folder and run: bash 2-START-SERVER.sh --console')
     package, cfg = configured()
     if package['slot'] != 'p1': raise RuntimeError('Only the HOST starts the server. The GUEST uses 2-TEST-CONNECTION.')
+    from x4lan.monitor import attach, probe, run
+    if probe(cfg):
+        # A read-only viewer must not acquire the running server's setup lock.
+        status_path = ROOT / 'logs/server-status.json'
+        if not status_path.is_file():
+            raise RuntimeError('A matching server is running, but its status is unavailable in this folder.')
+        status = read_json(status_path)
+        if not status.get('running') or any(status.get(k) != cfg[k] for k in ('build', 'bubble', 'port')):
+            raise RuntimeError('A matching server is running, but this folder has no matching live status.')
+        print('Opening status viewer. Closing it leaves the server running.', flush=True)
+        return attach(status_path)
     with session_lock():
-        from x4lan.monitor import run
         print('Internal Test server. Keep this window open. Ctrl+C stops it.', flush=True)
         run(cfg, ROOT / 'logs', version=VERSION + ' Internal')
 
@@ -269,11 +295,12 @@ def main():
     parser.add_argument('--invite', help='Path to JOIN-SESSION.json when joining')
     parser.add_argument('--game', help='Override detected game installation')
     parser.add_argument('--server-only', action='store_true', help='Configure files without installing or launching X4')
+    parser.add_argument('--console', action='store_true', help='Run the server in this console without opening a terminal')
     args = parser.parse_args()
     try:
         print('X4 Multiplayer ' + VERSION + ' - INTERNAL TEST', flush=True)
         if args.action == 'setup': setup(args)
-        elif args.action == 'server': server()
+        elif args.action == 'server': server(console=args.console)
         elif args.action == 'test': test_connection()
         elif args.action == 'start': platform_action('start')
         elif args.action == 'remove': platform_action('uninstall')

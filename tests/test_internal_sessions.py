@@ -52,11 +52,35 @@ class InternalSessions(unittest.TestCase):
                 self.assertIn(str(folder/'setup_windows.ps1'),argv)
     def test_only_host_starts_world_relay_and_session_is_locked(self):
         self.configure()
-        with patch.object(launcher,'ROOT',self.guest),self.assertRaisesRegex(RuntimeError,'Only the HOST'):launcher.server()
-        with patch.object(launcher,'ROOT',self.host),patch('x4lan.monitor.run') as run:
-            launcher.server();cfg=run.call_args.args[0];self.assertTrue(cfg['world_sync']);self.assertTrue(cfg['fire2']);self.assertEqual(cfg['port'],45841)
+        with patch.object(launcher,'ROOT',self.guest),self.assertRaisesRegex(RuntimeError,'Only the HOST'):launcher.server(console=True)
+        with patch.object(launcher,'ROOT',self.host),patch('x4lan.monitor.probe',return_value=False),patch('x4lan.monitor.run') as run:
+            launcher.server(console=True);cfg=run.call_args.args[0];self.assertTrue(cfg['world_sync']);self.assertTrue(cfg['fire2']);self.assertEqual(cfg['port'],45841)
             with launcher.session_lock():
-                with self.assertRaisesRegex(RuntimeError,'running'):launcher.server()
+                with self.assertRaisesRegex(RuntimeError,'running'):launcher.server(console=True)
+    def test_desktop_server_opens_terminal_without_starting_in_background(self):
+        with patch.object(launcher,'ROOT',self.host),patch.object(launcher.sys,'platform','linux'),patch.object(launcher.sys.stdout,'isatty',return_value=False),patch.object(launcher.shutil,'which',return_value='/usr/bin/konsole'),patch.object(launcher.subprocess,'Popen') as start,patch.object(launcher,'configured') as configured:
+            launcher.server()
+            argv=start.call_args.args[0]
+            self.assertEqual(argv,['/usr/bin/konsole','--separate','-e','bash',str(self.host/'2-START-SERVER.sh'),'--console'])
+            self.assertEqual(start.call_args.kwargs['cwd'],self.host)
+            for name in ('stdin','stdout','stderr'):
+                self.assertEqual(start.call_args.kwargs[name],launcher.subprocess.DEVNULL)
+            configured.assert_not_called()
+    def test_desktop_without_terminal_fails_instead_of_starting_hidden_server(self):
+        with patch.object(launcher.sys,'platform','linux'),patch.object(launcher.sys.stdout,'isatty',return_value=False),patch.object(launcher.shutil,'which',return_value=None),patch('x4lan.monitor.run') as run:
+            with self.assertRaisesRegex(RuntimeError,'No supported terminal'):launcher.server()
+            run.assert_not_called()
+    def test_second_open_attaches_while_server_holds_setup_lock(self):
+        invite=self.configure();logs=self.host/'logs';logs.mkdir()
+        status={k:invite[k] for k in ('build','bubble','port')};status['running']=True
+        (logs/'server-status.json').write_text(json.dumps(status))
+        with patch.object(launcher,'ROOT',self.host),patch('x4lan.monitor.probe',return_value=True),patch('x4lan.monitor.run') as run,patch('x4lan.monitor.attach') as attach:
+            with launcher.session_lock():launcher.server(console=True)
+            attach.assert_called_once_with(logs/'server-status.json');run.assert_not_called()
+            for key,value in [('running',False),('build','old'),('bubble','other'),('port',45842)]:
+                (logs/'server-status.json').write_text(json.dumps({**status,key:value}))
+                with self.subTest(key=key),self.assertRaisesRegex(RuntimeError,'no matching live status'):launcher.server(console=True)
+            attach.assert_called_once()
     def test_wrong_owned_installation_never_starts_or_removes(self):
         self.configure();game=self.root/'game';target=game/'extensions/x4_lan_lab';target.mkdir(parents=True)
         (target/'.x4lan-package-id').write_text('other-session')
