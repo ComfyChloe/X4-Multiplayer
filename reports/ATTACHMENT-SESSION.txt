@@ -235,3 +235,28 @@ publication sweep after the current sender ACK, as well as complete MD samples;
 the separate recipient still requires actual delivered coverage.465 checks pass
 without skips, production unchanged. Third game/peer closed, owned seed removed,
 7 normal saves and33-file/profile restoration verified.
+
+FULL NATIVE HOST PASS — SOURCE f27fd72
+attachment-world-host-post-ack-20261022 uses the real universe adapter, ordinary
+cooperative/player/market/cargo/quest fixture initialization, and native host
+attachment publisher. The strict unchanged gate passes3 real committed baselines
+(143/142/142 entities), with full recipient attachment coverage for all128 saved
+ships in EACH baseline.37,944 native publications and384 independent ordered MD
+samples match exact saved indices, native identities and attachment state.
+Independent sample states: {'FREE': 344, 'STORED': 33, 'EXTERNAL': 7}.
+The final publication sweep occurs after the relay baseline ACK; the recipient
+waits for all required actual packets. No send errors.
+
+Post-seed entities are explicitly outside this saved-attachment acceptance:
+15/14/14 native dynamically assigned ship IDs in the three baselines, all listed
+in full-host-validation.json. The peer is synthetic. This proves actual host
+publication and fixture startup through the full universe adapter, not native
+guest rendering, whole-universe/economy/mission authority, or two live engines.
+No packages were activated. The first three full-host runs remain FAIL with
+separate raw histories and exact reasons.
+
+Cleanup verified: owned native host/synthetic guest closed, isolated seed removed,
+7 actual normal-save bytes/timestamps preserved,33 installation files and recorded
+profile config/content/debug restored by hash. Source seed content digest remains
+the qualified af0fd2c production. Next: an actual full native guest replay of
+this qualified host capture, retaining omitted IDs and all phase-specific limits.
