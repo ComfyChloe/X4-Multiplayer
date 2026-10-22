@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Read-only independent witness for real native host publications. -->
+<mdscript name="X4LAN_AttachmentWorldProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Read" instantiate="true">
+  <conditions><event_ui_triggered screen="'X4LAN_AttachmentWorldProbe'" control="'Read'"/></conditions>
+  <actions>
+   <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$v.$object"/>
+   <do_if value="$ship.isoperational">
+    <set_value name="$dock" exact="if $ship.dock.exists and md.X4LAN_SeedDocks.State.$indices.{$ship.dock}? then md.X4LAN_SeedDocks.State.$indices.{$ship.dock} else 0"/>
+    <set_value name="$state" exact="if $ship.isinternallystored then 'STORED' else if $ship.dock.exists and $ship.dock.external then 'EXTERNAL' else if not $ship.dock.exists then 'FREE' else 'TRANSIT'"/>
+    <debug_text text="'[X4LAN] ATTACH_FULL_NATIVE sample sequence=%s revision=%s id=%s saved=%s code=%s macro=%s owner=%s state=%s dock=%s'.[$v.$sequence,$v.$revision,$v.$id,md.X4LAN_Seed.State.$ships.indexof.{$ship},$ship.idcode,$ship.macro.id,$ship.owner.id,$state,$dock]"/>
+    <raise_lua_event name="'X4LAN_AttachmentWorldProbe.Read'" param="$v.$sequence"/>
+   </do_if>
+   <do_else><raise_lua_event name="'X4LAN_AttachmentWorldProbe.Error'" param="'native published ship unavailable'"/></do_else>
+  </actions>
+ </cue></cues>
+</mdscript>

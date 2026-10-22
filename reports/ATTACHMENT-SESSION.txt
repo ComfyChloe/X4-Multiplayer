@@ -171,3 +171,22 @@ Cleanup verified: native game/peer closed, only this owned seed slot removed,
 recorded config/content/debug restored by hash. Steam metadata bytes preserved.
 All raw failed first-run artifacts remain failed; the second run has its own
 source inventories, peer history/stats, validators, save manifests and hashes.
+
+FULL NATIVE HOST HARNESS (PENDING)
+The unshipped attachment_world_probe now registers the complete production
+universe_game and normal cooperative fixtures in an explicitly enabled host
+profile. It observes actual publication inspections, retains exact UDP output,
+and requests independent native MD state/identity readbacks for the first
+publication of every saved ship/revision. The synthetic guest must commit at
+least3 real baselines and receive attachment coverage for every saved ship in
+each baseline. Non-saved entities are explicitly listed outside this gate.
+No host attachment goals or carrier pose are injected in this experiment. The
+diagnostic releases its preserved paused snapshot only after production admission.
+
+The strict evidence gate requires native fixture authority, unchanged saved
+references, every correlated first-per-revision MD readback and exact received
+packets with only the recipient lease rewritten. Missing, reordered, wrong
+identity/state, absent delivery and partial saved-ship coverage are rejected by
+regressions. Full native host probe schema VALID (sha256
+f40d4cc3d54a97b6c0a8dc5ed804dec0d89521b88e6a98e84e9bd1f45db74c3d).
+463 Linux/Python/LuaJIT checks PASS/no skips. Actual full-host run pending.
