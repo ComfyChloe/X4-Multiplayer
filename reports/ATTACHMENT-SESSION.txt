@@ -35,6 +35,37 @@ still passes.473 Linux/Python/LuaJIT checks PASS/no skips; source timing tests d
 not prove native queue/FPS improvement. Next native replay adds read-only sector,
 parent, pose and actual-write before/after diagnostics for the two FREE failures.
 
+SECOND FULL GUEST7576bcb — STILL FAIL, NO RATE IMPROVEMENT CLAIM
+The paced run retains14 cycles/1,792 MD samples and8 actual acknowledged native
+actions. Its strict gate rejects57 post-completion receive records: pausing the
+probe did not close the full client's receive path. The diagnostic now closes
+its owned transport and requests native Stop before emitting completion.
+The original raw remains unfiltered and failed. A separate cycle audit retains
+2/41/100 failing ships in cycles12/13/14 and a4.682s maximum receive gap; no native
+improvement follows from the relay source correction alone.
+
+Lua AND MD identify7212/HCP-215 and7245/HGE-656 in
+cluster_13_sector001_macro while the host baseline targets
+cluster_14_sector001_macro. Cross-sector repair remains intentionally held.
+These are a concrete next case for safe warp/attachment arbitration, not grounds
+to bypass it. Other FREE ships continue to drift while freshness fences close.
+
+The native client's32-packet/frame cap cannot drain even a lossless mixed128-ship
+attachment/identity stream in a new injected regression. Explicit attachment_sync
+sessions now have a fixed256-packet/frame bound; ordinary/default sessions retain32,
+foreign recipient filtering remains enforced and a permanent receive flood is
+bounded.475 full checks PASS/no skips. Native throughput/FPS is still pending.
+This game-source change requires a NEW content-matched seed capture before the
+next full host/guest qualification; do not relabel the prior seed's content hash.
+
+Both guest runs are cleaned (7 normal save bytes/mtimes,33-file/profile restore).
+The paced cleanup console was redirected into its evidence directory and still
+being written when the inventory hashed it. Its finish-console.log hash is thus
+explicitly excepted, not silently rewritten. Raw capture, peer, source, save and
+restoration entries match. Subsequent cleanup console output must be outside the
+directory being sealed. Supplemental cycle audits and validator copies have
+their own hashes; historical evidence remains unchanged.
+
 The first integration review found a retained-object identity hole: bindSeedObject
 returned false for absent, expired or foreign-epoch IDENT, but render ignored its
 return value and still wrote through r.object. Respect the return value before

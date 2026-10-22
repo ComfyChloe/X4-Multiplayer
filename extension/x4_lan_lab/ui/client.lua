@@ -31,6 +31,10 @@ function X4LAN_CLIENT.new(config, transport, nonce, log, resume)
     for _, key in ipairs({"build", "sector", "bubble"}) do
         assert(type(config[key]) == "string" and #config[key] <= 96 and config[key]:match("^[%w_.-]+$"), "invalid " .. key)
     end
+    -- A saved-world attachment stream adds bounded state/identity bursts to
+    -- ordinary session traffic.32 packets per frame can retain stale backlog
+    -- even for128 ships. Keep work capped and the larger budget explicit.
+    local receiveBudget = config.attachment_sync == true and 256 or 32
     local self = {config=config, transport=transport, nonce=nonce, log=log or function() end,
         lease=nil, sequence=resume and resume.sequence or 0, tick=resume and resume.tick or -1,
         resume=resume, lastHello=-math.huge, lastSend=-math.huge,
@@ -93,7 +97,7 @@ function X4LAN_CLIENT.new(config, transport, nonce, log, resume)
             self.transport:send(table.concat(hello, '|'))
             self.lastHello = now
         end
-        for _ = 1, 32 do
+        for _ = 1, receiveBudget do
             local packet = self.transport:receive()
             if not packet then break end
             self:receive(packet, now)

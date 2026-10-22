@@ -140,8 +140,11 @@ U.frame=function(now)
   if elapsed>=30 and not next(S.reads) then
    for _,op in pairs(S.operations) do if op.pending then return end end
    assert(A.coop.ready and A.cargo.ready and A.trade.state.ready and A.quest.ready,'ordinary guest fixtures not ready')
-   log(string.format('complete slot=p2 cycles=%d samples=%d executionAcks=%d elapsed=%.6f live_native_host=false',S.cycle,S.sequence,S.acks,elapsed))
+   -- Pause alone does not stop client receive callbacks. Close this owned
+   -- diagnostic transport before sealing the evidence boundary.
+   A.state.transport:close();AddUITriggeredEvent('X4LAN_Attachment','Stop')
    S.complete=true;Pause()
+   log(string.format('complete slot=p2 cycles=%d samples=%d executionAcks=%d elapsed=%.6f live_native_host=false',S.cycle,S.sequence,S.acks,elapsed))
   end
  end)
  if not ok then fail(why) end
