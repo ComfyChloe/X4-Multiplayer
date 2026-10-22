@@ -3,7 +3,7 @@ import unittest
 from unittest.mock import patch
 
 from x4lan.attachment import decode
-from x4lan.attachment_relay import ATTACH_BUDGET, ATTACH_TTL, AttachmentRelay
+from x4lan.attachment_relay import ATTACH_BUDGET, ATTACH_RETRY, ATTACH_TTL, AttachmentRelay
 import x4lan.attachment_relay as relay_module
 from x4lan.universe import Baseline, Receiver, UniverseSession
 from test_host import TOKEN, P1, P2, FOREIGN
@@ -222,6 +222,27 @@ class RelayTests(unittest.TestCase):
         self.assertEqual(len(first),count)
         self.assertLess(max(first.values())-1,ATTACH_TTL)
         self.assertLess(max(gaps),ATTACH_TTL)
+
+    def test_heartbeats_keep_pacing_and_changes_stay_immediate(self):
+        ships = 128
+        self.ready([row(i) for i in range(1, ships + 1)])
+        seq, last, gaps, sent = 0, {}, [], 0
+        for tick in range(200):                             # 10 s at 20 Hz, host heartbeat every tick
+            now = 1.0 + tick * .05
+            for ship in range(1, ships + 1):
+                seq += 1
+                self.observe(seq, ship, 1, now=now)
+            for r in self.delivered(now):
+                sent += 1
+                if r.ship in last:
+                    gaps.append(now - last[r.ship])
+                last[r.ship] = now
+        self.assertEqual(set(last), set(range(1, ships + 1)))
+        self.assertLessEqual(max(gaps), ATTACH_RETRY + .05 + 1e-9, 'every ship is refreshed within retry + one tick')
+        self.assertLessEqual(sent, ships * (10 / ATTACH_RETRY + 1), 'heartbeats never bypass the retry pacing')
+        seq += 1
+        self.observe(seq, 7, 1, dock=9, state='STORED', now=11.0)   # a real change goes out at once
+        self.assertIn(7, [r.ship for r in self.delivered(11.0)])
 
     def test_constructor_validates_its_limits(self):
         for kwargs in (dict(ttl=0), dict(ttl=float('inf')), dict(retry=-1), dict(budget=0), dict(budget=True)):
