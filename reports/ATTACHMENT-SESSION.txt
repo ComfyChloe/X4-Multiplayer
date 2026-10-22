@@ -120,3 +120,22 @@ The failed run is closed: owned game/peer stopped, owned seed removed,7 actual
 normal saves preserve bytes/timestamps,33 installation files and recorded profile
 config/content/debug restored by hash. Steam metadata bytes are preserved; its
 timestamp is not counted as a normal save timestamp.
+
+22 OCTOBER REVIEW / RESUMED TEST PREPARATION
+Claude reviewed the new wiring52b19e9 and accepted PR25 cache/fairness source.
+His protocol performance correction902014c is independently inspected and
+incorporated here as636d416. All16 protocol tests pass. A local Linux/LuaJIT
+100-revision benchmark with51,000 dock fingerprints measures40.949ms mean before
+and0.508ms after; this is a synthetic admission benchmark, not native FPS.
+In-place malformed edits still reject without advancing revision; removals are
+revalidated. Full saved-map validation remains required on changed input.
+
+The native component harness now also issues a deliberately invalid role=p1
+Start, requires the exact native rejection before connecting the valid guest,
+then runs the ordinary production Start. The validator rejects absent, reordered,
+unrelated or late startup rejection evidence. This will qualify the separately
+reviewed instantiated native startup handler; no native acceptance yet.
+The user renewed local work until22Oct17:00CEST after an OS deep-suspend from
+00:56:48 to08:38:27. The prior08:00 deadline guard refused a new capture. Existing
+clean restoration was reverified before resumption; permanent power settings
+remain unchanged and a temporary sleep inhibitor expires17:00.

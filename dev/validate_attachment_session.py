@@ -37,7 +37,7 @@ def project(text,seed,history,stats):
                 and row.sequence>previous and row.state==STATES[phase] and row.dock==dock,'invalid peer observation')
         previous=row.sequence;phases.add(phase);sent[row.sequence]=(encode(replace(row,recipient=guest)),phase)
     require(phases==set(range(8)),'peer phases incomplete')
-    canonical=[];connected=False;committed=False;ready=False;world_ready=False;complete=False
+    canonical=[];startup_requested=False;startup_rejected=False;connected=False;committed=False;ready=False;world_ready=False;complete=False
     received={};last_sequence=0;phase_reads=[];native_reads=[];completed_phases=[];wire_events=0;prepared={};pending_event=None
     def output(value):canonical.append('[X4LAN] '+value)
     for line in text.splitlines():
@@ -57,7 +57,14 @@ def project(text,seed,history,stats):
             expected='ATTACH_SESSION selected '+' '.join(f'{k}={selected[k]}' for k in ('ship','carrier','inside','outside','code','macro','owner'))
             require(value==expected,'native/peer selected descriptor differs')
             output(f"ATTACH_CONTROLLER selected shipIndex={ship} carrierIndex={selected['carrier']} inside={inside} outside={outside} identity={seed}:{ship}:{selected['macro']}:{selected['owner']}:{selected['code']}")
+        elif value=='ATTACH_SESSION startup-request role=p1':
+            require(not startup_requested and not connected,'startup fault request out of order');startup_requested=True
+        elif value.startswith('ATTACH_SESSION startup-rejected '):
+            require(startup_requested and not startup_rejected and not connected
+                    and value=='ATTACH_SESSION startup-rejected reason=native attachment session requires verified saved references',
+                    'startup rejection missing, duplicated or unrelated');startup_rejected=True
         elif value.startswith('ATTACH_SESSION connected '):
+            require(startup_rejected,'network component connected before the rejected-start regression')
             require(not connected and value=='ATTACH_SESSION connected lease='+guest,'native recipient lease differs');connected=True
         elif value.startswith('ATTACH_SESSION baseline '):
             require(connected and not committed and value==f'ATTACH_SESSION baseline epoch={host} revision=1 ship={ship}','native baseline differs');committed=True
@@ -121,7 +128,7 @@ def project(text,seed,history,stats):
             complete=True;output('ATTACH_CONTROLLER complete phases=8 operations=9')
         else:raise ValueError('unknown component evidence')
     require(connected and committed and ready and world_ready and complete,'component evidence incomplete')
-    return '\n'.join(canonical),dict(received_wire_events=wire_events,received_new_observations=len(received),host_epoch=host,recipient_lease=guest)
+    return '\n'.join(canonical),dict(rejected_start_then_ready=True,received_wire_events=wire_events,received_new_observations=len(received),host_epoch=host,recipient_lease=guest)
 
 
 def validate(text,seed,history,stats):

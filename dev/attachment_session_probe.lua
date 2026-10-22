@@ -73,6 +73,19 @@ RegisterEvent=function(name,fn)
  end
  return register(name,fn)
 end
+-- This local invalid request must be rejected without consuming the later
+-- valid production Start. No world adapter exists during this fault injection.
+register('X4LAN_Attachment.Error',function(_,why)
+ if S.rejectedStart then return end
+ guard(function()
+  assert(S.startupFault and tostring(why)=='native attachment session requires verified saved references',
+   'unexpected startup rejection')
+  S.rejectedStart=true;log('startup-rejected reason='..tostring(why))
+ end)
+end)
+register('X4LAN_Attachment.Ready',function()
+ if not S.rejectedStart then guard(function() error('invalid startup unexpectedly admitted') end) end
+end)
 RegisterEvent('X4LAN_AttachmentProbe.Error',function(_,why) guard(function() error(tostring(why)) end) end)
 RegisterEvent('X4LAN_AttachmentProbe.Selected',function(_,value) guard(function()
  assert(S.selecting and not S.ship,'unexpected native pair selection')
@@ -122,6 +135,8 @@ RegisterEvent('X4LAN_AttachmentProbe.Selected',function(_,value) guard(function(
   return false
  end
  log(string.format('selected ship=%d carrier=%d inside=%d outside=%d code=%s macro=%s owner=%s',S.shipIndex,S.carrierIndex,S.inside,S.outside,S.code,macro,owner))
+ S.startupFault=true;log('startup-request role=p1')
+ AddUITriggeredEvent('X4LAN_Attachment','Start',{seed=cfg.seed_id,epoch=string.rep('0',32),role='p1'})
 end) end)
 RegisterEvent('X4LAN_AttachmentProbe.Read',function(_,phase) guard(function()
  assert(S.reading and tonumber(phase)==S.phase,'native phase read order differs')
@@ -139,7 +154,7 @@ X4LAN_ADMISSION_AFTER={frame=function(now) guard(function()
  if not S.selecting then
   S.selecting=true;log('begin seed='..cfg.seed_id);AddUITriggeredEvent('X4LAN_AttachmentProbe','Select',cfg.seed_id);return
  end
- if not S.ship then return end
+ if not S.ship or not S.rejectedStart then return end
  -- The diagnostic explicitly releases its own paused-save experiment only after
  -- production admission and native selection. Production pause ownership stays unchanged.
  if C.IsGamePaused() then Unpause();return end

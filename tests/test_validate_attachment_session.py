@@ -25,6 +25,8 @@ def trace():
             emit('ATTACH_SESSION begin seed='+SEED);out.append(line)
         elif value.startswith('ATTACH_CONTROLLER selected '):
             emit('ATTACH_SESSION selected '+' '.join(f'{k}={v}' for k,v in selected.items()))
+            emit('ATTACH_SESSION startup-request role=p1')
+            emit('ATTACH_SESSION startup-rejected reason=native attachment session requires verified saved references')
             emit('ATTACH_SESSION connected lease='+GUEST)
             emit(f'ATTACH_SESSION baseline epoch={HOST} revision=1 ship=1')
             emit(f'ATTACH_SESSION event kind=Ready value={SEED}|{HOST}');emit('ATTACH_WORLD READY epoch='+HOST)
@@ -70,7 +72,7 @@ class AttachmentSessionEvidenceTests(unittest.TestCase):
         original,history,stats=trace();variants=[]
         for i,line in enumerate(original):
             if any(k in line for k in ('ATTACH_SESSION wire ','ATTACH_SESSION event ','ATTACH_SESSION connected ',
-                                       'ATTACH_SESSION baseline ','ATTACH_SESSION phase-complete ','ATTACH_WORLD READY')):
+                                       'ATTACH_SESSION baseline ','ATTACH_SESSION phase-complete ','ATTACH_WORLD READY','ATTACH_SESSION startup-')):
                 variants.append(original[:i]+original[i+1:])
         variants.append([x for x in original if 'ATTACH_SESSION wire ' not in x]+[x for x in original if 'ATTACH_SESSION wire ' in x])
         for before,after in (('at=2.010000','at=2.800000'),('allowPose=false','allowPose=true'),
@@ -78,6 +80,17 @@ class AttachmentSessionEvidenceTests(unittest.TestCase):
             variants.append([x.replace(before,after) for x in original])
         for lines in variants:
             with self.subTest(variant=variants.index(lines)),self.assertRaises(ValueError):self.check(lines,history,stats)
+
+    def test_rejected_start_must_precede_the_valid_native_session(self):
+        original,history,stats=trace()
+        startup=[v for v in original if 'ATTACH_SESSION startup-' in v]
+        variants=[
+            [v for v in original if v not in startup]+startup,
+            [v.replace('requires verified saved references','already started or stopped') for v in original],
+            [v.replace('startup-request role=p1','startup-request role=p2') for v in original],
+        ]
+        for lines in variants:
+            with self.assertRaises(ValueError):self.check(lines,history,stats)
 
     def test_peer_provenance_cannot_be_inferred_from_native_success(self):
         lines,history,stats=trace()
