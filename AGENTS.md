@@ -35,3 +35,9 @@
 - Coordinate native tests on the primary PC. A Git worktree does not isolate an
   X4 installation, Steam profile or relay port. Record actual evidence and pending
   checks. Keep branch progress in its task/PR and integrated state in the handoff.
+
+- Workshop incident22 October2026: Fix-1 test-mod isolation helper is withdrawn.
+  A separate personalfolderid is not proof of Steam account isolation. Do not
+  reintroduce selection writes based only on filesystem unit tests or assume
+  installed ws_ IDs are a historical subscription snapshot. See
+  reports/workshop-recovery-20261022.txt; preserve user Workshop subscriptions.

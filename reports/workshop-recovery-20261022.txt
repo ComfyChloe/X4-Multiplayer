@@ -1,0 +1,56 @@
+WORKSHOP INCIDENT / ASSISTED RECOVERY - 22 OCTOBER 2026
+
+User confirmed subscriptions are missing in Steam itself while installed mods
+remain visible in X4. This is an account-level report, not merely disabled local
+extensions. No remote Steam account inspection has been performed.
+
+The withdrawn Fix-1 helper wrote enabled=false to installed third-party IDs in
+profile45841/content.xml and did not explicitly control all Workshop sync fields.
+Its backups preserve the previous file/absence, before/after SHA256 and affected
+IDs. They do NOT preserve the previous Steam subscription list. Existing launchers
+include -noworkshopsync, but the actual tester launch/Steam sequence is unverified.
+A missing direct Steam API call does not rule out an indirect game/Steam effect.
+The prior file-isolation tests did not establish subscription safety.
+
+Containment:
+- Removed all writes from isolate_test_mods.apply; normal CLI refuses immediately.
+- Original supplemental ZIP + checksum retained byte-exact under delivery folder
+  WITHDRAWN-Workshop-Incident. ZIP SHA256:
+  cc6ba5ccae65037e8f224ca6e70bc393114a9c3b9d024ddb1370099a8506b171
+- Delivery warning and handoff replace the old recommendation. Claude notified.
+- Main release ZIPs, live game/server, Steam files and profiles were not changed.
+
+Workshop-Recovery-1:
+- Extract into the original configured Windows package. Bundled Python runs
+  10-RECOVER-WORKSHOP.cmd. Replaces the old helper with the write-disabled version.
+- Checks package identity, exact45841 path and backup integrity. Only rolls back
+  to the earliest original file/absence when a complete recorded chain connects
+  it to the current exact helper output. Subsequent changes cause a refusal of
+  local rollback, while Workshop links remain usable. No force option.
+- Preserves current and original bytes, checksums, source-record paths and result
+  under package-local workshop-recovery. Rollback is atomic for existing files.
+- Lists only valid ws_ IDs from affected-ID records. Installed manifests add names,
+  not subscription certainty. HTML escapes untrusted names and has no scripts.
+- Uses official Steam item pages for manual, reviewed resubscription. Never calls
+  a Steam API, launches X4, edits account data, changes normal profiles/saves or
+  deletes/edits installed mod files. No automated account recovery is claimed.
+
+Validation:22 focused helper/recovery checks PASS; full development suite316
+Python/Linux/LuaJIT tests PASS/no skips. Includes exact file/absence rollback,
+multiple-run chains, intervening edits, corrupt records, missing records, links,
+mid-operation changes, failed replacement, running-game guard, name escaping,
+ID bounds and preservation of normal files. These are synthetic filesystem tests,
+not a Windows-native or actual Steam account recovery test.
+
+Still required: tester verifies restored account subscriptions using the official
+Steam pages. If rollback refuses changed profile bytes, preserve recovery.json,
+content-before-recovery.xml and content-original.xml for review. Do not resume the
+affected multiplayer profile pending reviewed isolation behavior. Exact causality
+and a durable safe mod-isolation design remain open.
+
+Primary reference (documents Workshop/in-game subscription linkage, not proof of
+this particular incident):
+https://wiki.egosoft.com/X%20Rebirth%20Wiki/Modding%20support/Steam%20Workshop%20for%20X%20Rebirth%20and%20X4/
+XR-specific profile guidance was also reviewed; its sync-attribute instructions
+must not be assumed to prove X4 subscription isolation:
+https://wiki.egosoft.com/X%20Rebirth%20Wiki/Modding%20support/Modsextensions/Creating%20isolated%20modsetups%20for%20XR/

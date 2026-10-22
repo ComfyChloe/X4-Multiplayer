@@ -38,14 +38,15 @@ class IsolateTestMods(unittest.TestCase):
     def selection(self, proposed):
         return {e.get('id'): e.get('enabled') for e in ET.fromstring(proposed[2]).findall('extension')}
 
-    def test_missing_file_created_using_manifest_ids_and_other_profiles_untouched(self):
+    def test_missing_file_preview_does_not_write_and_apply_is_withdrawn(self):
         normal = self.base / 'user/12345'; normal.mkdir(); (normal / 'content.xml').write_bytes(b'normal sentinel')
         proposed = helper.plan(self.root)
         self.assertIsNone(proposed[1]); self.assertFalse((self.profile / 'content.xml').exists())
         self.assertEqual(self.selection(proposed), dict(actual_ui_id='false', ego_dlc_timelines='true', ego_dlc_ventures='false', x4_lan_lab='true'))
-        backup = helper.apply(self.root, proposed)
-        self.assertTrue((backup / 'BEFORE-WAS-ABSENT.txt').is_file())
-        self.assertEqual((self.profile / 'content.xml').read_bytes(), proposed[2])
+        with self.assertRaisesRegex(RuntimeError, 'WITHDRAWN'):
+            helper.apply(self.root, proposed)
+        self.assertFalse((self.profile / 'content.xml').exists())
+        self.assertFalse((self.root / 'backups').exists())
         self.assertEqual((normal / 'content.xml').read_bytes(), b'normal sentinel')
         self.assertEqual(ET.parse(self.game / 'extensions/legacy-ui/content.xml').getroot().get('id'), 'actual_ui_id')
 
@@ -55,7 +56,9 @@ class IsolateTestMods(unittest.TestCase):
         proposed = helper.plan(self.root); self.assertEqual(self.selection(proposed)['ego_dlc_timelines'], 'false')
         tree = ET.fromstring(proposed[2]); self.assertEqual(tree.get('sync'), 'false')
         self.assertTrue(all(e.get('enabled') == 'false' for e in tree.findall('extension') if e.get('id') == 'actual_ui_id'))
-        backup = helper.apply(self.root, proposed); self.assertEqual((backup / 'content.xml').read_bytes(), original)
+        with self.assertRaisesRegex(RuntimeError, 'WITHDRAWN'):
+            helper.apply(self.root, proposed)
+        self.assertEqual((self.profile / 'content.xml').read_bytes(), original)
 
     def test_user_extension_locations_and_compressed_manifest_are_included(self):
         self.extension(self.profile / 'extensions/one', 'user_one')

@@ -2,15 +2,11 @@
 from __future__ import annotations
 
 import argparse
-from datetime import datetime, timezone
 import gzip
-import hashlib
 import json
-import os
 from pathlib import Path
 import subprocess
 import sys
-import tempfile
 import xml.etree.ElementTree as ET
 
 
@@ -105,31 +101,8 @@ def plan(package_root):
 
 
 def apply(package_root, proposed):
-    target, before, after, disabled = proposed
-    current = target.read_bytes() if target.exists() else None
-    if target.is_symlink() or current != before:
-        raise RuntimeError('Profile settings changed during preparation; no changes written.')
-    stamp = datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S-%fZ')
-    backup = package_root / 'backups' / ('test-mod-isolation-' + stamp)
-    backup.mkdir(parents=True, exist_ok=False)
-    if before is not None:
-        (backup / 'content.xml').write_bytes(before)
-    else:
-        (backup / 'BEFORE-WAS-ABSENT.txt').write_text('The test profile had no content.xml before this operation.\n')
-    record = dict(profile=str(target.parent), before_exists=before is not None,
-                  before_sha256=hashlib.sha256(before).hexdigest() if before is not None else None,
-                  after_sha256=hashlib.sha256(after).hexdigest(), disabled_ids=disabled)
-    (backup / 'change.json').write_text(json.dumps(record, indent=2) + '\n', encoding='utf-8')
-    temporary = None
-    try:
-        with tempfile.NamedTemporaryFile(dir=target.parent, prefix='content.x4lan-', suffix='.tmp', delete=False) as stream:
-            temporary = Path(stream.name)
-            stream.write(after)
-        os.replace(temporary, target)
-    finally:
-        if temporary is not None and temporary.exists():
-            temporary.unlink()
-    return backup
+    raise RuntimeError('WITHDRAWN: Workshop subscriptions were reported lost. '
+                       'Do not isolate mods with this helper. Use 10-RECOVER-WORKSHOP.cmd.')
 
 
 def main():
@@ -138,20 +111,14 @@ def main():
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
     try:
+        if not args.check:
+            apply(root, None)
         ensure_closed()
         proposed = plan(root)
         print('Test profile:', proposed[0].parent)
         print('Multiplayer enabled; existing official DLC choices retained; Ventures and other mods disabled.')
         print('Disabled extension IDs:', ', '.join(proposed[3]))
-        if args.check:
-            print('CHECK ONLY: no files changed.')
-            return 0
-        ensure_closed()
-        backup = apply(root, proposed)
-        print('Settings written:', proposed[0])
-        print('Previous settings / recovery record:', backup)
-        print('Next: 3-START-X4-TEST. Start a fresh test world on both PCs.')
-        print('Normal profiles, saves, session credentials and installed mod files were not changed.')
+        print('WITHDRAWN HELPER - CHECK ONLY: no files changed. Do not apply this selection.')
         return 0
     except (OSError, ValueError, RuntimeError, KeyError, ET.ParseError, subprocess.SubprocessError) as exc:
         print('ERROR:', exc, file=sys.stderr)

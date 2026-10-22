@@ -15,17 +15,16 @@ Temporary thin Windows/Linux package layouts include the import module/command
 and valid inventories; native Windows/custom-display acceptance remains pending.
 See reports/profile-settings-next-package.txt.
 
-WINDOWS MOD SELECTION RECOVERY — 22 OCTOBER 2026
-The first7.2.0 guest report shows options-menu frame creation failing at66.46s
-and23967 optionsFrame nil errors; additional mods include duplicate UI extensions.
-The trigger remains unconfirmed pending a clean-profile comparison. Original
-installer creates config.xml only;45841/content.xml may legitimately be absent.
-An explicit standalone helper is available: distribution/isolate_test_mods.py
-and8-ISOLATE-TEST-MODS.cmd. It verifies installed ownership, discovers extension
-IDs and writes only the test-profile selection, with exact prior-file backup.
-Eight focused tests pass; actual Windows execution/human retest pending.
-This is a separate internal supplemental ZIP; original release ZIPs unchanged.
-No change to gameplay, other installed mods, normal profiles or credentials.
+WORKSHOP INCIDENT - 22 OCTOBER 2026, SUPERSEDES OLD HELPER INSTRUCTIONS
+User confirms actual Steam subscriptions disappeared; mod files remain in X4.
+Fix-1 is WITHDRAWN and isolate_test_mods.apply refuses all writes. No Steam account
+snapshot exists: disabled_ids are candidates, not a proven former subscription
+list. Workshop-Recovery-1 prepares official item links and only restores the
+original test content.xml when the complete backup chain and current bytes match.
+Changed files are preserved for manual review. No game or Steam API is invoked.
+Steam resubscription requires the tester to review/click the official Subscribe
+buttons. Account recovery and the original indirect trigger are not yet verified.
+Do not distribute the old helper or resume the affected test profile.
 
 SERVER LAUNCHER FIX — 22 OCTOBER 2026, AFTER DELIVERY
 User reported server would not start. It was running without a terminal.
