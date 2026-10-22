@@ -91,6 +91,40 @@ group is explicitly reported. The old code-only FAIL is not overwritten; the
 new result and exact validator are separately hashed. No new native run is
 required for this validator-only correction. Full host/guest24efeb9 follows.
 
+FULL WORLD WITH RECEIVE BUDGET — HOST PASS, GUEST FAIL
+Source 9c52707 has unchanged game content from 24efeb9. New full host run
+attachment-world-host-budget-20261022 passes: 132 saved ships fully delivered in
+three baselines, 45,218 native publications and 396 independent MD samples.
+Non-saved entities remain explicitly omitted (12/10/12 across those baselines).
+
+Guest run attachment-world-guest-budget-20261022 retains 14 cycles, 1,848 MD
+samples and 19 actual native execution acknowledgments. Closing its diagnostic
+transport fixed the late-evidence boundary: zero post-completion wire records.
+All observations in the final three cycles are fresh; maximum per-ship arrival
+gap is 1.379s. This is a measured improvement over the earlier runs, not a native
+4096-ship/FPS acceptance claim. Both roles are closed/restored; all 29 guest
+historical evidence hashes match and normal 7-save/33-file/profile checks pass.
+
+The strict guest gate still FAILS. Ships 7421 and 7426 remain EXTERNAL at wrong
+saved dock indices (16242 instead of 16246; 16248 instead of 16242). Final cycles
+have 2/5/6 failures. FREE pose error is <=0.0005m in cycle12, but subsequent
+cycles include the few ships outside that frame's 128-write sweep: up to
+2,586.289m in cycle13 and 5,229.250m in cycle14. Raw before/after native write
+traces show the requested pose is applied immediately and local motion later
+changes it. Do not raise the render cap merely to hide this behavior at 132 ships.
+
+NEXT CONTROLLED DIAGNOSTIC, NOT PRODUCTION ACCEPTANCE
+An explicit --hold-free overlay requests constant-zero native linear/angular
+velocity only for admitted saved replicas whose recorded host goal is FREE.
+Native seed/epoch/role/descriptor and current FREE state are checked again;
+player ancestry and fixtures are excluded. This does not abort AI scripts,
+replace orders or qualify ongoing ownership. All holds require native action
+and correlated completion before diagnostic completion. A separate validator
+reports this as a controlled comparison and never production acceptance.
+The original full guest gate remains unchanged in its state/pose requirements.
+481 Linux/Python/LuaJIT checks pass without skips; MD schema and Lua syntax pass.
+Native comparison remains pending. Production game content is unchanged.
+
 The first integration review found a retained-object identity hole: bindSeedObject
 returned false for absent, expired or foreign-epoch IDENT, but render ignored its
 return value and still wrote through r.object. Respect the return value before

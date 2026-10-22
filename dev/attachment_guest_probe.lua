@@ -139,6 +139,7 @@ U.frame=function(now)
   end
   if elapsed>=30 and not next(S.reads) then
    for _,op in pairs(S.operations) do if op.pending then return end end
+   if cfg.replica_hold_probe and next(assert(X4LAN_REPLICA_HOLD_PENDING)) then return end
    assert(A.coop.ready and A.cargo.ready and A.trade.state.ready and A.quest.ready,'ordinary guest fixtures not ready')
    -- Pause alone does not stop client receive callbacks. Close this owned
    -- diagnostic transport before sealing the evidence boundary.

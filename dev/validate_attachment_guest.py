@@ -194,6 +194,8 @@ def validate(text,replay,dock_count,history,stats):
     require(len(reports)>=10 and reports[-1]['elapsed']>=27 and all(not r['failures'] for r in reports[-3:]),
         'guest final three cycles did not converge: '+str(reports[-3:]))
     return dict(passed=True,native_guest=True,live_native_host=False,replayed_native_host_capture=True,
+        diagnostic_native_hold=replay.get('diagnostic_native_hold',False),
+        production_guest_acceptance=not replay.get('diagnostic_native_hold',False),
         full_universe_adapter=True,fixture_authority=True,saved_ships=len(expected),cycles=reports,
         independent_native_samples=len(md),execution_acknowledgments=execution_acks,
         attached_pose_alignment_accepted=False,omitted_non_saved_entities=replay['omitted_rows'],

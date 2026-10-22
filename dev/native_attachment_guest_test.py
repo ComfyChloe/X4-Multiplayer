@@ -1,6 +1,6 @@
 """Full native guest replay of a qualified native host capture; not a joint run."""
 from pathlib import Path
-import argparse,json,secrets,socket,sys,time
+import argparse,json,secrets,shutil,socket,sys,time
 ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from dev import native_seed_test as seed,native_world_test as native
 from dev.native_attachment_world_test import install_role
@@ -43,11 +43,12 @@ def host_replay(host_run):
         native_host_capture=True,live_native_host=False,geometry_evidence=True)
 
 
-def install(run,host_run):
+def install(run,host_run,hold_free=False):
     replay=host_replay(host_run)
     if json.loads((run/'state.json').read_text())['seed_id']!=replay['seed_id']:
         raise ValueError('Guest seed differs from qualified host')
     install_role(run,'p2','attachment_guest_probe')
+    replay['diagnostic_native_hold']=bool(hold_free)
     (run/'host-replay.json').write_text(json.dumps(replay,indent=2))
     entries=[]
     for wire in replay['rows']:
@@ -58,7 +59,13 @@ def install(run,host_run):
     import xml.etree.ElementTree as ET
     tree=ET.parse(native.TARGET/'ui.xml');env=tree.find('environment')
     index=next(i for i,e in enumerate(env) if e.get('name')=='ui/attachment_guest_probe.lua')
-    env.insert(index,ET.Element('file',name='ui/attachment_replay_data.lua'));tree.write(native.TARGET/'ui.xml',encoding='utf-8',xml_declaration=True)
+    env.insert(index,ET.Element('file',name='ui/attachment_replay_data.lua'))
+    if hold_free:
+        cfg=native.TARGET/'ui/config.lua';cfg.write_text(cfg.read_text().replace('X4LAN_CONFIG={','X4LAN_CONFIG={\n replica_hold_probe=true,'))
+        for suffix,folder in (('lua','ui'),('xml','md')):
+            shutil.copy2(ROOT/('dev/replica_hold_probe.'+suffix),native.TARGET/folder/('replica_hold_probe.'+suffix))
+        ET.SubElement(env,'file',name='ui/replica_hold_probe.lua')
+    tree.write(native.TARGET/'ui.xml',encoding='utf-8',xml_declaration=True)
     (run/'play-p2/installed-hashes.json').write_text(json.dumps({p.relative_to(native.TARGET).as_posix():seed.digest(p)
         for p in native.TARGET.rglob('*') if p.is_file()},indent=2))
 
@@ -127,8 +134,8 @@ def peer(run,duration=300):
 
 if __name__=='__main__':
     p=argparse.ArgumentParser();p.add_argument('action',choices=('install','peer'));p.add_argument('--run',type=Path,required=True)
-    p.add_argument('--host-run',type=Path);a=p.parse_args()
+    p.add_argument('--host-run',type=Path);p.add_argument('--hold-free',action='store_true',help='Explicit dev-only constant-zero velocity comparison, not production guest acceptance');a=p.parse_args()
     if a.action=='install':
         if a.host_run is None:p.error('install requires --host-run')
-        install(a.run,a.host_run)
+        install(a.run,a.host_run,a.hold_free)
     else:peer(a.run)

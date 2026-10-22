@@ -55,6 +55,11 @@ class FullNativeGuestEvidenceTests(unittest.TestCase):
         self.assertFalse(r['whole_universe_acceptance']);self.assertFalse(r['two_native_acceptance'])
         self.assertFalse(r['attached_pose_alignment_accepted'])
 
+    def test_controlled_native_hold_does_not_claim_production_guest_acceptance(self):
+        lines,replay,history,stats=trace();replay['diagnostic_native_hold']=True
+        result=self.check(lines,replay,history,stats)
+        self.assertTrue(result['diagnostic_native_hold']);self.assertFalse(result['production_guest_acceptance'])
+
     def test_deleted_native_evidence_and_reordered_actions_fail_closed(self):
         lines,replay,history,stats=trace()
         for i in range(len(lines)):

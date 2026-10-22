@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Unshipped constant-zero velocity comparison; never network-callable. -->
+<mdscript name="X4LAN_ReplicaHoldProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues><cue name="Hold" instantiate="true">
+  <conditions><event_ui_triggered screen="'X4LAN_ReplicaHoldProbe'" control="'Hold'"/></conditions>
+  <actions>
+   <set_value name="$v" exact="event.param3"/><set_value name="$outcome" exact="'invalid'"/>
+   <do_if value="md.X4LAN_Attachment.State.$active and md.X4LAN_Attachment.State.$epoch == $v.$epoch and md.X4LAN_Seed.State.$id == $v.$seed and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_Bubble.Arena.$localSlot == 2 and not md.X4LAN_Bubble.Arena.$host and $v.$ship ge 1 and $v.$ship le md.X4LAN_Seed.State.$ships.count">
+    <set_value name="$ship" exact="md.X4LAN_Seed.State.$ships.{$v.$ship}"/>
+    <set_value name="$valid" exact="$ship.isoperational and $ship.idcode == $v.$code and $ship.macro.id == $v.$macro and $ship.owner.id == $v.$owner and $ship != md.X4LAN_Bubble.Arena.$donor and not md.X4LAN_Bubble.Arena.$ships.indexof.{$ship} and not md.X4LAN_Bubble.Arena.$targets.indexof.{$ship}"/>
+    <set_value name="$players" exact="[player.ship,player.occupiedship,player.container]"/>
+    <do_all exact="$players.count" counter="$p">
+     <set_value name="$ancestor" exact="$players.{$p}"/>
+     <do_all exact="64">
+      <do_if value="$ancestor.exists">
+       <do_if value="$ancestor == $ship"><set_value name="$valid" exact="false"/></do_if>
+       <set_value name="$next" exact="$ancestor.parent"/><set_value name="$ancestor" exact="if $next == $ancestor then null else $next"/>
+      </do_if>
+     </do_all>
+     <do_if value="$ancestor.exists"><set_value name="$valid" exact="false"/></do_if>
+    </do_all>
+    <do_if value="$valid">
+     <set_value name="$outcome" exact="'busy'"/>
+     <do_if value="player.timewarp.factor gt 0s and not $ship.dock.exists and not $ship.isinternallystored">
+      <set_object_velocity object="$ship" constantvel="true"><linear x="0" y="0" z="0"/><angular x="0" y="0" z="0"/></set_object_velocity>
+      <set_value name="$outcome" exact="'held'"/>
+      <debug_text text="'[X4LAN] REPLICA_HOLD_NATIVE applied id=%s code=%s macro=%s owner=%s sector=%s mode=constant_zero'.[$v.$ship,$ship.idcode,$ship.macro.id,$ship.owner.id,$ship.sector.macro.id]"/>
+     </do_if>
+    </do_if>
+   </do_if>
+   <raise_lua_event name="'X4LAN_ReplicaHoldProbe.Result'" param="'%s|%s|%s|%s'.[$v.$seed,$v.$epoch,$v.$ship,$outcome]"/>
+  </actions>
+ </cue></cues>
+</mdscript>
