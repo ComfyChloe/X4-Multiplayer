@@ -70,3 +70,12 @@ queries and final pristine/load1 marker pass. Networking/fixtures are excluded.
 7 actual normal save bytes/timestamps and33 restored installation hashes plus
 recorded profile files verify clean; owned game closed and isolated seed removed.
 The prior strict evidence FAIL is retained. No validator threshold was relaxed.
+
+REVIEW CLARIFICATION22 OCTOBER
+A failed admission deliberately retains an owned pause. G.ready remains false
+and fixtures/network gameplay cannot enter a world whose saved identities failed
+verification. Resuming simulation automatically on this error would let that
+unverified world continue; the local failure remains frozen until the user exits
+or the owning isolated harness closes and restores its recorded test session.
+A pause that predated admission is also preserved. This is a terminal fail-closed
+state, not an omitted successful-admission unpause. No native-code change here.
