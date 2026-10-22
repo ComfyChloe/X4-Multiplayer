@@ -139,3 +139,35 @@ The user renewed local work until22Oct17:00CEST after an OS deep-suspend from
 00:56:48 to08:38:27. The prior08:00 deadline guard refused a new capture. Existing
 clean restoration was reverified before resumption; permanent power settings
 remain unchanged and a temporary sleep inhibitor expires17:00.
+
+NATIVE NETWORK COMPONENT PASS — SOURCE af0fd2c
+Run attachment-session-queued-ticket-20261022, seed
+a885a69b9fc0bc806dea99241f45f712, used the same production source for fresh
+capture/load and real checksum-verified loopback TCP transfer. All four unchanged
+bootstrap/component gates pass:50,778 dock references (all handles renumbered,
+max relative error0.00196838m),1,385 stations (max position error0.01600750137m,
+angle1.40684472e-6rad), and preserved existing pause with0pause/0resume calls.
+
+Native selected ship=13 carrier=39 inside=88 outside=92 code=MST-078 macro=ship_spl_s_trans_container_01_a_macro owner=freesplit
+The component consumed424 fresh network observations, completed all8 phases,
+9 actual actions/9 correlated native acknowledgments and5 target queries.
+Exactly9 native prepares,0 rejected consumptions and0 unissued windows; the
+queued-ticket frame correction therefore progressed in the real engine.
+The deliberately invalid role=p1 Start was rejected before the normal valid
+Start reached Ready, qualifying the revised initial startup handler. This run
+does not deliberately inject paused/expired consumption; earlier PR27 timing
+experiments remain separately attributed to their own source and raw evidence.
+
+This is a synthetic host driving one native selected ship/carrier through the
+production receiver/world/driver/consumer. Full universe_game and fixtures are
+absent, carrier pose is held, and selected AI/children are disabled. No native-host,
+whole-universe, Windows or two-native acceptance is inferred. Default package
+registration is unchanged. Next qualification is the actual full adapter plus
+fixture startup and real native host publication. Cross-sector arbitration still
+blocks that movement in attachment mode.
+
+Cleanup verified: native game/peer closed, only this owned seed slot removed,
+7 actual normal-save bytes/timestamps preserved,33 installation files plus
+recorded config/content/debug restored by hash. Steam metadata bytes preserved.
+All raw failed first-run artifacts remain failed; the second run has its own
+source inventories, peer history/stats, validators, save manifests and hashes.
