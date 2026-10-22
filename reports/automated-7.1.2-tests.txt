@@ -1,5 +1,5 @@
 X4 LAN Lab 7.1.2 automated candidate checks
-22 October 2026 — native Linux x86_64, Python 3.14.0, LuaJIT via lupa
+22 October 2026 — native Linux x86_64, Python 3.14.8, LuaJIT via lupa
 Command: python dev/check.py (existing local Python environment with LuaJIT)
 Result: PASS — 273 tests, zero failures, zero skipped checks.
 Includes real loopback UDP/native transport, Lua adapters, packet protocols,

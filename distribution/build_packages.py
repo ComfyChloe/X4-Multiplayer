@@ -108,6 +108,8 @@ def build(destination: Path):
     write(destination / 'PACKAGES-SHA256.txt', ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in sorted(destination.glob('*.zip'))))
     document(DIST / 'INSTALL.html', destination / 'INSTALL.html', release)
     document(DIST / 'README.txt', destination / 'README.txt', release)
+    document(DIST / 'NEXT-TEST.txt', destination / 'NEXT-TEST.txt', release)
+    shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', destination / 'WORLD-SYNC-TEST.txt')
     write(destination / 'VERSION.txt', release + '\n')
     shutil.copy2(SOURCE / 'VERSIONING.txt', destination / 'VERSIONING.txt')
     release_report = SOURCE / ('reports/release-' + release + '-checks.txt')
