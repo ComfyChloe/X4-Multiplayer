@@ -1,16 +1,35 @@
 CURRENT DELIVERY — INTERNAL 7.2.0, 22 OCTOBER 2026
-User requested a human-test pair by 20:00 and lower model usage. This release
-branch starts reviewed main 5fd786b, ships the sensor correction, and changes
-Linux isolated shader quality to 1. It does NOT include the experimental shared
-seed/attachment branches.User additionally requires Windows hosting: BOTH OS packages now carry relay
-and Python, with Host/Guest selection and private invitations. Still two players.
+User requested a human-test package by20:00, lower model usage and Windows hosting.
+Delivered folder: Desktop/X4 Online/Internal Tests/7.2.0-2026-10-22.
+Exact packaged source2775f83 includes reviewed main5fd786b sensor correction,
+Windows/Linux host-or-guest setup, private invitations and portable runtimes.
+The host runs BOTH the included relay and X4. Two simultaneous players per session.
+No experimental shared-seed/attachment branches are included in this release.
+
 281 Python/LuaJIT checks pass without skips. Applicable PowerShell installer
-fixtures pass on Linux; two Windows-only drive-root assertions are excluded.
-Exact packaged/native checks will be recorded in reports/package-7.2.0-checks.json and the delivery directory.
-Read distribution/NEXT-TEST.txt for the short human test and explicit limits.
-Existing 7.1.1 archives remain unchanged. Default work remains internal.
-Coordination remains quarter-hour :00/:15/:30/:45, compact changes/blockers only.
-No new broad experiment or feature task is needed to deliver this package.
+fixtures pass on Linux, including Windows-host loopback install/remove and guest
+loopback refusal; two Windows-only drive-root assertions are explicitly omitted.
+Both archives pass full inventory/digest/runtime-provenance checks. Archives have
+no credentials; setup creates/imports them only in each extracted working folder.
+Actual clean packaged native Linux host + synthetic guest startup PASS: two NPC
+baselines124/135 objects,340WORLD snapshots,141identities includingP1/P2 andF1-F4,
+no mod adapter errors. Normal7save bytes/mtimes unchanged; test save dir empty.
+The clean new33-file installation is retained; old7.1.1 installation is backed up
+and its two ZIPs remain hash-identical. Game/relay/peer are closed, port45841 free.
+Exact evidence: reports/package-7.2.0-checks.json and the delivery JSON files.
+
+Windows embedded-runtime execution and joint Windows-host gameplay remain for
+human testing. Ordinary station alignment, NPC orders/damage, the shared ongoing
+universe, vanilla shared missions and ingame chat remain unfinished. Shared-save
+and attachment source work stays in separate draft branches with failures retained.
+The preliminary7.1.2 sensor-only pair was superseded before delivery and retained
+under this worktree's.local/evidence-225-withheld; do not distribute it.
+
+Follow distribution/NEXT-TEST.txt and INSTALL.html. Default work remains internal;
+future internal packages must include the Windows server as explicitly requested.
+Avoid duplicate review/testing scopes; read compact diagnostics and changed source.
+Quarter-hour coordination applies during authorized work, not as an indefinite
+background job. Delivery completes the current by20:00 task.
 
 HISTORICAL HANDOFF (dates and former cadence below are not current instructions)
 

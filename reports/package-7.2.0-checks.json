@@ -1,0 +1,90 @@
+{
+  "version": "7.2.0",
+  "channel": "internal",
+  "packaged_source": "2775f837687d2048e49ae63a51e282730e0bfc0d",
+  "source_tree": "5ccef605f7cc4c7852451311e951f17d1ea8734a",
+  "production_tree": "486c424ee20a259f312a99575fbc63fad0ac79f1",
+  "archives": {
+    "X4-LAN-7.2.0-Linux.zip": {
+      "sha256": "ef766016a2beb69d957aa9f08908409308cfe41d0ed660d0662598138a74cd4d",
+      "bytes": 76400147
+    },
+    "X4-LAN-7.2.0-Windows11.zip": {
+      "sha256": "740aeb1c78e1e627f5b4294feba7a70410d673d463bc7eda1f243d5ec2331dda",
+      "bytes": 12835342
+    }
+  },
+  "archive_contains_credentials": false,
+  "session_created_only_in_extracted_host_folder": true,
+  "native_startup": {
+    "package_version": "7.2.0",
+    "packaged_relay_and_receiver": true,
+    "native_host_plus_synthetic_peer": true,
+    "baselines": [
+      {
+        "revision": 1,
+        "sector": "cluster_14_sector001_macro",
+        "objects": 124,
+        "digest": 3503600619
+      },
+      {
+        "revision": 2,
+        "sector": "cluster_14_sector001_macro",
+        "objects": 135,
+        "digest": 4164164164
+      }
+    ],
+    "world_snapshots": 340,
+    "identity_count": 141,
+    "player_and_fixture_scopes": [
+      [
+        "F",
+        "1"
+      ],
+      [
+        "F",
+        "2"
+      ],
+      [
+        "F",
+        "3"
+      ],
+      [
+        "F",
+        "4"
+      ],
+      [
+        "P",
+        "1"
+      ],
+      [
+        "P",
+        "2"
+      ]
+    ],
+    "md_adapter_errors": [],
+    "two_native_acceptance": false,
+    "duration": 79.13,
+    "success": true
+  },
+  "package_inventory_and_digests": "PASS",
+  "portable_linux_runtime_and_packaged_relay": "PASS",
+  "windows_runtime_execution": "PENDING human Windows test",
+  "windows_installer_fixtures": "PASS on Linux PowerShell with2 explicit Windows drive-root omissions; not native Windows acceptance",
+  "automated_checks": {
+    "passed": 281,
+    "skipped": 0
+  },
+  "installed_files": 33,
+  "installed_exactly_matches_configured_package": true,
+  "development_probes_absent": true,
+  "normal_save_files_preserved": 7,
+  "normal_save_bytes_and_timestamps_unchanged": true,
+  "steam_autocloud_bytes_unchanged": true,
+  "test_save_directory_empty": true,
+  "owned_game_server_peer_stopped": true,
+  "new_internal_installation_retained": true,
+  "two_native_acceptance": false,
+  "whole_universe_acceptance": false,
+  "previous_7_1_1_archives_unchanged": true
+}
