@@ -14,11 +14,12 @@ def recipient_complete(required,delivered):
                                    for revision,ships in required.items())
 
 
-def install(run):
-    play.install(run,'p1')
+def install_role(run,slot,probe):
+    assert (slot,probe) in (('p1','attachment_world_probe'),('p2','attachment_guest_probe'))
+    play.install(run,slot)
     config=native.TARGET/'ui/config.lua'
     config.write_text(config.read_text().replace('X4LAN_CONFIG={',
-        'X4LAN_CONFIG={\n seed_binding=true,attachment_sync=true,attachment_execute=true,attachment_world_probe=true,'))
+        'X4LAN_CONFIG={\n seed_binding=true,attachment_sync=true,attachment_execute=true,'+probe+'=true,'))
     tree=ET.parse(native.TARGET/'ui.xml');env=tree.find('environment')
     def before(anchor,names):
         index=next(i for i,e in enumerate(env) if e.get('name')=='ui/'+anchor+'.lua')
@@ -27,14 +28,18 @@ def install(run):
     before('seed_game',('seed_docks','seed_dock_import'))
     before('bubble_game',('seed_dock_game',))
     before('universe_game',('attachment_protocol','attachment_controller','attachment_execution','attachment_driver','attachment_world'))
-    ET.SubElement(env,'file',name='ui/attachment_world_probe.lua')
+    ET.SubElement(env,'file',name='ui/'+probe+'.lua')
     tree.write(native.TARGET/'ui.xml',encoding='utf-8',xml_declaration=True)
     for suffix,folder in (('lua','ui'),('xml','md')):
-        shutil.copy2(ROOT/('dev/attachment_world_probe.'+suffix),native.TARGET/folder/('attachment_world_probe.'+suffix))
-    folder=run/'play-p1'
+        shutil.copy2(ROOT/('dev/'+probe+'.'+suffix),native.TARGET/folder/(probe+'.'+suffix))
+    folder=run/('play-'+slot)
     (folder/'installed-hashes.json').write_text(json.dumps({p.relative_to(native.TARGET).as_posix():seed.digest(p)
         for p in native.TARGET.rglob('*') if p.is_file()},indent=2))
     (run/'play-session.json').chmod(0o600)
+
+
+def install(run):
+    install_role(run,'p1','attachment_world_probe')
 
 
 def peer(run,duration=300):
