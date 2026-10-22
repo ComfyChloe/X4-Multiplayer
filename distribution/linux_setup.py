@@ -158,7 +158,7 @@ def install(args):
         raise
     print('Installed. Existing player profiles were left untouched.')
     print('Test profile:',profile)
-    print('Next: 2-START-SERVER.sh, then 3-START-X4-TEST.sh.')
+    print('Installation complete. Follow the role-specific next step shown by the launcher.')
 
 def start():
     ensure_closed(); state=read_state()

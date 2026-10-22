@@ -1,11 +1,14 @@
-CURRENT DELIVERY — INTERNAL 7.1.2, 22 OCTOBER 2026
-User requested a human-test pair by20:00 and lower model usage. This release
-branch starts reviewed main5fd786b, ships the sensor correction, and changes
-Linux isolated shader quality to1. It does NOT include the experimental shared
-seed/attachment branches.273 automated checks pass; exact packaged/native checks
-will be recorded in reports/package-7.1.2-checks.json and the delivery directory.
+CURRENT DELIVERY — INTERNAL 7.2.0, 22 OCTOBER 2026
+User requested a human-test pair by 20:00 and lower model usage. This release
+branch starts reviewed main 5fd786b, ships the sensor correction, and changes
+Linux isolated shader quality to 1. It does NOT include the experimental shared
+seed/attachment branches.User additionally requires Windows hosting: BOTH OS packages now carry relay
+and Python, with Host/Guest selection and private invitations. Still two players.
+281 Python/LuaJIT checks pass without skips. Applicable PowerShell installer
+fixtures pass on Linux; two Windows-only drive-root assertions are excluded.
+Exact packaged/native checks will be recorded in reports/package-7.2.0-checks.json and the delivery directory.
 Read distribution/NEXT-TEST.txt for the short human test and explicit limits.
-Existing7.1.1 archives remain unchanged. Default work remains internal.
+Existing 7.1.1 archives remain unchanged. Default work remains internal.
 Coordination remains quarter-hour :00/:15/:30/:45, compact changes/blockers only.
 No new broad experiment or feature task is needed to deliver this package.
 

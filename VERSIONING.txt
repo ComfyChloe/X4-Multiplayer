@@ -6,13 +6,14 @@ Format: MAJOR.MINOR.PATCH, for example 5.0.1.
 - PATCH: fixes, defaults, documentation and packaging improvements.
 Every published update gets a higher version, including launcher-only fixes.
 
-Current development candidate: 7.1.2 (internal radar/HUD follow-up)
+Current development candidate: 7.2.0 (internal Windows/Linux hosting and radar/HUD)
 Corrects shared-ship native sensor initialization; preserves 7.1.1 gameplay.
 Read RELEASE-CHECKS.txt for acceptance status; full-universe work remains open.
-Install the new matched Linux/Windows pair, including the new Linux server.
+Install the new matched Windows/Linux packages, including the new host server.
 
 Historical mapping:
-7.1.2 = native radar/HUD initialization fix; focused human regression package.
+7.2.0 = Windows/Linux host or guest, private session invitations, native radar fix.
+7.1.2 = staged sensor-only candidate; superseded before delivery by 7.2.0.
 7.1.1 = native cooperative pose/velocity fixes; Linux high-texture workaround.
 7.1.0 = internal 7.0 playtest follow-up; exact-version matched pair required.
 7.0.0 = internal W01 NPC scenes; original world1 protocol, no full-world claim.
@@ -25,12 +26,13 @@ Historical mapping:
 Earlier archives keep their original names as historical test snapshots.
 
 Where to see the version:
-- ZIP and extracted folder names: X4-LAN-7.1.2-Linux / Windows11.
+- ZIP and extracted folder names: X4-LAN-7.2.0-Linux / Windows11.
 - VERSION.txt and package.json inside each package.
 - Launcher output, server dashboard/status log and installed mod display name.
 
-Use both archives from the same release folder. Each newly built pair has a shared
-session key; identical version labels alone do not make separate builds a pair.
+Use both archives from the same release folder. For 7.2.0, the host creates a fresh
+session key and shares JOIN-SESSION.json privately with its guest. Both must use
+the same version and session invitation. Archives themselves contain no keys.
 Exception: the 5.0.2 Windows launcher-only update preserves the existing pair.
 After that small update, the folder name and installed mod display name keep
 their previous label; VERSION.txt and the launcher show the updated version.

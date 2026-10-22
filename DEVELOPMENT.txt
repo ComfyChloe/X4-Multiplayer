@@ -72,9 +72,11 @@ The presence of this source checkout does not install or launch X4.
 
 PACKAGES / LIVE TESTS
 Record exact-version checks first, then build a new INTERNAL pair:
-  python3 distribution/build_packages.py .local/playtest/<new-folder-name>
-This creates matched Linux-host and Windows-guest archives with a fresh shared
-session key. Install using the generated launchers on each machine. Linux paths
+  python3 distribution/build_packages.py .local/playtest/<new-folder-name> --runtime-cache <verified-runtime-cache>
+For 7.2.0 this creates inert Windows/Linux host-or-guest archives with verified
+portable runtimes. Host setup generates a fresh invitation; guest setup imports it.
+The runtime cache uses distribution/public/runtimes.json only as an existing
+dependency hash registry; the build remains INTERNAL on profile/port 45841. Install using the generated launchers on each machine. Linux paths
 are discovered locally; no old PC/laptop game path is hard-coded in the package.
 Use only fresh creative worlds in isolated profile 45841 with autosave disabled.
 Read distribution/WORLD-SYNC-TEST.txt for the limited W01 acceptance test.

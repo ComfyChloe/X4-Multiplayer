@@ -301,6 +301,20 @@ try {
     Install-Package
     Check ((Get-Content -Raw -LiteralPath $freshState | ConvertFrom-Json).package_id -eq 'fixture-fresh-p2') 'Fresh retry did not install'
 
+    # The same Windows package can host locally; guests still reject loopback.
+    Remove-Package
+    @{steam_build='23660954';channel='internal';slot='p1';package_id='fixture-host-p1'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'package.json')
+    $ServerIP = '127.0.0.1'
+    Install-Package
+    $hostMod = Join-Path $GamePath 'extensions/x4_lan_lab'
+    $hostState = Get-Content -Raw -LiteralPath (Join-Path $PackageRoot 'installation.json') | ConvertFrom-Json
+    Check ($hostState.server -eq '127.0.0.1') 'Internal Windows host did not use loopback'
+    Check ((Get-Content -Raw -LiteralPath (Join-Path $hostMod 'ui/config.lua')).Contains('host = "127.0.0.1",')) 'Windows host Lua address wrong'
+    Remove-Package
+    @{steam_build='23660954';channel='internal';slot='p2';package_id='fixture-guest-p2'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'package.json')
+    Must-Fail { Install-Package } '*localhost*'
+    Check (!(Test-Path -LiteralPath $hostMod)) 'Guest loopback refusal left a mod'
+    Write-Host 'PASS: internal Windows host loopback install/remove; guest loopback refused.'
     Write-Host 'PASS: cloud tag classification; OneDrive start; links/unknowns/errors blocked; config backup; saved-profile protection; isolated launch; paired updater, backups, checksums, rollback and version guards; uninstalled legacy v5 update.'
     Write-Host 'PASS: IPv4 text validation; host entry contract; install staging, exact rollback and retry after injected failures (prior config/state present and absent, pre-existing state temp preserved); UTF-8 profile config; missing safeguard node; removal archive across volumes.'
     Write-Host 'Native Windows metadata reads were simulated. This is not a live Windows/OneDrive test.'

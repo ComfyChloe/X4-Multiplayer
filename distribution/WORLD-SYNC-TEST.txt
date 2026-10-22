@@ -1,4 +1,4 @@
-7.1.2 PRIORITY: read NEXT-TEST.txt first. Native Shuttle sensors are corrected.
+7.2.0 PRIORITY: read NEXT-TEST.txt first. Native Shuttle sensors are corrected.
 Shared-save and ongoing whole-universe authority are NOT active in this package.
 The following broader regression remains useful; its limitations still apply.
 
@@ -29,7 +29,7 @@ elsewhere. Leaving a sector removes its local replicas, not its host objects.
 TEST SEQUENCE
 1. Close both games and stop the previous relay. Install the matching pair.
    Use isolated profile 45841, matching official DLC and no other third-party
-   mods. Enable X4: Timelines on both for the shared Shuttle. Start the Linux
+   mods. Enable X4: Timelines on both for the shared Shuttle. Start the HOST
    server, then fresh creative worlds on both computers.
 2. Stay in Argon Prime for at least 30 seconds. Watch the console's NPC scene:
    host revision, ship count and guest committed revision should advance.

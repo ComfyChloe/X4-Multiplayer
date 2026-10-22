@@ -1,0 +1,47 @@
+X4 LAN LAB 7.2.0 — INTERNAL HUMAN-TEST CANDIDATE
+22 October 2026 | X4 9.00 (611726), Steam build 23660954
+
+SOURCE AND SCOPE
+Based on reviewed main 5fd786b, including sensor fix bc90d2e and validator 748a296.
+Changes from 7.1.1: shared-ship native sensor initialization, Linux test-profile
+shader quality 1, version/packaging documentation and role-selectable Windows/Linux hosting. Existing motion, cargo, ship
+hardware, FIRE2 and custom Cooperative Trial are retained.
+No experimental seed, attachment or whole-world development branch is included.
+
+EXISTING NATIVE EVIDENCE FOR THE SHIPPED SENSOR FIX
+Separate controlled Linux host and guest runs each passed 54 native readbacks.
+A nearby ship at 2 km and station at 6 km were discovered and resolved in radar/HUD
+before the independent control ship was created. Original failed sensor captures
+remain failed. Both shared ships retained six software modules and Mk3 thrusters.
+Cargo host/guest regression and guest movement through packet gaps passed with
+synthetic counterparts. See reports/native-sensor-discovery-checks.json in Git.
+These are not simultaneous Windows/Linux acceptance or full-universe evidence.
+
+LINUX PROFILE
+Only isolated profile 45841 uses shader quality 1 and High textures. This setting
+completed the October 22 native runs after quality 2 startup failures. Windows
+settings are unchanged. No general GPU, performance or NPC PiP fix is claimed.
+
+RELEASE VALIDATION
+AUTOMATED-TESTS.txt records the exact candidate automated check result.
+The delivery directory's SOURCE-CHECKPOINT.json and DELIVERY-CHECKS.json record
+packaged source, archive/inventory verification and actual packaged startup.
+Do not infer joint gameplay acceptance from packaging or startup checks.
+
+OPEN LIMITS
+Launchers still create separate worlds. Ordinary stations, NPC orders/damage,
+economy, arbitrary vanilla missions and persistent save/load remain unfinished.
+The Mercury cargo service fixture has protected hull and is not a controllable
+shared NPC fleet. Chat is absent. The experimental host-save and attachment work
+is retained in separate branches; its failed whole-guest tests are not released.
+
+Both INTERNAL archives include server and Python runtime, with no credentials.
+Host setup generates a private invitation, accepted by either OS guest. Keep 7.1.1 intact,
+replace BOTH packages and the host server, and follow NEXT-TEST.txt. No public release.
+
+WINDOWS HOSTING
+The role/invitation launcher reuses our existing project implementation with
+internal profile/port45841 and current world/FIRE2 protocol. Portable runtimes are
+verified against the recorded cache hashes. Windows loopback installation is
+allowed only for p1; guests must use the invited remote address. Windows native
+gameplay and the Windows embedded runtime still need human Windows acceptance.

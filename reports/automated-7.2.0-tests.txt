@@ -1,0 +1,20 @@
+X4 LAN Lab 7.2.0 automated candidate checks
+22 October 2026 — Linux x86_64, Python 3.14.8, LuaJIT via lupa
+Command: python dev/check.py
+PASS: 281 tests, zero failures and zero skipped Python/LuaJIT checks.
+New checks cover Windows-host/Linux-guest configuration, identical world/FIRE2
+and Shuttle setup, independent group credentials, wrong/public/old invitations,
+installed-session protection, host-only relay, Windows backend addresses,
+installation ownership and diagnostic key redaction.
+
+Windows installer fixtures: PowerShell on Linux, temporary mocked installations.
+PASS: internal host loopback install/removal; guest loopback rejected; staging,
+rollback and profile safeguards. TWO Windows drive-letter assertions are omitted
+in this Linux adaptation. The original full Windows script FAILS those Windows
+path assumptions on Linux and is retained; no full native Windows pass is claimed.
+The tracked full Windows script includes the new hosting regression for Windows.
+
+Windows embedded Python execution and joint Windows-host gameplay remain pending.
+Separate prior native sensor evidence is described in RELEASE-CHECKS.txt.
+Raw Python/LuaJIT log SHA-256: 0cfa967e8c750cb07ebe81d5abf1c8504194ea862b277c872b7be9637d9325aa
+Linux-adapted PowerShell log SHA-256: 3a587cca9059000ed628a48a59bb7e161c6a77b040dc6d83dba03a0cdce949c7

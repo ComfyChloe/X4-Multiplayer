@@ -1,4 +1,14 @@
-Version 7.1.2 — 22 October 2026 — INTERNAL
+Version 7.2.0 — 22 October 2026 — INTERNAL
+
+- Include a server and portable Python runtime in BOTH OS packages.
+- Select Host or Guest during setup; use a private invitation to join.
+- Keep groups separate with fresh keys/world IDs; reject wrong versions/channels.
+- Permit loopback only for the Windows host; guests use the invited host address.
+- Include the sensor correction and Linux graphics workaround described below.
+- Still two players per session. No full-universe, NPC order/damage, vanilla
+  mission, chat or headless-simulation completion is claimed.
+
+Staged 7.1.2 candidate — superseded before delivery by 7.2.0
 
 - Fix native radar discovery by creating the shared Shuttles through Mission
   Director, retaining loadouts and guarded asynchronous setup. Nearby ship and

@@ -211,7 +211,7 @@ function Install-Package {
     Assert-Game $game $pkg.steam_build
     $address = $ServerIP
     if (!$address) { $address = Read-Host 'Host IP (LAN or ZeroTier; shown in the server window)' }
-    $localHost = $pkg.PSObject.Properties['channel'] -and $pkg.channel -eq 'public' -and $pkg.slot -eq 'p1'
+    $localHost = $pkg.PSObject.Properties['channel'] -and $pkg.channel -in @('public', 'internal') -and $pkg.slot -eq 'p1'
     $address = Assert-IPv4 $address.Trim() ([bool]$localHost)
     $documents = Get-DocumentsFolder
     if (!$documents) { throw 'The Windows Documents folder could not be located.' }
@@ -285,7 +285,7 @@ function Install-Package {
     }
     Write-Host 'Installed. Existing player profiles were not modified.'
     Write-Host ('Test profile: ' + $profile)
-    Write-Host 'Next: 2-TEST-CONNECTION.cmd, then 3-START-X4-TEST.cmd.'
+    Write-Host 'Installation complete. Follow the role-specific next step shown by the launcher.'
 }
 function Start-TestGame {
     Assert-Closed
