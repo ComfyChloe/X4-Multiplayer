@@ -1,8 +1,10 @@
 """Opt-in UATTACH relay inside UniverseSession: authentication, view, acknowledgement and bounds."""
 import unittest
+from unittest.mock import patch
 
 from x4lan.attachment import decode
 from x4lan.attachment_relay import ATTACH_BUDGET, ATTACH_TTL, AttachmentRelay
+import x4lan.attachment_relay as relay_module
 from x4lan.universe import Baseline, Receiver, UniverseSession
 from test_host import TOKEN, P1, P2, FOREIGN
 
@@ -34,9 +36,9 @@ class RelayTests(unittest.TestCase):
         self.interest += 1
         self.s.receive(f'UINTEREST|1|{self.b}|{self.interest}|{sector}'.encode(), P2, now)
 
-    def acknowledge(self, now):
+    def acknowledge(self, now, ticks=20, interval=.05):
         """Drive the existing W01 delivery to the guest until it acknowledges a baseline."""
-        for i in range(20):
+        for i in range(ticks):
             for address, packet in self.s.snapshots(now):
                 if address == P2 and packet.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|')):
                     f = packet.decode().split('|')
@@ -45,7 +47,7 @@ class RelayTests(unittest.TestCase):
                         self.s.receive(f'UACK|1|{self.b}|{f[3]}|{f[4]}|{ack}'.encode(), P2, now)
             if self.s.delivery and self.s.delivery.done:
                 return
-            now += .05
+            now += interval
 
     def observe(self, seq, ship, revision, dock=7, state='EXTERNAL', lease=None, epoch=None, address=P1, now=1.0):
         lease = lease or self.a
@@ -163,20 +165,97 @@ class RelayTests(unittest.TestCase):
         self.assertEqual((self.s.attachments.live, self.s.attachments.marks), ({}, {}))
 
     def test_fair_bounded_transmission_budget(self):
-        self.ready([row(i) for i in range(1, 41)])
-        for i in range(1, 41):
+        count=ATTACH_BUDGET+8
+        self.ready([row(i) for i in range(1, count+1)])
+        for i in range(1, count+1):
             self.observe(i, i, 1)
         first = {r.ship for r in self.delivered(1.0)}
         second = {r.ship for r in self.delivered(1.05)}
         self.assertEqual(len(first), ATTACH_BUDGET)
-        self.assertEqual(first | second, set(range(1, 41)), 'every ship is served')
+        self.assertEqual(first | second, set(range(1, count+1)), 'every ship is served')
         self.assertFalse(first & second, 'no ship is resent before the retry interval')
         self.assertEqual(self.delivered(1.1), [])
+
+    def test_fresh_observations_and_retry_filtering_cannot_starve_other_ships(self):
+        # Keep a small budget here: this regression detects fairness independently
+        # of the production budget increase. Source observers refresh every .5s.
+        self.s.attachments.budget=32
+        self.look(SECTOR,.5)
+        self.publish(Baseline.create(self.a,1,SECTOR,[row(i) for i in range(1,513)]),.5)
+        self.acknowledge(.5,ticks=600,interval=0)
+        self.assertEqual(self.s.delivered,1)
+        first={};last={};gaps=[]
+        for step in range(61):
+            now=1+step*.05
+            if step%10==0:
+                for ship in range(1,513):self.observe(step+1,ship,1,now=now)
+            records=self.delivered(now)
+            self.assertLessEqual(len(records),32)
+            for record in records:
+                first.setdefault(record.ship,now)
+                if record.ship in last:gaps.append(now-last[record.ship])
+                last[record.ship]=now
+        self.assertEqual(len(first),512)
+        self.assertLessEqual(max(first.values())-1,.8)
+        self.assertLessEqual(max(gaps),.8+1e-9)
+
+    def test_full_admitted_view_receives_each_fresh_observation_within_ttl(self):
+        from x4lan.host import TICK_HZ
+        count=4096
+        self.look(SECTOR,.5)
+        self.publish(Baseline.create(self.a,1,SECTOR,[row(i) for i in range(1,count+1)]),.5)
+        # Drive the public baseline handshake at a fixed clock, independently of
+        # the later real 20Hz attachment schedule.
+        self.acknowledge(.5,ticks=600,interval=0)
+        self.assertEqual(self.s.delivered,1)
+        first={};last={};gaps=[]
+        for step in range(TICK_HZ*4+1):
+            now=1+step/TICK_HZ
+            if step%(TICK_HZ//2)==0:
+                for ship in range(1,count+1):self.observe(step+1,ship,1,now=now)
+            records=self.delivered(now)
+            self.assertLessEqual(len(records),ATTACH_BUDGET)
+            for record in records:
+                first.setdefault(record.ship,now)
+                if record.ship in last:gaps.append(now-last[record.ship])
+                last[record.ship]=now
+        self.assertEqual(len(first),count)
+        self.assertLess(max(first.values())-1,ATTACH_TTL)
+        self.assertLess(max(gaps),ATTACH_TTL)
 
     def test_constructor_validates_its_limits(self):
         for kwargs in (dict(ttl=0), dict(ttl=float('inf')), dict(retry=-1), dict(budget=0), dict(budget=True)):
             with self.subTest(kwargs), self.assertRaises(ValueError):
                 AttachmentRelay(self.s, **kwargs)
+
+    def test_baseline_parsing_is_linear_across_observations_and_send_ticks(self):
+        self.ready([row(i) for i in range(1,129)])
+        with patch.object(relay_module, 'saved_ships', wraps=relay_module.saved_ships) as parse:
+            for i in range(1,129):
+                self.observe(i,i,1)
+            served=set()
+            for step in range(4):
+                served.update(r.ship for r in self.delivered(1+step*.05))
+            self.assertEqual(served,set(range(1,129)))
+            self.assertLessEqual(parse.call_count,1,
+                'one immutable baseline must not be parsed for every ship or send tick')
+            # A replacement baseline in the same sector must invalidate the map.
+            self.ready([row(129)],revision=2,now=1.2)
+            self.observe(999,1,2,now=1.3)  # no longer in the committed baseline
+            self.observe(1,129,2,now=1.3)
+            self.assertEqual([r.ship for r in self.delivered(1.3)],[129])
+            self.assertLessEqual(parse.call_count,2)
+            # The single cached map must follow the active view, not old sectors.
+            self.ready([row(130)],revision=3,sector=OTHER,now=1.4)
+            self.observe(2,129,3,now=1.5)
+            self.observe(1,130,3,now=1.5)
+            self.assertEqual([r.ship for r in self.delivered(1.5)],[130])
+            self.assertLessEqual(parse.call_count,3)
+            before=parse.call_count
+            self.s.attachments.reset()
+            self.observe(2,130,3,now=1.6)
+            self.assertEqual([r.ship for r in self.delivered(1.6)],[130])
+            self.assertEqual(parse.call_count,before+1,'epoch reset must discard its cached map')
 
 
 if __name__ == '__main__':

@@ -10,12 +10,15 @@ Uplink recipientLease is the publisher (host) lease, as with other universe inpu
 re-encodes the same validated record with the current guest lease as recipient.
 """
 import math
+from bisect import bisect_right
 
 from .attachment import Attachment, AttachmentError, MAX_ACTIVE_SHIPS, MAX_SHIP, decode, encode
 
 ATTACH_TTL = 2.0         # seconds an accepted observation stays fresh; the host republishes
 ATTACH_RETRY = 0.25      # resend interval of an unchanged fresh record to the guest
-ATTACH_BUDGET = 32       # UATTACH datagrams per snapshot tick, fair round-robin
+# At the relay's 20Hz tick, a full 4096-ship view needs at most1.6s per
+# observation sweep. The 2s freshness gate still rejects delayed observations.
+ATTACH_BUDGET = 128      # UATTACH datagrams per snapshot tick, fair round-robin
 
 
 def saved_ships(baseline):
@@ -48,7 +51,17 @@ class AttachmentRelay:
         self.marks = {}          # ship -> (sequence, record): replay fence for the whole epoch
         self.live = {}           # ship -> accepted fresh observation of the current view
         self.view = None         # (guest lease, sector) the live records belong to
-        self.cursor = 0
+        self.cursor = 0         # last served ship ID, never an index into a changing ready list
+        self._baseline, self._ships = None, {}
+
+    def ships(self, baseline):
+        """Parse each immutable committed baseline once, retaining only one view's map."""
+        # Baseline is frozen and owns a tuple of immutable row strings. Object
+        # identity avoids an O(n) equality comparison on every observation.
+        if baseline is not self._baseline:
+            self._ships = saved_ships(baseline)
+            self._baseline = baseline
+        return self._ships
 
     def current_view(self):
         """(guest, sector, committed baseline of that sector) or None."""
@@ -65,10 +78,12 @@ class AttachmentRelay:
         key = (view[0].lease, view[1]) if view else None
         if key != self.view:
             self.live, self.view, self.cursor = {}, key, 0
+            self._baseline, self._ships = None, {}
 
     def reset(self):
         """Host loss: stop output and forget everything of this epoch."""
         self.epoch, self.marks, self.live, self.view, self.cursor = None, {}, {}, None, 0
+        self._baseline, self._ships = None, {}
 
     def receive(self, raw, address, now):
         """Admit one host observation. Never replies; returns [] in every case."""
@@ -94,7 +109,7 @@ class AttachmentRelay:
         # Only the committed baseline of the guest's current view, and only its saved ships.
         if record.revision != baseline.revision:
             return []
-        descriptor = saved_ships(baseline).get(record.ship)
+        descriptor = self.ships(baseline).get(record.ship)
         if descriptor is None:
             return []
         mark = self.marks.get(record.ship)
@@ -122,21 +137,21 @@ class AttachmentRelay:
         if not view or not self.live:
             return []
         guest, sector, baseline = view
-        ready = []
-        for ship in sorted(self.live):
+        current_ships = self.ships(baseline)
+        ships = sorted(self.live)
+        start = bisect_right(ships, self.cursor)
+        out = []
+        for offset in range(len(ships)):
+            ship = ships[(start + offset) % len(ships)]
             entry = self.live[ship]
-            current = saved_ships(baseline).get(ship) if baseline.revision == entry['revision'] else entry['descriptor']
+            current = current_ships.get(ship) if baseline.revision == entry['revision'] else entry['descriptor']
             if (entry['sector'] == sector and entry['revision'] == s.delivered and current == entry['descriptor']
                     and now - entry['sent'] >= self.retry):
-                ready.append(ship)
-        out = []
-        for i in range(min(self.budget, len(ready))):
-            ship = ready[(self.cursor + i) % len(ready)]
-            entry = self.live[ship]
-            r = entry['record']
-            out.append((guest.address, encode(Attachment(guest.lease, r.epoch, r.revision, r.sequence, r.ship,
-                                                         r.dock, r.state)).encode('ascii')))
-            entry['sent'] = now
-        if ready:
-            self.cursor = (self.cursor + self.budget) % len(ready)
+                r = entry['record']
+                out.append((guest.address, encode(Attachment(guest.lease, r.epoch, r.revision, r.sequence, r.ship,
+                                                             r.dock, r.state)).encode('ascii')))
+                entry['sent'] = now
+                self.cursor = ship
+                if len(out) == self.budget:
+                    break
         return out
