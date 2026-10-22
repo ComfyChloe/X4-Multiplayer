@@ -1,3 +1,15 @@
+WINDOWS MOD SELECTION RECOVERY — 22 OCTOBER 2026
+The first7.2.0 guest report shows options-menu frame creation failing at66.46s
+and23967 optionsFrame nil errors; additional mods include duplicate UI extensions.
+The trigger remains unconfirmed pending a clean-profile comparison. Original
+installer creates config.xml only;45841/content.xml may legitimately be absent.
+An explicit standalone helper is available: distribution/isolate_test_mods.py
+and8-ISOLATE-TEST-MODS.cmd. It verifies installed ownership, discovers extension
+IDs and writes only the test-profile selection, with exact prior-file backup.
+Eight focused tests pass; actual Windows execution/human retest pending.
+This is a separate internal supplemental ZIP; original release ZIPs unchanged.
+No change to gameplay, other installed mods, normal profiles or credentials.
+
 SERVER LAUNCHER FIX — 22 OCTOBER 2026, AFTER DELIVERY
 User reported server would not start. It was running without a terminal.
 Linux desktop server launch now opens a visible console; reopening a matching
