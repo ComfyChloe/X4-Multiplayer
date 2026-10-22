@@ -85,5 +85,22 @@ class FullNativeGuestEvidenceTests(unittest.TestCase):
         for values in ({'complete':False},{'send_errors':1},{'native_host':True}):
             with self.assertRaises(ValueError):self.check(lines,replay,history,{**stats,**values})
 
+    def test_delivery_order_is_per_ship_not_a_global_sequence_barrier(self):
+        lines,replay,history,stats=trace()
+        first=[i for i,v in enumerate(lines) if 'ATTACH_GUEST wire ' in v][:2]
+        a,b=first;lines[a],lines[b]=lines[b],lines[a]
+        self.assertTrue(self.check(lines,replay,history,stats)['passed'])
+        duplicate=lines[:b+1]+[lines[b]]+lines[b+1:]
+        with self.assertRaises(ValueError):self.check(duplicate,replay,history,stats)
+
+    def test_requested_geometry_requires_real_coordinates_and_matching_native_sector(self):
+        lines,replay,history,stats=trace();replay['geometry_evidence']=True
+        lines=[v+(' sector='+replay['sector']+' parent=400 pose=0.01,0,0 target=0,0,0' if 'ATTACH_GUEST sample ' in v
+                 else ' sector='+replay['sector'] if 'ATTACH_GUEST_NATIVE sample ' in v else '') for v in lines]
+        self.assertTrue(self.check(lines,replay,history,stats)['passed'])
+        for before,after in (('pose=0.01,0,0','pose=500,0,0'),('parent=400','parent=UNKNOWN'),
+                            ('sector='+replay['sector'],'sector=another_sector')):
+            with self.subTest(before=before),self.assertRaises(ValueError):self.check([v.replace(before,after) for v in lines],replay,history,stats)
+
 
 if __name__=='__main__':unittest.main()

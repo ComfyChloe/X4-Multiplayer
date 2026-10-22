@@ -13,6 +13,32 @@ local function fail(why)
  if U.attachments then U.attachments:stop(S.failed) end
  if not C.IsGamePaused() then Pause() end
 end
+-- Read-only tracing around the actual renderer call. No substitute pose write,
+-- activation, carrier holding or changed authority is introduced by this hook.
+do
+ local mt=getmetatable(C);local lookup=type(mt)=='table' and mt.__index
+ assert(type(lookup)=='function','native call diagnostic hook unavailable')
+ local apply=C.SetObjectSectorPos;local traced={}
+ mt.__index=function(lib,name)
+  if lib==C and name=='SetObjectSectorPos' then return function(object,sector,value)
+   local ship=U.seedObjects and U.seedObjects:index(object)
+   local selected=ship and expected[ship] and U.replicas[ship] and U.replicas[ship].object==object
+   local now=GetCurRealTime();local watch=selected and (not traced[ship] or now-traced[ship]>=1)
+   local before=watch and C.GetObjectPositionInSector(object)
+   apply(object,sector,value)
+   if watch then
+    traced[ship]=now;local after=C.GetObjectPositionInSector(object)
+    local actualSector=C.GetContextByClass(object,'sector',false)
+    local sectorName=actualSector~=0 and GetComponentData(A.id(actualSector),'macro') or 'UNKNOWN'
+    local docked,stored=GetComponentData(A.id(object),'isdocked','isinternallystored')
+    DebugError(string.format('[X4LAN] ATTACH_DIAGNOSTIC write id=%d at=%.6f sector=%s requested=%s parent=%s docked=%s stored=%s before=%.9g,%.9g,%.9g target=%.9g,%.9g,%.9g after=%.9g,%.9g,%.9g',
+     ship,now,sectorName,GetComponentData(A.id(sector),'macro'),tostring(C.GetParentComponent(object)):gsub('ULL$',''),
+     tostring(docked),tostring(stored),before.x,before.y,before.z,value.x,value.y,value.z,after.x,after.y,after.z))
+   end
+  end end
+  return lookup(lib,name)
+ end
+end
 local gate=G.frame
 G.frame=function(now)
  local ready=gate(now)
@@ -95,12 +121,16 @@ U.frame=function(now)
      local state,dock=U.attachments:inspect(object)
      local allowed=U.attachments:allow_pose(ship,object,now)
      local p=C.GetObjectPositionInSector(object);local wanted=r.entity.pose
+     local sector=C.GetContextByClass(object,'sector',false)
+     local sectorName=sector~=0 and GetComponentData(A.id(sector),'macro') or 'UNKNOWN'
+     local parent=tostring(C.GetParentComponent(object)):gsub('ULL$','')
      local err=math.max(math.abs(p.x-wanted[1]),math.abs(p.y-wanted[2]),math.abs(p.z-wanted[3]))
      local same=not S.handles[ship] or S.handles[ship]==object;S.handles[ship]=object
      S.sequence=S.sequence+1;S.reads[S.sequence]=now
-     log(string.format('sample sequence=%d cycle=%d revision=%d id=%d handle=%s code=%s macro=%s owner=%s original=%s sameHandle=%s state=%s dock=%d allowPose=%s poseError=%.9g at=%.6f',
+     log(string.format('sample sequence=%d cycle=%d revision=%d id=%d handle=%s code=%s macro=%s owner=%s original=%s sameHandle=%s state=%s dock=%d allowPose=%s poseError=%.9g at=%.6f sector=%s parent=%s pose=%.9g,%.9g,%.9g target=%.9g,%.9g,%.9g',
       S.sequence,S.cycle,U.latest.revision,ship,tostring(object):gsub('ULL$',''),A.identity.nativeCode(object),macro,owner,
-      tostring(r.seedOriginal==true),tostring(same),state or 'UNKNOWN',dock or 0,tostring(allowed),err,now))
+      tostring(r.seedOriginal==true),tostring(same),state or 'UNKNOWN',dock or 0,tostring(allowed),err,now,
+      sectorName,parent,p.x,p.y,p.z,wanted[1],wanted[2],wanted[3]))
      AddUITriggeredEvent('X4LAN_AttachmentGuestProbe','Read',{object=A.id(object),id=ship,
       sequence=S.sequence,revision=U.latest.revision,cycle=S.cycle})
     end

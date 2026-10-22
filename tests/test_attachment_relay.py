@@ -176,6 +176,27 @@ class RelayTests(unittest.TestCase):
         self.assertFalse(first & second, 'no ship is resent before the retry interval')
         self.assertEqual(self.delivered(1.1), [])
 
+    def test_equal_fresh_observations_keep_retry_pacing_and_send_the_latest_sequence(self):
+        self.ready([row(1)])
+        self.observe(1,1,1,now=1)
+        self.assertEqual([r.sequence for r in self.delivered(1)],[1])
+        for seq,now in ((2,1.05),(3,1.1),(4,1.2)):
+            self.observe(seq,1,1,now=now)
+            self.assertEqual(self.delivered(now),[], 'new equal observation must not bypass downlink pacing')
+        self.observe(5,1,1,now=1.25)
+        self.assertEqual([r.sequence for r in self.delivered(1.25)],[5])
+        self.assertEqual(self.s.attachments.live[1]['at'],1.25,'fresh host observation still refreshes expiry')
+
+    def test_changed_attachment_bypasses_pacing_but_its_equal_refresh_does_not(self):
+        self.ready([row(1)])
+        self.observe(1,1,1,now=1);self.delivered(1)
+        self.observe(2,1,1,state='STORED',now=1.05)
+        self.assertEqual([(r.sequence,r.state) for r in self.delivered(1.05)],[(2,'STORED')])
+        self.observe(3,1,1,state='STORED',now=1.1)
+        self.assertEqual(self.delivered(1.1),[])
+        self.observe(4,1,1,state='STORED',dock=8,now=1.15)
+        self.assertEqual([(r.sequence,r.dock) for r in self.delivered(1.15)],[(4,8)])
+
     def test_fresh_observations_and_retry_filtering_cannot_starve_other_ships(self):
         # Keep a small budget here: this regression detects fairness independently
         # of the production budget increase. Source observers refresh every .5s.

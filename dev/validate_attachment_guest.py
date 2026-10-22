@@ -47,7 +47,7 @@ def validate(text,replay,dock_count,history,stats):
     require(expected.keys()==host_ids.keys() and len(baselines)>=3,'incomplete replay publication')
     admitted=unpaused=fixture_lua=fixture_md=complete=False
     native_baselines={};received={};cycles={};samples={};md={};acks=set();handles={};operations={};execution_acks=0
-    summary=None;current_cycle=0;native_ready=False;received_sequences={};received_sequence=0
+    summary=None;current_cycle=0;native_ready=False;received_sequences={}
     for line in text.splitlines():
         require('Error in MD cue md.X4LAN' not in line and 'Lua error' not in line,'native guest engine error')
         if '[X4LAN]' in line:require('STOPPED' not in line and 'ATTACH_GUEST failed' not in line,'native guest adapter failed')
@@ -87,6 +87,8 @@ def validate(text,replay,dock_count,history,stats):
             lua=samples[seq];ship=int(f['id'])
             require(int(f['saved'])==ship and all(f[k]==lua[k] for k in ('cycle','revision','id','code','macro','owner')),
                 'native saved identity differs from Lua request')
+            if replay.get('geometry_evidence'):
+                require(f.get('sector')==lua.get('sector') and f.get('sector'),'native/Lua sector readback differs')
             md[seq]=f
         elif action=='admitted':
             require(not admitted and f==dict(seed=seed,docks=str(dock_count),paused='true'),'guest paused admission differs');admitted=True
@@ -99,8 +101,10 @@ def validate(text,replay,dock_count,history,stats):
             row=decode(f['value']);at=float(f['at']);require(math.isfinite(at) and row.sequence in published
                 and encode(row)==encode(replace(published[row.sequence],recipient=guest)),'native wire has no exact host provenance')
             if f['result']=='applied':
-                require(row.revision in native_baselines and row.sequence>received_sequence,'native attachment before baseline or replay accepted')
-                received[row.ship]=(row,at);received_sequences[row.sequence]=(row,at);received_sequence=row.sequence
+                previous=received.get(row.ship)
+                require(row.revision in native_baselines and row.sequence not in received_sequences
+                    and (not previous or row.sequence>previous[0].sequence),'native attachment before baseline or per-ship replay accepted')
+                received[row.ship]=(row,at);received_sequences[row.sequence]=(row,at)
         elif action=='cycle':
             cycle=int(f['index']);require(cycle==current_cycle+1 and (not current_cycle or cycles[current_cycle].get('ended'))
                 and int(f['revision']) in native_baselines and math.isfinite(float(f['at']))
@@ -120,6 +124,13 @@ def validate(text,replay,dock_count,history,stats):
                 and f['macro']==expected[ship][2] and f['owner']==expected[ship][3] and f['code']==identities[ship]['code'],
                 'guest binding is not the stable original saved ship')
             require(math.isfinite(at) and math.isfinite(float(f['poseError'])) and float(f['poseError'])>=0,'invalid guest sample time/pose')
+            if replay.get('geometry_evidence'):
+                require(f.get('sector') and f.get('parent','').isdigit(),'missing guest native parent/sector')
+                vectors=[list(map(float,f.get(k,'').split(','))) for k in ('pose','target')]
+                require(all(len(v)==3 and all(math.isfinite(x) for x in v) for v in vectors),'missing/nonfinite native pose geometry')
+                error=max(abs(a-b) for a,b in zip(*vectors))
+                rounding=max(.001,max(abs(x) for v in vectors for x in v)*1.1e-8)
+                require(abs(error-float(f['poseError']))<=rounding,'reported native pose error differs from coordinates')
             handles[ship]=handle;samples[seq]=f;cycles[cycle]['rows'][ship]=seq
             receipt=received.get(ship)
             f['fresh']=bool(receipt and 0<=at-receipt[1]<=2 and receipt[0].state==goals[ship]['state']
@@ -173,9 +184,11 @@ def validate(text,replay,dock_count,history,stats):
             lua=samples[seq];native=md[seq];goal=goals[ship];free=goal['state']=='FREE';err=float(lua['poseError'])
             (free_errors if free else attached_errors).append(err)
             if not (lua['fresh'] and lua['state']==native['state']==goal['state'] and int(lua['dock'])==int(native['dock'])==goal['dock']
-                and lua['allowPose']==str(free).lower() and (not free or err<=.1)):
+                and lua['allowPose']==str(free).lower() and (not free or err<=.1)
+                and (not replay.get('geometry_evidence') or lua['sector']==replay['sector'])):
                 failures.append(dict(id=ship,lua_state=lua['state'],native_state=native['state'],wanted=goal,
-                    lua_dock=int(lua['dock']),native_dock=int(native['dock']),fresh=lua['fresh'],allow_pose=lua['allowPose'],pose_error=err))
+                    lua_dock=int(lua['dock']),native_dock=int(native['dock']),fresh=lua['fresh'],allow_pose=lua['allowPose'],pose_error=err,
+                    sector=lua.get('sector'),parent=lua.get('parent')))
         reports.append(dict(cycle=cycle,elapsed=float(row['meta']['elapsed']),failures=failures,
             max_free_pose_error=max(free_errors,default=0),max_attached_pose_difference=max(attached_errors,default=0)))
     require(len(reports)>=10 and reports[-1]['elapsed']>=27 and all(not r['failures'] for r in reports[-3:]),

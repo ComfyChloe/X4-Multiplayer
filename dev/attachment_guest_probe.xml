@@ -8,7 +8,7 @@
    <do_if value="$ship.isoperational">
     <set_value name="$dock" exact="if $ship.dock.exists and md.X4LAN_SeedDocks.State.$indices.{$ship.dock}? then md.X4LAN_SeedDocks.State.$indices.{$ship.dock} else 0"/>
     <set_value name="$state" exact="if $ship.isinternallystored then 'STORED' else if $ship.dock.exists and $ship.dock.external then 'EXTERNAL' else if not $ship.dock.exists then 'FREE' else 'TRANSIT'"/>
-    <debug_text text="'[X4LAN] ATTACH_GUEST_NATIVE sample sequence=%s cycle=%s revision=%s id=%s saved=%s code=%s macro=%s owner=%s state=%s dock=%s'.[$v.$sequence,$v.$cycle,$v.$revision,$v.$id,md.X4LAN_Seed.State.$ships.indexof.{$ship},$ship.idcode,$ship.macro.id,$ship.owner.id,$state,$dock]"/>
+    <debug_text text="'[X4LAN] ATTACH_GUEST_NATIVE sample sequence=%s cycle=%s revision=%s id=%s saved=%s code=%s macro=%s owner=%s state=%s dock=%s sector=%s'.[$v.$sequence,$v.$cycle,$v.$revision,$v.$id,md.X4LAN_Seed.State.$ships.indexof.{$ship},$ship.idcode,$ship.macro.id,$ship.owner.id,$state,$dock,$ship.sector.macro.id]"/>
     <raise_lua_event name="'X4LAN_AttachmentGuestProbe.Read'" param="$v.$sequence"/>
    </do_if>
    <do_else><raise_lua_event name="'X4LAN_AttachmentGuestProbe.Error'" param="'native guest ship unavailable'"/></do_else>

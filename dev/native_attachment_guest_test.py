@@ -40,7 +40,7 @@ def host_replay(host_run):
         ('load.log','peer-history.json','peer-stats.json','state.json','source-capture.json','full-host-validation.json')},
         source_epoch=baseline['epoch'],source_revision=baseline['revision'],sector=baseline['sector'],
         rows=rows,omitted_rows=omitted,attachments=attachments,identities=identities,
-        native_host_capture=True,live_native_host=False)
+        native_host_capture=True,live_native_host=False,geometry_evidence=True)
 
 
 def install(run,host_run):

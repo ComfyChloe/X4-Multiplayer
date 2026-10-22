@@ -5,6 +5,36 @@ Scope: bind the reviewed relay/import/controller/execution modules to the actual
 universe adapter in an explicit saved-seed internal session. No default package
 activation or whole-universe acceptance. Native installation belongs to primary.
 
+LATEST22OCT10:10 — FULL GUEST STILL FAILS
+Run attachment-world-guest-first-20261022 at3228d0f replays the qualified full
+native host capture through a synthetic live host into the full native guest.
+All128 saved ships remain original bindings,14 cycles retain1,792 independent
+MD samples and7 actual attachment actions have correlated native acknowledgments.
+This is NOT live two-engine acceptance.14 post-seed host entities are explicitly
+excluded; attached pose alignment is reported separately from the FREE pose gate.
+
+The original validator wrongly required globally increasing received sequences.
+The relay can reorder different ships, so the corrected gate uses per-ship
+replay ordering, with a new regression. Original raw and original FAIL outcome
+are preserved; corrected revalidation also FAILS. Final cycles12/13 have two
+FREE pose failures:7212/HCP-215 and7245/HGE-656, about40–65km off. Cycle14 also
+contains14 stale-observation/closed-pose-fence ships; one has additional496.645m
+drift. This late regression is retained, never filtered out to claim convergence.
+Longest observed inter-arrival gaps exceed4s. All128 native attachment states
+match the recorded host goal, but that does not override the failed whole gate.
+Cleanup verifies7 actual normal saves (bytes/timestamps),33 restored installation
+files and recorded config/content/debug; owned game/peer closed and seed removed.
+
+A downlink pacing defect is reproduced by two failing regressions: every newer
+host heartbeat reset an unchanged state's sent timestamp to minus infinity,
+bypassing the existing0.25s pacing. The relay now retains that timestamp for
+equal state/dock/revision/descriptor, while retaining the NEW sequence and source
+observation time. Changed state/dock/revision/descriptor remains immediately
+eligible; replay never refreshes expiry. Existing4096-ship fairness/TTL coverage
+still passes.473 Linux/Python/LuaJIT checks PASS/no skips; source timing tests do
+not prove native queue/FPS improvement. Next native replay adds read-only sector,
+parent, pose and actual-write before/after diagnostics for the two FREE failures.
+
 The first integration review found a retained-object identity hole: bindSeedObject
 returned false for absent, expired or foreign-epoch IDENT, but render ignored its
 return value and still wrote through r.object. Respect the return value before

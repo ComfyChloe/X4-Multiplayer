@@ -15,7 +15,7 @@ from bisect import bisect_right
 from .attachment import Attachment, AttachmentError, MAX_ACTIVE_SHIPS, MAX_SHIP, decode, encode
 
 ATTACH_TTL = 2.0         # seconds an accepted observation stays fresh; the host republishes
-ATTACH_RETRY = 0.25      # resend interval of an unchanged fresh record to the guest
+ATTACH_RETRY = 0.25      # pacing interval of an unchanged fresh state, including newer observations
 # At the relay's 20Hz tick, a full 4096-ship view needs at most1.6s per
 # observation sweep. The 2s freshness gate still rejects delayed observations.
 ATTACH_BUDGET = 128      # UATTACH datagrams per snapshot tick, fair round-robin
@@ -117,9 +117,18 @@ class AttachmentRelay:
             return []                                   # duplicate, conflict or stale: no refresh
         if record.ship not in self.live and len(self.live) >= MAX_ACTIVE_SHIPS:
             return []
+        previous = self.live.get(record.ship)
+        sent = -math.inf
+        if (previous and previous['revision'] == baseline.revision and previous['descriptor'] == descriptor
+                and previous['record'].state == record.state and previous['record'].dock == record.dock):
+            # Renew the source observation, not its transmission budget. A host
+            # heartbeat carries a newer sequence even when the physical state
+            # is unchanged; resetting sent here flooded the native guest queue.
+            # State/dock/revision/identity changes retain immediate eligibility.
+            sent = previous['sent']
         self.marks[record.ship] = (record.sequence, record)
         self.live[record.ship] = dict(record=record, sector=sector, revision=baseline.revision,
-                                      descriptor=descriptor, at=now, sent=-math.inf)
+                                      descriptor=descriptor, at=now, sent=sent)
         return []
 
     def snapshots(self, now):
