@@ -1,0 +1,12 @@
+X4 LAN Lab 7.1.2 automated candidate checks
+22 October 2026 — native Linux x86_64, Python 3.14.0, LuaJIT via lupa
+Command: python dev/check.py (existing local Python environment with LuaJIT)
+Result: PASS — 273 tests, zero failures, zero skipped checks.
+Includes real loopback UDP/native transport, Lua adapters, packet protocols,
+ship/loadout and asynchronous sensor setup, cargo/motion and installer coverage.
+Linux profile expectation updated to shader quality 1; Windows stays at 2.
+Game source is reviewed main 5fd786b; release changes are packaging/profile/docs.
+No new experimental seed/attachment source or development probes are shipped.
+This automated run does not prove simultaneous Windows/Linux gameplay.
+Native sensor evidence is recorded separately in RELEASE-CHECKS.txt.
+Raw local log SHA-256: bb7bd195dcb55a7a7431d4bbb8552ac1d54394f187a265132f4427da7c2cc950

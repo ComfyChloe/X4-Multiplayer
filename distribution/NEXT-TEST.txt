@@ -1,0 +1,46 @@
+X4 LAN Lab {{VERSION}} — INTERNAL HUMAN TEST
+22 October 2026 | Linux host + Windows 11 guest | Two players
+
+MAIN CHANGE: native radar/HUD sensor initialization on the shared Shuttles.
+This is a focused 7.1.1 follow-up, not a complete synchronized universe.
+
+SETUP
+Use the matching Linux and Windows archives from this one release folder.
+Close both games and the old relay. Remove each old mod with its old package,
+then install this version. The prepared primary PC may already have it installed.
+Start the NEW Linux server, then both fresh test worlds using numbered launchers.
+Windows connects to the host LAN/ZeroTier IPv4 shown by the Linux server.
+Both need matching official DLC including Timelines; disable Ventures on both
+for a consistent test setup. Do not load ordinary saves. Do not use older ZIPs.
+
+15–25 MINUTE PRIORITY CHECK
+1. After setup completes, independently fly each Shuttle near a station and a
+   normal NPC ship. Within 10 km check radar contact, map name and target-monitor
+   name/type/owner. Take a screenshot of any Unknown contact, with range visible.
+   The exact same ordinary station need not exist at the same position on both
+   peers in this package; station alignment is still an open limitation.
+2. Compare each other's callsign and ship name, stationary and moving motion,
+   turning, target selection and docking at the two LAN test markets.
+3. Jettison 20 Energy Cells through the normal cargo menu. The other player uses
+   the normal magnet. Compare both inventories and disappearance after 10 seconds.
+   Repeat in the other direction. Do not use 6-COLLECT for this test.
+4. Complete the existing Cooperative Trial with normal trading and target combat.
+   Compare shield/hull values on the LAN Targets after firing stops. Report any
+   mismatch; this release does not claim a new general damage-authority fix.
+5. Run 4-DIAGNOSTICS on BOTH machines before another game launch. Keep their full
+   logs and the Linux server log from the same attempt. Report host/guest role,
+   approximate time, sector, object name/code and the exact failed action.
+
+KNOWN LIMITS
+- Separate starting worlds; no shared-save bootstrap in this release.
+- Ordinary station positions, economy and vanilla missions are not synchronized.
+- The player-faction Mercury test freighter is a protected cargo service fixture:
+  its hull is protected and independent orders are not supported multiplayer fleet
+  commands. It is not a valid general NPC combat/order acceptance test.
+- General NPC commands, damage, equipment, docking and ownership remain unfinished.
+- Ingame text chat is not implemented. Use your existing voice/text channel.
+- NPC PiP artifacts and exact projectile/aim equivalence remain open.
+- A simultaneous human Windows/Linux test of this new pair is still pending.
+
+Keep the previous 7.1.1 ZIPs for rollback. Do not publish this internal pair;
+session.json and ui/config.lua contain its private connection credentials.

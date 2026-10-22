@@ -1,3 +1,16 @@
+CURRENT DELIVERY — INTERNAL 7.1.2, 22 OCTOBER 2026
+User requested a human-test pair by20:00 and lower model usage. This release
+branch starts reviewed main5fd786b, ships the sensor correction, and changes
+Linux isolated shader quality to1. It does NOT include the experimental shared
+seed/attachment branches.273 automated checks pass; exact packaged/native checks
+will be recorded in reports/package-7.1.2-checks.json and the delivery directory.
+Read distribution/NEXT-TEST.txt for the short human test and explicit limits.
+Existing7.1.1 archives remain unchanged. Default work remains internal.
+Coordination remains quarter-hour :00/:15/:30/:45, compact changes/blockers only.
+No new broad experiment or feature task is needed to deliver this package.
+
+HISTORICAL HANDOFF (dates and former cadence below are not current instructions)
+
 CURRENT HANDOFF — INTERNAL 7.1.1 PLAYTEST FOLLOW-UP, 20 OCTOBER 2026
 
 LATEST USER PLAYTEST — READ BEFORE THE HISTORICAL DELIVERY NOTES BELOW

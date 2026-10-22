@@ -19,10 +19,12 @@ PROFILE = '45841'
 TEST_SETTINGS = {
     'autosave': 'false', 'uisafemode': 'false',
     'res_width': '1920', 'res_height': '1080', 'fullscreen': 'true', 'borderless': 'false',
-    'gfxquality': '1', 'shaderquality': '2', 'shadows': '1', 'softshadows': 'false',
+    'gfxquality': '1', 'shaderquality': '1', 'shadows': '1', 'softshadows': 'false',
     'ssao': '0', 'glow': '0', 'uiglow': '0', 'uiglowintensity': '0.75',
     'lodfactor': '0.15', 'effectdistance': '0.15', 'distortion': 'false',
     'disableradar': 'false', 'radarquality': '0', 'ssr': 'false', 'ssrquality': 'low',
+    # High shader quality also failed startup on this Linux PC; shaderquality1
+    # completed the isolated October22 runs. Windows defaults stay unchanged.
     # Low textures caused native shader compilation failures on the Linux test
     # system; high textures completed the isolated lifecycle run (not a PiP fix).
     'texturequality': 'high', 'chromaticaberration': 'false', 'volumetric': '0',

@@ -1,15 +1,24 @@
 X4 LAN Lab {{VERSION}} — two-player co-op, Linux host + Windows 11 guest
-20 October 2026 | X4 9.00 (611726), Steam build 23660954
+22 October 2026 | X4 9.00 (611726), Steam build 23660954
 
 Open INSTALL.html for installation, ZeroTier and the complete playtest sequence.
+Start with NEXT-TEST.txt for the short 7.1.2 human test.
 Read RELEASE-CHECKS.txt for verified results and remaining limitations.
+
+NEW IN 7.1.2
+Shared Shuttles now use native Mission Director creation so their sensors
+initialize correctly. Nearby ships and stations were correctly discovered in
+separate controlled Linux host and guest runs. Joint Windows/Linux confirmation
+is pending. This package does NOT activate host-save transfer, full-universe
+authority or experimental docking. Both launchers still create separate worlds.
+General NPC orders/damage and ordinary station alignment remain unresolved.
 
 UPGRADE BOTH COMPUTERS
 Use the two matching archives from this release folder. Extract the complete ZIPs
 before running anything. Close both games, stop the old server, remove each old
 mod with its original package's numbered 5 command, then install the new pair.
 Use this exact release on both computers, including its new relay. Do not mix
-with the original 7.0 or 7.1.0 pairs. Start two new creative test worlds.
+with any older pair, including 7.1.1. Start two new creative test worlds.
 Disable other third-party mods for testing. Keep matching official DLC, including
 X4: Timelines for the shared Xperimental Shuttles.
 
@@ -25,7 +34,7 @@ cargo/magnet transactions, shared names/display codes/radar contacts and smoothe
 source-clock movement. Read WORLD-SYNC-TEST.txt for the focused playtest and
 RELEASE-CHECKS.txt for actual acceptance evidence. Public Test 01 remains withheld.
 
-This patch also corrects native drift when a remote pose stays unchanged and
+Retained 7.1.1 behavior corrects native drift when a remote pose stays unchanged and
 keeps the two cooperative ships' native linear velocity consistent with their
 rendered motion. Packet-loss prediction freezes with zero velocity; lifecycle
 guards release overrides on docking, control or connection changes. Initial

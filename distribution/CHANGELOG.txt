@@ -1,3 +1,16 @@
+Version 7.1.2 — 22 October 2026 — INTERNAL
+
+- Fix native radar discovery by creating the shared Shuttles through Mission
+  Director, retaining loadouts and guarded asynchronous setup. Nearby ship and
+  station HUD/radar checks passed separately on Linux host and guest.
+- Preserve 7.1.1 cargo/magnet, movement, shared identities and Cooperative Trial.
+- Use shader quality 1 with High textures in the isolated Linux test profile
+  after local startup failures at quality 2. Windows settings stay unchanged.
+- Add a short human test checklist and distinguish verified fixes from open
+  universe, NPC order/damage, station, mission and chat work.
+- Experimental save/bootstrap/attachment branches are not shipped or activated.
+- Replace both packages and relay together; this is not a public release.
+
 Version 7.1.1 INTERNAL motion/physics follow-up — 20 October 2026
 
 - Correct actual cooperative ship drift even when the received pose is unchanged;

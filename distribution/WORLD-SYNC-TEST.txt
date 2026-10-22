@@ -1,3 +1,7 @@
+7.1.2 PRIORITY: read NEXT-TEST.txt first. Native Shuttle sensors are corrected.
+Shared-save and ongoing whole-universe authority are NOT active in this package.
+The following broader regression remains useful; its limitations still apply.
+
 INTERNAL FOLLOW-UP - WORLD / CARGO / MOTION TEST
 20 October 2026 | X4 9.00 Steam build 23660954
 

@@ -63,7 +63,7 @@ def build(destination: Path):
                'ship_macro': SHIP_MACRO, 'ship_loadout': SHIP_LOADOUT, 'ship_weapons': SHIP_WEAPONS}
         write(extension / 'ui/config.lua', '-- Paired test package. Configure with the installer.\nX4LAN_CONFIG = {\n' +
               ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n')
-        for name in ['INSTALL.html', 'README.txt', 'CHANGELOG.txt']:
+        for name in ['INSTALL.html', 'README.txt', 'CHANGELOG.txt', 'NEXT-TEST.txt']:
             document(DIST / name, root / name, release)
         shutil.copy2(SOURCE / 'VERSIONING.txt', root / 'VERSIONING.txt')
         shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', root / 'WORLD-SYNC-TEST.txt')
