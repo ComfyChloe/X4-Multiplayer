@@ -37,7 +37,8 @@ X4LAN_CONFIG={slot='p1',test_profile='45841',attachment_world_probe=true,attachm
 X4LAN_SEED_GATE={frame=function() return true end}
 X4LAN_SEED_DOCK_GATE={ready=true,importer={ready=function() return true end,
  fingerprints=function() return {[1]='dock'} end}}
-U={frame=function() end,seedObjects={index=function() return 1 end},sender={done=false}}
+U={frame=function() end,seedObjects={index=function() return 1 end},sender={done=false,
+ baseline={revision=3,rows={'1,ship,ship_arg_s_scout_01_a_macro,argon,0,0,0,0,0,0,none,0'}}}}
 X4LAN_BUBBLE_API={universe=U,state={},id=function(o) return o end,
  identity={nativeCode=function() return 'ABC-123' end},coop={ready=true},cargo={ready=true},
  trade={state={ready=true}},quest={ready=true}}
@@ -57,6 +58,10 @@ end
 now=13;U.frame(now)
 assert(not paused and pauseCalls==0,'incomplete sender must keep the native host running')
 U.sender.done=true;now=14;U.frame(now)
+assert(not paused,'baseline ACK alone precedes relay-admissible attachment refresh')
+now=14.1;world:inspect(101)
+net:send('UATTACH|1|'..string.rep('b',32)..'|'..string.rep('b',32)..'|3|4|1|0|FREE')
+now=14.2;U.frame(now)
 assert(paused and pauseCalls==1 and table.concat(logs,' '):find('complete slot=p1'))
 ''')
 

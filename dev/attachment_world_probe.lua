@@ -5,7 +5,7 @@ if not cfg or not cfg.attachment_world_probe then return end
 assert(cfg.slot=='p1' and cfg.test_profile=='45841' and cfg.attachment_sync and cfg.seed_binding)
 local A=X4LAN_BUBBLE_API;local U=A.universe;local G=X4LAN_SEED_GATE
 local P=X4LAN_ATTACHMENT_PROTOCOL;local C=require('ffi').C
-local S={reads={},sampled={},pending={},revisions={},sent=0,completedReads=0}
+local S={reads={},sampled={},pending={},revisions={},afterAck={},sent=0,completedReads=0}
 local function log(v) DebugError('[X4LAN] ATTACH_FULL '..v) end
 local function fail(why)
  S.failed=tostring(why);U.failed=true;log('failed '..S.failed)
@@ -49,6 +49,10 @@ X4LAN_TRANSPORT.open=function(...)
     assert(witness.state==row.state and witness.dock==row.dock and GetCurRealTime()-witness.at<=.05,
      'publication differs from current native inspection')
     S.started=S.started or GetCurRealTime();S.sent=S.sent+1;S.revisions[row.revision]=true
+    if U.sender and U.sender.done and U.sender.baseline.revision==row.revision then
+     S.afterAck[row.revision]=S.afterAck[row.revision] or {}
+     S.afterAck[row.revision][row.ship]=true
+    end
     log(string.format('publish at=%.6f handle=%s code=%s macro=%s owner=%s value=%s',GetCurRealTime(),
      tostring(witness.object):gsub('ULL$',''),witness.code,witness.macro,witness.owner,packet))
     local key=row.revision..':'..row.ship
@@ -80,6 +84,17 @@ U.frame=function(now)
   -- A newly captured revision can publish observations before its baseline is
   -- fully acknowledged. Keep the real sender running through that last ACK.
   if revisions>=3 and now-S.started>=12 and not next(S.pending) and U.sender and U.sender.done then
+   -- Records emitted before the relay commits this baseline may correctly be
+   -- rejected. Require a fresh complete publication sweep after that ACK too.
+   local sent=S.afterAck[U.sender.baseline.revision] or {};local count=0
+   for _,wire in ipairs(U.sender.baseline.rows) do
+    local ship=tonumber(wire:match('^(%d+),ship,'))
+    if ship and ship<=P.maxShip then
+     if not sent[ship] then return end
+     count=count+1
+    end
+   end
+   assert(count>0,'full host baseline has no saved ships')
    assert(A.coop.ready and A.cargo.ready and A.trade.state.ready and A.quest.ready,'ordinary fixtures not ready')
    log('complete slot=p1 revisions='..revisions..' published='..S.sent..' samples='..S.completedReads..' native_guest=false')
    S.complete=true;Pause()

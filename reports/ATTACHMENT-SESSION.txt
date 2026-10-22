@@ -222,3 +222,16 @@ every committed baseline, with a regression covering partial final delivery.
 Production and native MD are unchanged.465 checks PASS/no skips. Both prior
 full-host failures/raw traces remain retained; second owned game/peer and test
 seed are gone,7 normal saves/33-file/profile restore verified.
+
+THIRD FULL HOST RUN — POST-ACK PUBLICATION GAP, sourcee476c7a
+attachment-world-host-recipient-20261022 keeps its peer waiting for coverage,
+correctly exposing the remaining native probe timing gap. The host can finish
+on its baseline ACK before publishing any attachment refresh AFTER that ACK.
+Its earlier new-revision records may correctly have been rejected while the
+relay still held the previous baseline. Recipient coverage remains incomplete;
+raw run/strict gate remain FAIL. The native Lua probe regression independently
+reproduces early completion at this boundary. It now requires a full saved-ship
+publication sweep after the current sender ACK, as well as complete MD samples;
+the separate recipient still requires actual delivered coverage.465 checks pass
+without skips, production unchanged. Third game/peer closed, owned seed removed,
+7 normal saves and33-file/profile restoration verified.
