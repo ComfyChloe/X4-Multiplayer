@@ -66,6 +66,31 @@ restoration entries match. Subsequent cleanup console output must be outside the
 directory being sealed. Supplemental cycle audits and validator copies have
 their own hashes; historical evidence remains unchanged.
 
+FRESH CONTENT24efeb9 — BOOTSTRAP/COMPONENT, STATION GATE CORRECTED
+Run attachment-session-world-budget-20261022 uses new seed
+ef8ca166f0017ef27f3b798be7c3c701 and exact same production source capture/load.
+Dock import passes50,691 references, all handles renumbered, maximum relative
+error0.00184751m. Existing pause is preserved (0Pause/0Unpause ownership calls).
+The real UDP/native component completes8 phases,9 actual actions/9 ACKs,
+5 target queries,9 prepares with no rejected consumption/unissued window and
+87 fresh observations. Invalid-then-valid startup still passes. Normal7-save,
+33-file/profile cleanup is verified and all45 original evidence hashes match.
+
+The original station validator FAIL is retained: native display code LMQ-313
+belongs to two distinct stations in both observations, one Teladi factory in
+sector43 and one Split factory in sector418. Codes are not guaranteed unique.
+The validator now matches the fixed tuple(code,macro,owner,sector), never using
+coordinates or runtime handles to guess a match. A whole-tuple collision remains
+ambiguous and rejects; duplicate local component handles now also reject. Three
+new regressions cover disambiguation, ambiguity and component aliasing.478 full
+checks PASS/no skips. This is only a bounded station-layout comparison, not a
+network station identity scheme or ongoing authority.
+Supplemental revalidation of the unchanged raw capture/load passes all1,366
+stations, maximum position error0.01600750137m and angle3.6e-7rad. The collision
+group is explicitly reported. The old code-only FAIL is not overwritten; the
+new result and exact validator are separately hashed. No new native run is
+required for this validator-only correction. Full host/guest24efeb9 follows.
+
 The first integration review found a retained-object identity hole: bindSeedObject
 returned false for absent, expired or foreign-epoch IDENT, but render ignored its
 return value and still wrote through r.object. Respect the return value before

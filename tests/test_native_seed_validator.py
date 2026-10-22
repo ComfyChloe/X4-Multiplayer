@@ -17,6 +17,22 @@ def log(mode, rows=ROWS):
 
 
 class NativeSeedValidatorTests(unittest.TestCase):
+    def test_repeated_display_codes_are_disambiguated_by_fixed_native_descriptors(self):
+        rows=ROWS.replace('DEF-002','ABC-001')
+        loaded='\n'.join(reversed(rows.replace('object=300','object=900').replace('object=400','object=901').splitlines()))+'\n'
+        result=validate(log('capture',rows),log('load',loaded),SEED)
+        self.assertEqual(result['stations'],2)
+        self.assertEqual(result['duplicate_code_groups'],{'ABC-001':2})
+        self.assertEqual(result['station_identity_key'],['code','macro','owner','sector'])
+
+    def test_ambiguous_descriptor_collisions_are_not_matched_by_position(self):
+        rows=ROWS.replace('DEF-002','ABC-001').replace('station_wharf','station_factory').replace('owner=teladi','owner=argon').replace('sector_b','sector_a')
+        with self.assertRaises(ValueError):validate(log('capture',rows),log('load',rows),SEED)
+
+    def test_duplicate_local_component_is_not_two_stations(self):
+        rows=ROWS.replace('object=400','object=300')
+        with self.assertRaises(ValueError):validate(log('capture',rows),log('load',rows),SEED)
+
     def test_same_native_layout_with_distinct_local_handles(self):
         result = validate(log("capture"), log("load", ROWS.replace("object=300", "object=900")), SEED)
         self.assertEqual(result["stations"], 2)

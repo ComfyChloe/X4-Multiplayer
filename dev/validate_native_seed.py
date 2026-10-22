@@ -4,6 +4,7 @@ This checks the initial station layout, not ongoing simulation authority. Local
 component IDs are reported separately: network identity must not depend on them.
 """
 import argparse
+from collections import Counter
 import json
 import math
 from pathlib import Path
@@ -17,6 +18,7 @@ def _read(text, mode, seed_id):
     if len(begin) != 1 or end != begin or int(begin[0]) < 1:
         raise ValueError("missing, repeated or incomplete station observation")
     rows = {}
+    objects = set()
     for line in text.splitlines():
         if "SEED_PROBE station " not in line:
             continue
@@ -27,11 +29,17 @@ def _read(text, mode, seed_id):
             raise ValueError("malformed native station row")
         object_id, code, macro, owner, sector, pose = match.groups()
         values = tuple(map(float, pose.split(",")))
+        # Display codes can collide in an untouched native universe. Fixed
+        # descriptors disambiguate those cases without using coordinates or
+        # runtime handles to guess a match. A collision of this whole key is
+        # still ambiguous and must reject, even when positions differ.
+        identity = code, macro, owner, sector
         if (len(values) != 6 or not all(math.isfinite(v) for v in values)
                 or any(v in ("nil", "unknown", "null") for v in (code, macro, owner, sector))
-                or code in rows or int(object_id) == 0):
+                or identity in rows or int(object_id) == 0 or int(object_id) in objects):
             raise ValueError("invalid or duplicate station identity/pose")
-        rows[code] = dict(object=object_id, macro=macro, owner=owner, sector=sector, pose=values)
+        objects.add(int(object_id))
+        rows[identity] = dict(object=object_id, macro=macro, owner=owner, sector=sector, pose=values)
     if len(rows) != int(begin[0]):
         raise ValueError("station count differs from observation boundary")
     if re.search(r"(?:Error in MD cue|Lua error).*?(?:X4LAN|x4lan|seed_probe)", text):
@@ -51,17 +59,20 @@ def validate(capture, loaded, seed_id):
         raise ValueError("native station identity set changed")
     position_error = angle_error = 0.0
     local_ids_equal = True
-    for code, before in original.items():
-        after = restored[code]
+    for identity, before in original.items():
+        after = restored[identity]
         if any(before[k] != after[k] for k in ("macro", "owner", "sector")):
-            raise ValueError("native station definition/topology changed: " + code)
+            raise ValueError("native station definition/topology changed: " + identity[0])
         position_error = max(position_error, math.dist(before["pose"][:3], after["pose"][:3]))
         for a, b in zip(before["pose"][3:], after["pose"][3:]):
             angle_error = max(angle_error, abs((a - b + math.pi) % (2 * math.pi) - math.pi))
         local_ids_equal &= before["object"] == after["object"]
     if position_error > 0.05 or angle_error > 0.00001:
         raise ValueError("native station transform changed")
+    codes=Counter(key[0] for key in original)
     return dict(seed_id=seed_id, stations=len(original), native_reload=True,
+                station_identity_key=['code','macro','owner','sector'],
+                duplicate_code_groups={code:count for code,count in sorted(codes.items()) if count>1},
                 station_identity_topology_equal=True, max_position_error_m=position_error,
                 max_angle_error_rad=angle_error, local_component_ids_equal=local_ids_equal,
                 ongoing_simulation_authority=False, two_native_acceptance=False)
