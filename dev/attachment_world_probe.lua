@@ -77,7 +77,9 @@ U.frame=function(now)
   if not S.started then return end
   assert(now-S.started<=60,'full adapter observation timed out')
   local revisions=0;for _ in pairs(S.revisions) do revisions=revisions+1 end
-  if revisions>=3 and now-S.started>=12 and not next(S.pending) then
+  -- A newly captured revision can publish observations before its baseline is
+  -- fully acknowledged. Keep the real sender running through that last ACK.
+  if revisions>=3 and now-S.started>=12 and not next(S.pending) and U.sender and U.sender.done then
    assert(A.coop.ready and A.cargo.ready and A.trade.state.ready and A.quest.ready,'ordinary fixtures not ready')
    log('complete slot=p1 revisions='..revisions..' published='..S.sent..' samples='..S.completedReads..' native_guest=false')
    S.complete=true;Pause()

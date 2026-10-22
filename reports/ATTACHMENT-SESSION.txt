@@ -190,3 +190,22 @@ identity/state, absent delivery and partial saved-ship coverage are rejected by
 regressions. Full native host probe schema VALID (sha256
 f40d4cc3d54a97b6c0a8dc5ed804dec0d89521b88e6a98e84e9bd1f45db74c3d).
 463 Linux/Python/LuaJIT checks PASS/no skips. Actual full-host run pending.
+
+FIRST FULL HOST RUN — INCOMPLETE / FAIL, source b24f3ec
+attachment-world-host-first-20261022 ran the actual native host adapter and all
+ordinary fixture roles. It published37,815 native attachment records over3
+revisions;384 independent MD samples match the corresponding identity, saved
+index and attachment state. The synthetic guest committed only revisions1/2
+(140/139 entities) and received34,835 attachment packets. The diagnostic stopped
+its universe frame as soon as the third revision had publication samples, before
+that revision's baseline sender finished; the recipient never committed revision3.
+The strict gate correctly FAILS incomplete peer evidence. Partial observation
+audit is retained separately and does not override that failure.
+
+The actual Lua probe regression reproduces this premature completion before the
+fix. Completion now also requires U.sender.done, keeping the real world sender
+running through its last baseline ACK. All464 Linux/Python/LuaJIT checks pass
+without skips. This changes the dev-only probe; production source and saved-seed
+content digest are unchanged. A fresh full-host load is required for this timing
+correction. Prior owned game/peer closed;7 normal saves and33-file/profile restore
+verified, owned test seed removed.
