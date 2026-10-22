@@ -5,7 +5,13 @@ ROOT=Path(__file__).resolve().parents[1];sys.path.insert(0,str(ROOT))
 from dev import native_seed_play_test as play,native_seed_test as seed,native_world_test as native
 from x4lan.host import Relay
 from x4lan.universe import UniverseSession,Receiver
-from x4lan.attachment import decode
+from x4lan.attachment import decode,MAX_SHIP
+
+
+def recipient_complete(required,delivered):
+    """A baseline ACK does not mean its later attachment snapshot arrived."""
+    return len(required)>=3 and all(ships and ships<=delivered.get(revision,set())
+                                   for revision,ships in required.items())
 
 
 def install(run):
@@ -37,7 +43,7 @@ def peer(run,duration=300):
     relay=Relay('127.0.0.1',cfg['port'],session)
     sock=socket.socket(socket.AF_INET,socket.SOCK_DGRAM);sock.connect(('127.0.0.1',cfg['port']));sock.setblocking(False)
     receiver=Receiver();nonce=secrets.token_hex(16);lease=None;sequence=0;history=[];complete=False
-    start=time.monotonic();hello=send=scan=0;offset=0;carry='';native_complete=False;baselines=0
+    start=time.monotonic();hello=send=scan=0;offset=0;carry='';native_complete=False;required={};delivered={}
     try:
         while time.monotonic()-start<duration:
             now=time.monotonic();relay.step(now)
@@ -51,10 +57,13 @@ def peer(run,duration=300):
                     ack,baseline=receiver.receive(fields,now)
                     if ack is not None:sock.send(f'UACK|1|{lease}|{fields[3]}|{fields[4]}|{ack}'.encode())
                     if baseline:
-                        baselines+=1;history.append(dict(event='baseline',at=now-start,epoch=baseline.epoch,
+                        required[baseline.revision]={int(row.split(',')[0]) for row in baseline.rows
+                            if row.split(',')[1]=='ship' and int(row.split(',')[0])<=MAX_SHIP}
+                        history.append(dict(event='baseline',at=now-start,epoch=baseline.epoch,
                             revision=baseline.revision,sector=baseline.sector,rows=list(baseline.rows)))
                 elif fields[0]=='UATTACH':
-                    decode(packet);history.append(dict(event='attachment',at=now-start,packet=packet))
+                    row=decode(packet);delivered.setdefault(row.revision,set()).add(row.ship)
+                    history.append(dict(event='attachment',at=now-start,packet=packet))
                 elif fields[0]=='IDENT' and len(fields)==11 and fields[5]=='N':
                     history.append(dict(event='identity',at=now-start,packet=packet))
             if lease and now>=send:
@@ -72,7 +81,7 @@ def peer(run,duration=300):
                     if '[X4LAN]' in line and ('STOPPED' in line or 'ATTACH_FULL failed' in line):
                         raise RuntimeError('Native full adapter stopped')
                     if '[X4LAN] ATTACH_FULL complete ' in line:native_complete=True
-            if native_complete and baselines>=3:
+            if native_complete and recipient_complete(required,delivered):
                 complete=True;break
             time.sleep(.005)
         if not complete:raise RuntimeError('Full native host did not complete')

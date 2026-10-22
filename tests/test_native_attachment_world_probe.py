@@ -2,11 +2,24 @@
 from pathlib import Path
 import unittest
 from lupa.luajit21 import LuaRuntime
+from dev.native_attachment_world_test import recipient_complete
 
 ROOT=Path(__file__).resolve().parents[1]
 
 
 class NativeHostProbeCompletionTests(unittest.TestCase):
+    def test_last_baseline_ack_waits_for_every_saved_ships_attachment_delivery(self):
+        required={1:{10,20},2:{10,20},3:{10,20}}
+        delivered={1:{10,20},2:{10,20}}
+        self.assertFalse(recipient_complete(required,delivered))
+        delivered[3]={10}
+        self.assertFalse(recipient_complete(required,delivered))
+        delivered[3].add(20)
+        self.assertTrue(recipient_complete(required,delivered))
+        self.assertFalse(recipient_complete({1:{10,20},2:{10,20}},delivered))
+        required[4]=set()
+        self.assertFalse(recipient_complete(required,delivered))
+
     def test_native_readbacks_do_not_finish_before_the_last_baseline_is_sent(self):
         lua=LuaRuntime();lua.execute((ROOT/'extension/x4_lan_lab/ui/attachment_protocol.lua').read_text())
         lua.execute('''

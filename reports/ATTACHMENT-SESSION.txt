@@ -209,3 +209,16 @@ without skips. This changes the dev-only probe; production source and saved-seed
 content digest are unchanged. A fresh full-host load is required for this timing
 correction. Prior owned game/peer closed;7 normal saves and33-file/profile restore
 verified, owned test seed removed.
+
+SECOND FULL HOST RUN — RECIPIENT COVERAGE FAIL, source9abfdb6
+attachment-world-host-sender-20261022 correctly finishes the native sender and
+its synthetic guest commits all3 baselines (142/141/140 entities). All128 saved
+ships have matching native publications in every revision. Recipient coverage
+is128/128 for revisions1/2 but0/128 for revision3: its loop exited immediately
+after that baseline committed, before the relay's attachment snapshots arrived.
+The unchanged strict validator rejects this coverage hole; no full-host PASS.
+The peer completion predicate now waits for every saved ship's attachment in
+every committed baseline, with a regression covering partial final delivery.
+Production and native MD are unchanged.465 checks PASS/no skips. Both prior
+full-host failures/raw traces remain retained; second owned game/peer and test
+seed are gone,7 normal saves/33-file/profile restore verified.
