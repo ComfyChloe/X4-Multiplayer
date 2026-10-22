@@ -1,3 +1,20 @@
+NEXT PACKAGE — PERSONAL DISPLAY AND CONTROL SETTINGS
+User requested normal game preferences for testers with custom resolution/bindings.
+Internal setup now imports config.xml and inputmap*.xml from a normal sibling
+profile, choosing interactively only when several exist.9-IMPORT-SETTINGS can
+repeat import explicitly. Server-only setup skips it; failed import can be retried
+without reinstalling. Existing test files are backed up and rolled back on error.
+Only autosave/uisafemode are forced false. Windows/Linux launchers no longer
+reset resolution, window mode, graphics or controls. Mod selection, uidata and
+saves are excluded; normal source profiles are read-only. This supersedes the
+old fixed1080p/Low and local Linux shader defaults for future packages.
+Prepared in source only: sealed7.2.0 archives and installed user profiles were
+not changed.302 Linux/Python/LuaJIT checks pass without skips; applicable Windows
+PowerShell fixtures pass on Linux with the same2 explicit drive-root omissions.
+Temporary thin Windows/Linux package layouts include the import module/command
+and valid inventories; native Windows/custom-display acceptance remains pending.
+See reports/profile-settings-next-package.txt.
+
 WINDOWS MOD SELECTION RECOVERY — 22 OCTOBER 2026
 The first7.2.0 guest report shows options-menu frame creation failing at66.46s
 and23967 optionsFrame nil errors; additional mods include duplicate UI extensions.

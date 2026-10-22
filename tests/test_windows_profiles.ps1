@@ -60,7 +60,7 @@ try {
     New-Item -ItemType Directory -Path $profile -Force | Out-Null
     New-Item -ItemType Directory -Path $PackageRoot -Force | Out-Null
     $configPath = Join-Path $profile 'config.xml'
-    $original = '<root><autosave>false</autosave><uisafemode>false</uisafemode><res_width>3840</res_width><res_height>2160</res_height><language>49</language></root>'
+    $original = '<root><autosave>false</autosave><uisafemode>false</uisafemode><res_width>5120</res_width><res_height>1440</res_height><fullscreen>false</fullscreen><borderless>true</borderless><texturequality>high</texturequality><shaderquality>3</shaderquality><language>49</language></root>'
     [IO.File]::WriteAllText($configPath, $original, $Utf8)
     $stateFile = Join-Path $PackageRoot 'installation.json'
     @{profile=$profile;game='fixture-game';steam='fixture-steam';server='192.0.2.109';package_id='fixture-p2';version='5.0.1'} | ConvertTo-Json | Set-Content -LiteralPath $stateFile
@@ -74,11 +74,9 @@ try {
     Check ($script:launchCount -eq 1) 'OneDrive did not reach Steam launch'
     Check ($script:launchArgs -contains '45841' -and $script:launchArgs -contains 'custom_creative') 'Isolated launch arguments changed'
     [xml]$after = Get-Content -Raw -LiteralPath $configPath
-    Check ($after.root.res_width -eq '1920' -and $after.root.res_height -eq '1080' -and $after.root.texturequality -eq 'low' -and $after.root.shaderquality -eq '2') 'Cloud config not set to 1080p Low'
-    Check ($after.root.fullscreen -eq 'true' -and $after.root.borderless -eq 'false') 'Exclusive fullscreen was not selected'
-    Check ($after.root.language -eq '49' -and $after.root.autosave -eq 'false') 'Unrelated settings/safeguards changed'
-    $backedUp = @(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'backups') -Recurse -Filter config.xml)
-    Check ($backedUp.Count -eq 1 -and [IO.File]::ReadAllText($backedUp[0].FullName) -ceq $original) 'Cloud configuration not backed up exactly'
+    Check ($after.root.res_width -eq '5120' -and $after.root.res_height -eq '1440' -and $after.root.texturequality -eq 'high' -and $after.root.shaderquality -eq '3') 'Personal graphics settings changed on launch'
+    Check ($after.root.fullscreen -eq 'false' -and $after.root.borderless -eq 'true') 'Personal window mode changed'
+    Check ([IO.File]::ReadAllText($configPath) -ceq $original) 'Launch rewrote personal configuration'
     $unchangedConfig = [IO.File]::ReadAllText($configPath)
     foreach ($path in @($profile, $configPath)) {
         $oldTag = $script:tags[$path]
@@ -97,7 +95,7 @@ try {
     Must-Fail { Start-TestGame } '*test profile contains saves*'
     Check ([IO.File]::ReadAllText($save) -ceq 'save must remain unchanged') 'Existing save changed'
     Check ($script:launchCount -eq 1) 'Profile with saves launched'
-    # A stale linked temporary config must not be followed during graphics writes.
+    # A stale linked temporary config must not be followed during installation writes.
     $temp = Join-Path $profile 'config.x4lan.tmp'
     [IO.File]::WriteAllText($temp, 'unrelated temporary target', $Utf8)
     $script:tags[$temp] = 'A000000C'

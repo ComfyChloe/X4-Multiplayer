@@ -10,8 +10,8 @@ NEW IN 7.2.0
   invitation; the guest imports it. Each test group gets separate credentials.
 - Shared Shuttles use native creation that correctly initializes their sensors.
   Nearby ship/station radar and HUD checks passed in separate Linux role tests.
-- The isolated Linux profile uses shader quality 1 with High textures after
-  measured startup failures at quality 2. Windows graphics are unchanged.
+- Setup imports your normal profile display, graphics, audio and control settings.
+  Launching the test does not reset your resolution, quality or key bindings.
 - Existing cargo/magnet, smooth movement, identities and Cooperative Trial remain.
 
 QUICK START
@@ -22,6 +22,13 @@ QUICK START
    Send the generated JOIN-SESSION.json privately to the other player.
 3. Guest: run 1-INSTALL, select G, and enter the path to JOIN-SESSION.json.
    Both need this exact version; use the invitation from the intended host.
+   Setup copies config.xml and inputmap*.xml from your normal game profile. If
+   several profiles exist, choose the one you use. No saves, mod selection or
+   uidata are copied. Existing test settings are backed up. Autosave and protected
+   UI mode stay disabled because this internal test requires those settings.
+   Later edits in the test profile are retained. To import again with X4 closed,
+   use 9-IMPORT-SETTINGS; --settings-profile selects a specific source folder,
+   and --keep-test-settings keeps the current test preferences.
 4. Host: run 2-START-SERVER and keep its console open. The host must ALSO run X4.
    Guest: run 2-TEST-CONNECTION. Then both run 3-START-X4-TEST.
 5. After testing, run 4-DIAGNOSTICS on both PCs and keep the host server logs.

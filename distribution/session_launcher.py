@@ -271,6 +271,12 @@ def verify():
     print(f'PASS: {count} package files verified.' + (' Session-specific configuration excluded.' if configured_files else ''))
 
 
+def import_settings(source=None, keep=False):
+    configured()
+    ensure_closed()
+    return backend_module('profile_settings').import_settings(ROOT, source=source, keep=keep)
+
+
 def setup(args):
     if not (ROOT / 'session.json').exists():
         role = args.role or input('Role: [H]ost or [G]uest? ').strip().lower()
@@ -284,23 +290,28 @@ def setup(args):
         else: raise ValueError('Choose H for host or G for guest.')
     package, _ = configured()
     if not args.server_only and not (ROOT / 'installation.json').exists(): platform_action('install', args.game)
+    if not args.server_only and not (ROOT / 'settings-import.json').exists():
+        import_settings(getattr(args, 'settings_profile', None), getattr(args, 'keep_test_settings', False))
     print('Next: ' + ('2-START-SERVER, then ' if package['slot'] == 'p1' else '2-TEST-CONNECTION, then ') + '3-START-X4-TEST.')
 
 
 def main():
     parser = argparse.ArgumentParser(description='X4 Multiplayer Internal Test - Windows/Linux host or guest')
-    parser.add_argument('action', choices=['setup', 'server', 'test', 'start', 'diagnose', 'remove', 'collect', 'verify', 'version'])
+    parser.add_argument('action', choices=['setup', 'server', 'test', 'start', 'diagnose', 'remove', 'collect', 'verify', 'version', 'settings'])
     parser.add_argument('--role', choices=['host', 'guest'])
     parser.add_argument('--server', help='Host LAN/ZeroTier IPv4 when creating a session')
     parser.add_argument('--invite', help='Path to JOIN-SESSION.json when joining')
     parser.add_argument('--game', help='Override detected game installation')
     parser.add_argument('--server-only', action='store_true', help='Configure files without installing or launching X4')
     parser.add_argument('--console', action='store_true', help='Run the server in this console without opening a terminal')
+    parser.add_argument('--settings-profile', help='Normal X4 profile folder to copy display and control preferences from')
+    parser.add_argument('--keep-test-settings', action='store_true', help='Keep current test settings instead of importing preferences')
     args = parser.parse_args()
     try:
         print('X4 Multiplayer ' + VERSION + ' - INTERNAL TEST', flush=True)
         if args.action == 'setup': setup(args)
         elif args.action == 'server': server(console=args.console)
+        elif args.action == 'settings': import_settings(args.settings_profile, args.keep_test_settings)
         elif args.action == 'test': test_connection()
         elif args.action == 'start': platform_action('start')
         elif args.action == 'remove': platform_action('uninstall')

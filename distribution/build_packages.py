@@ -64,6 +64,7 @@ def build(destination: Path, runtime_cache: Path | None = None):
         for name in ('TEST-REPORT.txt', 'RELEASE-CHECKS.txt'): shutil.copy2(reports[1], root / name)
         shutil.copy2(reports[0], root / 'AUTOMATED-TESTS.txt')
         shutil.copy2(DIST / 'session_launcher.py', root / 'launcher.py')
+        shutil.copy2(DIST / 'profile_settings.py', root / 'profile_settings.py')
         shutil.copy2(DIST / 'action.py', root / 'action.py')
         (root / 'x4lan').mkdir()
         for name in ('__init__', 'host', 'bubble', 'economy', 'coop', 'quests', 'monitor', 'universe', 'cargo', 'identity'):
@@ -85,7 +86,8 @@ def build(destination: Path, runtime_cache: Path | None = None):
             write(root / 'RUNTIMES.json', json.dumps(runtimes, indent=2) + '\n')
         actions = {'1-INSTALL': 'setup', '2-START-SERVER': 'server', '2-TEST-CONNECTION': 'test',
                    '3-START-X4-TEST': 'start', '4-DIAGNOSTICS': 'diagnose', '5-REMOVE-MOD': 'remove',
-                   '6-COLLECT-CONTAINER': 'collect', '7-VERIFY-PACKAGE': 'verify'}
+                   '6-COLLECT-CONTAINER': 'collect', '7-VERIFY-PACKAGE': 'verify',
+                   '9-IMPORT-SETTINGS': 'settings'}
         for title, action in actions.items():
             if platform == 'Linux':
                 command = '"./runtime/bin/python3"' if runtime_cache else 'python3'

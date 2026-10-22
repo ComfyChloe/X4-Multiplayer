@@ -15,22 +15,9 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent
 PROFILE = '45841'
-# X4 9.00 libraries/config_gfxpreset_low.xml, with explicit test display settings.
-TEST_SETTINGS = {
-    'autosave': 'false', 'uisafemode': 'false',
-    'res_width': '1920', 'res_height': '1080', 'fullscreen': 'true', 'borderless': 'false',
-    'gfxquality': '1', 'shaderquality': '1', 'shadows': '1', 'softshadows': 'false',
-    'ssao': '0', 'glow': '0', 'uiglow': '0', 'uiglowintensity': '0.75',
-    'lodfactor': '0.15', 'effectdistance': '0.15', 'distortion': 'false',
-    'disableradar': 'false', 'radarquality': '0', 'ssr': 'false', 'ssrquality': 'low',
-    # High shader quality also failed startup on this Linux PC; shaderquality1
-    # completed the isolated October22 runs. Windows defaults stay unchanged.
-    # Low textures caused native shader compilation failures on the Linux test
-    # system; high textures completed the isolated lifecycle run (not a PiP fix).
-    'texturequality': 'high', 'chromaticaberration': 'false', 'volumetric': '0',
-    'pom': 'low', 'envmapprobes': 'none', 'frameratelimit': 'true', 'frameratetarget': '60',
-    'upmode': 'none', 'dlss': 'false', 'dlssmode': 'off', 'fsr3g': 'off',
-}
+# Personal display, graphics and input preferences belong to the tester.
+TEST_SETTINGS = {'autosave': 'false', 'uisafemode': 'false'}
+
 GAME_ARGS = ['-applaunch', '392160', '-personalfolderid', PROFILE, '-module', 'custom_creative',
              '-skipintro', '-debug', 'scripts', '-logfile', 'x4lan-debug.txt', '-nocputhrottle', '-noworkshopsync']
 
@@ -95,11 +82,14 @@ def ensure_closed():
                 raise RuntimeError('X4 is still running. Close the game first.')
         except (FileNotFoundError,PermissionError,ProcessLookupError):pass
 
-def configure_profile(profile: Path, backup: Path):
+def assert_test_profile(profile: Path):
     if profile.name!=PROFILE or profile.is_symlink():raise RuntimeError('Unexpected test profile path.')
     for item in (profile/'save', profile/'config.xml', profile/'config.x4lan.tmp'):
         if item.is_symlink():raise RuntimeError('Refusing to modify a linked test profile item: '+str(item))
     if any((profile/'save').glob('*.xml*')):raise RuntimeError('The test profile contains saves. Back them up separately and use an empty test profile. They will not be changed.')
+
+def configure_profile(profile: Path, backup: Path):
+    assert_test_profile(profile)
     config=profile/'config.xml'
     if config.is_symlink():raise RuntimeError('Refusing to edit a linked profile configuration.')
     tree=ET.parse(config) if config.exists() else ET.ElementTree(ET.Element('root'))
@@ -163,12 +153,12 @@ def install(args):
 def start():
     ensure_closed(); state=read_state()
     check_game(Path(state['game']),json.loads((ROOT/'package.json').read_text())['steam_build'])
+    assert_test_profile(Path(state['profile']))
     config=ET.parse(Path(state['profile'])/'config.xml').getroot()
     if config.findtext('autosave')!='false' or config.findtext('uisafemode')!='false':
         raise RuntimeError('The test profile must keep autosave=false and uisafemode=false. See INSTALL.html.')
     if any((Path(state['profile'])/'save').glob('*.xml*')):raise RuntimeError('The test profile contains saves. See INSTALL.html; do not load an existing game.')
-    configure_profile(Path(state['profile']),ROOT/'backups'/('graphics-'+datetime.now().strftime('%Y%m%d-%H%M%S-%f')))
-    print('Test graphics: 1920x1080 exclusive fullscreen, Low settings with High textures, 60 FPS limit.')
+    print('Using your test profile display, graphics and control settings.')
     log=Path(state['profile'])/'x4lan-debug.txt'
     if log.exists():
         (ROOT/'logs').mkdir(exist_ok=True)

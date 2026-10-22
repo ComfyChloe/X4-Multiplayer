@@ -2,6 +2,7 @@
 import importlib.util,json,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
+from types import SimpleNamespace
 ROOT=Path(__file__).resolve().parents[1]
 spec=importlib.util.spec_from_file_location('internal_launcher',ROOT/'distribution/session_launcher.py')
 launcher=importlib.util.module_from_spec(spec);spec.loader.exec_module(launcher)
@@ -94,3 +95,17 @@ class InternalSessions(unittest.TestCase):
         invite=self.configure();logs=self.host/'logs';logs.mkdir();(logs/'x4-debug.txt').write_text(invite['token'])
         with patch.object(launcher,'ROOT',self.host):launcher.diagnostics()
         self.assertNotIn(invite['token'],(logs/'x4-debug.txt').read_text());self.assertFalse((logs/'JOIN-SESSION.json').exists())
+    def test_setup_retries_failed_settings_import_without_reinstalling_or_reimporting_success(self):
+        self.configure();(self.host/'installation.json').write_text('{}')
+        args=SimpleNamespace(server_only=False,game=None,settings_profile=None,keep_test_settings=False)
+        with patch.object(launcher,'ROOT',self.host),patch.object(launcher,'platform_action') as install,patch.object(launcher,'import_settings') as settings:
+            settings.side_effect=RuntimeError('invalid source input XML')
+            with self.assertRaisesRegex(RuntimeError,'invalid source'):launcher.setup(args)
+            settings.side_effect=lambda *_:(self.host/'settings-import.json').write_text('{}')
+            launcher.setup(args);launcher.setup(args)
+            self.assertEqual(settings.call_count,2);install.assert_not_called()
+    def test_server_only_setup_does_not_import_player_preferences(self):
+        self.configure()
+        with patch.object(launcher,'ROOT',self.host),patch.object(launcher,'import_settings') as settings,patch.object(launcher,'platform_action') as install:
+            launcher.setup(SimpleNamespace(server_only=True,game=None))
+            settings.assert_not_called();install.assert_not_called()

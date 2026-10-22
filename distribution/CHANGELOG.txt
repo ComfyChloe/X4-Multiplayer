@@ -1,3 +1,11 @@
+Prepared for the next internal package (not in the sealed 7.2.0 archives)
+
+- Import config.xml and inputmap*.xml from the normal game profile during setup,
+  with profile selection when ambiguous and exact prior test-setting backups.
+- Preserve custom resolution, window mode, quality, audio and controls on launch.
+- Keep autosave/protected-UI safeguards; never import saves, mod lists or uidata.
+- Add9-IMPORT-SETTINGS to reimport preferences explicitly with X4 closed.
+
 Version 7.2.0 — 22 October 2026 — INTERNAL
 
 - Include a server and portable Python runtime in BOTH OS packages.

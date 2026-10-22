@@ -9,6 +9,9 @@ Extract this version for your OS. Close old games/server and remove the old mod
 with its original package. Run 1-INSTALL: host chooses H and its LAN/ZeroTier IPv4;
 guest chooses G and imports the host's private JOIN-SESSION.json. The host runs
 2-START-SERVER; guest runs 2-TEST-CONNECTION; both run 3-START-X4-TEST.
+Setup imports your normal display/control settings; choose the source profile if
+asked. Check custom resolution, window mode and key bindings after startup and
+again after changing a setting and restarting. 9-IMPORT-SETTINGS repeats import.
 Both need matching official DLC including Timelines; disable Ventures on both.
 Do not load ordinary saves. Use this exact version in both roles.
 A host still needs to play X4; the bundled relay cannot simulate the universe.

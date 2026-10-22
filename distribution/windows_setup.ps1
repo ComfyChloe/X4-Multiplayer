@@ -181,26 +181,6 @@ function Assert-EmptyTestProfile([string]$Profile) {
         if (Get-ChildItem -LiteralPath $saves -Filter '*.xml*' -File) { throw 'The test profile contains saves. Back them up and use an empty test profile. Nothing will be deleted.' }
     }
 }
-function Set-TestGraphics([xml]$Config) {
-    # X4 9.00 low preset plus explicit test display settings; no main profile edits.
-    $settings = [ordered]@{
-        res_width='1920'; res_height='1080'; fullscreen='true'; borderless='false'
-        gfxquality='1'; shaderquality='2'; shadows='1'; softshadows='false'
-        ssao='0'; glow='0'; uiglow='0'; uiglowintensity='0.75'
-        lodfactor='0.15'; effectdistance='0.15'; distortion='false'
-        disableradar='false'; radarquality='0'; ssr='false'; ssrquality='low'
-        texturequality='low'; chromaticaberration='false'; volumetric='0'
-        pom='low'; envmapprobes='none'; frameratelimit='true'; frameratetarget='60'
-        upmode='none'; dlss='false'; dlssmode='off'; fsr3g='off'
-    }
-    $changed = $false
-    foreach ($key in $settings.Keys) {
-        $node = $Config.DocumentElement.SelectSingleNode($key)
-        if ($null -eq $node) { $node = $Config.CreateElement($key); $Config.DocumentElement.AppendChild($node) | Out-Null }
-        if ($node.InnerText -ne $settings[$key]) { $node.InnerText = $settings[$key]; $changed = $true }
-    }
-    return $changed
-}
 function Install-Package {
     Assert-Closed
     $pkg = Get-Content -Raw -LiteralPath (Join-Path $PackageRoot 'package.json') | ConvertFrom-Json
@@ -255,7 +235,6 @@ function Install-Package {
             if ($null -eq $node) { $node = $config.CreateElement($key); $config.DocumentElement.AppendChild($node) | Out-Null }
             $node.InnerText = 'false'
         }
-        Set-TestGraphics $config | Out-Null
         Assert-SafeProfileItem $tempConfig
         $config.Save($tempConfig)
         Move-Item -LiteralPath $tempConfig -Destination $configPath -Force
@@ -298,16 +277,7 @@ function Start-TestGame {
     [xml]$config = Read-Utf8Text $configPath
     if ($config.DocumentElement.Name -ne 'root') { throw 'Unknown config.xml format.' }
     if ((Get-ConfigValue $config 'autosave') -ne 'false' -or (Get-ConfigValue $config 'uisafemode') -ne 'false') { throw 'The test profile must keep autosave=false and uisafemode=false. See INSTALL.html.' }
-    if (Set-TestGraphics $config) {
-        $backup = Join-Path $PackageRoot ('backups\graphics-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
-        New-Item -ItemType Directory -Force -Path $backup | Out-Null
-        Copy-Item -LiteralPath $configPath -Destination (Join-Path $backup 'config.xml')
-        $tempConfig = Join-Path $state.profile 'config.x4lan.tmp'
-        Assert-SafeProfileItem $tempConfig
-        $config.Save($tempConfig)
-        Move-Item -LiteralPath $tempConfig -Destination $configPath -Force
-    }
-    Write-Host 'Test graphics: 1920x1080 exclusive fullscreen, Low preset, 60 FPS limit.'
+    Write-Host 'Using your test profile display, graphics and control settings.'
     $log = Join-Path $state.profile 'x4lan-debug.txt'
     if (Test-Path -LiteralPath $log) {
         $logs = Join-Path $PackageRoot 'logs'; New-Item -ItemType Directory -Force -Path $logs | Out-Null
