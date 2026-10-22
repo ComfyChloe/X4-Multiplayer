@@ -60,7 +60,9 @@ and NPC PiP artifacts have remaining limits described in RELEASE-CHECKS.txt.
 
 Use matching official DLC, disable Ventures for this test, and disable other
 third-party mods. Never load or save a normal game with this experimental mod.
-If either game or relay is restarted, both players must start fresh test worlds.
+For every fresh test session, stop BOTH games AND the relay. Start a fresh relay,
+then start fresh test worlds on both PCs. Reusing the relay after restarting the
+host game is unsupported: it retains the previous NPC session identity.
 For another group/session, use a fresh extracted package and a new host invitation.
 
 This is INTERNAL only. Do not publish this package or its generated session files.

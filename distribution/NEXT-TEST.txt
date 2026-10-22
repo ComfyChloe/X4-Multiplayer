@@ -14,6 +14,8 @@ asked. Check custom resolution, window mode and key bindings after startup and
 again after changing a setting and restarting. 9-IMPORT-SETTINGS repeats import.
 Both need matching official DLC including Timelines; disable Ventures on both.
 Do not load ordinary saves. Use this exact version in both roles.
+Every new attempt requires BOTH games AND the relay to be stopped first. Restart
+the relay, then both fresh worlds. A new host game cannot reuse the old relay.
 A host still needs to play X4; the bundled relay cannot simulate the universe.
 There are TWO simultaneous player slots. Other tester pairs create new sessions.
 

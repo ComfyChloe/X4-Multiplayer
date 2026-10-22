@@ -9,7 +9,8 @@ This helper prepares an isolated mod selection for profile 45841.
    folder, beside 1-INSTALL.cmd, installation.json and the runtime folder.
    Do not put the files into the game installation or the Documents folder.
 3. Run 8-ISOLATE-TEST-MODS.cmd. No administrator privileges or downloads needed.
-4. On success, use 3-START-X4-TEST. Both players start fresh test worlds.
+4. On success, close BOTH games and stop the host relay too. Start the relay
+   again, then use 3-START-X4-TEST on both PCs for fresh test worlds.
    Check Escape/options and pause/resume before continuing the gameplay test.
 
 The helper reads the exact profile/game paths from installation.json and verifies
