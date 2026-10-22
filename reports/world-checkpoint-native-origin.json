@@ -1,0 +1,14 @@
+{
+  "checkpoint_reopened": true,
+  "native_origin": {
+    "game_build": "611726",
+    "game_guid": "13630156-7289-4a1a-98c7-7e997eda4b1e",
+    "game_version": "900",
+    "gamestart": "custom_creative",
+    "generation_seed": 276944566
+  },
+  "source_sha256": "224d4322a63e18ff83866093e5eb028763ff7bd2331242599389e5c499d35a59",
+  "checkpoint_sha256": "224d4322a63e18ff83866093e5eb028763ff7bd2331242599389e5c499d35a59",
+  "new_native_run": false,
+  "save_resume_accepted": false
+}

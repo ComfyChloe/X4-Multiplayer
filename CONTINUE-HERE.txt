@@ -1,3 +1,19 @@
+23 OCTOBER SOLO STATION/BOOTSTRAP WORK — SOURCE ONLY
+Latest human playtest: radar PASS, ordinary cargo PASS, tested mission PASS.
+Claude owns weapons/damage PR16; no duplicate work. One Slack report at08:30CEST.
+Branch starts at PR18/a321b59, separately from sealed7.2.0 and PR30 follow-ups.
+Added shared numeric-seed recipe/argument validation, all-or-nothing native
+station-layout comparison and private durable host checkpoint repository.
+35 focused tests PASS; new comparator reproduces1,378 retained native stations
+(max0.016m). Native25.4MB checkpoint survives repository reopen byte-exact.
+These are component/source results; fresh same-seed generation, native ongoing
+save/resume, live station/economy replication and late admission remain OPEN.
+Isolated direct native startup was blocked by the Steam requirement before a
+world loaded. Preserve its raw failures; do not bypass account isolation or use
+the withdrawn Workshop helper. No live game/profile/package changes were made.
+Read reports/STATION-BOOTSTRAP-20261023.txt and dev/WORLD-CHECKPOINT.txt.
+Only changed-scope tests were run; accepted radar/cargo/mission were not retested.
+
 CURRENT HANDOFF — INTERNAL 7.1.1 PLAYTEST FOLLOW-UP, 21 OCTOBER 2026
 
 21 OCTOBER REAL WINDOWS/LINUX DEVELOPMENT RENDEZVOUS

@@ -1,0 +1,18 @@
+{
+  "stations": 1378,
+  "max_position_error_m": 0.0160040494908104,
+  "max_angle_error_rad": 9.89735327028285e-07,
+  "retained_native_layout_matches": true,
+  "original_generation_seed": 276944566,
+  "fresh_same_seed_generation_test": false,
+  "checkpoint_reopen_exact": true,
+  "save_sha256": "224d4322a63e18ff83866093e5eb028763ff7bd2331242599389e5c499d35a59",
+  "bytes": 25437300,
+  "new_native_game_started": false,
+  "ongoing_world_authority": false,
+  "evidence_sha256": {
+    "capture.log": "672e3adc60d7681e9bed7825465f2143e37ea13083c1b6151ff1bdd08c7b4eee",
+    "load.log": "7031a1a3ee16765c8d88c80a252915d5d48e92f9cb9a559be8a104530598f028"
+  },
+  "explanation": "New code against retained native capture/reload evidence; not a new engine run or two freshly generated worlds."
+}

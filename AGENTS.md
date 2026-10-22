@@ -35,3 +35,9 @@
 - Coordinate native tests on the primary PC. A Git worktree does not isolate an
   X4 installation, Steam profile or relay port. Record actual evidence and pending
   checks. Keep branch progress in its task/PR and integrated state in the handoff.
+
+- Current23 October solo scope/limits are in CONTINUE-HERE and
+  reports/STATION-BOOTSTRAP-20261023.txt. Do not interpret numeric-seed recipes,
+  retained station agreement or checkpoint component tests as native world
+  authority. Steam Workshop selections must remain untouched; the old helper is
+  withdrawn. Recheck only changed scopes per the user's token-saving instruction.

@@ -1,0 +1,47 @@
+DEVELOPER WORLD CHECKPOINTS — NOT A PLAYABLE MODE
+
+Source is layered on PR18. The delivered7.2.0 packages do not invoke these tools.
+No command starts a game, changes Steam subscriptions or installs a mod.
+
+Prepare content.json from INDEPENDENTLY measured enabled content:
+{"game_build":"world1-9.00-steam23660954","mod_sha256":"<64 lowercase hex>","extensions":[{"id":"ego_dlc_timelines","version":"900"}]}
+Use the actual enabled extension list, unique/sorted by id, not this example.
+
+Create an explicit initial-world recipe and a private repository:
+ python dev/world_checkpoint.py recipe --content content.json --generation-seed 42 --output recipe.json
+ python dev/world_checkpoint.py init --recipe recipe.json --store .local/my-world
+
+Print a NEW-world argument plan against an existing isolated45841 config:
+ python dev/world_checkpoint.py plan --recipe recipe.json --profile /absolute/test/45841 --observed-content content.json
+This does not launch X4. A supplied recipe alone does not prove the engine used it.
+A mismatched config seed or load/module override is refused, never overwritten.
+Do not use the withdrawn mod-isolation helper or modify Workshop settings.
+
+After an owned native save has COMPLETED, publish it:
+ python dev/world_checkpoint.py publish --store .local/my-world --world-id <recipe world_id> --snapshot /absolute/owned/completed.xml.gz --expected-revision 0
+Use the original .xml or .xml.gz extension to preserve native format metadata.
+After restarting the host process, inspect the committed head:
+ python dev/world_checkpoint.py head --store .local/my-world --world-id <same world_id>
+Subsequent publication requires the reported current revision. The numeric seed,
+gamestart and native world GUID must remain consistent. Changing content/build
+needs an explicit migration design; never edit world.json to bypass the guard.
+Incomplete checkpoints remain as evidence; no garbage collection is implemented.
+
+Existing seed.send_bundle/receive_bundle can transport a pinned checkpoint.
+The caller must authenticate world/revision/checkpoint discovery and provide the
+expected snapshot ID/content to the receiver. Do not infer live joining from the
+component transport test. These tools do not request saves or restore game roles.
+
+Convert retained seed-probe logs for the bounded station-layout comparison:
+ python dev/station_snapshot.py host.log --recipe recipe.json --capture-id <saved marker> --mode capture --output host-stations.json
+ python dev/station_snapshot.py guest.log --recipe recipe.json --capture-id <same marker> --mode load --output guest-stations.json
+ python dev/world_checkpoint.py compare-stations host-stations.json guest-stations.json --output comparison.json
+The recipe here is caller-supplied metadata, not native numeric-seed proof.
+The fixed identity tuple must be unique; positions are only compared afterwards.
+No bindings are returned after any missing/extra/moved/ambiguous station.
+
+Tests (only these changed scopes need rechecking for this work):
+ python -m unittest discover -s tests -p 'test_world_st*.py'
+ python -m unittest discover -s tests -p 'test_station_*.py'
+ python -m unittest discover -s tests -p 'test_save_origin.py'
+See reports/STATION-BOOTSTRAP-20261023.txt for exact evidence and open boundaries.

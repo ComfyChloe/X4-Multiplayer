@@ -1,0 +1,96 @@
+SOLO STATION / WORLD-START PROGRESS — 23 OCTOBER 2026
+
+User's latest human playtest: radar PASS, ordinary cargo PASS, tested shared
+mission PASS. No repeat of those gameplay tests was performed. Weapons/damage
+remain Claude-owned under PR16; no duplicate changes or overnight Slack polling.
+Work authorized until08:30 Europe/Berlin; a single final Slack update is requested.
+
+SOURCE SCOPE
+This branch builds on PR18/a321b59, not on the sealed7.2.0 delivery. New modules
+are opt-in development building blocks; no production launcher/relay/game adapter
+imports them. Existing experimental attachment/identity branches remain separate.
+No new package or claim of fully synchronized stations/universe is made.
+
+1. Numeric generation seed
+x4lan/world_start.py validates a shared world recipe: opaque world ID, a numeric
+seed, gamestart, build, mod digest and DLC/extension identity. It emits the actual
+-seed:NUMBER argument for a fresh world and rejects conflicting config seed/load
+settings or mismatched measured content. It never edits config/content.xml.
+The numeric seed is distinct from the existing PR18 "seed" native-save bundle.
+A same-number recipe is a hypothesis about initialization, not proof of identical
+station layouts or synchronized simulation. Fresh host/guest generation remains
+UNTESTED. Source documentation confirms the colon syntax and notes config seed
+precedence; the latter is explicitly not a new native measurement here:
+https://wiki.egosoft.com/X4%20Foundations%20Wiki/Modding%20Support/Running%20X4%20for%20modding/
+
+2. Station catalog agreement
+x4lan/station_catalog.py validates bounded native station catalogs and matches
+(code, macro, owner, sector) BEFORE comparing pose. Display-code collisions are
+allowed only when fixed descriptors disambiguate them; a full-key collision,
+missing/extra station, bad coordinate or aliased runtime handle rejects. Position
+is never used to guess identity. Rebound local handles are returned only when
+ALL stations match within0.05m /0.00001rad. These are ephemeral startup bindings,
+not persistent network IDs or safe authority for moving a live docked station.
+dev/station_snapshot.py enforces ordered native begin/rows/end/completion markers,
+expected capture identity, exact counts and absence of relevant native errors.
+
+New code against existing raw capture/load evidence reproduced1,378 matches,
+maximum position0.01600404949m and angle9.89735327e-7rad. This reuses a retained
+native save/reload experiment, NOT two new worlds with the same numeric seed.
+Private evidence: .local/evidence-233-withheld and .local/evidence-250-withheld
+Original logs remain unchanged. Their SHA256 values:
+ capture672e3adc60d7681e9bed7825465f2143e37ea13083c1b6151ff1bdd08c7b4eee
+ load7031a1a3ee16765c8d88c80a252915d5d48e92f9cb9a559be8a104530598f028
+
+3. Persistent host checkpoint repository
+x4lan/world_store.py owns a new private directory. Completed native save bytes
+are sealed as immutable numbered checkpoints. A writer lock and expected-revision
+check reject concurrent/stale publishers. Files are flushed, then HEAD is replaced
+atomically. Interrupted staging/orphan directories are preserved but never adopted
+as latest. Corrupt committed state fails closed instead of silently selecting an
+older world. Earlier checkpoints remain unchanged and source saves are copied.
+Native header readback pins generation seed, gamestart, engine build/version and
+world GUID; a different-world save cannot advance an existing repository.
+Header parsing is bounded and rejects declarations/UTF16; it does NOT validate
+all native save contents or prove an engine save-completion callback occurred.
+The caller must supply a completed host snapshot.
+
+Targeted tests reopen the repository in another Python process and use real
+loopback TCP to deliver revision2 to a client which missed revision1. These are
+synthetic save/header and transport tests, NOT native ongoing-world save/resume.
+A retained25,437,300-byte native gzip snapshot was additionally sealed, reopened
+and verified with the same SHA256:
+224d4322a63e18ff83866093e5eb028763ff7bd2331242599389e5c499d35a59
+Its actual header records generation seed276944566 and world GUID
+13630156-7289-4a1a-98c7-7e997eda4b1e. Evidence: .local/evidence-126-withheld
+No actual live-world save request, pause barrier, role restoration, admission,
+late-join controller or station/economy/mission replication is implemented here.
+
+NATIVE ATTEMPT / WORKSHOP CONTAINMENT
+A direct X4 process was attempted in a bubblewrap environment with a read-only
+host filesystem, private writable home, separate network/IPC/PID namespaces,
+hidden Steam runtime sockets and no Steam launcher. Two initial mount-setup
+errors preceded the corrected attempt. The corrected attempt exited before a
+world started, trying to launch Steam from the empty private home. Raw evidence
+under .local/evidence-219-withheld, -2 and -3 is retained. Do not count this as a native
+seed test. No further game launch or account/isolation workaround was attempted.
+The actual profile45841, normal profiles, Workshop selections and installation
+were not edited. No task-owned game or relay remains from this attempt.
+
+VALIDATION AND REMAINING WORK
+35 focused tests PASS:6 recipe,14 checkpoint,8 station catalog,3 ordered native
+snapshot,4 save-header checks. Only affected checks were repeated after fixes.
+CLI head/compare smoke checks pass. No unchanged full project suite, native cargo,
+radar, mission or weapon tests were rerun. Windows-native filesystem locking,
+flush semantics and same-seed Windows/Linux generation remain unverified.
+
+Next acceptance steps:
+- Resolve safe native test startup after the Workshop incident, then compare TWO
+  fresh worlds with the same numeric recipe and matching content. Reject layout
+  mismatches; do not silently warp stations/children or equate seed with authority.
+- Wire host save completion/quiescence and authenticated checkpoint discovery to
+  this repository, with world/revision/epoch binding before transfer/admission.
+- Restore saved role/MD/attachment state before admitting peers; preserve separate
+  draft-branch failure evidence. Do not reuse fresh-fixture setup on progressed saves.
+- Then implement ongoing station creation/destruction/modules/ownership/economy
+  and other-object authority. A generation seed cannot encode later player history.
