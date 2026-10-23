@@ -178,7 +178,7 @@ function c.receive(f,now)
    r.track=track
    resumeCutoff(entity) -- Latch an unknown mapping at its first valid NAV2 baseline.
   else r.track=nil end
-  r.seq,r.at,r.dock=seq,now,dock
+  r.seq,r.at,r.dock,r.sourceLease=seq,now,dock,f[4]
   -- In fire2 mode the NAV counter never triggers fire; there is no protocol transition.
   if fire>r.fire and not fire2Mode then r.fireDeadline=now+.35 end;r.fire=fire
   r.samples[#r.samples+1]={time=now,pose=p};while #r.samples>5 do table.remove(r.samples,1) end
@@ -316,6 +316,7 @@ function c.frame(now)
     if sector~=0 then
      local name=GetComponentData(A.id(sector),'macro');c.sectors[name]=sector
      local p=C.GetObjectPositionInSector(ship);c.seq[i]=c.seq[i]+1
+     if cfg.coop_docks and c.publishDock then c.publishDock(i,c.seq[i],now) end
      local fields={'NAV2','1',s.client.lease,tostring(i),tostring(c.epochs[i]),tostring(c.seq[i]),name}
      for _,value in ipairs({p.x,p.y,p.z,p.yaw,p.pitch,p.roll}) do fields[#fields+1]=string.format('%.9g',value) end
      fields[#fields+1]=tostring(c.docks[i]);fields[#fields+1]=tostring(c.shots[i])
@@ -340,14 +341,15 @@ function c.frame(now)
   if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) and C.GetPlayerControlledShipID()~=ship then
    if (r.fireDeadline or 0)>now and not r.firing then r.firing=true;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=true}) end
    local sector=c.sectorId(r.sector)
-   if c.docks[i]~=r.dock and sector and now>=(r.nextDock or 0) then
+   if not cfg.coop_docks and c.docks[i]~=r.dock and sector and now>=(r.nextDock or 0) then
     r.nextDock=now+1
     AddUITriggeredEvent('X4LAN_Coop','Dock',{ship=i,market=r.dock,sector=A.id(sector),x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
    end
    -- The legacy market index is zero at ordinary stations too. Recheck the
    -- actual native attachment before a synchronous pose write; a stale/free
    -- network sample must not pull a locally docked ship out of its parent.
-   if sector and r.dock==0 and c.docks[i]==0 and GetComponentData(A.id(ship),'isdocked')~=true then
+   local dockAllowed=not cfg.coop_docks or (c.dockPoseAllowed and c.dockPoseAllowed(i,r,now))
+   if dockAllowed and sector and r.dock==0 and c.docks[i]==0 and GetComponentData(A.id(ship),'isdocked')~=true then
     local value={x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}
     if C.GetContextByClass(ship,'sector',false)~=sector then
      if now>=(r.nextWarp or 0) then

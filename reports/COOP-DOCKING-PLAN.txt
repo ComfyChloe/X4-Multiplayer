@@ -34,5 +34,38 @@ matching Marked acknowledgement, then a new pristine-world readback, then save.
 Missing/foreign/error acknowledgements prevent saving. Normal capture has no
 new registry dependency unless explicitly opted in. Launcher does not enable it.
 Eight dock-related tests and five capture tests passed under Linux/LuaJIT;
-registry MD schema VALID. Native capture/reload qualification is running under
-.local/evidence-251-withheld No ordinary-pad synchronization acceptance yet.
+registry MD schema VALID. Native capture/reload evidence follows below. No ordinary-pad synchronization
+acceptance yet.
+
+NATIVE READBACK AND EXECUTION PROGRESS (24 OCTOBER)
+The completed-story save contains51506 dock references. After reload,51504 pass
+all retained parent/container/macro/type/capacity/relative-position witnesses.
+Indices20054/20055 resolve as a non-dockingbay type. Both belonged to the saved
+Scale Plate Teladi transport ZJQ-435 (ship_tel_s_trans_container_01_b_macro), which
+has a low-attention attack recorded in the captured save. The exact later type/
+transition is not established; do not call this a proven serializer bug. The
+strict whole-registry result remains FAIL. A nested existence/class guard rejects
+these without querying invalid docking-only properties. No witness is relaxed.
+.local/evidence-253-withheld has unique full coverage including the2 explicit rejects;
+raw SHA256cc49451cd8ed47d4c37a0b25999b1f8d80a8c3ae84bcb75fbbda39fba7d6167c.
+Earlier probe failure and native property errors are retained separately.
+
+coop_dock_game.lua / x4lan_coop_docks.xml provide optional native observations.
+Free-flight pose requires matching NAV/CDOCK sequence, source lease, epoch and
+fresh native FREE state. Missing/stale/unknown attachment cannot authorize pose.
+Four new LuaJIT adapter tests PASS;25 existing cooperative adapter tests and23
+FIRE2 tests PASS on the changed cooperative source. UI is registered, but the
+feature flag is unset and UniverseSession still does not inherit DockSession.
+Queued movement execution must also be tied to attachment transitions before
+activation; synchronous pose fencing alone does not close the MD queue race.
+
+x4lan_coop_attachment.xml is an inert, explicit-start adaptation of our previously
+qualified attachment consumer to the two Arena ships. It adds per-ship generation
+fences, exact-bay RESERVE/CANCEL, native handle matching and physical actor guards.
+There is no automatic client caller yet. Its schema and observation schema VALID.
+.local/evidence-020-withheld: exact native HQ bay35497 reserved for ship1; conflicting
+ship2 reservation refused; ship1 attached with native EXTERNAL readback; ship2
+attachment into the occupied bay refused. The run FAILS at an undock readback
+sampled after0.5s. Command invocation is not completion. A bounded wait/readback
+follow-up is prepared in coop-dock-exec-02, not yet run. No end-to-end/boarding/
+same-pad crash acceptance. All completed runs have verified owned cleanup.

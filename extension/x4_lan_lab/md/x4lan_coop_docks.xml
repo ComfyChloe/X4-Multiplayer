@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Optional observation only. No dock/undock/warp action is dispatched here. -->
+<mdscript name="X4LAN_CoopDocks" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Session" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_CoopDocks'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="$ready" exact="false"/>
+    <do_if value="md.X4LAN_Seed.State.$id? and md.X4LAN_Seed.State.$id == event.param3 and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and md.X4LAN_SeedDocks.State.$id == event.param3 and md.X4LAN_SeedDocks.State.$version == 1 and md.X4LAN_Bubble.Arena.$ships?">
+     <set_value name="$ready" exact="true"/>
+     <raise_lua_event name="'X4LAN_CoopDocks.Ready'" param="event.param3"/>
+    </do_if>
+    <do_else><raise_lua_event name="'X4LAN_CoopDocks.Error'" param="'missing shared saved dock registry'"/></do_else>
+   </actions>
+   <cues>
+    <cue name="Read" instantiate="true">
+     <conditions><event_ui_triggered screen="'X4LAN_CoopDocks'" control="'Read'"/></conditions>
+     <actions>
+      <do_if value="$ready and player.timewarp.factor gt 0s">
+       <do_all exact="2" counter="$i">
+        <set_value name="$ship" exact="md.X4LAN_Bubble.Arena.$ships.{$i}"/>
+        <set_value name="$mode" exact="'UNKNOWN'"/><set_value name="$dock" exact="null"/><set_value name="$index" exact="0"/>
+        <do_if value="$ship.isoperational">
+         <do_if value="$ship.dock.exists">
+          <set_value name="$dock" exact="$ship.dock"/>
+          <set_value name="$mode" exact="if $ship.isinternallystored then 'STORED' else if $dock.external then 'EXTERNAL' else 'UNKNOWN'"/>
+         </do_if>
+         <do_elseif value="$ship.assigneddock.exists"><set_value name="$dock" exact="$ship.assigneddock"/><set_value name="$mode" exact="'APPROACH'"/></do_elseif>
+         <do_elseif value="not $ship.isinternallystored"><set_value name="$mode" exact="'FREE'"/></do_elseif>
+         <do_if value="$dock.exists">
+          <do_if value="md.X4LAN_SeedDocks.State.$indices.{$dock}?"><set_value name="$index" exact="md.X4LAN_SeedDocks.State.$indices.{$dock}"/></do_if>
+          <do_else><set_value name="$mode" exact="'UNKNOWN'"/></do_else>
+         </do_if>
+         <do_if value="$mode == 'UNKNOWN'"><set_value name="$index" exact="0"/></do_if>
+        </do_if>
+        <raise_lua_event name="'X4LAN_CoopDocks.Row'" param="'%s|%s|%s|%s|%s|%s'.[player.age / 1s,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},$i,$ship,$mode,$index]"/>
+       </do_all>
+      </do_if>
+     </actions>
+    </cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>

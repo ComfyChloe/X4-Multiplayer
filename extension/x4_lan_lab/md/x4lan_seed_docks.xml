@@ -45,10 +45,15 @@
      <raise_lua_event name="'X4LAN_SeedDocks.Begin'" param="'%s|%s|%s|%s|%s'.[State.$id,$v.$serial,$v.$start,$last,State.$docks.count]"/>
      <do_all exact="$last - $v.$start + 1" counter="$offset">
       <set_value name="$i" exact="$v.$start + $offset - 1"/><set_value name="$dock" exact="State.$docks.{$i}"/>
+      <!-- Saved mobile docks can disappear during ordinary simulation. Never
+           evaluate docking-only properties on a missing or differently typed ref. -->
+      <do_if value="$dock.exists"><do_if value="$dock.isclass.dockingbay">
       <do_if value="$dock.exists and $dock.parent.exists and $dock.container.exists and State.$indices.{$dock}? and State.$indices.{$dock} == $i and $dock.parent == State.$parents.{$i} and $dock.container == State.$containers.{$i} and $dock.macro.id == State.$macros.{$i} and $dock.container.macro.id == State.$containerMacros.{$i} and $dock.external == State.$external.{$i} and $dock.isstorage == State.$storage.{$i} and $dock.shipstorage.capacity == State.$capacities.{$i} and $dock.distanceto.[State.$containers.{$i},State.$positions.{$i}] le 0.05m">
        <raise_lua_event name="'X4LAN_SeedDocks.Row'" param="'%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s'.[State.$id,$v.$serial,$i,$dock,$dock.parent,$dock.container,State.$macros.{$i},State.$containerMacros.{$i},if $dock.external then 1 else 0,if $dock.isstorage then 1 else 0,$dock.shipstorage.capacity,$dock.distanceto.[State.$containers.{$i},State.$positions.{$i}] / 1m]"/>
       </do_if>
       <do_else><set_value name="$valid" exact="false"/><raise_lua_event name="'X4LAN_SeedDocks.Error'" param="'saved dock witnesses changed at index %s'.[$i]"/></do_else>
+      </do_if><do_else><set_value name="$valid" exact="false"/><raise_lua_event name="'X4LAN_SeedDocks.Error'" param="'saved reference is not a dockingbay at index %s container=%s'.[$i,State.$containerMacros.{$i}]"/></do_else></do_if>
+      <do_else><set_value name="$valid" exact="false"/><raise_lua_event name="'X4LAN_SeedDocks.Error'" param="'saved reference no longer exists at index %s container=%s'.[$i,State.$containerMacros.{$i}]"/></do_else>
      </do_all>
      <raise_lua_event name="'X4LAN_SeedDocks.End'" param="'%s|%s|%s|%s|%s|%s'.[State.$id,$v.$serial,$v.$start,$last,State.$docks.count,if $valid then 1 else 0]"/>
     </do_if>

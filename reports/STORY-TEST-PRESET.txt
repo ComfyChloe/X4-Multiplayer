@@ -60,3 +60,17 @@ The owned game/helpers were closed and installation/settings/save inventories
 restored. PASS is limited to this native Linux fresh-start observation. Native
 capture/reload timing, later triggers and human two-PC acceptance are still
 distinct checks; no completed campaign/session persistence claim is made.
+
+CAPTURE / RELOAD FOLLOW-UP
+Production seed_capture with optional coop_docks saved the completed-story start
+in .local/evidence-251-withheld The reload probe first rejected a transient native
+load count0; production seed admission already waits for count1. That failed
+probe and its raw log remain retained. Corrected probe reused identical snapshot
+bytes; no regenerated world. .local/evidence-253-withheld observes the loaded world
+through game71.05s. Its mission lists show only three Acquire Captain upkeep
+missions, no plot mission. This extends the bounded story observation to actual
+native save/reload, not later campaign triggers or two-PC acceptance.
+The independent dock-witness audit remains FAIL for2/51506 saved mobile dock refs;
+that does not invalidate the separately observed mission list. See the docking
+plan. All runs restore original installation/preferences/owned slot010 and seven
+actual normal-save bytes/timestamps; steam_autocloud bytes are checked separately.
