@@ -12,7 +12,8 @@ unique launcher numbers, borderless test-profile defaults for Alt+Tab, and all
 four PERSONAL teleportation research levels (including unlimited range).
 Your normal profile remains read-only. Resolution, quality, sound and custom
 bindings are imported; only the test display mode changes to borderless.
-Weapon/damage changes and their measured scope are listed in reports/RELEASE-CHECKS.txt.
+Weapon/damage synchronization is UNCHANGED and remains unreliable. A candidate
+fix failed the native engine check and is not included in this package.
 
 Ordinary station docking remains incomplete: the other player's native landing
 pad occupancy/barriers are not shared, so boarding their docked ship may fail

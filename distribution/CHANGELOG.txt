@@ -8,7 +8,8 @@ Version 7.3.1 — 23 October 2026 — INTERNAL candidate
   profile for Alt+Tab. Keep -nocputhrottle; normal preferences stay read-only.
 - Unlock all four personal teleportation research levels after admitted ship
   setup, including maximum/unlimited range. No HQ relocation progression change.
-- Damage integration and measured checks: see reports/RELEASE-CHECKS.txt.
+- Weapon/damage synchronization remains unchanged and unreliable. The candidate
+  damage correction failed a native engine check and is not shipped.
 - Ordinary-station dock occupancy/barriers and ongoing-world authority remain open.
 
 Version 7.3.0 — 23 October 2026 — INTERNAL

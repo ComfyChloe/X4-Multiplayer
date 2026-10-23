@@ -51,15 +51,21 @@ EVIDENCE / NEXT CHECK
   Guest needs its NEW private JOIN-SESSION.json; never print or commit its secrets.
 
 CURRENT CHECKPOINT
-Launcher/settings47 targeted tests PASS; PowerShell fixtures PASS with native
-Windows metadata simulated. Teleport MD schema VALID. Native Linux final background/teleport function test PASS at40e0e69:25.338s
-other-window focus, continuous unpaused NAV, all4research flags true. Failed
-startup/window-selection runs retained. Game/runtime/helpers closed;37files and
-config restored,7normal saves +reserved save unchanged. See reports/BACKGROUND-
-TELEPORT-20261023.txt. Recheck live state before another native action.
-Claude PR34 385250c NOT integrated: source ordering regression undoes host40
-extra damage, lethal replay undo unproven. Asked Claude for fixes/native evidence.
-8 existing damage tests pass, not sufficient acceptance.
+Production frozen for 7.3.1 usability delivery; final 383 Python/LuaJIT tests PASS,
+no skips. Launcher/settings47 focused checks and Linux PowerShell fixtures pass;
+teleport MD schema VALID. Native Linux background/research PASS at40e0e69:
+25.338s other-window focus, unpaused NAV and all4research flags true. Failed runs
+retained; reports/BACKGROUND-TELEPORT-20261023.txt describes the exact limits.
+Claude PR34 c5eae79 EXCLUDED: native replay produced43 shield-hit callbacks but
+only5 notifications in each attacker stream;1,440damage remained uncompensated.
+Raw reviews in x4-pr34-review/.local/evidence-028-withheld and damage-source-events;
+committed reports/damage-c5eae79*.json. Neither capture is a combat PASS.
+All owned games/helpers closed; original37files/settings restored;7normal saves
+and reserved test save retain bytes/timestamps. Recheck live state before changes.
+Claude has a bounded victim-pilot authority design/source feasibility task until
+20:00; separate draft only, no Windows profile/native changes. No after20:30 work
+is inferred. Ordinary station pad occupancy remains open. Packaging is next;
+public mirror and7.3.0 sealed archives remain unchanged.
 
 TASK REFERENCES — OPEN WHEN RELEVANT
 - Setup/machine sync: DEVELOPMENT.txt. Collaboration/PR delivery: CONTRIBUTING.txt.

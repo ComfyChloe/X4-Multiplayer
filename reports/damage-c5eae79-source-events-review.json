@@ -1,0 +1,32 @@
+{
+  "head": "c5eae79",
+  "event_counts": {
+    "ATTACK": 5,
+    "SOURCE": 5,
+    "OWNED_SOURCE": 5,
+    "SHIELD": 43,
+    "HULL": 0
+  },
+  "shield_damage": 1720.0,
+  "undone_shield_damage": 280.0,
+  "uncompensated_replayed_damage": 1440.0,
+  "cadence_pass": true,
+  "source_capture_pass": false,
+  "cleanup": {
+    "owned_game_closed": true,
+    "helpers_closed": true,
+    "normal_saves_and_test_save_unchanged": true,
+    "original_installation_restored": true,
+    "selection_unchanged": true,
+    "controller_completed": true
+  },
+  "raw_sha256": {
+    "native.log": "db62961b59c0806b98de8e1e9b566238150de7e03996d63c69431e0565e1e308",
+    "installed-probe.json": "beeab9f6b7598219d0498e4dc1e5a841e7a15f2bf061db3105c17531eb212577",
+    "saves-before.json": "08dfce270cb35229d31a51c7358d2f08a0d50993879499bdfa086271da930eb1",
+    "saves-after.json": "98ad4b19f2c624148978f2a717951ef1de20f8bee53e93c2d6af44fdc3b43e63",
+    "restored-files.json": "4e0548a228f6b06a65bdfb4aa285605b4f1e050a179f472c9f4b1af33ce554b7",
+    "cleanup.json": "4499d6e326cc035f0850dcfd64f6c724f3480c73cd8f511bce12b797262ec1ba"
+  },
+  "verdict": "FAIL damage attribution: attacker-side notifications are also throttled; source_capture gate is not applicable to this no-echo diagnostic but retained false."
+}

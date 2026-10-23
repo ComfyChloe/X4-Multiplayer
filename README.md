@@ -15,7 +15,7 @@ shared rules. Read [setup instructions](DEVELOPMENT.txt) for a new machine and
 Use the matched 7.3.1 Windows/Linux packages, both including the server and portable
 runtime. Follow [installation instructions](distribution/INSTALL.html), the
 [package guide](distribution/README.txt) and the
-[focused damage/background test](distribution/NEXT-TEST.txt). The host runs both X4 and the
+[focused setup/background/teleportation test](distribution/NEXT-TEST.txt). The host runs both X4 and the
 relay. Host setup prepares the starting save once; guests import the private
 invitation and download the verified world at launch. UDP45841 and TCP45844 are
 required. Both roles use isolated test profile 45841 and matching game/DLC content.
@@ -43,6 +43,11 @@ Humans passed radar, ordinary cargo/magnet interaction and Cooperative Trial in
 shared missions. Ongoing station economy, construction/destruction, complete
 NPC/docking authority, campaign save/resume, progressed-world join and ingame chat
 remain unfinished. See [world requirements](WORLD-SYNC-REQUIREMENTS.txt).
+
+7.3.1 adds an invitation picker, unique launcher numbers, borderless test settings
+and all four personal teleportation research levels. Native Linux background and
+research checks pass. Weapon damage remains unchanged: the proposed correction
+failed native event-attribution checks and is excluded from this release.
 
 Source: `x4lan/` holds relay/session logic, `extension/x4_lan_lab/` the Lua/MD/AI
 adapters, and `distribution/` the launchers and packaging. Development checks

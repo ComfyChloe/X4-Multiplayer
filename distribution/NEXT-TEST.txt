@@ -9,19 +9,19 @@ Open00-START-HERE.html. Allow UDP45841 and TCP45844 on the host.
 FOCUSED CHECK
 1. Setup: confirm the invitation can be selected, personal resolution/bindings
    remain usable, and both players reach their own Shuttle.
-2. Damage: follow the exact supported target/weapon scope in
-   reports/RELEASE-CHECKS.txt. Alternate host and guest shooting the same target.
-   Compare BOTH hull and shield, including after stopping fire and after death.
-   Record target code, attacker, weapon/group and time if values diverge.
-3. Background: with neither game manually paused, Alt+Tab one player to another
+2. Background: with neither game manually paused, Alt+Tab one player to another
    app for30 seconds while the other observes its ship. Return and compare
    position, radar and damage. Repeat with roles reversed. Keep X4 open in
    borderless mode; explicit minimize-to-desktop is a separate unverified case.
-4. Teleportation: after Shuttle setup, verify personal teleportation works at
+3. Teleportation: after Shuttle setup, verify personal teleportation works at
    long range using an eligible normal destination. Note destination, ownership,
    sector and whether the player was piloting or walking before the teleport.
 
 ALREADY PASSED / OPEN LIMITS
+Weapon/damage synchronization has NO new fix in this release. The candidate
+correction failed native validation and is excluded. No repeated damage test is
+required to reconfirm this known limitation. If a new failure appears during
+normal play, record target code, attacker, weapon/group and approximate time.
 Station and asteroid alignment passed the7.3.0 human test. Radar, ordinary cargo,
 smooth movement and Cooperative Trial also retain their previous human evidence.
 Do not spend time repeating them unless a regression appears.

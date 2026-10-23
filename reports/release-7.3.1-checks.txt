@@ -1,0 +1,55 @@
+X4 Multiplayer 7.3.1 — INTERNAL HUMAN-TEST CANDIDATE
+23 October 2026 | Windows/Linux host or guest | Two players
+
+INCLUDED
+- Invitation file picker (automatic adjacent JOIN-SESSION.json still supported).
+- Unique 01–10 launcher numbers, explicit HOST actions and 00-START-HERE.html.
+- Personal settings import retains resolution, graphics quality and controls;
+  only the isolated test profile switches to borderless mode for Alt+Tab.
+- All four personal teleportation research levels after admitted Shuttle setup.
+  HQ relocation and normal campaign progression are not changed.
+- Server and portable Python runtime in BOTH OS packages. Shared starting-save
+  capture/transfer is retained. No Python download or installation is needed.
+
+WEAPONS / DOCKING: STILL OPEN
+There is NO new weapon-damage fix in this release. The proposed damage-claim
+adapter is excluded. Native X4 emits many damage events between attacker
+notifications: one diagnostic observed 43 shield-damage callbacks but only five
+notifications in each attacker stream. The candidate failed to compensate 1,440
+points of replayed damage. Guessing the attacker could double or erase damage.
+Ordinary station landing-pad occupancy/barriers are also unfinished. Peer ships
+may be inaccessible and NPC traffic may overlap them. Pose sync is insufficient
+to reserve a native docking bay.
+
+ACTUAL EVIDENCE
+Native Linux on production change 40e0e69, synthetic UDP peer: all four personal
+research flags true; 25.338 seconds with a different owned window focused, 44
+unpaused samples and continuous NAV updates. X4 stayed open, not minimized.
+Failed startup/window-selection captures are retained. All owned helpers stopped;
+37 original installation files and test settings restored. Seven normal saves
+and the reserved test save retained bytes/timestamps; selection was not changed.
+This is NOT native Windows, a two-native playtest, a minimize test or a completed
+long-range teleport journey. Windows background behavior remains for humans.
+
+Launcher/settings: 47 focused Python/LuaJIT checks pass. PowerShell fixtures pass
+on Linux with native metadata simulated and two drive-root omissions. Changed
+teleport MD schema validates. Final integration: 383 Python/LuaJIT tests PASS,
+no skips. Exact output is in AUTOMATED-TESTS.txt.
+The first integration attempt passed 382/383; the packaging contract could not
+run until this required release report existed. Its raw failure is retained.
+
+DELIVERY CHECKS
+Archive verification checks both runtimes/servers, every listed hash, matching
+platform/version/pair, ten unique launcher numbers, and no probes/session secrets.
+Actual sealed-archive results and local installation status are recorded in the
+outer delivery folder. Do not infer native Windows execution from archive checks.
+
+RETAINED HUMAN RESULTS / LIMITS
+Station and asteroid alignment passed the 7.3.0 human playtest. Radar, ordinary
+cargo, smooth ship movement and Cooperative Trial retain their prior human
+evidence. Unchanged accepted gameplay checks were not repeated.
+Ongoing universe economy, general NPC authority, full docking, ordinary shared
+missions and persistent campaign save/resume remain unfinished. Restarting BOTH
+games and relay reloads the original starting world, not progressed gameplay.
+Normal saves/preferences and Workshop selections/subscriptions must be preserved.
+See NEXT-TEST.txt. This package is INTERNAL, not a public release.
