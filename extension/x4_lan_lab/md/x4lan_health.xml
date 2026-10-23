@@ -53,8 +53,9 @@
     <cue name="KeepWatchdog" instantiate="true" checkinterval="0.5s"><conditions><check_value value="not $arena.$host"/></conditions><actions>
      <do_all exact="2" counter="$i">
       <do_if value="$arena.$healthOwn.{$i} and player.age - $arena.$healthKeptAt.{$i} gt 2s">
+       <raise_lua_event name="'X4LAN_Health.Expired'" param="'%s|%s'.[$i,$arena.$healthAuth.{$i}]"/>
+       <debug_text text="'[X4LAN] HEALTH_KEEP_WATCHDOG entity=%s gen=%s'.[$i,$arena.$healthAuth.{$i}]"/>
        <set_value name="$arena.$healthOwn.{$i}" exact="false"/><set_value name="$arena.$healthAuth.{$i}" exact="0"/>
-       <debug_text text="'[X4LAN] HEALTH_KEEP_WATCHDOG entity=%s'.[$i]"/>
       </do_if>
      </do_all>
     </actions></cue>
@@ -98,8 +99,11 @@
         <set_object_min_hull object="$ship" exact="1"/>
         <do_if value="not $arena.$dead.{$i}"><set_object_hull object="$ship" exact="$arena.$healthValue.{$i}.{1}"/><set_object_shield object="$ship" exact="$arena.$healthValue.{$i}.{2}"/></do_if>
        </do_if>
+       <!-- Expiry closes the generation natively: no queued old Apply can re-arm it after a hang. -->
        <set_value name="$arena.$healthLive.{$i}" exact="false"/>
-       <debug_text text="'[X4LAN] HEALTH_WATCHDOG entity=%s'.[$i]"/>
+       <set_value name="$arena.$healthClosed.{$i}" exact="[$arena.$healthClosed.{$i},$arena.$healthGen.{$i}].max"/>
+       <raise_lua_event name="'X4LAN_Health.Expired'" param="'%s|%s'.[$i,$arena.$healthGen.{$i}]"/>
+       <debug_text text="'[X4LAN] HEALTH_WATCHDOG entity=%s gen=%s'.[$i,$arena.$healthGen.{$i}]"/>
       </do_if>
      </do_all>
     </actions></cue>

@@ -203,3 +203,11 @@ end
 RegisterEvent('X4LAN_Health.Ready',function() h.ready=true;log('HEALTH_READY slot='..cfg.slot) end)
 RegisterEvent('X4LAN_Health.Own',function(_,payload) if h.ready then h.own(payload) end end)
 RegisterEvent('X4LAN_Health.Based',function(_,payload) if h.ready then h.based(payload) end end)
+-- An MD watchdog closed a generation natively (host: no applied value for 2 s; guest: no keepalive):
+-- close it here too; the host reports it so the relay starts a new generation from its WORLD.
+RegisterEvent('X4LAN_Health.Expired',function(_,payload)
+ local e,gen=tostring(payload):match('^(%d)|(%d+)$');e,gen=tonumber(e),tonumber(gen)
+ if not h.ready or not e or e<1 or e>2 or not gen or gen<1 then return end
+ if cfg.slot=='p1' then h.stale[e]=gen end
+ h.close(e,gen)
+end)

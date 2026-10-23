@@ -258,6 +258,21 @@ class HealthAdapterTests(unittest.TestCase):
         md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
         self.assertTrue('<do_if value="$arena.$healthOwn.{$i} and player.age - $arena.$healthKeptAt.{$i} gt 2s">' in md)
 
+    def test_md_watchdog_expiry_closes_the_generation_on_both_sides(self):
+        host = self.make('p1').execute('''
+         hgen(1,1,3);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','1','80','50'},now)
+         events['X4LAN_Health.Expired'](nil,'2|3');now=10.2;frames.onUpdate()
+         own('50.2',0,0,0,0);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','2','80','50'},now)
+         return order('Apply','Release'),tostring(last('Release').closed),#sentKind('HSTALE')''')
+        self.assertEqual(tuple(host), ('Apply:3,Release:3', 'true', 1))
+        guest = self.make('p2').execute('''
+         hgen(1,1,4);base(4);events['X4LAN_Health.Based'](nil,'2|4');events['X4LAN_Health.Expired'](nil,'2|4')
+         base(4);return X4LAN_BUBBLE_API.health.live,last('Authority').gen,countRequest('Base')''')
+        self.assertEqual(tuple(guest), (None, 0, 1))
+        md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        self.assertTrue('exact="[$arena.$healthClosed.{$i},$arena.$healthGen.{$i}].max"' in md)
+        self.assertEqual(md.count("'X4LAN_Health.Expired'"), 2)
+
     def test_no_queued_write_without_an_md_clock(self):
         out = self.make('p1', clock=False).execute('''
          hgen(1,1,3);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','1','80','50'},now)
