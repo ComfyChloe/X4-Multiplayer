@@ -12,7 +12,7 @@
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not cfg or not cfg.coop or not cfg.pilot_health or not A or not A.coop or not A.state.active then return end
 local c=A.coop;local s=A.state
-local h={seq=0,gen={0,0},last={0,0},closed={0,0},remote={},owned={false,false}};A.health=h
+local h={seq=0,gen={0,0},last={0,0},closed={0,0},seen={0,0},remote={},auth={{0,false},{0,false}}};A.health=h
 local INTERVAL,FRESH=.1,1.0
 local function log(v) DebugError('[X4LAN] '..v) end
 local function number(v,max)
@@ -22,19 +22,29 @@ local function integer(v,max) local n=number(v,max);if n and n%1==0 then return 
 local function hex(v) return type(v)=='string' and #v==32 and v:match('^[a-f0-9]+$')~=nil end
 local function send(v) if s.client and s.client.lease then s.transport:send(v) end end
 function h.mine(e) return c.owners[e]==cfg.slot and c.pilots[e]==cfg.slot and c.epochs[e]~=nil end
+-- Guest: MD keeps the authority it may write under; Base and the WORLD guards check it when they
+-- execute, so a queued write of an older or ended generation never lands.
+local function authority(e,gen,own)
+ local a=h.auth[e]
+ if a[1]~=gen or a[2]~=own then h.auth[e]={gen,own};AddUITriggeredEvent('X4LAN_Health','Authority',{entity=e,gen=gen,own=own}) end
+end
 
--- Pilot: adopt a generation's baseline once; acknowledge every repeat of the adopted one.
+-- Pilot: adopt a generation's baseline once; acknowledge every repeat of the adopted one. An
+-- older generation than one already seen for that ship is never adopted again.
 function h.base(f,now)
  if cfg.slot=='p1' or #f~=7 or not s.client or f[3]~=s.client.lease then return end
  local e,gen,hu,sh=integer(f[4],2),integer(f[5],2147483647),number(f[6],100),number(f[7],100)
- if not e or e<1 or not gen or not hu or not sh or not h.mine(e) then return end
+ if not e or e<1 or not gen or not hu or not sh or not h.mine(e) or gen<h.seen[e] then return end
+ h.seen[e]=gen
  local live=h.live
  if live and live.entity==e and live.gen==gen then
   if now>=(h.nextAck or 0) then h.nextAck=now+.25;send(string.format('HACK|1|%s|%d|%d',s.client.lease,e,gen)) end
   return
  end
  if h.basing and h.basing.entity==e and h.basing.gen==gen then return end
+ if live then authority(live.entity,0,false) end
  h.live,h.basing=nil,{entity=e,gen=gen}
+ authority(e,gen,false)
  AddUITriggeredEvent('X4LAN_Health','Base',{entity=e,gen=gen,hull=hu,shield=sh})
 end
 
@@ -44,6 +54,7 @@ function h.based(payload)
  local b=h.basing
  if b and b.entity==e and b.gen==gen and h.mine(e) then
   h.live,h.basing,h.reading,h.seq,h.nextAck=b,nil,nil,0,0
+  authority(e,gen,true)
   log(string.format('HEALTH_LIVE entity=%d gen=%d',e,gen))
  end
 end
@@ -84,18 +95,13 @@ function h.frame(now)
    local ended=c.owners[e]~=r.owner or c.pilots[e]~=r.owner or c.epochs[e]~=r.epoch
    if ended or now-r.at>FRESH then
     if ended then h.closed[e]=r.gen end
-    h.remote[e]=nil;AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=r.gen})
+    h.remote[e]=nil;AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=r.gen,closed=ended})
    end
   end
   return
  end
- if h.live and not h.mine(h.live.entity) then h.live=nil end
- if h.basing and not h.mine(h.basing.entity) then h.basing=nil end
- -- Which co-op ship's health the WORLD Apply must leave alone.
- for e=1,2 do
-  local m=h.live~=nil and h.live.entity==e
-  if m~=h.owned[e] then h.owned[e]=m;AddUITriggeredEvent('X4LAN_Health','Owned',{entity=e,own=m}) end
- end
+ if h.live and not h.mine(h.live.entity) then authority(h.live.entity,0,false);h.live=nil end
+ if h.basing and not h.mine(h.basing.entity) then authority(h.basing.entity,0,false);h.basing=nil end
  local r=h.reading
  if not h.live or not r or r.entity~=h.live.entity then return end
  if not h.urgent and now<(h.nextSend or 0) then return end

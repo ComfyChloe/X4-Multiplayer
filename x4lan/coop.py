@@ -48,6 +48,9 @@ class CoopSession(EconomySession):
         self.body_sectors = {k: v for k, v in self.body_sectors.items() if k in retained}
         self.game_metrics = {k: v for k, v in self.game_metrics.items() if k in live}
         self.health = {k: v for k, v in self.health.items() if v['lease'] in live}
+        # Every message and snapshot starts here, so each authority transition gets its own
+        # generation even when no snapshot falls between a leave and a re-entry.
+        for entity in (1, 2): self.health_generation(entity)
 
     def pilot(self, entity):
         for slot, peer in self.peers.items():
