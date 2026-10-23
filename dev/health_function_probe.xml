@@ -7,11 +7,13 @@
    <actions>
     <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
     <set_value name="$n" exact="0"/>
+    <!-- Enables the post-write readbacks ('written ...') inside md/x4lan_health.xml. -->
+    <set_value name="$arena.$healthProbe" exact="true"/>
     <debug_text text="'[X4LAN] HEALTH_PROBE observe host=%s'.[$arena.$host]"/>
    </actions>
    <cues>
-    <!-- 5 Hz native state of both co-op ships: health, floor authority, fences and life state. -->
-    <cue name="Sample" instantiate="true" checkinterval="0.2s"><conditions><check_value value="true"/></conditions><actions>
+    <!-- 20 Hz native state of both co-op ships: health, floor authority, fences and life state. -->
+    <cue name="Sample" instantiate="true" checkinterval="0.05s"><conditions><check_value value="true"/></conditions><actions>
      <set_value name="$n" operation="add" exact="1"/>
      <do_all exact="2" counter="$i">
       <set_value name="$s" exact="$arena.$ships.{$i}"/>

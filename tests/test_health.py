@@ -163,8 +163,8 @@ class HealthAdapterTests(unittest.TestCase):
          events['X4LAN_Health.Based'](nil,'2|5')
          own('51',2,5,10,0);now=10.4;frames.onUpdate()
          local stalled=order('Base');hgen(3,1,7);base(7)
-         return revoked.gen,revoked.own,stalled,order('Base'),#sentKind('HEALTH'),X4LAN_BUBBLE_API.health.live''')
-        self.assertEqual(tuple(out), (0, False, 'Base:5', 'Base:5,Base:7', 0, None))
+         return revoked.gen,revoked.own,revoked.ended,stalled,order('Base'),#sentKind('HEALTH'),X4LAN_BUBBLE_API.health.live''')
+        self.assertEqual(tuple(out), (0, False, 5, 'Base:5', 'Base:5,Base:7', 0, None))   # the revocation names gen 5
 
     def test_guest_never_readopts_an_older_baseline(self):
         out = self.make('p2').execute('''
@@ -174,7 +174,6 @@ class HealthAdapterTests(unittest.TestCase):
         self.assertEqual(tuple(out), (5, None, 'Authority:5,Base:5,Authority:5'))
         md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
         self.assertTrue('$a.$gen == $arena.$healthAuth.{$a.$entity} and player.timewarp.factor gt 0s' in md, '$a.$gen == $arena.$healthAuth.{$a.$entity} and player.timewarp.factor gt 0s')
-        self.assertTrue('exact="$a.$own and $a.$gen gt 0"' in md, 'exact="$a.$own and $a.$gen gt 0"')
 
     def test_host_applies_valid_generations_in_order_and_releases(self):
         out = self.make('p1').execute('''
@@ -218,7 +217,7 @@ class HealthAdapterTests(unittest.TestCase):
         md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
         fresh = ("player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $a.$stamp "
                  "and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline")
-        self.assertEqual(md.count(fresh), 2)                       # Base and Apply
+        self.assertEqual(md.count(fresh), 3)                       # Base, Apply and Authority(own)
         self.assertTrue('<check_value value="player.timewarp.factor gt 0s"/>' in md, '<check_value value="player.timewarp.factor gt 0s"/>')   # unpaused readback
         self.assertNotIn('Blackboard', (UI / 'health_game.lua').read_text())
 
@@ -272,6 +271,20 @@ class HealthAdapterTests(unittest.TestCase):
         md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
         self.assertTrue('exact="[$arena.$healthClosed.{$i},$arena.$healthGen.{$i}].max"' in md)
         self.assertEqual(md.count("'X4LAN_Health.Expired'"), 2)
+
+    def test_guest_authority_is_fenced_against_a_queued_old_own(self):
+        out = self.make('p2').execute('''
+         hgen(1,1,4);base(4);events['X4LAN_Health.Based'](nil,'2|4');local a=last('Authority')
+         return a.gen,tostring(a.own),a.stamp,a.from,a.deadline''')
+        self.assertEqual(tuple(out), (4, 'true', '2026-10-23T23:00:00', 50, 51))
+        md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        fresh = ("player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $a.$stamp "
+                 "and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline")
+        own = '$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen == $arena.$healthAuth.{$e} and @$a.$stamp and ' + fresh
+        self.assertTrue(own in md, 'own=true needs gen above the closed fence, its own gen and a fresh window')
+        self.assertTrue('<do_elseif value="$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen gt $arena.$healthTop.{$e} and not $a.$own">' in md)
+        self.assertTrue('exact="[$arena.$healthClosed.{$i},$arena.$healthAuth.{$i}].max"' in md)   # keepalive watchdog fence
+        self.assertEqual(md.count(fresh), 3)                       # Authority(own), Base, Apply
 
     def test_no_queued_write_without_an_md_clock(self):
         out = self.make('p1', clock=False).execute('''

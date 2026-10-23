@@ -41,9 +41,16 @@ local function window(args) args.stamp,args.from,args.deadline=h.mdStamp,h.mdAge
 
 -- Guest: MD keeps the authority it may write under; Base and the WORLD guards check it when they
 -- execute, so a queued write of an older or ended generation never lands.
+-- own=true carries the window of the current readback; MD refuses a stale one (self-healing:
+-- without own, readbacks report gen 0, no frames go out and the relay ends the generation).
 local function authority(e,gen,own)
  local a=h.auth[e]
- if a[1]~=gen or a[2]~=own then h.auth[e]={gen,own};AddUITriggeredEvent('X4LAN_Health','Authority',{entity=e,gen=gen,own=own}) end
+ if a[1]~=gen or a[2]~=own then
+  local args={entity=e,gen=gen,own=own,ended=gen==0 and a[1] or nil}   -- a revocation names its generation
+  h.auth[e]={gen,own}
+  if own and h.mdStamp then args.stamp,args.from,args.deadline=h.mdStamp,h.mdAge,h.mdAge+TTL end
+  AddUITriggeredEvent('X4LAN_Health','Authority',args)
+ end
 end
 
 -- End this machine's use of every generation up to gen for good (guest: its own; host: the
