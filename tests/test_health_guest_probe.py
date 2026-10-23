@@ -17,6 +17,10 @@ class HealthGuestProbeTests(unittest.TestCase):
         l.execute("sectors={};ConvertIDTo64Bit=function(v) return tonumber(v) end;GetComponentData=function() return 'cluster_14_sector001_macro' end")
         for file in ('bubble_game.lua', 'motion.lua', 'coop_game.lua', 'health_game.lua'):
             l.execute((UI / file).read_text())
+        # Native transports are userdata: any field write must fail, so the probe may not try.
+        l.execute('''local real=X4LAN_TRANSPORT.open
+         X4LAN_TRANSPORT.open=function(...) local t=real(...)
+          return setmetatable({},{__index=function(_,k) return t[k] end,__newindex=function() error('attempt to index userdata') end}) end''')
         l.execute((ROOT / 'dev/health_guest_probe.lua').read_text())
         l.execute('''events['X4LAN.Loaded']();now=10;frames.onUpdate();events['X4LAN_Bubble.Ready']();frames.onUpdate();events['X4LAN_Coop.Ready']()
          client:receiveExtension({'AUTH','1',client.lease,'1','p1','1','p1','p2','1','p2'},now)
@@ -39,7 +43,7 @@ class HealthGuestProbeTests(unittest.TestCase):
     def test_handover_order_is_logged(self):
         text = self.make().execute('return probe()')
         order = [m for m in ('Authority entity=2 gen=4 own=false', 'Base entity=2 gen=4', 'Based 2|4',
-                             'Authority entity=2 gen=4 own=true', 'sent HACK|1|lease|2|4', 'sent HEALTH|1|lease|2|4|1|64.500') ]
+                             'Authority entity=2 gen=4 own=true', 'sent HACK gen=4', 'sent HEALTH gen=4 seq=1 hull=64.500') ]
         positions = [text.find(m) for m in order]
         self.assertTrue(all(p >= 0 for p in positions), list(zip(order, positions)))
         self.assertEqual(positions, sorted(positions))
