@@ -12,6 +12,9 @@ class CoopDockAdapterTests(unittest.TestCase):
         l=coop.CoopAdapterTests().make()
         l.execute("X4LAN_CONFIG.coop_docks=true;X4LAN_CONFIG.seed_id=string.rep('a',32);X4LAN_SEED_GATE={frame=function() return true end}")
         l.execute((UI/'coop_dock_game.lua').read_text())
+        # Isolate observation pairing here; execution acknowledgement has its
+        # own adapter cases and must be present in the actual optional mode.
+        l.execute('X4LAN_BUBBLE_API.coopDocks.authorized=function() return true end')
         l.execute('''
          function dock(seq,mode,index,lease,epoch)
           client:receiveExtension({'CDOCK','1',client.lease,lease or string.rep('b',32),'2',tostring(epoch or 1),tostring(seq),mode,tostring(index or 0)},now)

@@ -32,8 +32,9 @@
   <cue name="Fence" instantiate="true">
    <conditions><event_ui_triggered screen="'X4LAN_CoopAttachment'" control="'Fence'"/></conditions>
    <actions><set_value name="$v" exact="event.param3"/>
-    <do_if value="State.$active and $v.$ship ge 1 and $v.$ship le 2 and $v.$generation gt State.$generations.{$v.$ship}">
+    <do_if value="State.$active and $v.$seed == State.$seed and $v.$epoch == State.$epoch and $v.$ship ge 1 and $v.$ship le 2 and $v.$generation gt State.$generations.{$v.$ship}">
      <set_value name="State.$generations.{$v.$ship}" exact="$v.$generation"/><set_value name="State.$enabled.{$v.$ship}" exact="$v.$enabled"/><set_value name="State.$pending" exact="null"/>
+     <raise_lua_event name="'X4LAN_CoopAttachment.Fenced'" param="'%s|%s|%s|%s'.[State.$seed,State.$epoch,$v.$ship,$v.$generation]"/>
     </do_if>
    </actions>
   </cue>
@@ -48,7 +49,7 @@
     <do_if value="State.$active? and State.$active and $v.$seed == State.$seed and $v.$epoch == State.$epoch and $v.$operation == State.$operation + 1 and $v.$operation le 2147483647">
      <set_value name="State.$operation" exact="$v.$operation"/><set_value name="State.$pending" exact="null"/>
      <include_actions ref="Check"/>
-     <do_if value="$valid and player.timewarp.factor gt 0s">
+     <do_if value="$valid and player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $v.$stamp and player.age / 1s ge $v.$age and player.age / 1s le $v.$age + 0.3">
       <set_value name="State.$pending" exact="$v"/>
       <set_value name="State.$stamp" exact="player.systemtime.{'%Y-%m-%dT%H:%M:%S'}"/>
       <set_value name="State.$preparedAge" exact="player.age"/><set_value name="$accepted" exact="true"/>

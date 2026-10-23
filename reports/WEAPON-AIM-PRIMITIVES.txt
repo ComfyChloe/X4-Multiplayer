@@ -92,3 +92,15 @@ Raw SHA256713b12cca8e14f195bf410bf610d5316062030f0bf6344997c7cdf55e5d17519.
 Source/readback/cleanup inventories and all native error lines are retained in
 .local/evidence-267-withheld Original installation/settings/save bytes and actual-save
 timestamps restored; game and helpers closed.
+
+NATIVE POSITIONAL OFFSET SETTER (24 OCTOBER, bounded FAIL)
+.local/evidence-265-withheld verifies the existing GetPositionalOffset/
+SetPositionalOffset signatures and degree/radian conversion against the native
+menu_mapeditor.lua declarations/use. The getter reads the gun offset correctly
+(x0,y-1.59929,z7.60469), but setting yaw15 degrees leaves the readback at0 and all
+27 actual projectile directions unchanged (12 baseline,15 setter phase). No
+setter error does NOT mean a weapon aim change. Raw SHA256
+c5e5f32933d5b28ae9b20e84aac405952fb000c9220b55e7846b463b34d14818.
+Owned installation/preferences/slot and7 actual normal saves verified restored.
+This closes another ineffective primitive; actual free-aim transmission remains
+open, and selected-victim auto-lock is not an acceptable substitute.

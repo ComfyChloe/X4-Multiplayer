@@ -8,6 +8,7 @@
     <set_value name="$ready" exact="false"/>
     <do_if value="md.X4LAN_Seed.State.$id? and md.X4LAN_Seed.State.$id == event.param3 and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and md.X4LAN_SeedDocks.State.$id == event.param3 and md.X4LAN_SeedDocks.State.$version == 1 and md.X4LAN_Bubble.Arena.$ships?">
      <set_value name="$ready" exact="true"/>
+     <set_value name="md.X4LAN_Bubble.Arena.$coopDocks" exact="true"/>
      <raise_lua_event name="'X4LAN_CoopDocks.Ready'" param="event.param3"/>
     </do_if>
     <do_else><raise_lua_event name="'X4LAN_CoopDocks.Error'" param="'missing shared saved dock registry'"/></do_else>

@@ -30,6 +30,18 @@ local function localRow(e,now)
  if (r.mode=='EXTERNAL' or r.mode=='STORED') and not docked then return nil end
  return r
 end
+d.localRow=localRow;d.stop=stop
+function d.intent(e,now)
+ local r,q=c.remote[e],d.remote[e]
+ if d.closed or not d.ready or not r or not q or c.owners[e]==cfg.slot or
+  C.GetPlayerControlledShipID()==c.ships[e] or A.paused() then return nil end
+ if q.epoch~=c.epochs[e] or q.lease~=r.sourceLease or now-q.at>.75 or q.mode=='UNKNOWN' then return nil end
+ return q
+end
+function d.goal(e,now)
+ local q=d.intent(e,now)
+ if q and q.seq==c.remote[e].seq then return q end
+end
 function c.publishDock(e,seq,now)
  if not s.client or not s.client.lease then return end
  local r=localRow(e,now)
@@ -37,10 +49,10 @@ function c.publishDock(e,seq,now)
   r and r.mode or 'UNKNOWN',r and r.dock or 0))
 end
 function c.dockPoseAllowed(e,r,now)
- if d.closed or not r then return false end
- local q=d.remote[e];local own=localRow(e,now)
- return q and own and q.epoch==c.epochs[e] and q.lease==r.sourceLease and
-  q.seq==r.seq and now-q.at<=.75 and q.mode=='FREE' and own.mode=='FREE'
+ local q,own=d.goal(e,now),localRow(e,now)
+ if not q or not own or not d.authorized or not d.authorized(e,now) then return false end
+ return q.mode=='FREE' and own.mode=='FREE' or
+  q.mode=='APPROACH' and own.mode=='APPROACH' and q.dock==own.dock
 end
 local receive,frame=c.receive,c.frame
 function c.receive(f,now)
@@ -82,6 +94,7 @@ function c.frame(now)
  if d.ready and not A.paused() and now>=(d.nextRead or 0) then
   d.nextRead=now+.05;AddUITriggeredEvent('X4LAN_CoopDocks','Read')
  end
+ if d.executeFrame then d.executeFrame(now) end
  frame(now)
 end
 RegisterEvent('X4LAN_CoopDocks.Ready',function(_,id)

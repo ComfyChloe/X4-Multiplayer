@@ -65,8 +65,11 @@ local function applyVelocity(i,sector,linear,now)
  -- Changed vectors, especially the packet-loss freeze, never wait for a timer.
  if changed or now>=(v.next or 0) then
   v.next=now+.1;v.sequence=v.sequence+1;v.linear={linear[1],linear[2],linear[3]}
+  local dockStamp,dockAge
+  if cfg.coop_docks and c.attachmentWindow then dockStamp,dockAge=c.attachmentWindow(i,now) end
   AddUITriggeredEvent('X4LAN_Coop','Velocity',{ship=i,generation=v.generation,session=v.session,epoch=v.epoch,
-   sequence=v.sequence,sector=A.id(sector),parent=A.id(parent),x=linear[1],y=linear[2],z=linear[3],expires=GetCurTime()+.3})
+   sequence=v.sequence,sector=A.id(sector),parent=A.id(parent),x=linear[1],y=linear[2],z=linear[3],expires=GetCurTime()+.3,
+   dockGeneration=cfg.coop_docks and c.attachmentGeneration and c.attachmentGeneration(i) or nil,dockStamp=dockStamp,dockAge=dockAge})
  end
 end
 local function stopFire2(i)
@@ -353,7 +356,12 @@ function c.frame(now)
     local value={x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}
     if C.GetContextByClass(ship,'sector',false)~=sector then
      if now>=(r.nextWarp or 0) then
-      r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector);AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
+      r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector)
+      if cfg.coop_docks then
+       value.dockGeneration=c.attachmentGeneration and c.attachmentGeneration(i)
+       if c.attachmentWindow then value.dockStamp,value.dockAge=c.attachmentWindow(i,now) end
+      end
+      AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
      end
     elseif now>=(r.nextApply or 0) then
      -- There are only two cooperative ships. Correct their native controller

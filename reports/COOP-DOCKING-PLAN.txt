@@ -62,10 +62,17 @@ activation; synchronous pose fencing alone does not close the MD queue race.
 x4lan_coop_attachment.xml is an inert, explicit-start adaptation of our previously
 qualified attachment consumer to the two Arena ships. It adds per-ship generation
 fences, exact-bay RESERVE/CANCEL, native handle matching and physical actor guards.
-There is no automatic client caller yet. Its schema and observation schema VALID.
+An optional client executor now prepares operations and waits for actual native
+readback, with session-bound generation acknowledgements and queued movement
+freshness checks. The flag remains unset; relay/launcher activation is pending.
+All three changed MD schemas VALID;8 observer/executor adapter tests,25 existing
+co-op adapter tests and23 FIRE2 tests PASS. These tests do not emulate X4 physics.
 .local/evidence-020-withheld: exact native HQ bay35497 reserved for ship1; conflicting
 ship2 reservation refused; ship1 attached with native EXTERNAL readback; ship2
 attachment into the occupied bay refused. The run FAILS at an undock readback
-sampled after0.5s. Command invocation is not completion. A bounded wait/readback
-follow-up is prepared in coop-dock-exec-02, not yet run. No end-to-end/boarding/
+sampled after0.5s. Command invocation is not completion. Follow-up coop-dock-exec-02 PASSES all8 phases: both conflict refusals,
+exact attachment, both actual undocks and a prepared-then-fenced operation. Native
+undock takes about8 seconds. Raw SHA256
+37535d753f746bdeed51496182f4df0a4e26bfb996cdc0b96887b7dc3d19f5e1.
+coop-dock-exec-03 is now testing the additional session/freshness checks; pending. No end-to-end/boarding/
 same-pad crash acceptance. All completed runs have verified owned cleanup.
