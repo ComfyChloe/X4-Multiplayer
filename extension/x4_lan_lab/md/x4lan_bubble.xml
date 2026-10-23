@@ -167,6 +167,12 @@
   <raise_lua_event name="'X4LAN_Bubble.ShipsRefused'" param="$refusal" />
  </do_if>
  <do_else>
+  <!-- Full personal teleportation research for internal exploration. Only after admitted ship setup. -->
+  <do_if value="not ware.research_teleportation.research.unlocked"><add_research ware="ware.research_teleportation" /></do_if>
+  <do_if value="not ware.research_teleportation_range_01.research.unlocked"><add_research ware="ware.research_teleportation_range_01" /></do_if>
+  <do_if value="not ware.research_teleportation_range_02.research.unlocked"><add_research ware="ware.research_teleportation_range_02" /></do_if>
+  <do_if value="not ware.research_teleportation_range_03.research.unlocked"><add_research ware="ware.research_teleportation_range_03" /></do_if>
+  <debug_text text="'[X4LAN] TELEPORT_RESEARCH base=%s range1=%s range2=%s range3=%s'.[ware.research_teleportation.research.unlocked,ware.research_teleportation_range_01.research.unlocked,ware.research_teleportation_range_02.research.unlocked,ware.research_teleportation_range_03.research.unlocked]" />
   <set_value name="$own" exact="$candidate" />
   <raise_lua_event name="'X4LAN_Bubble.PreparedOwn'" param="$candidate" />
   <raise_lua_event name="'X4LAN_Bubble.PreparedProxy'" param="$peer" />

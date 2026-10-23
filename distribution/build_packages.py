@@ -54,15 +54,16 @@ def build(destination: Path, runtime_cache: Path | None = None):
         for name in ('aiscripts/x4lan.interaction.fire.xml', 'aiscripts/x4lan.interaction.trade.xml', 'md/x4lan_interactions.xml'):
             (extension / name).unlink()
         (extension / 'native' / ('x4lan_net_64.dll' if platform == 'Linux' else 'x4lan_net.so')).unlink()
-        write(extension / 'ui/config.lua', '-- Run 1-INSTALL before using this package.\nX4LAN_CONFIG = {\n'
+        write(extension / 'ui/config.lua', '-- Run 01-INSTALL before using this package.\nX4LAN_CONFIG = {\n'
               '    enabled = false,\n' + f'    ship_macro = "{SHIP_MACRO}",\n'
               + f'    ship_loadout = "{SHIP_LOADOUT}",\n    ship_weapons = {SHIP_WEAPONS},\n' + '}\n')
         for name in ('INSTALL.html', 'README.txt', 'CHANGELOG.txt', 'NEXT-TEST.txt'):
-            document(DIST / name, root / name, release)
+            document(DIST / name, root / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
         shutil.copy2(SOURCE / 'VERSIONING.txt', root / 'VERSIONING.txt')
         shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', root / 'WORLD-SYNC-TEST.txt')
-        for name in ('TEST-REPORT.txt', 'RELEASE-CHECKS.txt'): shutil.copy2(reports[1], root / name)
-        shutil.copy2(reports[0], root / 'AUTOMATED-TESTS.txt')
+        (root / 'reports').mkdir()
+        shutil.copy2(reports[1], root / 'reports/RELEASE-CHECKS.txt')
+        shutil.copy2(reports[0], root / 'reports/AUTOMATED-TESTS.txt')
         shutil.copy2(DIST / 'session_launcher.py', root / 'launcher.py')
         shutil.copy2(DIST / 'profile_settings.py', root / 'profile_settings.py')
         shutil.copy2(DIST / 'world_launcher.py', root / 'world_launcher.py')
@@ -85,10 +86,11 @@ def build(destination: Path, runtime_cache: Path | None = None):
                 write(runtime / 'python314._pth', 'python314.zip\n.\n..\n')
             shutil.copytree(runtime_cache / 'licenses', root / 'licenses/python')
             write(root / 'RUNTIMES.json', json.dumps(runtimes, indent=2) + '\n')
-        actions = {'1-INSTALL': 'setup', '2-START-SERVER': 'server', '2-TEST-CONNECTION': 'test',
-                   '3-START-X4-TEST': 'start', '4-DIAGNOSTICS': 'diagnose', '5-REMOVE-MOD': 'remove',
-                   '6-COLLECT-CONTAINER': 'collect', '7-VERIFY-PACKAGE': 'verify',
-                   '9-IMPORT-SETTINGS': 'settings', '2-PREPARE-WORLD': 'prepare-world'}
+        actions = {'01-INSTALL': 'setup', '02-PREPARE-WORLD-HOST': 'prepare-world',
+                   '03-START-SERVER-HOST': 'server', '04-TEST-CONNECTION': 'test',
+                   '05-START-X4': 'start', '06-DIAGNOSTICS': 'diagnose',
+                   '07-VERIFY-PACKAGE': 'verify', '08-IMPORT-SETTINGS': 'settings',
+                   '09-REMOVE-MOD': 'remove', '10-COLLECT-TEST-CONTAINER': 'collect'}
         for title, action in actions.items():
             if platform == 'Linux':
                 command = '"./runtime/bin/python3"' if runtime_cache else 'python3'
@@ -110,10 +112,12 @@ def build(destination: Path, runtime_cache: Path | None = None):
             for path in sorted(root.rglob('*')):
                 if path.is_file(): z.write(path, path.relative_to(destination))
     write(destination / 'PACKAGES-SHA256.txt', ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in sorted(destination.glob('*.zip'))))
-    for name in ('INSTALL.html', 'README.txt', 'NEXT-TEST.txt'): document(DIST / name, destination / name, release)
+    for name in ('INSTALL.html', 'README.txt', 'NEXT-TEST.txt'):
+        document(DIST / name, destination / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
     shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', destination / 'WORLD-SYNC-TEST.txt')
     shutil.copy2(SOURCE / 'VERSIONING.txt', destination / 'VERSIONING.txt')
-    shutil.copy2(reports[1], destination / 'RELEASE-CHECKS.txt')
+    (destination / 'reports').mkdir()
+    shutil.copy2(reports[1], destination / 'reports/RELEASE-CHECKS.txt')
     write(destination / 'VERSION.txt', release + '\n')
     print('Internal host-or-guest packages created:', destination)
     return folders

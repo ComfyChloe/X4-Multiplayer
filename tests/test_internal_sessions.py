@@ -62,7 +62,7 @@ class InternalSessions(unittest.TestCase):
         with patch.object(launcher,'ROOT',self.host),patch.object(launcher.sys,'platform','linux'),patch.object(launcher.sys.stdout,'isatty',return_value=False),patch.object(launcher.shutil,'which',return_value='/usr/bin/konsole'),patch.object(launcher.subprocess,'Popen') as start,patch.object(launcher,'configured') as configured:
             launcher.server()
             argv=start.call_args.args[0]
-            self.assertEqual(argv,['/usr/bin/konsole','--separate','-e','bash',str(self.host/'2-START-SERVER.sh'),'--console'])
+            self.assertEqual(argv,['/usr/bin/konsole','--separate','-e','bash',str(self.host/'03-START-SERVER-HOST.sh'),'--console'])
             self.assertEqual(start.call_args.kwargs['cwd'],self.host)
             for name in ('stdin','stdout','stderr'):
                 self.assertEqual(start.call_args.kwargs[name],launcher.subprocess.DEVNULL)
@@ -109,3 +109,22 @@ class InternalSessions(unittest.TestCase):
         with patch.object(launcher,'ROOT',self.host),patch.object(launcher,'import_settings') as settings,patch.object(launcher,'platform_action') as install:
             launcher.setup(SimpleNamespace(server_only=True,game=None))
             settings.assert_not_called();install.assert_not_called()
+
+    def test_windows_invitation_dialog_returns_path_as_data(self):
+        path = 'C:\\Users\\Test Name\\Downloads\\JOIN-SESSION.json'
+        with patch.object(launcher.sys, 'platform', 'win32'), patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(returncode=0, stdout=path+'\n', stderr='')) as run:
+            self.assertEqual(launcher.choose_invitation(), path)
+            argv = run.call_args.args[0]
+            self.assertEqual(argv[:4], ['powershell.exe', '-NoProfile', '-STA', '-Command'])
+            self.assertNotIn(path, argv[-1])
+            self.assertFalse(run.call_args.kwargs.get('shell', False))
+
+    def test_cancelled_invitation_does_not_prompt_or_configure(self):
+        with patch.object(launcher.sys, 'platform', 'win32'), patch.object(launcher.subprocess, 'run', return_value=SimpleNamespace(returncode=2, stdout='', stderr='')), patch('builtins.input') as ask:
+            with self.assertRaisesRegex(RuntimeError, 'cancelled'):
+                launcher.choose_invitation()
+            ask.assert_not_called()
+
+    def test_unavailable_dialog_falls_back_to_quoted_terminal_path(self):
+        with patch.object(launcher.sys, 'platform', 'win32'), patch.object(launcher.subprocess, 'run', side_effect=FileNotFoundError), patch('builtins.input', return_value='"C:/Folder With Spaces/JOIN-SESSION.json"'):
+            self.assertEqual(launcher.choose_invitation(), 'C:/Folder With Spaces/JOIN-SESSION.json')

@@ -1,4 +1,4 @@
-# X4 Multiplayer — internal 7.3.0
+# X4 Multiplayer — internal 7.3.1 candidate
 
 Experimental two-player co-op for X4 Foundations. This version prepares one native
 host starting save and transfers it to the guest so both start in the same world.
@@ -12,16 +12,16 @@ shared rules. Read [setup instructions](DEVELOPMENT.txt) for a new machine and
 
 ## Internal playtest
 
-Use the matched 7.3.0 Windows/Linux packages, both including the server and portable
+Use the matched 7.3.1 Windows/Linux packages, both including the server and portable
 runtime. Follow [installation instructions](distribution/INSTALL.html), the
 [package guide](distribution/README.txt) and the
-[focused station test](distribution/NEXT-TEST.txt). The host runs both X4 and the
+[focused damage/background test](distribution/NEXT-TEST.txt). The host runs both X4 and the
 relay. Host setup prepares the starting save once; guests import the private
 invitation and download the verified world at launch. UDP45841 and TCP45844 are
 required. Both roles use isolated test profile 45841 and matching game/DLC content.
 
 Normal display/audio/input preferences are imported read-only into the test
-profile; autosave is disabled. Preserve normal saves and Steam subscriptions.
+profile; autosave is disabled and borderless mode supports Alt+Tab. Preserve normal saves and Steam subscriptions.
 The withdrawn Workshop selection helper must not be used. Never commit session
 credentials, generated packages or installed configuration.
 
@@ -34,8 +34,8 @@ release requires an explicit request.
 
 Separate native Linux roles matched 1,359 station identities after loading the
 same save. The clean packaged Linux host passed capture/transfer/startup with a
-synthetic guest. Native Windows hosting and simultaneous Windows/Linux gameplay
-still need human acceptance; see the [native report](reports/SHARED-START-20261023.txt)
+synthetic guest. The subsequent 7.3 human playtest confirmed station and asteroid
+alignment. Ordinary station pad occupancy/barriers still fail; see the [native report](reports/SHARED-START-20261023.txt)
 and [package evidence](reports/package-7.3.0-checks.json).
 
 Humans passed radar, ordinary cargo/magnet interaction and Cooperative Trial in

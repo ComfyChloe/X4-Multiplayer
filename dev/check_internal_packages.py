@@ -24,15 +24,17 @@ def check(folder):
             cfg=z.read(prefix+'extension/x4_lan_lab/ui/config.lua').decode()
             assert 'enabled = false' in cfg and 'token' not in cfg
             assert not any(n.endswith('_probe.lua') or '_probe.xml' in n or '/dev_' in n for n in names)
-            for name in ('WORLD-SYNC-TEST.txt','NEXT-TEST.txt','RELEASE-CHECKS.txt','AUTOMATED-TESTS.txt','launcher.py','world_launcher.py','profile_settings.py','RUNTIMES.json'):
+            for name in ('WORLD-SYNC-TEST.txt','NEXT-TEST.txt','reports/RELEASE-CHECKS.txt','reports/AUTOMATED-TESTS.txt','00-START-HERE.html','launcher.py','world_launcher.py','profile_settings.py','RUNTIMES.json'):
                 assert name in actual,name
             for module in ('host','monitor','universe','cargo','identity','coop','quests','bubble','economy','seed'):
                 assert 'x4lan/'+module+'.py' in actual,module
             assert not any('ISOLATE-TEST-MODS' in n or 'isolate_test_mods.py' in n or 'world_observer.lua' in n for n in names)
             windows=meta['platform']=='Windows11'
             suffix='.cmd' if windows else '.sh'
-            for action in ('1-INSTALL','2-START-SERVER','2-TEST-CONNECTION','3-START-X4-TEST','4-DIAGNOSTICS','5-REMOVE-MOD','7-VERIFY-PACKAGE','2-PREPARE-WORLD','9-IMPORT-SETTINGS'):
+            for action in ('01-INSTALL','03-START-SERVER-HOST','04-TEST-CONNECTION','05-START-X4','06-DIAGNOSTICS','09-REMOVE-MOD','07-VERIFY-PACKAGE','02-PREPARE-WORLD-HOST','08-IMPORT-SETTINGS'):
                 assert action+suffix in actual
+            starters=[n for n in actual if '/' not in n and n.endswith(suffix) and n[:2].isdigit()]
+            assert len(starters)==10 and len({n.split('-',1)[0] for n in starters})==10, 'Duplicate launcher numbers'
             assert ('runtime/python.exe' if windows else 'runtime/bin/python3') in actual
             if windows:
                 assert z.read(prefix+'runtime/python.exe')[:2]==b'MZ'

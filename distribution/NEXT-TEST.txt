@@ -1,41 +1,36 @@
 X4 Multiplayer {{VERSION}} — INTERNAL HUMAN TEST
-23 October 2026 | Shared native starting world | Windows/Linux host or guest
+23 October 2026 | Windows/Linux host or guest | Two players
 
-Use the same new version in both roles, including the new host server.
-Follow README.txt: host INSTALL -> PREPARE-WORLD -> START-SERVER -> START-X4;
-guest INSTALL with invitation -> TEST-CONNECTION -> START-X4.
-Allow both UDP45841 and TCP45844. The host must run X4 as well as the server.
-During preparation X4 saves and exits itself. During play startup it loads the
-verified world automatically. These are expected parts of the new startup flow.
+Use the same new version in both roles, including the new host server/invitation.
+Host:01 INSTALL ->02 PREPARE WORLD ->03 SERVER ->05 START X4.
+Guest:01 INSTALL (choose host invitation) ->04 CONNECTION ->05 START X4.
+Open00-START-HERE.html. Allow UDP45841 and TCP45844 on the host.
 
-FOCUSED CHECK — STATIONS / SHARED START / HOSTING
-1. Confirm the guest downloads the world and reaches its own Shuttle. Note either
-   an installer/transfer error, a permanent loading screen or a remaining Pause
-   state. Check your personal resolution and bindings have been retained.
-2. Pick an ORDINARY station in Argon Prime. Compare its code/name, map location,
-   orientation and nearby landmarks on both PCs. Both fly to the SAME station.
-   Have one player dock while the other observes: does the ship sit on the actual
-   station on both sides, instead of in empty space? Capture both views if not.
-3. Repeat with one ordinary station in another sector. This checks layout beyond
-   the starting sector; it does not prove a shared ongoing economy.
-4. Stop BOTH games and the relay. Restart the relay and both games. Both must load
-   the same starting layout again. Previous gameplay progress is expected to reset.
-5. If possible, swap host OS for a separate session using fresh package folders.
-   Report Windows-host server/transfer/start behavior separately from Linux-host.
+FOCUSED CHECK
+1. Setup: confirm the invitation can be selected, personal resolution/bindings
+   remain usable, and both players reach their own Shuttle.
+2. Damage: follow the exact supported target/weapon scope in
+   reports/RELEASE-CHECKS.txt. Alternate host and guest shooting the same target.
+   Compare BOTH hull and shield, including after stopping fire and after death.
+   Record target code, attacker, weapon/group and time if values diverge.
+3. Background: with neither game manually paused, Alt+Tab one player to another
+   app for30 seconds while the other observes its ship. Return and compare
+   position, radar and damage. Repeat with roles reversed. Keep X4 open in
+   borderless mode; explicit minimize-to-desktop is a separate unverified case.
+4. Teleportation: after Shuttle setup, verify personal teleportation works at
+   long range using an eligible normal destination. Note destination, ownership,
+   sector and whether the player was piloting or walking before the teleport.
 
-No need to repeat the complete cargo/radar/Cooperative Trial suite already passed
-by humans. Report regressions if encountered while doing the station test.
-Weapons/general NPC combat have no new acceptance claim in this version.
+ALREADY PASSED / OPEN LIMITS
+Station and asteroid alignment passed the7.3.0 human test. Radar, ordinary cargo,
+smooth movement and Cooperative Trial also retain their previous human evidence.
+Do not spend time repeating them unless a regression appears.
+Ordinary station pad occupancy/barriers are still open: peer boarding may fail
+and NPC traffic can overlap the peer ship. General NPC orders/combat and the
+ongoing station economy are not yet a complete shared-universe implementation.
+Progress is NOT resumed after restarting. Stop both games and relay together;
+both load the same starting world. Never load/save a normal campaign here.
 
-KNOWN LIMITS
-- The starting save is shared; new station construction/destruction, economy,
-  production and arbitrary NPC orders are not yet continuously synchronized.
-- Persistent multiplayer save/resume, late join to progressed worlds, ordinary
-  shared missions and ingame text chat remain unfinished.
-- The protected Mercury service freighter is not a general fleet-command test.
-- Full docked-child/parent synchronization and projectile equivalence remain open.
-- A previous guest cannot continue independently or resume an old relay epoch.
-
-After a failure, run4-DIAGNOSTICS on BOTH PCs before another launch. Include the
-host server logs, the exact error, roles/OS, approximate time, sector and station
-code. Do not post session credentials. Keep the previous release ZIPs unchanged.
+After a failure run06-DIAGNOSTICS on BOTH PCs before restarting. Keep host logs,
+roles/OS, object codes, approximate time and weapon details. Never post invitation
+or session secrets. Preserve previous release archives.

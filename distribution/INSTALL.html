@@ -5,27 +5,31 @@
 <h1>X4 Multiplayer {{VERSION}}</h1><p>Internal test · 23 October 2026 · Windows/Linux · Two players</p>
 <p class="note">Both players now load one host-created starting save. This aligns the initial world; a persistent campaign and continuous shared station economy are still unfinished.</p>
 <h2>Before starting</h2>
-<p>Use X4 9.00, Steam build23660954, and matching enabled official DLC including Timelines. Both packages include the server and Python runtime. Close X4 and the previous server, remove the old mod using its original <strong>5-REMOVE-MOD</strong>, then extract the complete new archive into a new folder.</p>
-<p>Setup imports your normal display, sound and control preferences without changing that normal profile. Choose your usual profile if several are found. <strong>9-IMPORT-SETTINGS</strong> repeats this copy later. Starts preserve custom resolution and bindings. Only the test safeguards autosave=false and uisafemode=false are required.</p>
+<p>Use X4 9.00, Steam build23660954, and matching enabled official DLC including Timelines. Both packages include the server and Python runtime. Close X4 and the previous server, remove the old mod using its original <strong>5-REMOVE-MOD</strong> (7.3.0 and earlier), then extract the complete new archive into a new folder.</p>
+<p>Setup imports your normal display, sound and control preferences without changing that normal profile. Choose your usual profile if several are found. <strong>08-IMPORT-SETTINGS</strong> repeats this copy later. Starts preserve custom resolution and bindings. The test profile uses borderless mode for background updates, with autosave=false and uisafemode=false. Resolution, graphics quality and controls are retained.</p>
 <h2>Host: create the shared world once</h2>
-<ol><li>Run <strong>1-INSTALL</strong>, choose <strong>H</strong> and enter your reachable LAN/ZeroTier IPv4 address.</li>
-<li>Run <strong>2-PREPARE-WORLD</strong>. X4 opens a disposable new world, saves it and closes automatically. Wait for <em>Shared world ready</em>. Do not play or load another save during preparation.</li>
+<ol><li>Run <strong>01-INSTALL</strong>, choose <strong>H</strong> and enter your reachable LAN/ZeroTier IPv4 address.</li>
+<li>Run <strong>02-PREPARE-WORLD-HOST</strong>. X4 opens a disposable new world, saves it and closes automatically. Wait for <em>Shared world ready</em>. Do not play or load another save during preparation.</li>
 <li>Send <code>JOIN-SESSION.json</code> privately to the guest.</li>
-<li>Run <strong>2-START-SERVER</strong> and keep its console open.</li>
-<li>Run <strong>3-START-X4-TEST</strong>. The shared save loads automatically and your Shuttle appears after setup.</li></ol>
+<li>Run <strong>03-START-SERVER-HOST</strong> and keep its console open.</li>
+<li>Run <strong>05-START-X4</strong>. The shared save loads automatically and your Shuttle appears after setup.</li></ol>
 <h2>Guest: receive and load</h2>
-<ol><li>Keep the received <code>JOIN-SESSION.json</code> in your extracted package folder. Run <strong>1-INSTALL</strong>, choose <strong>G</strong> and enter the invitation's path when asked.</li>
-<li>Run <strong>2-TEST-CONNECTION</strong>, then <strong>3-START-X4-TEST</strong>.</li>
+<ol><li>Keep the received <code>JOIN-SESSION.json</code> in your extracted package folder. Run <strong>01-INSTALL</strong>, choose <strong>G</strong> and select the invitation in the file dialog if it is not already in this folder.</li>
+<li>Run <strong>04-TEST-CONNECTION</strong>, then <strong>05-START-X4</strong>.</li>
 <li>The launcher downloads and checks the host world before opening X4. Wait through automatic loading; do not select another save. Stay in the pilot seat until Shuttle setup completes.</li></ol>
-<p>Windows: use the numbered <code>.cmd</code> files. Linux: run the corresponding <code>.sh</code> files from a terminal, such as <code>bash 1-INSTALL.sh</code>; use another terminal while the server is running.</p>
+<p>Windows: use the numbered <code>.cmd</code> files. Linux: run the corresponding <code>.sh</code> files from a terminal, such as <code>bash 01-INSTALL.sh</code>; use another terminal while the server is running.</p>
+<p>Numbers identify actions: guests skip HOST-only actions 02 and 03. Optional checks/removal are 06–10. Detailed evidence is grouped under <code>reports/</code>.</p>
+<h2>Background operation and teleportation</h2>
+<p>Alt+Tab to another application while X4 stays open in borderless mode. Keep the server running. Explicit pause or minimizing to the desktop can still suspend native updates. All four personal teleportation research levels are unlocked after Shuttle setup; use normal map/context-menu destinations. HQ relocation is separate.</p>
 <h2>Network and roles</h2>
 <p>Allow <strong>UDP45841 and TCP45844</strong> to the host on the private test network. The connection check uses UDP; world transfer additionally needs TCP. A working ZeroTier connection needs no router forwarding. Keep the firewall enabled. The host must run both X4 and the included server; the Python server alone does not simulate X4.</p>
 <h2>Restart, diagnostics and removal</h2>
 <p>For every retry stop <strong>both games and the relay</strong>, then restart the relay and both games. Both reload the same starting save; progress from the previous attempt is not resumed. Use a fresh extracted pair and invitation for a different world. Preparation will not replace an existing world.</p>
-<p>Read <a href="NEXT-TEST.txt">NEXT-TEST.txt</a> for the focused station and docking test. The existing cargo, radar and Cooperative Trial human results are retained; repeat them only if a regression appears.</p>
-<p>Run <strong>4-DIAGNOSTICS</strong> on both PCs before restarting after a failure. Include roles/OS, approximate time, sector and station code. Keep private session files out of public reports. <strong>7-VERIFY-PACKAGE</strong> checks package files; configured role files are checked separately.</p>
-<p>Close X4 and the relay, then run <strong>5-REMOVE-MOD</strong> from its owning package. Only the recorded, byte-matching <code>save_010</code> copy in profile45841 is removed; the package retains its immutable world bundle and archives its mod. Other or changed saves are preserved. Never load or save normal campaigns in this test profile.</p>
+<p>Read <a href="NEXT-TEST.txt">NEXT-TEST.txt</a> for the focused damage, Alt+Tab and teleportation test. The existing cargo, radar and Cooperative Trial human results are retained; repeat them only if a regression appears.</p>
+<p>Run <strong>06-DIAGNOSTICS</strong> on both PCs before restarting after a failure. Include roles/OS, approximate time, sector and station code. Keep private session files out of public reports. <strong>07-VERIFY-PACKAGE</strong> checks package files; configured role files are checked separately.</p>
+<p>Close X4 and the relay, then run <strong>09-REMOVE-MOD</strong> from its owning package. Only the recorded, byte-matching <code>save_010</code> copy in profile45841 is removed; the package retains its immutable world bundle and archives its mod. Other or changed saves are preserved. Never load or save normal campaigns in this test profile.</p>
 <h2>Content differences and limits</h2>
 <p>Different DLC/mod sets stop shared-world loading. No Workshop selections are rewritten and the withdrawn7.2 isolation helper is not included. A separate profile alone does not isolate the Steam account. Compare content manually if the launcher reports a difference.</p>
-<p>Station construction/destruction and economy are not continuously synchronized. General NPC commands/combat, persistent campaign resume, normal shared missions and ingame text chat remain unfinished. Check <a href="RELEASE-CHECKS.txt">RELEASE-CHECKS.txt</a> for measured evidence and pending native Windows/two-player tests.</p>
+<p>Ordinary station landing-pad occupancy and barriers are not yet shared: boarding a peer ship may fail and NPC traffic may overlap it.</p>
+<p>Station construction/destruction and economy are not continuously synchronized. General NPC commands/combat, persistent campaign resume, normal shared missions and ingame text chat remain unfinished. Check <a href="reports/RELEASE-CHECKS.txt">RELEASE-CHECKS.txt</a> for measured evidence and pending native Windows/two-player tests.</p>
 </html>

@@ -1,3 +1,16 @@
+Version 7.3.1 — 23 October 2026 — INTERNAL candidate
+
+- Recognize station/asteroid alignment as passed in the human7.3.0 test.
+- Select the host invitation in an OS file dialog, with terminal fallback.
+- Use unique launcher numbers01–10, explicit HOST-only labels and00-START-HERE.
+  Group technical evidence under reports/ and remove duplicate report copies.
+- Import personal resolution/controls while using borderless mode in the TEST
+  profile for Alt+Tab. Keep -nocputhrottle; normal preferences stay read-only.
+- Unlock all four personal teleportation research levels after admitted ship
+  setup, including maximum/unlimited range. No HQ relocation progression change.
+- Damage integration and measured checks: see reports/RELEASE-CHECKS.txt.
+- Ordinary-station dock occupancy/barriers and ongoing-world authority remain open.
+
 Version 7.3.0 — 23 October 2026 — INTERNAL
 
 - Create one pristine native host world with2-PREPARE-WORLD. X4 saves and exits

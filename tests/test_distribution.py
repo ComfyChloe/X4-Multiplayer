@@ -15,7 +15,7 @@ class DistributionTests(unittest.TestCase):
    self.assertTrue(popen.call_args.kwargs['start_new_session'])
  def test_missing_terminal_explains_manual_start(self):
   with patch.object(setup.sys.stdout,'isatty',return_value=False),patch.object(setup.shutil,'which',return_value=None):
-   with self.assertRaisesRegex(RuntimeError,'bash 2-START-SERVER.sh'):setup.server()
+   with self.assertRaisesRegex(RuntimeError,'bash 03-START-SERVER-HOST.sh'):setup.server()
  def test_profile_only_changes_test_config_and_preserves_other_files(self):
   with tempfile.TemporaryDirectory() as d:
    root=Path(d);p=root/'45841';p.mkdir();(p/'config.xml').write_text('<root><language>49</language><autosave>true</autosave><res_width>5120</res_width><res_height>1440</res_height><shaderquality>3</shaderquality><texturequality>medium</texturequality></root>');(root/'save.xml.gz').write_bytes(b'original');before=(p/'config.xml').read_bytes()

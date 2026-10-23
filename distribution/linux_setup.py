@@ -15,8 +15,9 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parent
 PROFILE = '45841'
-# Personal display, graphics and input preferences belong to the tester.
-TEST_SETTINGS = {'autosave': 'false', 'uisafemode': 'false'}
+# Preserve resolution/graphics/input; exclusive fullscreen stalls unfocused X4.
+TEST_SETTINGS = {'autosave': 'false', 'uisafemode': 'false',
+                 'fullscreen': 'false', 'borderless': 'true'}
 
 GAME_ARGS = ['-applaunch', '392160', '-personalfolderid', PROFILE, '-module', 'custom_creative',
              '-skipintro', '-debug', 'scripts', '-logfile', 'x4lan-debug.txt', '-nocputhrottle', '-noworkshopsync']
@@ -28,7 +29,7 @@ def package_version():
 def read_state():
     path = ROOT / 'installation.json'
     if not path.exists():
-        raise RuntimeError('Run 1-INSTALL.sh first.')
+        raise RuntimeError('Run 01-INSTALL.sh first.')
     return json.loads(path.read_text())
 
 def steam_roots(home: Path):
@@ -180,7 +181,7 @@ def server(console=False):
                 subprocess.Popen([executable] + options + command, start_new_session=True)
                 print('Opened the X4 LAN Server window.')
                 return
-        raise RuntimeError('No supported terminal found. Open a terminal in this folder and run: bash 2-START-SERVER.sh')
+        raise RuntimeError('No supported terminal found. Open a terminal in this folder and run: bash 03-START-SERVER-HOST.sh')
     sys.path.insert(0, str(ROOT))
     from x4lan.monitor import run
     cfg = json.loads((ROOT/'session.json').read_text())

@@ -45,6 +45,19 @@ class ProfileSettings(unittest.TestCase):
         self.assertEqual((Path(record['backup']) / 'config.xml').read_bytes(), old)
         self.assertEqual({p: (p.read_bytes(), p.stat().st_mtime_ns) for p in before}, before)
 
+    def test_background_mode_overrides_only_test_copy(self):
+        config = self.source / 'config.xml'
+        config.write_text('<root><fullscreen>true</fullscreen><borderless>false</borderless><res_width>5120</res_width><res_height>1440</res_height><texturequality>high</texturequality></root>')
+        before = config.read_bytes()
+        settings.import_settings(self.package)
+        tree = ET.parse(self.target / 'config.xml').getroot()
+        self.assertEqual(tree.findtext('fullscreen'), 'false')
+        self.assertEqual(tree.findtext('borderless'), 'true')
+        self.assertEqual(tree.findtext('res_width'), '5120')
+        self.assertEqual(tree.findtext('res_height'), '1440')
+        self.assertEqual(tree.findtext('texturequality'), 'high')
+        self.assertEqual(config.read_bytes(), before)
+
     def test_multiple_profiles_require_selection_and_test_profiles_are_excluded(self):
         other = self.source.parent / '99999'; other.mkdir(); (other / 'config.xml').write_text('<root><res_width>3440</res_width></root>')
         public = self.source.parent / '45842'; public.mkdir(); (public / 'config.xml').write_text('<root/>')

@@ -16,7 +16,7 @@ function Get-PackageVersion {
 }
 function Read-State {
     $path = Join-Path $PackageRoot 'installation.json'
-    if (!(Test-Path -LiteralPath $path)) { throw 'Run 1-INSTALL.cmd first.' }
+    if (!(Test-Path -LiteralPath $path)) { throw 'Run 01-INSTALL.cmd first.' }
     return Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
 }
 function Assert-Closed {
@@ -242,10 +242,11 @@ function Install-Package {
         [IO.File]::WriteAllText((Join-Path $staging 'ui\config.lua'), $lua, $Utf8)
         [IO.File]::WriteAllText((Join-Path $staging '.x4lan-package-id'), $pkg.package_id, $Utf8)
         New-Item -ItemType Directory -Force -Path $profile | Out-Null
-        foreach ($key in @('autosave','uisafemode')) {
+        $testSettings = @{autosave='false'; uisafemode='false'; fullscreen='false'; borderless='true'}
+        foreach ($key in $testSettings.Keys) {
             $node = $config.DocumentElement.SelectSingleNode($key)
             if ($null -eq $node) { $node = $config.CreateElement($key); $config.DocumentElement.AppendChild($node) | Out-Null }
-            $node.InnerText = 'false'
+            $node.InnerText = $testSettings[$key]
         }
         Assert-SafeProfileItem $tempConfig
         $config.Save($tempConfig)

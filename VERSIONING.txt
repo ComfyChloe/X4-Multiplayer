@@ -6,12 +6,13 @@ Format: MAJOR.MINOR.PATCH, for example 5.0.1.
 - PATCH: fixes, defaults, documentation and packaging improvements.
 Every published update gets a higher version, including launcher-only fixes.
 
-Current development candidate: 7.3.0 (shared native starting world)
-Adds native capture, transfer and role-safe load; preserves accepted7.2 gameplay.
-Read RELEASE-CHECKS.txt for acceptance status; full-universe work remains open.
+Current development candidate: 7.3.1 (damage and playtest usability follow-up)
+Retains shared starting state; adds personal teleportation and clearer launchers.
+Read reports/RELEASE-CHECKS.txt for acceptance status; full-universe work remains open.
 Install the new matched Windows/Linux packages, including the new host server.
 
 Historical mapping:
+7.3.1 = damage/playtest follow-up; unique launchers, teleport research, background mode.
 7.3.0 = shared host starting-save bootstrap, portable Windows/Linux hosting.
 7.2.0 = Windows/Linux host or guest, private session invitations, native radar fix.
 7.1.2 = staged sensor-only candidate; superseded before delivery by 7.2.0.
@@ -27,11 +28,11 @@ Historical mapping:
 Earlier archives keep their original names as historical test snapshots.
 
 Where to see the version:
-- ZIP and extracted folder names: X4-LAN-7.3.0-Linux / Windows11.
+- ZIP and extracted folder names: X4-LAN-7.3.1-Linux / Windows11.
 - VERSION.txt and package.json inside each package.
 - Launcher output, server dashboard/status log and installed mod display name.
 
-Use both archives from the same release folder. For 7.3.0, the host creates a fresh
+Use both archives from the same release folder. For 7.3.1, the host creates a fresh
 session key and shares JOIN-SESSION.json privately with its guest. Both must use
 the same version and session invitation. Archives themselves contain no keys.
 Exception: the 5.0.2 Windows launcher-only update preserves the existing pair.

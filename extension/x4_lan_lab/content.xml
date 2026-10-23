@@ -1,4 +1,4 @@
 <?xml version="1.0" encoding="utf-8"?>
-<content id="x4_lan_lab" name="X4 LAN Lab (experimental)" description="Internal multiplayer with a shared native starting world, host NPC scenes and cooperative cargo. Ongoing station economy and campaign resume are unfinished. Use isolated profile 45841." author="X4 LAN Lab" version="9" date="2026-10-23" save="false">
+<content id="x4_lan_lab" name="X4 LAN Lab (experimental)" description="Internal multiplayer with a shared native starting world, host NPC scenes and cooperative cargo. Ongoing station economy and campaign resume are unfinished. Use isolated profile 45841." author="X4 LAN Lab" version="10" date="2026-10-23" save="false">
   <dependency version="900" />
 </content>

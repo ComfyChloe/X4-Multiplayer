@@ -109,7 +109,7 @@ def configured():
     if package.get('channel') != 'internal' or package.get('version') != VERSION:
         raise RuntimeError('This launcher requires a Internal Test package.')
     if package.get('slot') not in ('p1', 'p2') or not (ROOT / 'session.json').is_file():
-        raise RuntimeError('Run 1-INSTALL first to create or join a session.')
+        raise RuntimeError('Run 01-INSTALL first to create or join a session.')
     session = read_json(ROOT / 'session.json')
     validate_invite({k: v for k, v in session.items() if k != 'host'})
     expected_host = '127.0.0.1' if package['slot'] == 'p1' else session['server']
@@ -123,7 +123,7 @@ def configure(role, server=None, invite=None):
     # safe while an unrelated X4 instance runs; installation still checks X4.
     with session_lock():
         if (ROOT / 'installation.json').exists():
-            raise RuntimeError('Remove the installed mod with 5-REMOVE-MOD before changing roles or sessions.')
+            raise RuntimeError('Remove the installed mod with 09-REMOVE-MOD before changing roles or sessions.')
         if (ROOT / 'session.json').exists():
             raise RuntimeError('This folder already has a session. Reuse it, or use a fresh extracted package for a new session.')
         if role == 'host':
@@ -216,14 +216,14 @@ def server(console=False):
         for terminal, options in terminals:
             executable = shutil.which(terminal)
             if executable:
-                subprocess.Popen([executable, *options, 'bash', str(ROOT / '2-START-SERVER.sh'), '--console'],
+                subprocess.Popen([executable, *options, 'bash', str(ROOT / '03-START-SERVER-HOST.sh'), '--console'],
                                  cwd=ROOT, start_new_session=True, stdin=subprocess.DEVNULL,
                                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
                 print('Opened the X4 LAN Server window.')
                 return
-        raise RuntimeError('No supported terminal found. Open a terminal in this folder and run: bash 2-START-SERVER.sh --console')
+        raise RuntimeError('No supported terminal found. Open a terminal in this folder and run: bash 03-START-SERVER-HOST.sh --console')
     package, cfg = configured()
-    if package['slot'] != 'p1': raise RuntimeError('Only the HOST starts the server. The GUEST uses 2-TEST-CONNECTION.')
+    if package['slot'] != 'p1': raise RuntimeError('Only the HOST starts the server. The GUEST uses 04-TEST-CONNECTION.')
     from x4lan.monitor import attach, probe, run
     if probe(cfg):
         # A read-only viewer must not acquire the running server's setup lock.
@@ -285,6 +285,48 @@ def import_settings(source=None, keep=False):
     return backend_module('profile_settings').import_settings(ROOT, source=source, keep=keep, slot_validator=validator)
 
 
+def choose_invitation():
+    """Use an OS file dialog when available; never guess a session or expose its key."""
+    print('Select the JOIN-SESSION.json sent privately by your host.')
+    command = None
+    if sys.platform == 'win32':
+        # The path is returned as UTF-8 data, never interpolated into a command.
+        script = r"""[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Title = 'Select your host JOIN-SESSION.json'
+$dialog.Filter = 'Session invitation (JOIN-SESSION.json)|JOIN-SESSION.json|JSON files (*.json)|*.json'
+$dialog.CheckFileExists = $true
+try {
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        [Console]::WriteLine($dialog.FileName)
+    } else { exit 2 }
+} finally { $dialog.Dispose() }
+"""
+        command = ['powershell.exe', '-NoProfile', '-STA', '-Command', script]
+    elif os.environ.get('DISPLAY') or os.environ.get('WAYLAND_DISPLAY'):
+        if shutil.which('kdialog'):
+            command = ['kdialog', '--getopenfilename', str(ROOT), '*.json', '--title',
+                       'Select your host JOIN-SESSION.json']
+        elif shutil.which('zenity'):
+            command = ['zenity', '--file-selection', '--title=Select your host JOIN-SESSION.json',
+                       '--file-filter=JSON invitations | *.json']
+    if command:
+        try:
+            result = subprocess.run(command, capture_output=True, encoding='utf-8', check=False)
+        except OSError:
+            result = None
+        if result is not None and result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+        if result is not None and result.returncode in (1, 2) and not result.stderr.strip():
+            raise RuntimeError('Invitation selection cancelled. Run 01-INSTALL to try again.')
+        print('File selection is unavailable; paste the invitation path below.')
+    value = input('Path to the host JOIN-SESSION.json: ').strip().strip('"')
+    if not value:
+        raise ValueError('No invitation selected. Ask the host for JOIN-SESSION.json.')
+    return value
+
+
 def setup(args):
     if not (ROOT / 'session.json').exists():
         role = args.role or input('Role: [H]ost or [G]uest? ').strip().lower()
@@ -295,13 +337,13 @@ def setup(args):
             configure(role, server=args.server or input('Your host LAN/ZeroTier IPv4: ').strip())
         elif role == 'guest':
             invite = args.invite or (str(ROOT / 'JOIN-SESSION.json') if (ROOT / 'JOIN-SESSION.json').is_file() else None)
-            configure(role, invite=invite or input('Path to the host JOIN-SESSION.json: ').strip().strip('"'))
+            configure(role, invite=invite or choose_invitation())
         else: raise ValueError('Choose H for host or G for guest.')
     package, _ = configured()
     if not args.server_only and not (ROOT / 'installation.json').exists(): platform_action('install', args.game)
     if not args.server_only and not (ROOT / 'settings-import.json').exists():
         import_settings(getattr(args, 'settings_profile', None), getattr(args, 'keep_test_settings', False))
-    print('Next: ' + ('2-PREPARE-WORLD, then 2-START-SERVER, then ' if package['slot'] == 'p1' else '2-TEST-CONNECTION, then ') + '3-START-X4-TEST.')
+    print('Next: ' + ('02-PREPARE-WORLD-HOST, then 03-START-SERVER-HOST, then ' if package['slot'] == 'p1' else '04-TEST-CONNECTION, then ') + '05-START-X4.')
 
 
 def main():

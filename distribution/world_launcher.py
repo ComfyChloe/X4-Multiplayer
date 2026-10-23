@@ -192,11 +192,11 @@ def stage(root, profile, bundle):
 def verify_prepared(folder, session):
     folder = Path(folder)
     if not (folder / 'prepared.json').is_file() or not (folder / 'bundle/manifest.json').is_file():
-        raise RuntimeError('Run 2-PREPARE-WORLD on the host before starting its server or game.')
+        raise RuntimeError('Run 02-PREPARE-WORLD-HOST on the host before starting its server or game.')
     manifest, _ = seed.read_bundle(folder / 'bundle')
     expected = dict(seed_id=session['bubble'], sha256=manifest['sha256'], native_completed=True)
     if not (folder / 'prepared.json').is_file() or read(folder / 'prepared.json') != expected:
-        raise RuntimeError('Run 2-PREPARE-WORLD; no matching completed native host world is available.')
+        raise RuntimeError('Run 02-PREPARE-WORLD-HOST; no matching completed native host world is available.')
     if manifest['seed_id'] != session['bubble'] or manifest['game_build'] != session['build']:
         raise RuntimeError('Prepared host world belongs to another session.')
     return manifest
@@ -317,10 +317,10 @@ def prepare(root, package, session, ensure_closed, timeout=600):
             if begin in text and 'WORLD_CAPTURE STOPPED' in text[text.index(begin):]:
                 shutil.copy2(logfile, run / 'failed-native.log')
                 failure = next(line for line in text[text.index(begin):].splitlines() if 'WORLD_CAPTURE STOPPED' in line)
-                raise RuntimeError(failure + '. Close X4, correct the reported content/settings difference and rerun 2-PREPARE-WORLD. Evidence was retained.')
+                raise RuntimeError(failure + '. Close X4, correct the reported content/settings difference and rerun 02-PREPARE-WORLD-HOST. Evidence was retained.')
         if observed and closed:
             finish_capture(root, state, target, identity)
-            print('Shared world ready. Start 2-START-SERVER and send JOIN-SESSION.json privately to your guest.'); return
+            print('Shared world ready. Start 03-START-SERVER-HOST and send JOIN-SESSION.json privately to your guest.'); return
         time.sleep(1)
     raise RuntimeError('World preparation timed out. Close X4; capture evidence and any new save are preserved. Do not use the play launcher yet.')
 

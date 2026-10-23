@@ -59,13 +59,14 @@ def prepare(profile, source):
     tree = xml_root(config.read_bytes(), str(config))
     if tree.tag != 'root':
         raise RuntimeError('Unknown source config.xml format.')
-    # Only these two test requirements override personal preferences.
-    for name in ('autosave', 'uisafemode'):
+    # Keep resolution, quality and controls; use borderless for background ticks.
+    for name, value in {'autosave': 'false', 'uisafemode': 'false',
+                        'fullscreen': 'false', 'borderless': 'true'}.items():
         nodes = tree.findall(name)
         if not nodes:
             nodes = [ET.SubElement(tree, name)]
         for node in nodes:
-            node.text = 'false'
+            node.text = value
     files = {'config.xml': ET.tostring(tree, encoding='utf-8', xml_declaration=True)}
     for path in sorted(source.iterdir()):
         if not INPUT_FILE.fullmatch(path.name):
@@ -110,7 +111,7 @@ def import_settings(package_root, source=None, keep=False, ask=input, slot_valid
                 print(f'{i}: {candidate}')
             answer = ask('Profile number (0 keeps the current test settings): ').strip()
             if not answer.isdigit() or int(answer) > len(choices):
-                raise ValueError('Invalid settings profile selection. Run 1-INSTALL again to retry.')
+                raise ValueError('Invalid settings profile selection. Run 01-INSTALL again to retry.')
             if int(answer):
                 source = choices[int(answer) - 1]
     record = {'profile': str(profile), 'source': None, 'files': []}
@@ -152,5 +153,5 @@ def import_settings(package_root, source=None, keep=False, ask=input, slot_valid
         raise
     print('Display, graphics and controls copied from:', source)
     print('Previous test settings backed up to:', backup)
-    print('Only autosave and protected UI mode are disabled for this internal test.')
+    print('Test profile uses borderless mode for Alt+Tab, with autosave/protected UI mode disabled. Resolution and controls are preserved.')
     return record
