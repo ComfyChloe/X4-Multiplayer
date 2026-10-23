@@ -1,6 +1,0 @@
-<?xml version='1.0' encoding='UTF-8'?>
-<diff>
-  <add sel="/mdscript/cues/cue[@name=&quot;X4ep1_Mentor_Subscription_SetUp&quot;]/conditions">
-    <check_value value="player.module != 'x4lan_internal'"/>
-  </add>
-</diff>

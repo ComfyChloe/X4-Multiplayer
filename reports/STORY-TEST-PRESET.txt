@@ -1,0 +1,62 @@
+INTERNAL COMPLETED-STORY PRESET — 23 OCTOBER 2026
+
+The owner requested the native Custom Game Start completion mechanism, choosing
+completed branches with the least disruption practical for technical tests.
+This replaces the earlier29 blanket cue patches, including their two invalid
+debug-wrapper condition modes. Native scripts now run their supported completed-
+start initialization instead of being disabled. Ordinary game starts are unchanged.
+
+The single source of the fixed choices is libraries/gamestarts.xml, under the
+hidden x4lan_internal start. A future player menu can replace these defaults;
+that menu is not implemented. Existing saves are not rewritten.
+
+Selection priorities: preserve existing major factions and their identities;
+avoid additional antagonists, sabotage and optional galaxy interference where
+the native completed branches permit it. There is no completely unchanged
+universe with every plot completed. These are qualitative test choices, not a
+measured global minimum of all simulation changes.
+
+- HQ with Boso and Dal: required native prerequisite for the completed plots.
+  The HQ is precreated through the native gamestart property definition, using
+  the stock dock construction plan. Waiting for the mentor script to create it
+  is too late for the Timelines universe-generated callback.
+- Diplomacy Network ready; Protocol Null remains inactive.
+- Paranid escalation completed: preserves separate PAR and HOP empires instead
+  of merging them. Unavoidable consequence: Duke's Tempest and its expanded
+  conflict. Chosen to preserve the two existing empires, not as a peaceful ending.
+- Split Patriarchy victory: retains Zyarth rather than the Rhak/Curbs replacement;
+  Patriarchy expansion into Free Families space is still a world change.
+- Terran covert operations: Status quo, avoiding war or an Argon/Antigone schism.
+- Neutral Yaki, completed Segaris Project Genesis and Boron reintegration.
+- Arrested Curs: no new player Raven. Northriver alliance: no rival sabotage.
+- Completed Erlking upgrades, Timelines epilogue and Envoy plot.
+- Hyperion granted to PAR: one supported completed branch, no new faction war.
+- Native research completion flags and matching research wares suppress research
+  story steps and retain full teleportation for testing. Venture research is
+  excluded; the obsolete, non-researchable high-mass teleportation ware is also
+  excluded. Current teleportation/HQ-warp research remains selected. This preset
+  does not enable online Ventures or alter subscriptions.
+
+References are the installed game's own gamestarts.xml definitions, their
+English descriptions, Custom Game Start UI serialization and native MD startup
+branches. No third-party multiplayer implementation is used.
+
+VALIDATION
+Merged native gamestart schema: VALID. Selected flags and dependency choices
+are retained privately in .local/evidence-258-withheld and
+.local/evidence-256-withheld Combined native preset/pulse observation
+.local/evidence-257-withheld exposed the missing early HQ and the obsolete
+research entry; that story result remains FAIL, with raw errors preserved.
+
+Corrected story-only run .local/evidence-255-withheld:42 selected flags read back as1
+(14 completed plot choices,28 research skips); exactly one HQ; the native
+Timelines epilogue is cancelled by its completed-state path. Fourteen mission
+list samples from game time11.84s to76.92s contain only ordinary upkeep and the
+Cooperative Trial, no plot missions. No MD/AI or preset errors. Engine startup,
+signature and Saturn resource-region warnings are retained separately and are
+not silently discarded. Raw SHA256:
+62393b8e4b70b6997451dc0634a79b9468cc54b9b9a02324452863948376b4d9.
+The owned game/helpers were closed and installation/settings/save inventories
+restored. PASS is limited to this native Linux fresh-start observation. Native
+capture/reload timing, later triggers and human two-PC acceptance are still
+distinct checks; no completed campaign/session persistence claim is made.

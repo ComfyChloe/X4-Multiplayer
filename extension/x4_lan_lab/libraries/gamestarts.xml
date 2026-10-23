@@ -1,23 +1,111 @@
-<?xml version="1.0" encoding="utf-8"?>
+<?xml version='1.0' encoding='utf-8'?>
 <diff>
  <add sel="/gamestarts">
-  <!-- Dedicated module scopes story suppression to newly created MP worlds. -->
   <gamestart id="x4lan_internal" name="X4 Multiplayer Internal" description="Internal shared starting world. Start through the multiplayer launcher." image="gamestart_custom_01" group="2">
-   <unlock hidden="true"/>
-   <location galaxy="xu_ep2_universe_macro" sector="cluster_14_sector001_macro"/>
+   <unlock hidden="true" />
+   <location galaxy="xu_ep2_universe_macro" sector="cluster_14_sector001_macro" />
    <player macro="character_player_custom_f_asi_macro" female="true" money="10000" name="Multiplayer Pilot">
     <ship macro="ship_arg_s_scout_01_a_macro">
      <loadout>
       <macros>
-       <engine macro="engine_arg_s_travel_01_mk2_macro" path="../con_engine_01"/>
-       <engine macro="engine_arg_s_travel_01_mk2_macro" path="../con_engine_02"/>
-       <shield macro="shield_arg_s_standard_01_mk1_macro" path="../con_shield_01"/>
+       <engine macro="engine_arg_s_travel_01_mk2_macro" path="../con_engine_01" />
+       <engine macro="engine_arg_s_travel_01_mk2_macro" path="../con_engine_02" />
+       <shield macro="shield_arg_s_standard_01_mk1_macro" path="../con_shield_01" />
       </macros>
-      <virtualmacros><thruster macro="thruster_gen_s_allround_01_mk1_macro"/></virtualmacros>
+      <virtualmacros>
+       <thruster macro="thruster_gen_s_allround_01_mk1_macro" />
+      </virtualmacros>
      </loadout>
     </ship>
-    <inventory><ware ware="weapon_gen_spacesuit_repairlaser_01_mk1" amount="1"/><ware ware="software_scannerobjectmk3" amount="1"/></inventory>
+    <inventory>
+     <ware ware="weapon_gen_spacesuit_repairlaser_01_mk1" amount="1" />
+     <ware ware="software_scannerobjectmk3" amount="1" />
+    </inventory>
+    <research>
+     <ware ware="research_diplomacy_network" />
+     <ware ware="research_mod_engine_mk1" />
+     <ware ware="research_mod_engine_mk2" />
+     <ware ware="research_mod_engine_mk3" />
+     <ware ware="research_mod_shield_mk1" />
+     <ware ware="research_mod_shield_mk2" />
+     <ware ware="research_mod_shield_mk3" />
+     <ware ware="research_mod_ship_mk1" />
+     <ware ware="research_mod_ship_mk2" />
+     <ware ware="research_mod_ship_mk3" />
+     <ware ware="research_mod_weapon_mk1" />
+     <ware ware="research_mod_weapon_mk2" />
+     <ware ware="research_mod_weapon_mk3" />
+     <ware ware="research_module_build" />
+     <ware ware="research_module_defence" />
+     <ware ware="research_module_dock" />
+     <ware ware="research_module_habitation" />
+     <ware ware="research_module_production" />
+     <ware ware="research_module_storage" />
+     <ware ware="research_module_welfare_1" />
+     <ware ware="research_module_welfare_2" />
+     <ware ware="research_seta" />
+     <ware ware="research_teleportation" />
+     <ware ware="research_teleportation_range_01" />
+     <ware ware="research_teleportation_range_02" />
+     <ware ware="research_teleportation_range_03" />
+     <ware ware="research_warp_hq_01" />
+     <ware ware="research_warp_hq_02" />
+    </research>
+    <property>
+     <station id="player_HQ" macro="station_pla_headquarters_base_01_macro" comment="Native completed-story prerequisite, created before universe-generated story callbacks.">
+      <location sector="cluster_01_sector001_macro">
+       <position x="128000" y="0" z="198000" />
+      </location>
+      <construction ref="x4ep1_playerheadquarters_with_dock" />
+     </station>
+    </property>
    </player>
+   <universe>
+    <stories>
+     <story ref="story_hq_dal" state="1" comment="Headquarters and staff ready; native prerequisite for completed plots." />
+     <story ref="story_diplomacy_network" state="1" comment="Embassy ready; Protocol Null interference cell remains inactive." />
+     <story ref="story_paranid_esc_3" state="1" comment="Keep PAR and HOP separate instead of merging their empires. The Duke becomes Tempest; this is an unavoidable completed-branch consequence." />
+     <story ref="story_split_cabal_complete" state="1" comment="Keep Zyarth instead of the Rhak/Curbs replacement. Patriarchy expansion is an unavoidable completed-branch consequence." />
+     <story ref="story_covert_ops_neutral" state="1" comment="Preserve the Argon, Antigone and Terran status quo." />
+     <story ref="story_yaki_complete" state="1" comment="Supported completed Yaki state; avoid an unfinished invasion plot." />
+     <story ref="story_terraforming" state="1" comment="Finish the Segaris plot through its native custom-start path." />
+     <story ref="story_criminal_arrested_curs" state="1" comment="End the Curs plot without granting the player a Raven." />
+     <story ref="story_twin_northriver" state="1" comment="Leave Northriver business intact instead of sabotaging its ships." />
+     <story ref="story_erlking_upgrade" state="1" comment="Finish the Erlking research chain." />
+     <story ref="story_queendom_returned" state="1" comment="Finish the Boron reintegration tasks." />
+     <story ref="story_timelines_grandmother" state="1" comment="Finish the Timelines epilogue." />
+     <story ref="story_hyperion_par" state="1" comment="Single completed Hyperion branch; no additional faction war." />
+     <story ref="story_envoy" state="1" comment="Finish the Envoy plot." />
+     <story ref="research_diplomacy_network" state="1" />
+     <story ref="story_research_mod_engine_mk1" state="1" />
+     <story ref="story_research_mod_engine_mk2" state="1" />
+     <story ref="story_research_mod_engine_mk3" state="1" />
+     <story ref="story_research_mod_shield_mk1" state="1" />
+     <story ref="story_research_mod_shield_mk2" state="1" />
+     <story ref="story_research_mod_shield_mk3" state="1" />
+     <story ref="story_research_mod_ship_mk1" state="1" />
+     <story ref="story_research_mod_ship_mk2" state="1" />
+     <story ref="story_research_mod_ship_mk3" state="1" />
+     <story ref="story_research_mod_weapon_mk1" state="1" />
+     <story ref="story_research_mod_weapon_mk2" state="1" />
+     <story ref="story_research_mod_weapon_mk3" state="1" />
+     <story ref="story_research_module_build" state="1" />
+     <story ref="story_research_module_defence" state="1" />
+     <story ref="story_research_module_dock" state="1" />
+     <story ref="story_research_module_habitation" state="1" />
+     <story ref="story_research_module_production" state="1" />
+     <story ref="story_research_module_storage" state="1" />
+     <story ref="story_research_module_welfare_1" state="1" />
+     <story ref="story_research_module_welfare_2" state="1" />
+     <story ref="story_research_seta" state="1" />
+     <story ref="story_research_teleportation" state="1" />
+     <story ref="story_research_teleportation_range_01" state="1" />
+     <story ref="story_research_teleportation_range_02" state="1" />
+     <story ref="story_research_teleportation_range_03" state="1" />
+     <story ref="story_research_warp_hq_01" state="1" />
+     <story ref="story_research_warp_hq_02" state="1" />
+    </stories>
+   </universe>
   </gamestart>
  </add>
 </diff>
