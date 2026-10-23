@@ -23,9 +23,9 @@
     <debug_text text="'[X4LAN] HEALTH_SETUP host=%s'.[$arena.$host]"/>
    </actions>
    <cues>
-    <!-- 'gameSeconds|entity|gen|hull|shield': also MD's clock for the deadlines of queued writes.
-         gen is the authority this readback was taken under (0 until own). -->
-    <cue name="Own" instantiate="true" checkinterval="0.1s"><conditions><check_value value="true"/></conditions><actions>
+    <!-- 'gameSeconds|wallSecond|entity|gen|hull|shield', unpaused only: also the freshness window
+         of queued writes. gen is the authority this readback was taken under (0 until own). -->
+    <cue name="Own" instantiate="true" checkinterval="0.1s"><conditions><check_value value="player.timewarp.factor gt 0s"/></conditions><actions>
      <set_value name="$e" exact="0"/><set_value name="$g" exact="0"/><set_value name="$hull" exact="0"/><set_value name="$shield" exact="0"/>
      <do_if value="@player.occupiedship.isoperational">
       <set_value name="$e" exact="$arena.$ships.indexof.{player.occupiedship}"/>
@@ -34,7 +34,7 @@
        <set_value name="$hull" exact="player.occupiedship.hullpercentage"/><set_value name="$shield" exact="player.occupiedship.shieldpercentage"/>
       </do_if>
      </do_if>
-     <raise_lua_event name="'X4LAN_Health.Own'" param="'%s|%s|%s|%s|%s'.[player.age / 1s,$e,$g,$hull,$shield]"/>
+     <raise_lua_event name="'X4LAN_Health.Own'" param="'%s|%s|%s|%s|%s|%s'.[player.age / 1s,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},$e,$g,$hull,$shield]"/>
     </actions></cue>
     <!-- Guest: the generation it may write under (0 = none); own only once its baseline is set. -->
     <cue name="Authority" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Authority'"/><check_value value="not $arena.$host"/></conditions><actions>
@@ -46,8 +46,8 @@
     <!-- Pilot: write the host's canonical baseline on the ship it occupies, then confirm. -->
     <cue name="Base" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Base'"/><check_value value="not $arena.$host"/></conditions><actions>
      <set_value name="$a" exact="event.param3"/><set_value name="$ship" exact="$arena.$ships.{$a.$entity}"/>
-     <!-- Fresh in game time AND real time (Lua's blackboard stamp keeps moving while paused). -->
-     <do_if value="$a.$gen == $arena.$healthAuth.{$a.$entity} and player.age / 1s le $a.$deadline and @player.entity.$x4lanHealthWall and $a.$wall + 1.0 ge player.entity.$x4lanHealthWall and @$ship.isoperational and player.occupiedship == $ship">
+     <!-- Unpaused, in the readback's wall-clock second and game-age window (else Lua retries). -->
+     <do_if value="$a.$gen == $arena.$healthAuth.{$a.$entity} and player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $a.$stamp and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline and @$ship.isoperational and player.occupiedship == $ship">
       <!-- A generation's baseline is written once; a retry of it only confirms. -->
       <do_if value="$arena.$healthBased.{$a.$entity} != $a.$gen">
        <set_object_hull object="$ship" exact="$a.$hull"/><set_object_shield object="$ship" exact="$a.$shield"/>
@@ -59,7 +59,7 @@
     </actions></cue>
     <cue name="Apply" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Apply'"/><check_value value="$arena.$host"/></conditions><actions>
      <set_value name="$a" exact="event.param3"/><set_value name="$e" exact="$a.$entity"/><set_value name="$ship" exact="$arena.$ships.{$e}"/>
-     <do_if value="$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen ge $arena.$healthGen.{$e} and player.age / 1s le $a.$deadline and @player.entity.$x4lanHealthWall and $a.$wall + 1.0 ge player.entity.$x4lanHealthWall and @$ship.isoperational and not $arena.$dead.{$e}">
+     <do_if value="$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen ge $arena.$healthGen.{$e} and player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $a.$stamp and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline and @$ship.isoperational and not $arena.$dead.{$e}">
       <set_value name="$arena.$healthGen.{$e}" exact="$a.$gen"/>
       <set_value name="$arena.$healthAt.{$e}" exact="player.age"/>
       <set_value name="$arena.$healthLive.{$e}" exact="true"/>

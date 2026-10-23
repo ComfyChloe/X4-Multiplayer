@@ -137,10 +137,13 @@ Second review round (A:primary, re-review of c7cb744):
 - Queued Base/Apply carry a deadline on MD's game clock (TTL 1 s) that MD checks at execution.
   Without a readback clock nothing is queued, and nothing is queued while paused.
 Third review round (A:primary on b88909f) and lifecycle self-audit:
-- Real-time freshness: every frame, also while paused, Lua writes GetCurRealTime() to the player
-  entity blackboard ($x4lanHealthWall). Queued Base/Apply carry their real-time stamp and an MD
-  game-time deadline, and MD refuses either one after 1 s. So a write queued before a pause is
-  refused after it. Nothing is queued without both clocks or while paused.
+- Real-time freshness (corrected after review): MD's own wall clock, as qualified in
+  x4lan_attachment.xml. The readback (unpaused only) carries
+  player.systemtime.{'%Y-%m-%dT%H:%M:%S'} and player.age. Queued Base/Apply carry that second and
+  the [age, age + 1 s] window. MD executes them only when player.timewarp.factor > 0s, in the
+  same wall second and inside the window. Lua issues writes only from a readback at most 0.5 s
+  old and not while paused, and simply re-issues refused ones. No Lua-written clock and no
+  blackboard API.
 - Base retry: an unconfirmed Base is re-issued after 0.5 s. MD writes a generation's baseline
   once ($healthBased) and only confirms repeats, so a retry never resets HP.
 - Reports: each fresh MD readback is sent at most once. Nothing is sent while paused or from a
@@ -166,5 +169,17 @@ Lifecycle audit (code and doubles only):
 - Accepted residual: a Base queued just before a revocation can still execute before the
   revoking Authority event. It writes the host's canonical baseline of the ended generation on
   the ship and its Based is then refused. No pilot value is accepted from it.
-Still unverified natively: SetNPCBlackboard on the player entity read as player.entity.$var,
-10 Hz setters on a FIRE2-driven proxy, min hull 2 under bursts.
+Still unverified natively: 10 Hz setters on a FIRE2-driven proxy, min hull 2 under bursts.
+Stale, pause and failed-callback audit (after the MD wall-clock change):
+- Pause: readbacks stop (timewarp gate), so Lua stops issuing writes within 0.5 s and stops
+  reporting. Queued writes fail the timewarp/second/window check on resume. Host freshness
+  (1 s real) and the watchdog (2 s game) release the floor. After resume, the next readback
+  re-enables writes.
+- Lua stalls or fails while MD runs: no new writes or reports. The host watchdog releases, and
+  the guest clears its MD authority on a caught failure. A guest Lua that hangs without failing
+  keeps $healthOwn: it remains authoritative for its own ship and the host releases its floor.
+- MD refuses a write (second boundary, window, fence): Base -> no Based -> retried after 0.5 s
+  from a fresh readback, written once. Apply -> the next HEALTH frame (10 Hz) re-issues it.
+  Release is not windowed (restorative, fenced by generation).
+- Lost or late network frames: the relay repeats HBASE/HGEN every snapshot. HEALTH counts only
+  for the valid generation, in seq order. HACK is resent on each repeated HBASE.
