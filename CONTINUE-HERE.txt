@@ -29,11 +29,10 @@ mutates native transport userdata, HEALTH STOPPED. It exposed a production bug:
 h.failed stops frames but receive/base/based keep granting new own generations.
 Claude notified01:44, assigned permanent health-failure closure + regression,
 and dev observer userdata-safe send logging. Need native failure phase7 after fix.
-Review worktree ../x4-health-review at9516cf5. Native Windows remains blocked by
+Dev-only observer e5a41b8 independently2 PASS; review worktree at e5a41b8. Native Windows remains blocked by
 Workshop restrictions. Primary owns aim/docking/story/controller/native/integration.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last01:30 checkpoint1792798183.879429,
-01:40 observer report1792798839.482029, production finding1792799049.961589.
-Quarter-hour coordination; next01:45. No new timer/chat.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last01:45 checkpoint1792799144.276449; production finding1792799049.961589.
+Quarter-hour coordination; next02:00. No new timer/chat.
 
 IMPLEMENTATION / EVIDENCE
 Story native preset: hidden x4lan_internal start,14 completed plot choices and28
@@ -64,7 +63,9 @@ both refs,24 unique indexed bays and complete Beta cycle; overall PARTIAL due
 Beta name-count failure. Explicit rename confirmed by health-guest-01 station
 witness (both refs/counts1), whose separate health portion FAILS.24 seed+23bubble+
 12trade tests pass; schema/generator deltas checked. Launcher coop_docks still off.
-No boarding/platform/two-native same-pad crash or post-seed new-station acceptance.
+Handover01 PASS: p2 claims host ship(epoch2), docks/exits; p1 reclaims(epoch3)/exits.
+175 retained readbacks stay docked/one occupant/zero local position spread. Native
+teleport seat changes; no walking/two-native crash/post-seed new-station acceptance.
 
 WEAPONS
 reports/WEAPON-AIM-PRIMITIVES.txt: native shoot_at spatial helper can hit fixed
@@ -76,11 +77,10 @@ forward15deg but NOT flight; SetObjectSectorPos rejects bullets. Prior gun sette
 and direct gun-object shooting also fail. No production aim change.
 
 LIVE JOBS / TOOLS
-ACTIVE native exec79459: .local/evidence-227-withheld, single6-shot
-add_object_velocity primitive (set velocity already rejected). All other native
-runs cleaned. aim-latch-01 completed: direct shooting after shoot_at release gives
-12 forward shots/no hits; AI cannot access md namespace, so phase labels failed
-and planned additive-velocity half was NOT exercised. Raw failure retained.
+No active game/controller; all completed runs verified cleaned.
+Additive velocity01 FAIL: all6 bullets reject non-destructible velocity write.
+aim-latch01 PARTIAL fixture:12 forward shots after release; AI md lookup error.
+Raw evidence/cleanup retained; these add no successful aim primitive.
 Health guest next: clone .local/evidence-049-withheld controller after Claude fixes.
 It loads seed-market-dock-02 snapshot, synthetic p1 + real Linux p2,6 phases.
 Add deliberate callback-failure phase7 and gate ordinary HEALTH STOPPED early.

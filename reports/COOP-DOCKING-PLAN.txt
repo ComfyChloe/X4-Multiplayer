@@ -137,3 +137,20 @@ and one station of each name. Its health portion FAILS in the dev observer; that
 does not establish health acceptance. Do not relabel the older dock capture.
 24 seed +23 bubble +12 trade adapter tests PASS; changed MD schemas VALID and
 the two changed generator branches match. No unrelated cargo/mission reruns.
+
+HOST-SHIP HANDOVER / LAND / EXIT — 24 OCTOBER 2026
+.local/evidence-023-withheld, source bc178aa, one native Linux p1 and a labelled
+synthetic UDP p2 with the real relay. Host leaves its ship for saved station
+Beta; p2 claims ship1 (epoch2), moves/reserves/attaches it, then leaves the seat.
+The remote owner continues to publish EXTERNAL with an intentionally distant
+free-flight NAV pose. Host then reclaims the actual docked ship (epoch3), and
+leaves it again. Old p2 epoch2 NAV/CDOCK continue and cannot displace it.
+Bounded PASS: 97 post-guest-exit,29 reclaim and49 post-host-exit retained readbacks
+all show the exact occupied bay, one docked ship and zero local-position spread.
+Both native seat transitions and the relay owner/epoch changes are recorded.
+Raw SHA2567177ca7df9554fbe818875b965e2ffeec36235ea409d417b6ee731ed2ea846c7.
+46 installed production-source files match; original37-file installation,
+preferences,owned test slot and7actual normal-save bytes/timestamps restored.
+This tests the reported ownership/docking oscillation path in one engine. It is
+not a two-native gameplay acceptance or walking/barrier test: seat changes were
+native teleports. Baseline engine warnings are preserved, not called error-free.

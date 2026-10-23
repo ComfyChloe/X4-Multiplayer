@@ -42,3 +42,30 @@ remain separate from the mod repository and its public source mirror.
 Reading source can identify the right mechanism; it cannot expose an unavailable
 hook by itself. If necessary, a narrow supported API addition or an agreed debug
 build/instrumentation path could be discussed after the above questions are resolved.
+
+PRIMARY-GUN AIM / PROJECTILE FOLLOW-UP, 24 OCTOBER 2026
+We can observe real player-fired projectiles and their initial direction, including
+native gimbal alignment and spread. In one 168-shot sample, the initial forward
+agreed with later displacement within 0.181 degrees. GetPlayerTargetOffset remained
+zero during these off-axis shots without a selected target. It did not expose
+free aim in that case.
+
+Bounded native experiments show why a transform-only hook is insufficient:
+SetPositionalOffset on a bullet changes its forward readback to 15 degrees, while the
+actual flight remains near its original direction. SetObjectSectorPos rejects
+the bullet as not an object; set_object_velocity/add_object_velocity reject it
+as not destructible. Primary weapon components reject shoot/shoot_at as not
+defensible. We have not established that no other suitable interface exists.
+
+Could you identify a supported way to set a remote primary weapon's actual aim
+intent, or spawn/replay a shot with its observed muzzle transform and physical
+velocity? It must preserve native heat, cadence, spread, collision, impact damage
+and attribution, including deliberate misses and shots through empty space.
+An object-targeted shoot_at is useful for NPC attacks but does not by itself
+represent the remote player's free aim. We would especially value the contracts
+at the primary-gun fire-control and projectile-construction boundaries, and any
+existing distinction between projectile presentation and its ballistic state.
+
+The measured details and retained failed approaches are in
+reports/WEAPON-AIM-PRIMITIVES.txt. These are isolated single-engine experiments,
+not paired multiplayer combat acceptance.

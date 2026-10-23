@@ -162,3 +162,17 @@ correct ballistic replay. Raw SHA256
 af50b0895f672eb162bb61dc3839f88e0ec1d345b0c38a8e6155ac912fa9d4c7.
 All these completed/aborted runs retain verified owned cleanup. No production
 weapon change or aim replay acceptance results from them.
+
+ADDITIVE VELOCITY / AIM RELEASE FOLLOW-UP
+projectile-add-velocity-01 isolates the previously unexecuted additive test:
+6 actual shots, 6 add_object_velocity destructible-class rejections, all observed
+flight remains near forward. FAIL. Raw SHA256
+79ecee840ded6c9bf38ddc65f8a82d8716a854a0318de871c42d1640f8b85979.
+aim-latch-01 remains PARTIAL: after stopping object-targeted aim, direct shooting
+produces 12 forward pulse shots and no hits. The AI script cannot resolve the MD
+namespace used by the diagnostic phase marker; the intended additive-velocity
+half was therefore not executed. Raw SHA256
+db41cf6af89f03b777d7fcf99a5bf0f59c13f2e2db55bef7108280e054803b97.
+Both runs retain cleanup inventories and their failures; neither qualifies aim
+replay. The engine-contact draft now asks specifically for primary-gun aim and
+projectile physical-velocity interfaces. It has not been sent.
