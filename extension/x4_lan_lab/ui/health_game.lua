@@ -15,13 +15,18 @@
 --  HEALTH|1|lease|entity|gen|seq|hull%|shield%   pilot -> relay -> host (with the source lease)
 -- A generation ends for good on any accepted AUTH transition of its ship or when a newer one is
 -- valid; nothing of it is adopted or applied again. A frame that overtook its AUTH is ignored
--- (its sender repeats it), so reordering delays a generation but never revives or stalls one. Queued MD writes carry their generation and
--- an MD game-time deadline and are checked again when they execute.
+-- (its sender repeats it), so reordering delays a generation but never revives or stalls one.
+-- Queued MD writes carry their generation, an
+-- MD game-time deadline and a real-time stamp; MD checks them again when they execute against the
+-- real time this module writes to the player entity's blackboard every frame, also while paused,
+-- so a write queued before a pause is refused after it.
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not cfg or not cfg.coop or not cfg.pilot_health or not A or not A.coop or not A.state.active then return end
+local ffi=require('ffi');local C=ffi.C
+pcall(ffi.cdef,'UniverseID GetPlayerID(void);')
 local c=A.coop;local s=A.state
 local h={seq=0,valid={},gen={0,0},last={0,0},closed={0,0},remote={},auth={{0,false},{0,false}}};A.health=h
-local INTERVAL,FRESH,TTL=.1,1.0,1.0
+local INTERVAL,FRESH,TTL,READING,RETRY=.1,1.0,1.0,.3,.5
 local function log(v) DebugError('[X4LAN] '..v) end
 local function number(v,max)
  local n=tonumber(v);if not n or n~=n or n<0 or n>max then return nil end;return n
@@ -33,6 +38,15 @@ local function paused() return A.paused and A.paused() end
 function h.mine(e) return c.owners[e]==cfg.slot and c.pilots[e]==cfg.slot and c.epochs[e]~=nil end
 -- Deadline of a queued write on MD's own game clock (from the readback); nil before the first one.
 local function deadline() return h.mdAge and h.mdAge+TTL end
+-- Real time for MD: the stamp queued writes are compared with when they execute.
+local function wall(now)
+ local ok=pcall(function()
+  local id=C.GetPlayerID()
+  SetNPCBlackboard(ConvertStringTo64Bit and ConvertStringTo64Bit(tostring(id)) or id,'$x4lanHealthWall',now)
+ end)
+ h.wall=ok and now or nil
+end
+local function writable() return h.wall and deadline() and not paused() end
 
 -- Guest: MD keeps the authority it may write under; Base and the WORLD guards check it when they
 -- execute, so a queued write of an older or ended generation never lands.
@@ -42,12 +56,14 @@ local function authority(e,gen,own)
 end
 
 -- End this machine's use of every generation up to gen for good (guest: its own; host: the
--- remote pilot's, releasing the floor to the retained canonical value).
+-- remote pilot's). The host always tells MD, even after a stale release removed the floor, so a
+-- delayed queued Apply of that generation is refused natively too.
 function h.close(e,gen)
- if gen>h.closed[e] then h.closed[e]=gen end
+ if gen<=h.closed[e] then return end
+ h.closed[e]=gen
  if cfg.slot=='p1' then
-  local r=h.remote[e]
-  if r and r.gen<=h.closed[e] then h.remote[e]=nil;AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=r.gen,closed=true}) end
+  if h.remote[e] and h.remote[e].gen<=gen then h.remote[e]=nil end
+  AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=gen,closed=true})
   return
  end
  for _,k in ipairs({'live','basing'}) do
@@ -68,11 +84,14 @@ function h.base(f,now)
   if now>=(h.nextAck or 0) then h.nextAck=now+.25;send(string.format('HACK|1|%s|%d|%d',s.client.lease,e,gen)) end
   return
  end
- if (h.basing and h.basing.entity==e and h.basing.gen==gen) or paused() or not deadline() then return end
+ -- An expired or refused Base never confirms: retry it, bounded by RETRY. MD applies a
+ -- generation's baseline once and only confirms repeats, so a retry never resets HP again.
+ local b=h.basing
+ if (b and b.entity==e and b.gen==gen and now-b.at<RETRY) or not writable() then return end
  if live then authority(live.entity,0,false) end
- h.live,h.basing=nil,{entity=e,gen=gen}
+ h.live,h.basing=nil,{entity=e,gen=gen,at=now}
  authority(e,gen,false)
- AddUITriggeredEvent('X4LAN_Health','Base',{entity=e,gen=gen,hull=hu,shield=sh,deadline=deadline()})
+ AddUITriggeredEvent('X4LAN_Health','Base',{entity=e,gen=gen,hull=hu,shield=sh,deadline=deadline(),wall=now})
 end
 
 -- MD 'entity|gen' once it wrote that baseline on the occupied ship.
@@ -95,7 +114,7 @@ function h.own(payload)
  h.mdAge=age
  local live=h.live
  if not e or e<1 or not hu or not sh or not live or live.entity~=e or live.gen~=gen then return false end
- local old=h.reading;h.reading={entity=e,hull=hu,shield=sh}
+ local old=h.reading;h.reading={entity=e,hull=hu,shield=sh,at=h.now or 0}
  if old and (hu<old.hull or sh<old.shield) then h.urgent=true end
  return true
 end
@@ -124,10 +143,10 @@ function h.receive(f,now)
  local owner=c.owners[e]
  if not valid(e,gen) or not owner or owner==cfg.slot or c.pilots[e]~=owner then return true end
  if gen==h.gen[e] and seq<=h.last[e] then return true end
- if paused() or not deadline() then return true end      -- a later frame carries the newer value
+ if not writable() then return true end                 -- a later frame carries the newer value
  h.gen[e],h.last[e]=gen,seq
  h.remote[e]={gen=gen,at=now}
- AddUITriggeredEvent('X4LAN_Health','Apply',{entity=e,gen=gen,hull=hu,shield=sh,deadline=deadline()})
+ AddUITriggeredEvent('X4LAN_Health','Apply',{entity=e,gen=gen,hull=hu,shield=sh,deadline=deadline(),wall=now})
  return true
 end
 
@@ -139,10 +158,11 @@ function h.frame(now)
   end
   return
  end
+ -- Each fresh MD readback is reported at most once; nothing while paused or from a stale one.
  local r=h.reading
- if not h.live or not r or r.entity~=h.live.entity then return end
+ if not h.live or not r or r.sent or r.entity~=h.live.entity or paused() or now-r.at>READING then return end
  if not h.urgent and now<(h.nextSend or 0) then return end
- h.urgent,h.nextSend,h.seq=false,now+INTERVAL,h.seq+1
+ r.sent,h.urgent,h.nextSend,h.seq=true,false,now+INTERVAL,h.seq+1
  send(string.format('HEALTH|1|%s|%d|%d|%d|%.3f|%.3f',s.client.lease,r.entity,h.live.gen,h.seq,r.hull,r.shield))
 end
 
@@ -167,10 +187,15 @@ function c.receive(f,now)
 end
 function c.frame(now)
  frame(now)
+ h.now=now
  if c.ready and not h.setup then h.setup=true;AddUITriggeredEvent('X4LAN_Health','Setup') end
  if h.ready and not h.failed then
+  wall(now)
   local ok,err=pcall(h.frame,now)
-  if not ok then h.failed=true;log('HEALTH STOPPED '..tostring(err)) end
+  if not ok then
+   h.failed=true;log('HEALTH STOPPED '..tostring(err))
+   for e=1,2 do pcall(authority,e,0,false) end    -- MD watchdogs release the host floor
+  end
  end
 end
 RegisterEvent('X4LAN_Health.Ready',function() h.ready=true;log('HEALTH_READY slot='..cfg.slot) end)

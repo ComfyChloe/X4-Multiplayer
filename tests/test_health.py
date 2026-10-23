@@ -94,6 +94,8 @@ class HealthAdapterTests(unittest.TestCase):
          sectors={[11]=22,[42]=22};ConvertIDTo64Bit=function(v) return tonumber(v) end
          api.GetContextByClass=function(object) return sectors[object] or 22 end
          GetComponentData=function() return 'cluster_14_sector001_macro' end
+         api.GetPlayerID=function() return 7 end
+         SetNPCBlackboard=function(id,k,v) board={id=id,k=k,v=v} end
         ''')
         for file in ('bubble_game.lua', 'motion.lua', 'coop_game.lua', 'health_game.lua'):
             l.execute((UI / file).read_text())
@@ -112,6 +114,7 @@ class HealthAdapterTests(unittest.TestCase):
         ''')
         if clock:
             l.execute("own('50',0,0,0,0)")
+        l.execute('frames.onUpdate()')                          # first real-time stamp for MD
         return l
 
     def test_guest_adopts_the_valid_baseline_once_then_acknowledges_and_reports(self):
@@ -185,6 +188,45 @@ class HealthAdapterTests(unittest.TestCase):
         self.assertIn('$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen ge $arena.$healthGen.{$e} and player.age / 1s le $a.$deadline', md)
         self.assertIn('<do_if value="event.param3.$closed"><set_value name="$arena.$healthClosed.{$e}"', md)
         self.assertIn('exact="$arena.$healthValue.{$e}.{1}"', md)  # release restores the canonical value
+
+    def test_real_time_stamp_for_md_and_on_every_write(self):
+        out = self.make('p1').execute('''
+         now=10.4;frames.onUpdate();local k,v=board.k,board.v
+         hgen(1,1,3);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','1','80','50'},now)
+         return k,v,last('Apply').wall''')
+        self.assertEqual(tuple(out), ('$x4lanHealthWall', 10.4, 10.4))
+        md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        self.assertEqual(md.count('@player.entity.$x4lanHealthWall and $a.$wall + 1.0 ge player.entity.$x4lanHealthWall'), 2)
+
+    def test_host_closes_natively_even_after_a_stale_release(self):
+        out = self.make('p1').execute('''
+         hgen(1,1,3);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','1','80','50'},now)
+         now=11.3;frames.onUpdate();auth(2,1,'0')
+         return order('Apply','Release'),tostring(last('Release').closed)''')
+        self.assertEqual(tuple(out), ('Apply:3,Release:3,Release:3', 'true'))
+        md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        self.assertIn('<do_if value="$arena.$healthLive.{$i} and player.age - $arena.$healthAt.{$i} gt 2s">', md)  # watchdog
+
+    def test_guest_retries_an_unconfirmed_base_and_md_writes_it_once(self):
+        out = self.make('p2').execute('''
+         hgen(1,1,4);base(4);now=10.3;base(4);local early=countRequest('Base')
+         now=10.7;base(4);return early,countRequest('Base')''')
+        self.assertEqual(tuple(out), (1, 2))
+        md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        self.assertIn('<do_if value="$arena.$healthBased.{$a.$entity} != $a.$gen">', md)
+
+    def test_guest_reports_each_fresh_reading_once_and_never_while_paused(self):
+        out = self.make('p2').execute('''
+         hgen(1,1,4);base(4);events['X4LAN_Health.Based'](nil,'2|4')
+         own('51',2,4,80,50);for i=1,8 do now=10.1+i*.1;frames.onUpdate() end
+         local once=#sentKind('HEALTH')
+         X4LAN_BUBBLE_API.paused=function() return true end
+         own('52',2,4,70,50);now=11.0;frames.onUpdate();local paused=#sentKind('HEALTH')
+         X4LAN_BUBBLE_API.paused=function() return false end
+         now=11.5;frames.onUpdate();local stale=#sentKind('HEALTH')
+         own('53',2,4,60,50);now=11.6;frames.onUpdate()
+         return once,paused,stale,#sentKind('HEALTH')''')
+        self.assertEqual(tuple(out), (1, 1, 1, 2))
 
     def test_no_queued_write_without_an_md_clock(self):
         out = self.make('p1', clock=False).execute('''

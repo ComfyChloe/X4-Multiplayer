@@ -136,3 +136,35 @@ Second review round (A:primary, re-review of c7cb744):
   before the baseline can never be the first frame of a generation.
 - Queued Base/Apply carry a deadline on MD's game clock (TTL 1 s) that MD checks at execution.
   Without a readback clock nothing is queued, and nothing is queued while paused.
+Third review round (A:primary on b88909f) and lifecycle self-audit:
+- Real-time freshness: every frame, also while paused, Lua writes GetCurRealTime() to the player
+  entity blackboard ($x4lanHealthWall). Queued Base/Apply carry their real-time stamp and an MD
+  game-time deadline, and MD refuses either one after 1 s. So a write queued before a pause is
+  refused after it. Nothing is queued without both clocks or while paused.
+- Base retry: an unconfirmed Base is re-issued after 0.5 s. MD writes a generation's baseline
+  once ($healthBased) and only confirms repeats, so a retry never resets HP.
+- Reports: each fresh MD readback is sent at most once. Nothing is sent while paused or from a
+  reading older than 0.3 s; there is no cached republishing.
+- Host close: every closed generation is sent to MD as a closed Release, even after a stale
+  release removed the floor. A delayed queued Apply of it is refused natively.
+- Watchdog: host MD returns a live ship to host authority, from the canonical value, after 2 s
+  of game time without an applied pilot value. On a Lua failure the guest clears its MD
+  authority (best effort).
+Lifecycle audit (code and doubles only):
+- Start: no generation is valid until an HGEN of the held AUTH revision; no HBASE exists before
+  a host WORLD.
+- Handover: valid HBASE -> Authority(gen, false) -> Base (fenced, written once) -> Based (valid
+  only) -> Authority(gen, true) -> HACK on the next HBASE -> HEALTH accepted by the relay ->
+  host Apply (fenced, deadline).
+- Steady state: fresh readbacks, 10 Hz, at once on a decrease. Host freshness is 1 s real time;
+  the MD watchdog covers 2 s game time.
+- Leave, re-enter, transfer, epoch change: the AUTH hook closes at once on both sides. The relay
+  generation moves on; delayed frames are invalid.
+- Pause: no new writes; queued writes expire by real time; reports stop; freshness releases.
+- Death: a reported <= 1.01 restores the 1% floor -> LifeTick -> Publish 0 -> later writes are
+  refused (not operational / dead).
+- Accepted residual: a Base queued just before a revocation can still execute before the
+  revoking Authority event. It writes the host's canonical baseline of the ended generation on
+  the ship and its Based is then refused. No pilot value is accepted from it.
+Still unverified natively: SetNPCBlackboard on the player entity read as player.entity.$var,
+10 Hz setters on a FIRE2-driven proxy, min hull 2 under bursts.

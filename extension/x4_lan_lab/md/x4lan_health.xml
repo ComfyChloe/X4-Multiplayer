@@ -17,6 +17,8 @@
     <set_value name="$arena.$healthGen" exact="[0,0]"/>
     <set_value name="$arena.$healthClosed" exact="[0,0]"/>
     <set_value name="$arena.$healthAuth" exact="[0,0]"/>
+    <set_value name="$arena.$healthBased" exact="[0,0]"/>
+    <set_value name="$arena.$healthAt" exact="[0s,0s]"/>
     <raise_lua_event name="'X4LAN_Health.Ready'"/>
     <debug_text text="'[X4LAN] HEALTH_SETUP host=%s'.[$arena.$host]"/>
    </actions>
@@ -44,16 +46,22 @@
     <!-- Pilot: write the host's canonical baseline on the ship it occupies, then confirm. -->
     <cue name="Base" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Base'"/><check_value value="not $arena.$host"/></conditions><actions>
      <set_value name="$a" exact="event.param3"/><set_value name="$ship" exact="$arena.$ships.{$a.$entity}"/>
-     <do_if value="$a.$gen == $arena.$healthAuth.{$a.$entity} and player.age / 1s le $a.$deadline and @$ship.isoperational and player.occupiedship == $ship">
-      <set_object_hull object="$ship" exact="$a.$hull"/><set_object_shield object="$ship" exact="$a.$shield"/>
+     <!-- Fresh in game time AND real time (Lua's blackboard stamp keeps moving while paused). -->
+     <do_if value="$a.$gen == $arena.$healthAuth.{$a.$entity} and player.age / 1s le $a.$deadline and @player.entity.$x4lanHealthWall and $a.$wall + 1.0 ge player.entity.$x4lanHealthWall and @$ship.isoperational and player.occupiedship == $ship">
+      <!-- A generation's baseline is written once; a retry of it only confirms. -->
+      <do_if value="$arena.$healthBased.{$a.$entity} != $a.$gen">
+       <set_object_hull object="$ship" exact="$a.$hull"/><set_object_shield object="$ship" exact="$a.$shield"/>
+       <set_value name="$arena.$healthBased.{$a.$entity}" exact="$a.$gen"/>
+       <debug_text text="'[X4LAN] HEALTH_BASE entity=%s gen=%s hull=%s shield=%s'.[$a.$entity,$a.$gen,$a.$hull,$a.$shield]"/>
+      </do_if>
       <raise_lua_event name="'X4LAN_Health.Based'" param="'%s|%s'.[$a.$entity,$a.$gen]"/>
-      <debug_text text="'[X4LAN] HEALTH_BASE entity=%s gen=%s hull=%s shield=%s'.[$a.$entity,$a.$gen,$a.$hull,$a.$shield]"/>
      </do_if>
     </actions></cue>
     <cue name="Apply" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Apply'"/><check_value value="$arena.$host"/></conditions><actions>
      <set_value name="$a" exact="event.param3"/><set_value name="$e" exact="$a.$entity"/><set_value name="$ship" exact="$arena.$ships.{$e}"/>
-     <do_if value="$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen ge $arena.$healthGen.{$e} and player.age / 1s le $a.$deadline and @$ship.isoperational and not $arena.$dead.{$e}">
+     <do_if value="$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen ge $arena.$healthGen.{$e} and player.age / 1s le $a.$deadline and @player.entity.$x4lanHealthWall and $a.$wall + 1.0 ge player.entity.$x4lanHealthWall and @$ship.isoperational and not $arena.$dead.{$e}">
       <set_value name="$arena.$healthGen.{$e}" exact="$a.$gen"/>
+      <set_value name="$arena.$healthAt.{$e}" exact="player.age"/>
       <set_value name="$arena.$healthLive.{$e}" exact="true"/>
       <set_value name="$arena.$healthValue.{$e}" exact="[$a.$hull,$a.$shield]"/>
       <do_if value="$a.$hull le 1.01">
@@ -64,6 +72,21 @@
       <set_object_hull object="$ship" exact="$a.$hull"/>
       <set_object_shield object="$ship" exact="$a.$shield"/>
      </do_if>
+    </actions></cue>
+    <!-- Host watchdog: no applied pilot value for 2 s of game time (Lua failed or a Release was
+         lost) returns the ship to host authority from its retained canonical value. -->
+    <cue name="Watchdog" instantiate="true" checkinterval="0.5s"><conditions><check_value value="$arena.$host"/></conditions><actions>
+     <do_all exact="2" counter="$i">
+      <do_if value="$arena.$healthLive.{$i} and player.age - $arena.$healthAt.{$i} gt 2s">
+       <set_value name="$ship" exact="$arena.$ships.{$i}"/>
+       <do_if value="@$ship.isoperational">
+        <set_object_min_hull object="$ship" exact="1"/>
+        <do_if value="not $arena.$dead.{$i}"><set_object_hull object="$ship" exact="$arena.$healthValue.{$i}.{1}"/><set_object_shield object="$ship" exact="$arena.$healthValue.{$i}.{2}"/></do_if>
+       </do_if>
+       <set_value name="$arena.$healthLive.{$i}" exact="false"/>
+       <debug_text text="'[X4LAN] HEALTH_WATCHDOG entity=%s'.[$i]"/>
+      </do_if>
+     </do_all>
     </actions></cue>
     <cue name="Release" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Release'"/><check_value value="$arena.$host"/></conditions><actions>
      <set_value name="$e" exact="event.param3.$entity"/><set_value name="$ship" exact="$arena.$ships.{$e}"/>
