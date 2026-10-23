@@ -71,6 +71,21 @@ end
 
 local function valid(e,gen) return gen==h.valid[e] and gen>h.closed[e] end
 
+-- A failure ends this module for the session: every generation it used is closed at once
+-- (guest: revocation, MD authority 0 and no WORLD guard; host: closed Release), and nothing is
+-- adopted, acknowledged, reported or applied again. Ordinary WORLD fallback continues.
+function h.fail(err)
+ if h.failed then return end
+ h.failed=true;log('HEALTH STOPPED '..tostring(err))
+ for e=1,2 do
+  local used=math.max(h.gen[e],h.valid[e] or 0,h.remote[e] and h.remote[e].gen or 0)
+  for _,k in ipairs({'live','basing'}) do if h[k] and h[k].entity==e then used=math.max(used,h[k].gen) end end
+  if used>0 then pcall(h.close,e,used) end
+  pcall(authority,e,0,false)
+ end
+ h.live,h.basing,h.remote,h.valid=nil,nil,{},{}
+end
+
 -- Pilot: adopt the current generation's baseline once; acknowledge every repeat of it.
 function h.base(f,now)
  if cfg.slot=='p1' or #f~=7 or not s.client or f[3]~=s.client.lease then return end
@@ -94,6 +109,7 @@ end
 
 -- MD 'entity|gen' once it wrote that baseline on the occupied ship.
 function h.based(payload)
+ if h.failed then return end
  local e,gen=tostring(payload):match('^(%d)|(%d+)$');e,gen=tonumber(e),tonumber(gen)
  local b=h.basing
  if b and b.entity==e and b.gen==gen and valid(e,gen) and h.mine(e) then
@@ -112,6 +128,7 @@ end
 -- entity 0 = not in a co-op ship; gen is the authority MD wrote under (0 until own), so a
 -- reading never crosses a baseline.
 function h.own(payload)
+ if h.failed then return false end
  local age,stamp,e,gen,hu,sh=tostring(payload):match('^([^|]+)|([%d%-T:]+)|(%d)|(%d+)|([^|]+)|([^|]+)$')
  age,e,gen,hu,sh=number(age,1e12),integer(e,2),tonumber(gen),number(hu,100),number(sh,100)
  if not age or #stamp~=19 then return false end
@@ -124,6 +141,7 @@ function h.own(payload)
 end
 
 function h.receive(f,now)
+ if h.failed then return f[1]=='HGEN' or f[1]=='HBASE' or f[1]=='HEALTH' end   -- consumed, never acted on
  if f[1]=='HGEN' then
   local rev=integer(f[4],2147483647)
   if #f==6 and s.client and f[3]==s.client.lease and rev and rev==c.revision then
@@ -186,8 +204,10 @@ end
 local receive,frame=c.receive,c.frame
 local function key(e) return tostring(c.owners[e])..'|'..tostring(c.epochs[e])..'|'..tostring(c.pilots[e]) end
 function c.receive(f,now)
- if h.receive(f,now) then return true end
- if f[1]~='AUTH' then return receive(f,now) end
+ local ok,handled=pcall(h.receive,f,now)
+ if not ok then h.fail(handled);handled=f[1]=='HGEN' or f[1]=='HBASE' or f[1]=='HEALTH' end
+ if handled then return true end
+ if f[1]~='AUTH' or h.failed then return receive(f,now) end
  local before={key(1),key(2)}
  local result=receive(f,now)
  for e=1,2 do
@@ -206,10 +226,7 @@ function c.frame(now)
  if c.ready and not h.setup then h.setup=true;AddUITriggeredEvent('X4LAN_Health','Setup') end
  if h.ready and not h.failed then
   local ok,err=pcall(h.frame,now)
-  if not ok then
-   h.failed=true;log('HEALTH STOPPED '..tostring(err))
-   for e=1,2 do pcall(authority,e,0,false) end    -- MD watchdogs release the host floor
-  end
+  if not ok then h.fail(err) end
  end
 end
 RegisterEvent('X4LAN_Health.Ready',function() h.ready=true;log('HEALTH_READY slot='..cfg.slot) end)
@@ -219,7 +236,7 @@ RegisterEvent('X4LAN_Health.Based',function(_,payload) if h.ready then h.based(p
 -- close it here too; the host reports it so the relay starts a new generation from its WORLD.
 RegisterEvent('X4LAN_Health.Expired',function(_,payload)
  local e,gen=tostring(payload):match('^(%d)|(%d+)$');e,gen=tonumber(e),tonumber(gen)
- if not h.ready or not e or e<1 or e>2 or not gen or gen<1 then return end
+ if not h.ready or h.failed or not e or e<1 or e>2 or not gen or gen<1 then return end
  if cfg.slot=='p1' then h.stale[e]=gen end
  h.close(e,gen)
 end)

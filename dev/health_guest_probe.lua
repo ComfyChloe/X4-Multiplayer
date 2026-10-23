@@ -23,22 +23,26 @@ AddUITriggeredEvent=function(screen,control,args)
  return add(screen,control,args)
 end
 
--- The transport may be created or replaced after load: wrap its send lazily, once per object.
-local function watchTransport()
- local t=s.transport
- if not t or t.x4lanHealthProbe then return end
- local sendRaw=t.send;t.x4lanHealthProbe=true
- t.send=function(self,packet)
-  local kind=tostring(packet):match('^(%u+)|')
-  if kind=='HACK' or kind=='HEALTH' then
-   op=op+1;log(string.format('op=%d sent %s phase=%d',op,(tostring(packet):gsub('|'..string.rep('%x',32)..'|','|lease|',1)),phase()))
-  end
-  return sendRaw(self,packet)
+-- Sends are derived from health_game.lua's own state, never by touching the transport (natively
+-- a userdata without assignable fields): a new h.seq after a frame is a sent HEALTH, a moved
+-- h.nextAck after Based or an HBASE repeat is a sent HACK.
+local function sentHealth(before)
+ local r,l=h.reading,h.live
+ if h.seq~=before and l and r then
+  op=op+1;log(string.format('op=%d sent HEALTH gen=%d seq=%d hull=%.3f shield=%.3f phase=%d',op,l.gen,h.seq,r.hull,r.shield,phase()))
  end
 end
+local function sentAck(before,gen)
+ if h.nextAck~=before then op=op+1;log(string.format('op=%d sent HACK gen=%s phase=%d',op,tostring(gen),phase())) end
+end
+local base=h.base
+function h.base(f,now) local before=h.nextAck;base(f,now);sentAck(before,f[5]) end
 
 local based=h.based
-function h.based(payload) op=op+1;log(string.format('op=%d Based %s phase=%d',op,tostring(payload),phase()));return based(payload) end
+function h.based(payload)
+ op=op+1;log(string.format('op=%d Based %s phase=%d',op,tostring(payload),phase()))
+ local before=h.nextAck;based(payload);sentAck(before,tostring(payload):match('|(%d+)$'))
+end
 
 local receive=h.receive
 function h.receive(f,now)
@@ -59,7 +63,6 @@ end
 
 local frame=h.frame
 function h.frame(now)
- watchTransport()
  local p=phase()
  if p==3 and not done[3] and h.live then
   done[3]=true;add('X4LAN_HealthGuestProbe','LocalDamage',{entity=h.live.entity,hull=50})
@@ -78,6 +81,8 @@ function h.frame(now)
  if p==6 and not done[6] and oldBase then
   done[6]=true;log('inject old HBASE gen='..tostring(oldBase[5]));receive(oldBase,now)
  end
- return frame(now)
+ local before=h.seq
+ frame(now)
+ sentHealth(before)
 end
 log('READY slot='..cfg.slot)

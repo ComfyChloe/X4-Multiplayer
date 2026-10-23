@@ -297,6 +297,31 @@ class HealthAdapterTests(unittest.TestCase):
         self.assertTrue('exact="[$arena.$healthClosed.{$i},$arena.$healthAuth.{$i}].max"' in md)   # keepalive watchdog fence
         self.assertEqual(md.count(fresh), 3)                       # Authority(own), Base, Apply
 
+    def test_a_failed_guest_closes_at_once_and_never_resumes(self):
+        # A:primary guest01: after HEALTH STOPPED, fresh Base/Based re-armed the WORLD guard.
+        out = self.make('p2').execute('''
+         hgen(1,1,4);base(4);events['X4LAN_Health.Based'](nil,'2|4')
+         local H=X4LAN_BUBBLE_API.health;H.frame=function() error('induced') end
+         now=10.2;frames.onUpdate();local revoked=last('Authority')
+         local n0,s0=#requests,#sent
+         hgen(1,1,5);base(5);events['X4LAN_Health.Based'](nil,'2|5');own('51',2,5,60,20)
+         client:receiveExtension({'HBASE','1',client.lease,'2','5','64.5','30'},now)
+         now=10.3;frames.onUpdate();now=10.4;frames.onUpdate()
+         local health=0;for i=n0+1,#requests do if requests[i][1]=='X4LAN_Health' then health=health+1 end end
+         local packets=0;for i=s0+1,#sent do local k=sent[i]:match('^(%u+)|');if k=='HACK' or k=='HEALTH' then packets=packets+1 end end
+         return H.failed,revoked.gen,revoked.ended,health,packets,H.live''')
+        self.assertEqual(tuple(out), (True, 0, 4, 0, 0, None))
+
+    def test_a_failed_host_closes_its_remote_generation_and_applies_nothing(self):
+        out = self.make('p1').execute('''
+         local src=string.rep('c',32)
+         hgen(1,1,3);client:receiveExtension({'HEALTH','1',client.lease,src,'2','3','1','80','50'},now)
+         local H=X4LAN_BUBBLE_API.health;H.frame=function() error('induced') end
+         now=10.2;frames.onUpdate();local rel=last('Release')
+         hgen(1,1,4);client:receiveExtension({'HEALTH','1',client.lease,src,'2','4','1','70','50'},now)
+         return rel.gen,tostring(rel.closed),order('Apply'),#sentKind('HSTALE')''')
+        self.assertEqual(tuple(out), (3, 'true', 'Apply:3', 0))
+
     def test_no_queued_write_without_an_md_clock(self):
         out = self.make('p1', clock=False).execute('''
          hgen(1,1,3);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','1','80','50'},now)
