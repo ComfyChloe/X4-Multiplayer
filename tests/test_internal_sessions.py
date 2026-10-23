@@ -54,7 +54,7 @@ class InternalSessions(unittest.TestCase):
     def test_only_host_starts_world_relay_and_session_is_locked(self):
         self.configure()
         with patch.object(launcher,'ROOT',self.guest),self.assertRaisesRegex(RuntimeError,'Only the HOST'):launcher.server(console=True)
-        with patch.object(launcher,'ROOT',self.host),patch('x4lan.monitor.probe',return_value=False),patch('x4lan.monitor.run') as run:
+        with patch.object(launcher,'ROOT',self.host),patch('x4lan.monitor.probe',return_value=False),patch('x4lan.monitor.run') as run,patch.object(launcher,'backend_module'):
             launcher.server(console=True);cfg=run.call_args.args[0];self.assertTrue(cfg['world_sync']);self.assertTrue(cfg['fire2']);self.assertEqual(cfg['port'],45841)
             with launcher.session_lock():
                 with self.assertRaisesRegex(RuntimeError,'running'):launcher.server(console=True)

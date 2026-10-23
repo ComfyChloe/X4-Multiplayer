@@ -94,6 +94,13 @@ X4LAN_BUBBLE_API={state=s,id=id,nonce=nonce,paused=function() return C.IsGamePau
 local function frame()
  local now=GetCurRealTime()
  if s.failed then return end
+ if cfg.seed_id then
+  local gate=X4LAN_SEED_GATE
+  if not gate or gate.failed then
+   error('native seed admission unavailable: '..tostring(gate and gate.failed))
+  end
+  if not gate.frame(now) then return end
+ end
  if not s.loaded then
   if C.IsPlayerValid() and now>=(s.probe or 0) then AddUITriggeredEvent('X4LAN','Ready');s.probe=now+1 end
   return

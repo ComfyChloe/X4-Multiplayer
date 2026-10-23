@@ -65,9 +65,10 @@ def build(destination: Path, runtime_cache: Path | None = None):
         shutil.copy2(reports[0], root / 'AUTOMATED-TESTS.txt')
         shutil.copy2(DIST / 'session_launcher.py', root / 'launcher.py')
         shutil.copy2(DIST / 'profile_settings.py', root / 'profile_settings.py')
+        shutil.copy2(DIST / 'world_launcher.py', root / 'world_launcher.py')
         shutil.copy2(DIST / 'action.py', root / 'action.py')
         (root / 'x4lan').mkdir()
-        for name in ('__init__', 'host', 'bubble', 'economy', 'coop', 'quests', 'monitor', 'universe', 'cargo', 'identity'):
+        for name in ('__init__', 'host', 'bubble', 'economy', 'coop', 'quests', 'monitor', 'universe', 'cargo', 'identity', 'seed'):
             shutil.copy2(SOURCE / 'x4lan' / (name + '.py'), root / 'x4lan' / (name + '.py'))
         if platform == 'Linux': shutil.copy2(DIST / 'linux_setup.py', root / 'setup_linux.py')
         else: shutil.copy2(DIST / 'windows_setup.ps1', root / 'setup_windows.ps1')
@@ -87,7 +88,7 @@ def build(destination: Path, runtime_cache: Path | None = None):
         actions = {'1-INSTALL': 'setup', '2-START-SERVER': 'server', '2-TEST-CONNECTION': 'test',
                    '3-START-X4-TEST': 'start', '4-DIAGNOSTICS': 'diagnose', '5-REMOVE-MOD': 'remove',
                    '6-COLLECT-CONTAINER': 'collect', '7-VERIFY-PACKAGE': 'verify',
-                   '9-IMPORT-SETTINGS': 'settings'}
+                   '9-IMPORT-SETTINGS': 'settings', '2-PREPARE-WORLD': 'prepare-world'}
         for title, action in actions.items():
             if platform == 'Linux':
                 command = '"./runtime/bin/python3"' if runtime_cache else 'python3'

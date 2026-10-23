@@ -1,3 +1,8 @@
+7.3.0 UPDATE: Use NEXT-TEST.txt first. Both peers now load a shared native
+starting snapshot through2-PREPARE-WORLD /3-START-X4-TEST. The longer historical
+regressions below are optional when a related regression is observed. A shared
+starting save is not continuous station/economy authority or campaign resume.
+
 7.2.0 PRIORITY: read NEXT-TEST.txt first. Native Shuttle sensors are corrected.
 Shared-save and ongoing whole-universe authority are NOT active in this package.
 The following broader regression remains useful; its limitations still apply.

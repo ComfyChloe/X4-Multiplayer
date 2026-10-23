@@ -1,69 +1,63 @@
-X4 LAN Lab {{VERSION}} — INTERNAL TEST — Windows/Linux host or guest
-22 October 2026 | Two players per session | X4 9.00, Steam build 23660954
+X4 Multiplayer {{VERSION}} — INTERNAL TEST
+23 October 2026 | Windows/Linux host or guest | Two players per session
+X4 9.00, Steam build23660954 | Matching official DLC including Timelines
 
-Open INSTALL.html, then follow NEXT-TEST.txt for the focused human test.
-Both packages include the relay server and a private portable Python runtime.
-No separate Python installation or download is required at setup time.
+Both packages include the server and a private Python runtime. No Python install
+or download is needed. Open INSTALL.html for detailed instructions.
 
-NEW IN 7.2.0
-- Either Windows or Linux can host or join. The host creates a private session
-  invitation; the guest imports it. Each test group gets separate credentials.
-- Shared Shuttles use native creation that correctly initializes their sensors.
-  Nearby ship/station radar and HUD checks passed in separate Linux role tests.
-- Setup imports your normal profile display, graphics, audio and control settings.
-  Launching the test does not reset your resolution, quality or key bindings.
-- Existing cargo/magnet, smooth movement, identities and Cooperative Trial remain.
+WHAT CHANGED
+The host now creates one native starting save. Both games load that exact world;
+the guest downloads it automatically from the host before launching X4. This is
+intended to align ordinary stations, gates and the initial universe layout.
+A shared starting save does not make the ongoing economy or all NPC decisions
+host-authoritative. Saving/resuming a played multiplayer campaign is not ready.
 
-QUICK START
-1. Both: extract the COMPLETE archive for your OS into a new folder. Close X4
-   and the previous relay. Remove the old mod using its ORIGINAL package's
-   5-REMOVE-MOD command. Keep the old archives for rollback.
-2. Host: run 1-INSTALL, select H, enter the host's LAN or ZeroTier IPv4.
-   Send the generated JOIN-SESSION.json privately to the other player.
-3. Guest: run 1-INSTALL, select G, and enter the path to JOIN-SESSION.json.
-   Both need this exact version; use the invitation from the intended host.
-   Setup copies config.xml and inputmap*.xml from your normal game profile. If
-   several profiles exist, choose the one you use. No saves, mod selection or
-   uidata are copied. Existing test settings are backed up. Autosave and protected
-   UI mode stay disabled because this internal test requires those settings.
-   Later edits in the test profile are retained. To import again with X4 closed,
-   use 9-IMPORT-SETTINGS; --settings-profile selects a specific source folder,
-   and --keep-test-settings keeps the current test preferences.
-4. Host: run 2-START-SERVER and keep its console open. The host must ALSO run X4.
-   Guest: run 2-TEST-CONNECTION. Then both run 3-START-X4-TEST.
-5. After testing, run 4-DIAGNOSTICS on both PCs and keep the host server logs.
+Existing radar, ordinary cargo and the Cooperative Trial passed the previous
+human test. Smooth ship movement is retained. Weapons/damage have no new fix in
+this release. Graphics, sound and custom bindings are imported from your normal
+profile; launch does not reset them. Your normal profile remains read-only.
 
-Windows commands are .cmd files; double-click them. Linux commands are .sh files;
-run them in a terminal, for example: bash 1-INSTALL.sh
-All commands use the included runtime. Ctrl+C in the host console stops the relay.
-7-VERIFY-PACKAGE checks the files against the packaged hash inventory.
+HOST
+1. Close X4 and the old server. Remove the previous mod using its ORIGINAL
+   package's 5-REMOVE-MOD. Extract this complete archive into a new folder.
+2. Run 1-INSTALL, choose H, enter your reachable LAN/ZeroTier IPv4 address.
+   Choose your normal settings profile if asked.
+3. Run 2-PREPARE-WORLD once. X4 opens, creates the shared world, saves and closes
+   automatically. Wait for "Shared world ready" in the launcher. Do not play or
+   load a different save during preparation.
+4. Send JOIN-SESSION.json privately to your guest. Run 2-START-SERVER and keep
+   its console open. The host runs BOTH this server and X4.
+5. Run 3-START-X4-TEST. The saved world loads automatically; wait for your Shuttle.
 
-The server is a relay, not a headless X4 universe simulator. One player hosts the
-relay AND plays X4 as p1; the other joins as p2. Windows/Windows, Linux/Windows,
-Windows/Linux and Linux/Linux role selection are supported by the launcher.
-A new joint native Windows/Linux gameplay test is still required.
+GUEST
+1. Remove the previous mod using its original package and extract the complete
+   new archive. Receive the host's JOIN-SESSION.json and keep it in this folder.
+2. Run 1-INSTALL, choose G, enter the path to that invitation when asked.
+3. Run 2-TEST-CONNECTION, then 3-START-X4-TEST. The launcher downloads and checks
+   the shared world, then X4 loads it automatically. Do not choose another save.
 
-SCOPE AND LIMITATIONS
-This release still launches SEPARATE fresh creative worlds in profile 45841.
-Experimental host-save transfer and shared attachment branches are not included.
-Ordinary stations, NPC orders/damage, equipment, economy, vanilla missions and
-persistent save/load are not synchronized. Ingame chat is not implemented.
-The player-faction Mercury freighter is a protected cargo service fixture,
-not a controllable shared fleet ship. Use the two LAN Targets for damage checks.
+Windows: double-click the numbered .cmd files. Linux: run the matching .sh files
+from a terminal, for example bash 1-INSTALL.sh. Allow UDP45841 and TCP45844 to the
+host on your test network. A successful UDP check alone does not test the save
+transfer. No router forwarding is needed with a working ZeroTier connection.
 
-Both players retain an Xperimental Shuttle with six guns, full software including
-Docking Computer Mk2, Mk3 combat thrusters and a shared treasury. Timelines must
-be enabled on both PCs. The custom Cooperative Trial remains shared. Ordinary
-cargo jettison/magnet pickup works for the shared ships; general NPC loot and
-multi-ware containers remain outside acceptance. Motion/weapon/hit equivalence
-and NPC PiP artifacts have remaining limits described in RELEASE-CHECKS.txt.
+RESTART / STOP
+Every retry requires BOTH games AND the relay to stop first. Restart the relay
+and both games. They reload the same STARTING world; previous gameplay progress
+is not resumed. To create a different world/session, use a fresh extracted pair
+and a new invitation. 2-PREPARE-WORLD never regenerates an existing world.
 
-Use matching official DLC, disable Ventures for this test, and disable other
-third-party mods. Never load or save a normal game with this experimental mod.
-For every fresh test session, stop BOTH games AND the relay. Start a fresh relay,
-then start fresh test worlds on both PCs. Reusing the relay after restarting the
-host game is unsupported: it retains the previous NPC session identity.
-For another group/session, use a fresh extracted package and a new host invitation.
+ONLY the reserved, recorded save_010 belongs to the launcher. Other or changed
+saves are preserved and cause a refusal. Never save a normal campaign in45841.
+5-REMOVE-MOD removes its byte-matching reserved copy and archives the owned mod;
+the package keeps the immutable world bundle. Close X4 and the relay first.
 
-This is INTERNAL only. Do not publish this package or its generated session files.
-Detailed acceptance evidence: RELEASE-CHECKS.txt and AUTOMATED-TESTS.txt.
+The setup does not change Workshop selections or subscribe/unsubscribe to mods.
+The withdrawn7.2 Fix-1 helper is not included. A separate profile does not by
+itself isolate the Steam account. If content differs, stop and compare the two
+setups; no automatic mod-selection rewrite is performed.
+
+NEXT-TEST.txt describes tonight's focused test. Run4-DIAGNOSTICS on BOTH PCs before
+restarting after a failure. Keep logs, role/OS, object code and approximate time.
+Do not share JOIN-SESSION.json, session.json or ui/config.lua publicly.
+This remains an INTERNAL test, with two simultaneous players per session.

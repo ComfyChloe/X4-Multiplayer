@@ -1,52 +1,41 @@
-X4 LAN Lab {{VERSION}} — INTERNAL HUMAN TEST
-22 October 2026 | Windows or Linux host/guest | Two players
+X4 Multiplayer {{VERSION}} — INTERNAL HUMAN TEST
+23 October 2026 | Shared native starting world | Windows/Linux host or guest
 
-MAIN CHANGES: Windows/Linux hosting and native Shuttle radar/HUD initialization.
-This is a focused 7.1.1 follow-up, not a complete synchronized universe.
+Use the same new version in both roles, including the new host server.
+Follow README.txt: host INSTALL -> PREPARE-WORLD -> START-SERVER -> START-X4;
+guest INSTALL with invitation -> TEST-CONNECTION -> START-X4.
+Allow both UDP45841 and TCP45844. The host must run X4 as well as the server.
+During preparation X4 saves and exits itself. During play startup it loads the
+verified world automatically. These are expected parts of the new startup flow.
 
-SETUP
-Extract this version for your OS. Close old games/server and remove the old mod
-with its original package. Run 1-INSTALL: host chooses H and its LAN/ZeroTier IPv4;
-guest chooses G and imports the host's private JOIN-SESSION.json. The host runs
-2-START-SERVER; guest runs 2-TEST-CONNECTION; both run 3-START-X4-TEST.
-Setup imports your normal display/control settings; choose the source profile if
-asked. Check custom resolution, window mode and key bindings after startup and
-again after changing a setting and restarting. 9-IMPORT-SETTINGS repeats import.
-Both need matching official DLC including Timelines; disable Ventures on both.
-Do not load ordinary saves. Use this exact version in both roles.
-Every new attempt requires BOTH games AND the relay to be stopped first. Restart
-the relay, then both fresh worlds. A new host game cannot reuse the old relay.
-A host still needs to play X4; the bundled relay cannot simulate the universe.
-There are TWO simultaneous player slots. Other tester pairs create new sessions.
+FOCUSED CHECK — STATIONS / SHARED START / HOSTING
+1. Confirm the guest downloads the world and reaches its own Shuttle. Note either
+   an installer/transfer error, a permanent loading screen or a remaining Pause
+   state. Check your personal resolution and bindings have been retained.
+2. Pick an ORDINARY station in Argon Prime. Compare its code/name, map location,
+   orientation and nearby landmarks on both PCs. Both fly to the SAME station.
+   Have one player dock while the other observes: does the ship sit on the actual
+   station on both sides, instead of in empty space? Capture both views if not.
+3. Repeat with one ordinary station in another sector. This checks layout beyond
+   the starting sector; it does not prove a shared ongoing economy.
+4. Stop BOTH games and the relay. Restart the relay and both games. Both must load
+   the same starting layout again. Previous gameplay progress is expected to reset.
+5. If possible, swap host OS for a separate session using fresh package folders.
+   Report Windows-host server/transfer/start behavior separately from Linux-host.
 
-15–25 MINUTE PRIORITY CHECK
-1. After setup completes, independently fly each Shuttle near a station and a
-   normal NPC ship. Within 10 km check radar contact, map name and target-monitor
-   name/type/owner. Take a screenshot of any Unknown contact, with range visible.
-   The exact same ordinary station need not exist at the same position on both
-   peers in this package; station alignment is still an open limitation.
-2. Compare each other's callsign and ship name, stationary and moving motion,
-   turning, target selection and docking at the two LAN test markets.
-3. Jettison 20 Energy Cells through the normal cargo menu. The other player uses
-   the normal magnet. Compare both inventories and disappearance after 10 seconds.
-   Repeat in the other direction. Do not use 6-COLLECT for this test.
-4. Complete the existing Cooperative Trial with normal trading and target combat.
-   Compare shield/hull values on the LAN Targets after firing stops. Report any
-   mismatch; this release does not claim a new general damage-authority fix.
-5. Run 4-DIAGNOSTICS on BOTH machines before another game launch. Keep their full
-   logs and the host server log from the same attempt. Report host/guest role,
-   approximate time, sector, object name/code and the exact failed action.
+No need to repeat the complete cargo/radar/Cooperative Trial suite already passed
+by humans. Report regressions if encountered while doing the station test.
+Weapons/general NPC combat have no new acceptance claim in this version.
 
 KNOWN LIMITS
-- Separate starting worlds; no shared-save bootstrap in this release.
-- Ordinary station positions, economy and vanilla missions are not synchronized.
-- The player-faction Mercury test freighter is a protected cargo service fixture:
-  its hull is protected and independent orders are not supported multiplayer fleet
-  commands. It is not a valid general NPC combat/order acceptance test.
-- General NPC commands, damage, equipment, docking and ownership remain unfinished.
-- Ingame text chat is not implemented. Use your existing voice/text channel.
-- NPC PiP artifacts and exact projectile/aim equivalence remain open.
-- A simultaneous human Windows/Linux test of this new pair is still pending.
+- The starting save is shared; new station construction/destruction, economy,
+  production and arbitrary NPC orders are not yet continuously synchronized.
+- Persistent multiplayer save/resume, late join to progressed worlds, ordinary
+  shared missions and ingame text chat remain unfinished.
+- The protected Mercury service freighter is not a general fleet-command test.
+- Full docked-child/parent synchronization and projectile equivalence remain open.
+- A previous guest cannot continue independently or resume an old relay epoch.
 
-Keep the previous 7.1.1 ZIPs for rollback. Do not publish this internal pair;
-session.json and ui/config.lua contain its private connection credentials.
+After a failure, run4-DIAGNOSTICS on BOTH PCs before another launch. Include the
+host server logs, the exact error, roles/OS, approximate time, sector and station
+code. Do not post session credentials. Keep the previous release ZIPs unchanged.

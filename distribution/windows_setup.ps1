@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Install','Start','Test','Diagnose','Remove','Version')][string]$Action = 'Install',
+    [ValidateSet('Install','Start','Test','Diagnose','Remove','Version','CheckWorldProfile')][string]$Action = 'Install',
     [string]$GamePath = '',
     [string]$ServerIP = ''
 )
@@ -181,6 +181,18 @@ function Assert-EmptyTestProfile([string]$Profile) {
         if (Get-ChildItem -LiteralPath $saves -Filter '*.xml*' -File) { throw 'The test profile contains saves. Back them up and use an empty test profile. Nothing will be deleted.' }
     }
 }
+function Assert-WorldProfile {
+    Assert-Closed
+    $state = Read-State
+    if ((Split-Path -Leaf $state.profile) -ne $ProfileId) { throw 'Unexpected test profile path.' }
+    foreach ($path in @($state.profile, (Join-Path $state.profile 'config.xml'), (Join-Path $state.profile 'save'))) {
+        Assert-SafeProfileItem $path
+    }
+    $save = Join-Path $state.profile 'save'
+    if (Test-Path -LiteralPath $save) {
+        foreach ($item in Get-ChildItem -LiteralPath $save -Force) { Assert-SafeProfileItem $item.FullName }
+    }
+}
 function Install-Package {
     Assert-Closed
     $pkg = Get-Content -Raw -LiteralPath (Join-Path $PackageRoot 'package.json') | ConvertFrom-Json
@@ -344,6 +356,7 @@ try {
     Write-Host ('X4 LAN Lab ' + (Get-PackageVersion))
     switch ($Action) {
         'Version' { }
+        'CheckWorldProfile' { Assert-WorldProfile }
         'Install' { Install-Package }
         'Start' { Start-TestGame }
         'Test' { Test-ConnectionToRelay }

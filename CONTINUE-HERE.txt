@@ -1,3 +1,31 @@
+CURRENT SOURCE CANDIDATE —7.3.0 SHARED START,23 OCTOBER2026
+
+User renewed implementation until18:00 Europe/Berlin for a new INTERNAL human-test
+version. Worktree x4-release-7-3-0, contrib/astra-7-3-0-delivery, based on834b86f.
+Default remains internal; Windows package includes server/runtime. Weapons/damage
+stay Claude-owned. No new coordinator timer/chat was created.
+
+7.3 integrates native host starting-save capture, authenticated TCP45844 transfer,
+owned profile45841 staging and PR18 native role admission. Keep UDP45841 too.
+2-PREPARE-WORLD runs once on the host; both roles then load the same starting save.
+Do not merge the unaccepted ongoing-world/attachment experiments into this pair.
+Shared initial stations are not ongoing station economy or campaign save/resume.
+
+Two native Linux role runs with synthetic peers reproduce1359 station identities
+with max0.031m position difference after save/reload, correct own ship and all four
+MD authority flags. Native load is unpaused. Full evidence, rejected stale-log
+harness attempt and limits: reports/SHARED-START-20261023.txt and JSON inventory.
+Same numeric seed alone FAILED complete fresh-world agreement (46/47 differing
+station identities); it is not the shipped solution. All7 normal saves and the
+recorded33-file restoration verified. No Workshop selection/account writes.
+
+The actual package pair and clean final native delivery smoke are still pending
+in this source checkpoint. New preferences import, visible server console and
+withdrawn-helper containment are included from PR30. Latest human7.2 radar,
+ordinary cargo and Cooperative Trial results remain accepted; do not replay their
+full gameplay suites unnecessarily. Read the new distribution/README.txt and
+NEXT-TEST.txt for the new host/guest flow and focused station test.
+
 NEXT PACKAGE — PERSONAL DISPLAY AND CONTROL SETTINGS
 User requested normal game preferences for testers with custom resolution/bindings.
 Internal setup now imports config.xml and inputmap*.xml from a normal sibling

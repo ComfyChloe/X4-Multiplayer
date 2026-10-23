@@ -4,6 +4,7 @@ local cfg = X4LAN_CONFIG
 local function log(message) DebugError("[X4LAN] " .. tostring(message)) end
 if not cfg or not cfg.enabled then log("disabled; prepare a client package first"); return end
 if cfg.bubble_actions then return end
+if cfg.seed_id then log("ADAPTER STOPPED: seed admission requires cooperative bubble mode"); return end
 local ffi = require("ffi")
 local C = ffi.C
 local function declareType(name, definition)

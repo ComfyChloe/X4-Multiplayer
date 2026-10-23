@@ -1,0 +1,77 @@
+SHARED NATIVE START — 23 OCTOBER 2026 — INTERNAL7.3 CANDIDATE
+
+PROBLEM AND CHANGE
+7.2 starts independently generated worlds, so ordinary station identity/positions
+can differ. A fixed numeric seed was investigated first, as requested. Two fresh
+native Linux worlds with seed276944566 produced1381 and1382 stations:1335 tuples
+(code,macro,owner,sector) agreed exactly, but46/47 identities were absent/extra.
+Both actual native save headers confirm that seed. Equal numeric seed alone is
+therefore NOT accepted as a complete initial-universe solution. Raw failures stay
+in work/x4-station-bootstrap/.local/evidence-218-withheld; no rows were filtered.
+
+7.3 instead prepares ONE host-native pristine save before multiplayer fixtures.
+2-PREPARE-WORLD launches an isolated world with gameplay adapters disabled,
+checks actual active content in the engine, marks/saves save_010 and exits X4
+through QuitGame after native completion. The launcher seals the completed bytes.
+The regular server also serves authenticated snapshots over TCP45844. The guest
+receives into a new private directory, verifies integrity/content/session, then
+stages only its reserved journalled test slot. Both roles load the same snapshot
+and pass the native MD marker/load-count gate before creating player fixtures.
+
+The selected transport/gate implementation comes from reviewed PR18/a321b59.
+The new distribution integration, capture/content checks and recovery ownership
+are in this branch. PR31/9e05f11 supplies read-only catalog/origin diagnostics.
+An actual native random seed3416042533 revealed that save headers use the unsigned
+32-bit range. Origin/recipe descriptors now accept that range; unverified CLI
+arguments above the previously bounded signed range remain refused.
+
+NATIVE EVIDENCE — SEPARATE LINUX ROLES, NOT A JOINT HUMAN PLAYTEST
+Retained under.local/evidence-116-withheld The first candidate adds an
+unshipped read-only station observer and existing native MD/role readback probes.
+Exact package/installation inventories and raw captures are retained.
+- Native capture completed and exited automatically. Shared world ID:
+  ab5b7174d149b715e825ec9b2e0aef92. Actual origin is in shared-start-20261023.json.
+- Real authenticated TCP transfer copied the snapshot to an independent guest
+  bundle; staging uses an independent file, not a writable link to that bundle.
+- Both native roles loaded1359 station tuples. No missing/extra tuple or pose
+  failure under the unchanged0.05m/0.00001rad catalog gate. Maximum difference:
+  0.030999999959m and0.00000167136045rad. No station warps or filtering were used.
+- Both native own-ship controls and distinct native ship identities pass. MD
+  host/trade/cargo/quest flags are1 forp1 and0 forp2. Each has2Shuttles/2markets.
+  Native load readbacks show paused=false for both roles.
+- The host emitted two ordinary NPC baselines with153/154 objects to a synthetic
+  peer. This is an initialization regression, not new NPC/economy authority.
+- All7 actual normal saves retain exact bytes/timestamps. The test selection
+  content.xml bytes are unchanged. The33-file prior installation is restored
+  exactly, reserved test slots removed, and task-owned game/relay/forwarder closed.
+  The preexisting user's7.2 server was not used or stopped by these experiments.
+
+RETAINED HARNESS FAILURES / CORRECTIONS
+The first numeric capture finished natively, but its local wrapper used the wrong
+header-format label and identified X4 only by comm, which later becomes Main().
+The owned process was closed explicitly; subsequent execution used /proc/exe.
+
+The initial p2 wrapper incorrectly read the PREVIOUS HOST LOG before Steam had
+spawned the guest and prematurely reported readiness. That folder is explicitly
+REJECTED in play-p2/harness-error.json. The actual already-launched guest's fresh
+log was retained separately in play-p2-live. Its synthetic relay listened only
+on localhost while the guest used its invited ZeroTier address; a task-owned
+local UDP forwarder connected those interfaces. After that correction, fresh
+p2 native role/control evidence passed. This is local synthetic-peer evidence,
+NOT a remote ZeroTier or two-native gameplay test. The corrected validator
+requires exact role, load/readiness order, native MD flags and own actor identity;
+it rejects the stale host log forp2. No historical failure was overwritten.
+
+BOUNDARIES
+This aligns the STARTING universe. Independent station construction/destruction,
+production/economy and arbitrary NPC decisions can still diverge as play advances.
+Restart reloads the starting snapshot; campaign progress and absent-player catchup
+are not implemented. Ongoing native-original/attachment experiments remain draft
+and are not activated. Weapons/damage remain Claude-owned and unchanged.
+
+The final clean packaged startup, when run, is recorded alongside the delivery;
+it must not be inferred from these instrumented role captures. Native Windows,
+Windows-host gameplay, simultaneous Windows/Linux play and full-world authority
+remain outside this evidence. Prior accepted human radar/cargo/mission scenarios
+were not replayed as new gameplay acceptance. Workshop account subscription state
+was not independently queried; no selection or account writes were introduced.

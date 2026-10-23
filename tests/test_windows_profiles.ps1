@@ -261,8 +261,10 @@ try {
     [IO.File]::WriteAllText($installConfig, $configured.OuterXml, $Utf8)
 
     # Removal archive: same volume beside the package, otherwise outside extensions\.
-    Check (Test-SameVolume 'C:\Games\X4' 'c:\Packages\x') 'Same volume not recognised'
-    Check (!(Test-SameVolume 'D:\SteamLibrary\X4' 'C:\Packages\x')) 'Different volumes treated as same'
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        Check (Test-SameVolume 'C:\Games\X4' 'c:\Packages\x') 'Same volume not recognised'
+        Check (!(Test-SameVolume 'D:\SteamLibrary\X4' 'C:\Packages\x')) 'Different volumes treated as same'
+    } else { Write-Host 'NOT RUN on Linux: 2 Windows drive-root assertions; native Windows remains pending.' }
     $realSameVolume = ${function:Test-SameVolume}
     ${function:Test-SameVolume} = { param($First, $Second) $false }
     Remove-Package
@@ -308,6 +310,7 @@ try {
     $hostState = Get-Content -Raw -LiteralPath (Join-Path $PackageRoot 'installation.json') | ConvertFrom-Json
     Check ($hostState.server -eq '127.0.0.1') 'Internal Windows host did not use loopback'
     Check ((Get-Content -Raw -LiteralPath (Join-Path $hostMod 'ui/config.lua')).Contains('host = "127.0.0.1",')) 'Windows host Lua address wrong'
+    Assert-WorldProfile # Uses the same native reparse/cloud guard for the shared-world launcher.
     Remove-Package
     @{steam_build='23660954';channel='internal';slot='p2';package_id='fixture-guest-p2'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'package.json')
     Must-Fail { Install-Package } '*localhost*'

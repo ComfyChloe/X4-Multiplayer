@@ -54,16 +54,16 @@ def validate_invite(value):
         raise ValueError('Session version/channel does not match Internal Test.')
     if not isinstance(value['token'], str) or not re.fullmatch('[0-9a-f]{32}', value['token']):
         raise ValueError('Invalid session key.')
-    if not isinstance(value['bubble'], str) or not re.fullmatch('world-[0-9a-f]{16}', value['bubble']):
+    if not isinstance(value['bubble'], str) or not re.fullmatch('[0-9a-f]{32}', value['bubble']):
         raise ValueError('Invalid session identity.')
     internal_ip(value['server'])
     return value
 
 
 @contextmanager
-def session_lock():
+def session_lock(filename=".session.lock"):
     # Shared by configure and server. A stale file after a crash holds no OS lock.
-    with (ROOT / '.session.lock').open('a+b') as stream:
+    with (ROOT / filename).open('a+b') as stream:
         if stream.tell() == 0:
             stream.write(b'0'); stream.flush()
         stream.seek(0)
@@ -128,7 +128,7 @@ def configure(role, server=None, invite=None):
             raise RuntimeError('This folder already has a session. Reuse it, or use a fresh extracted package for a new session.')
         if role == 'host':
             session = dict(format=1, channel='internal', version=VERSION, test_id=TEST_ID,
-                           steam_build='23660954', build=BUILD, bubble='world-' + secrets.token_hex(8),
+                           steam_build='23660954', build=BUILD, bubble=secrets.token_hex(16),
                            port=PORT, coop=True, fire2=True, world_sync=True, world_mode='replica', token=secrets.token_hex(16), server=internal_ip(server))
         elif role == 'guest':
             path = Path(invite).expanduser()
@@ -146,6 +146,7 @@ def configure(role, server=None, invite=None):
                    walking_avatars=False, test_profile=PROFILE, host=host, port=PORT,
                    token=session['token'], build=BUILD, bubble=session['bubble'], coop=True, fire2=True, world_sync=True, world_mode='replica',
                    ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental', ship_weapons=6,
+                   seed_id=session['bubble'], seed_verified=False,
                    slot=package['slot'], mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
         lua = '-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
         lua += ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n'
@@ -236,7 +237,8 @@ def server(console=False):
         return attach(status_path)
     with session_lock():
         print('Internal Test server. Keep this window open. Ctrl+C stops it.', flush=True)
-        run(cfg, ROOT / 'logs', version=VERSION + ' Internal')
+        with backend_module('world_launcher').WorldServer(ROOT, cfg):
+            run(cfg, ROOT / 'logs', version=VERSION + ' Internal')
 
 
 def diagnostics():
@@ -274,7 +276,13 @@ def verify():
 def import_settings(source=None, keep=False):
     configured()
     ensure_closed()
-    return backend_module('profile_settings').import_settings(ROOT, source=source, keep=keep)
+    validator = None
+    if (ROOT / 'world/slot.json').exists():
+        world = backend_module('world_launcher')
+        world.owned_installation(ROOT, configured()[0])
+        manifest, _ = world.seed.read_bundle(ROOT / 'world/bundle')
+        validator = lambda profile: world.validate_slot(ROOT, profile, manifest)
+    return backend_module('profile_settings').import_settings(ROOT, source=source, keep=keep, slot_validator=validator)
 
 
 def setup(args):
@@ -286,18 +294,19 @@ def setup(args):
             for row in addresses(): print(row['kind'] + ': ' + row['ip'] + ' (' + row['interface'] + ')')
             configure(role, server=args.server or input('Your host LAN/ZeroTier IPv4: ').strip())
         elif role == 'guest':
-            configure(role, invite=args.invite or input('Path to the host JOIN-SESSION.json: ').strip().strip('"'))
+            invite = args.invite or (str(ROOT / 'JOIN-SESSION.json') if (ROOT / 'JOIN-SESSION.json').is_file() else None)
+            configure(role, invite=invite or input('Path to the host JOIN-SESSION.json: ').strip().strip('"'))
         else: raise ValueError('Choose H for host or G for guest.')
     package, _ = configured()
     if not args.server_only and not (ROOT / 'installation.json').exists(): platform_action('install', args.game)
     if not args.server_only and not (ROOT / 'settings-import.json').exists():
         import_settings(getattr(args, 'settings_profile', None), getattr(args, 'keep_test_settings', False))
-    print('Next: ' + ('2-START-SERVER, then ' if package['slot'] == 'p1' else '2-TEST-CONNECTION, then ') + '3-START-X4-TEST.')
+    print('Next: ' + ('2-PREPARE-WORLD, then 2-START-SERVER, then ' if package['slot'] == 'p1' else '2-TEST-CONNECTION, then ') + '3-START-X4-TEST.')
 
 
 def main():
     parser = argparse.ArgumentParser(description='X4 Multiplayer Internal Test - Windows/Linux host or guest')
-    parser.add_argument('action', choices=['setup', 'server', 'test', 'start', 'diagnose', 'remove', 'collect', 'verify', 'version', 'settings'])
+    parser.add_argument('action', choices=['setup', 'server', 'test', 'start', 'diagnose', 'remove', 'collect', 'verify', 'version', 'settings', 'prepare-world'])
     parser.add_argument('--role', choices=['host', 'guest'])
     parser.add_argument('--server', help='Host LAN/ZeroTier IPv4 when creating a session')
     parser.add_argument('--invite', help='Path to JOIN-SESSION.json when joining')
@@ -313,8 +322,19 @@ def main():
         elif args.action == 'server': server(console=args.console)
         elif args.action == 'settings': import_settings(args.settings_profile, args.keep_test_settings)
         elif args.action == 'test': test_connection()
-        elif args.action == 'start': platform_action('start')
-        elif args.action == 'remove': platform_action('uninstall')
+        elif args.action in ('start', 'prepare-world'):
+            package, session = configured()
+            with session_lock('.world-operation.lock' if args.action == 'start' else '.session.lock'):
+                world = backend_module('world_launcher')
+                action = world.start if args.action == 'start' else world.prepare
+                action(ROOT, package, session, ensure_closed)
+        elif args.action == 'remove':
+            configured(); ensure_closed()
+            # Validate the backend ownership before removing the reserved snapshot.
+            state = read_json(ROOT / 'installation.json')
+            backend_module('world_launcher').owned_installation(ROOT, configured()[0])
+            backend_module('world_launcher').remove_slot(ROOT, state)
+            platform_action('uninstall')
         elif args.action == 'diagnose': diagnostics()
         elif args.action == 'collect':
             configured()

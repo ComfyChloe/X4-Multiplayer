@@ -22,7 +22,7 @@ def xml_root(data, name):
         raise ValueError('Invalid XML in ' + name + ': ' + str(exc)) from exc
 
 
-def owned_profile(package_root):
+def owned_profile(package_root, slot_validator=None):
     package = read_json(package_root / 'package.json')
     state = read_json(package_root / 'installation.json')
     if (package.get('channel') != 'internal' or not package.get('package_id')
@@ -34,8 +34,12 @@ def owned_profile(package_root):
     marker = Path(state['game']) / 'extensions/x4_lan_lab/.x4lan-package-id'
     if marker.read_text(encoding='utf-8-sig') != package['package_id']:
         raise RuntimeError('The installed mod belongs to another package.')
-    if (profile / 'save').is_symlink() or any((profile / 'save').glob('*.xml*')):
+    if (profile / 'save').is_symlink():
         raise RuntimeError('The test profile contains saves or a linked save folder.')
+    if any((profile / 'save').glob('*.xml*')):
+        if slot_validator is None:
+            raise RuntimeError('The test profile contains saves; a verified shared-world slot is required.')
+        slot_validator(profile)
     return profile
 
 
@@ -92,8 +96,8 @@ def atomic_write(path, data):
             temporary.unlink()
 
 
-def import_settings(package_root, source=None, keep=False, ask=input):
-    profile = owned_profile(package_root)
+def import_settings(package_root, source=None, keep=False, ask=input, slot_validator=None):
+    profile = owned_profile(package_root, slot_validator)
     if source and keep:
         raise ValueError('Choose a source profile or keep the test settings, not both.')
     if source is None and not keep:

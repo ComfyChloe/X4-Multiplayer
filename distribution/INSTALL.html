@@ -1,34 +1,31 @@
 <!doctype html>
-<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>X4 LAN Lab {{VERSION}} — Internal setup</title>
-<style>
-body{font:17px/1.65 system-ui,sans-serif;max-width:1000px;margin:auto;padding:40px 24px 80px;color:#e2e9f3;background:#101923}h1,h2,h3{line-height:1.25;color:#fff}h1{font-size:2.3rem}h2{margin-top:40px;border-top:1px solid #34465a;padding-top:22px}a{color:#7dc9ff}code{font:.9em ui-monospace,monospace;color:#c4edff}pre{background:#081119;padding:16px;border-radius:8px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}li{margin:8px 0}table{width:100%;border-collapse:collapse}td,th{padding:10px;border-bottom:1px solid #34465a;text-align:left}.note{background:#1c3045;border-left:4px solid #65bcf1;padding:16px 20px;border-radius:4px}.meta{color:#a9b8ca}strong{color:#fff}@media print{body{background:white;color:#17232f;padding:0;font-size:11pt}h1,h2,h3,strong{color:#000}a,code{color:#18394f}.note,pre{background:#eef3f6}h2,h3{break-after:avoid}tr,pre,.note{break-inside:avoid}}
-</style>
-<h1>X4 LAN Lab {{VERSION}}</h1><p>Internal test · 22 October 2026 · Windows or Linux host/guest · Two players</p>
-<div class="note"><strong>New:</strong> Windows hosting, portable runtimes, private group invitations and corrected Shuttle sensor initialization. <strong>Still incomplete:</strong> the shared universe, ordinary stations, NPC orders/damage and vanilla missions. Both launchers still create separate worlds. Read <a href="NEXT-TEST.txt">NEXT-TEST.txt</a> for tonight's short test.</div>
-<h2>1 · Requirements and upgrade</h2>
-<p>Both PCs need X4 9.00 (611726), Steam build 23660954, matching official DLC including Timelines, and this exact mod version. Disable Ventures and other third-party mods for this test. Linux uses native X4, not Proton. The Windows package is x64. Python and the relay are included; setup requires no runtime download.</p>
-<p>Extract the complete ZIP for your OS into a fresh folder. Close both games and the previous server. Run <strong>5-REMOVE-MOD from the OLD package</strong> before installing the new one. Existing installations are not silently overwritten. Keep old archives for rollback.</p>
-<h2>2 · Choose a host and join its session</h2>
-<ol>
-<li><strong>Host, on either OS:</strong> run 1-INSTALL, choose H, and enter your LAN/ZeroTier IPv4. Use an address reachable by the guest, not localhost. Installation writes a private <code>JOIN-SESSION.json</code> in the package folder. Send that file privately to the guest.</li>
-<li><strong>Guest, on either OS:</strong> run 1-INSTALL, choose G, and enter the path to the received <code>JOIN-SESSION.json</code>. The launcher rejects mismatched versions and public-test invitations.</li>
-<li><strong>Host:</strong> run 2-START-SERVER. Keep its console open. <strong>Guest:</strong> run 2-TEST-CONNECTION. A successful connection check does not occupy a player slot.</li>
-<li><strong>Both:</strong> run 3-START-X4-TEST to start a fresh creative test world. Stay in the pilot seat until setup completes.</li>
-</ol>
-<p>Windows: double-click the numbered <code>.cmd</code> files. Linux: open a terminal in the extracted folder and run, for example, <code>bash 1-INSTALL.sh</code>. Use another terminal to start the game while the server runs.</p>
-<p><strong>The host must also run X4.</strong> The Python server routes shared state; it is not a headless universe simulator. Each session has one host player and one guest. Separate pairs can create separate invitations. A new session needs a fresh extracted package; setup will not replace an existing session or installed configuration.</p>
-<h2>3 · Network</h2>
-<p>Both PCs need a reachable LAN or approved ZeroTier connection. Allow UDP 45841 to the host through its firewall only if necessary. On Windows, allow the included Python server on the private network you use for testing; do not disable the firewall. No router forwarding is needed for a working ZeroTier connection. Public Internet hosting is outside this test.</p>
-<h2>4 · Isolated game profile and test</h2>
-<p>Only profile <code>45841</code> is used. Autosave is disabled; a profile containing saves is refused. Never load or save a normal game with this experimental mod. Both Shuttles have six guns, Mk3 thrusters and all six software modules including Docking Computer Mk2.</p>
-<p>Setup copies display, graphics, audio and control preferences from your normal game profile into the test profile. If several profiles exist, choose the one you use. Your resolution, window mode, graphics quality and custom bindings are retained; subsequent starts do not reset them. Only autosave and protected UI mode are disabled for this internal test. Saves, mod selection and UI history are not imported. Previous test settings are backed up, and the normal profile is read-only.</p>
-<p>To copy preferences again with X4 closed, run <strong>9-IMPORT-SETTINGS</strong>. Advanced options: <code>--settings-profile "path to your normal profile"</code> selects a source; <code>--keep-test-settings</code> keeps the test preferences. Without an existing normal profile, setup retains current test settings or game defaults.</p>
-<p>Follow <a href="NEXT-TEST.txt">NEXT-TEST.txt</a> first: nearby radar/HUD, ship motion/names, ordinary cargo magnet in both directions, and the custom Cooperative Trial. <a href="WORLD-SYNC-TEST.txt">WORLD-SYNC-TEST.txt</a> gives the longer regression sequence. The Mercury service freighter has protected hull and is not a supported multiplayer NPC command target.</p>
-<p>The custom trial requires selling a combined 20 Energy Cells at LAN Trading Station Beta, then destroying both LAN Targets. It rewards the shared treasury once. It does not make normal vanilla missions cooperative. Do not treat independent ordinary station positions or NPC commands as fixed.</p>
-<h2>5 · Diagnostics, stop and removal</h2>
-<p>Run 4-DIAGNOSTICS on BOTH PCs before starting another attempt. Keep both game logs and the host's server logs. Report version, host/guest OS, sector, object name/code, approximate time and action. Generated session files contain credentials; do not post them publicly.</p>
-<p>7-VERIFY-PACKAGE verifies archive-file hashes; configured role files are checked separately. Ctrl+C in the server console stops the relay. For every fresh session, stop BOTH games AND the relay; start a fresh relay, then fresh worlds on both PCs. The relay retains its original NPC session identity and cannot be reused with a restarted host game. Multiplayer save/rejoin is not supported.</p>
-<p>To remove: close X4 and run 5-REMOVE-MOD from the package that owns the installation. It archives only its owned mod; normal saves are untouched. The test profile is retained. Restore your normal mods before loading normal saves.</p>
-<p>Read <a href="RELEASE-CHECKS.txt">RELEASE-CHECKS.txt</a> for measured evidence and pending tests. This is an internal candidate; a joint human Windows-host test is still required.</p>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>X4 Multiplayer {{VERSION}} — Internal Test</title>
+<style>body{font:17px/1.55 system-ui,sans-serif;max-width:860px;margin:40px auto;padding:0 22px;background:#121b26;color:#e4edf7}a{color:#84c9ff}code{background:#253447;padding:2px 5px}h1,h2{line-height:1.2}li{margin:.6em 0}.note{border-left:4px solid #84c9ff;padding:8px 18px;background:#192a3b}</style>
+<h1>X4 Multiplayer {{VERSION}}</h1><p>Internal test · 23 October 2026 · Windows/Linux · Two players</p>
+<p class="note">Both players now load one host-created starting save. This aligns the initial world; a persistent campaign and continuous shared station economy are still unfinished.</p>
+<h2>Before starting</h2>
+<p>Use X4 9.00, Steam build23660954, and matching enabled official DLC including Timelines. Both packages include the server and Python runtime. Close X4 and the previous server, remove the old mod using its original <strong>5-REMOVE-MOD</strong>, then extract the complete new archive into a new folder.</p>
+<p>Setup imports your normal display, sound and control preferences without changing that normal profile. Choose your usual profile if several are found. <strong>9-IMPORT-SETTINGS</strong> repeats this copy later. Starts preserve custom resolution and bindings. Only the test safeguards autosave=false and uisafemode=false are required.</p>
+<h2>Host: create the shared world once</h2>
+<ol><li>Run <strong>1-INSTALL</strong>, choose <strong>H</strong> and enter your reachable LAN/ZeroTier IPv4 address.</li>
+<li>Run <strong>2-PREPARE-WORLD</strong>. X4 opens a disposable new world, saves it and closes automatically. Wait for <em>Shared world ready</em>. Do not play or load another save during preparation.</li>
+<li>Send <code>JOIN-SESSION.json</code> privately to the guest.</li>
+<li>Run <strong>2-START-SERVER</strong> and keep its console open.</li>
+<li>Run <strong>3-START-X4-TEST</strong>. The shared save loads automatically and your Shuttle appears after setup.</li></ol>
+<h2>Guest: receive and load</h2>
+<ol><li>Keep the received <code>JOIN-SESSION.json</code> in your extracted package folder. Run <strong>1-INSTALL</strong>, choose <strong>G</strong> and enter the invitation's path when asked.</li>
+<li>Run <strong>2-TEST-CONNECTION</strong>, then <strong>3-START-X4-TEST</strong>.</li>
+<li>The launcher downloads and checks the host world before opening X4. Wait through automatic loading; do not select another save. Stay in the pilot seat until Shuttle setup completes.</li></ol>
+<p>Windows: use the numbered <code>.cmd</code> files. Linux: run the corresponding <code>.sh</code> files from a terminal, such as <code>bash 1-INSTALL.sh</code>; use another terminal while the server is running.</p>
+<h2>Network and roles</h2>
+<p>Allow <strong>UDP45841 and TCP45844</strong> to the host on the private test network. The connection check uses UDP; world transfer additionally needs TCP. A working ZeroTier connection needs no router forwarding. Keep the firewall enabled. The host must run both X4 and the included server; the Python server alone does not simulate X4.</p>
+<h2>Restart, diagnostics and removal</h2>
+<p>For every retry stop <strong>both games and the relay</strong>, then restart the relay and both games. Both reload the same starting save; progress from the previous attempt is not resumed. Use a fresh extracted pair and invitation for a different world. Preparation will not replace an existing world.</p>
+<p>Read <a href="NEXT-TEST.txt">NEXT-TEST.txt</a> for the focused station and docking test. The existing cargo, radar and Cooperative Trial human results are retained; repeat them only if a regression appears.</p>
+<p>Run <strong>4-DIAGNOSTICS</strong> on both PCs before restarting after a failure. Include roles/OS, approximate time, sector and station code. Keep private session files out of public reports. <strong>7-VERIFY-PACKAGE</strong> checks package files; configured role files are checked separately.</p>
+<p>Close X4 and the relay, then run <strong>5-REMOVE-MOD</strong> from its owning package. Only the recorded, byte-matching <code>save_010</code> copy in profile45841 is removed; the package retains its immutable world bundle and archives its mod. Other or changed saves are preserved. Never load or save normal campaigns in this test profile.</p>
+<h2>Content differences and limits</h2>
+<p>Different DLC/mod sets stop shared-world loading. No Workshop selections are rewritten and the withdrawn7.2 isolation helper is not included. A separate profile alone does not isolate the Steam account. Compare content manually if the launcher reports a difference.</p>
+<p>Station construction/destruction and economy are not continuously synchronized. General NPC commands/combat, persistent campaign resume, normal shared missions and ingame text chat remain unfinished. Check <a href="RELEASE-CHECKS.txt">RELEASE-CHECKS.txt</a> for measured evidence and pending native Windows/two-player tests.</p>
 </html>
