@@ -82,3 +82,13 @@ readback/completion ordering and physical bay assignments/counts. Raw SHA256
 This proves the native consumer; the complete network/client executor and queued
 SectorMove race remain separate checks. No end-to-end/boarding/
 same-pad crash acceptance. All completed runs have verified owned cleanup.
+
+OPTIONAL CLIENT/RELAY INTEGRATION IN PROGRESS
+UniverseSession now derives from DockSession; clients with the feature disabled
+send no docking records.8 relay/integration tests and26 universe tests PASS.
+A denied local approach is cancelled only if its published epoch/sequence still
+belongs to the same approach, a fresh native reading agrees, and MD execution
+rechecks the local physical player, saved bay, session, generation and time
+window. Never force-undock/teleport a physical player.9 observer/executor adapter
+tests PASS; changed MD schema VALID. Full native transport/adapter function check
+.local/evidence-016-withheld is running; no new docking acceptance yet.

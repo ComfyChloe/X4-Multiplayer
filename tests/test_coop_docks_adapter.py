@@ -64,4 +64,25 @@ class CoopDockAdapterTests(unittest.TestCase):
          c.publishDock(1,19,now);assert(sent[#sent]:match('|1|1|19|UNKNOWN|0$'))
         ''')
 
+    def test_denial_only_cancels_the_current_published_approach(self):
+        l=self.make();l.execute('''
+         local c=X4LAN_BUBBLE_API.coop;local d=X4LAN_BUBBLE_API.coopDocks
+         c.owners[2]='p1';controlled=42
+         d.execution={ready=true,epoch='native-session',generation={1,4}}
+         function denied(seq,dockIndex)
+          c.receive({'CDOCK_DENIED','1',client.lease,'2','1',tostring(seq),tostring(dockIndex or 12)},now)
+         end
+         own('APPROACH',12);c.publishDock(2,100,now)
+         denied(101);denied(99);denied(100,13);assert(d.denied==nil)
+         denied(100);frames.onUpdate()
+         local q;local count=0
+         for _,r in ipairs(requests) do if r[2]=='Denied' then count=count+1;q=r[3] end end
+         assert(count==1 and q.dock==12 and q.native=='42' and q.generation==4)
+         now=10.51;own('FREE');c.publishDock(2,101,now)
+         own('APPROACH',12);c.publishDock(2,102,now)
+         denied(100);frames.onUpdate()
+         count=0;for _,r in ipairs(requests) do if r[2]=='Denied' then count=count+1 end end
+         assert(count==1) -- delayed denial from an earlier approach never cancels the retry
+        ''')
+
 if __name__=='__main__':unittest.main()

@@ -10,7 +10,7 @@ local function key(e,now)
  -- Separate datagrams can temporarily be unpaired. This blocks pose/new
  -- preparation, but must not repeatedly cancel an already invoked undock.
  local q=d.intent(e,now)
- if not q then return 'blocked',nil end
+ if not q then return table.concat({'blocked',tostring(c.owners[e]),tostring(c.epochs[e]),tostring(c.pilots[e])},'|'),nil end
  return table.concat({c.owners[e],q.epoch,q.lease,q.mode,q.dock},'|'),q
 end
 local function fence(e,k,q)

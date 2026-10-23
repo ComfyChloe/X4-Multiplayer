@@ -9,7 +9,8 @@ from dataclasses import dataclass
 import math
 import zlib
 
-from .coop import CoopSession, pose
+from .coop import pose
+from .docking import DockSession
 from .host import ATOM, HEX, MAX_PACKET, sequence
 from .cargo import CargoTransactions
 from .identity import Identities
@@ -196,7 +197,7 @@ class Sender:
         return result
 
 
-class UniverseSession(CoopSession):
+class UniverseSession(DockSession):
     """Opt-in INTERNAL W01. Host lease owns the epoch for the whole relay life."""
     def __init__(self, *args):
         super().__init__(*args)

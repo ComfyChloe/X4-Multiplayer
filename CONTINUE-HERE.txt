@@ -43,7 +43,7 @@ Dock registry: saved seed d1041307b01d6f6db5055fba7ffc4b17;51504/51506 reload
 witnesses valid,2wrong-type mobile docks explicitly rejected. Strict registry
 FAIL retained; original ship was under attack, cause not proven serialization.
 reports/COOP-DOCKING-PLAN.txt links raw evidence. Optional capture/observer/executor
-are registered but coop_docks unset, UniverseSession still unwired. New executor
+are registered but coop_docks unset, UniverseSession now derives from DockSession. New executor
 requires native Fence ACK, fresh paired NAV/CDOCK for new operations, waits actual
 FREE after undock. Temporary UDP pairing gaps do not restart native undock.
 Queued movement/Prepare have session/generation/wall/game-age fences.8 new dock
@@ -51,7 +51,8 @@ adapter +25 existing coop +23 FIRE2 tests PASS;3 changed MD schemas VALID.
 Native coop-dock-exec-02: all8 phases PASS (reserve/conflict refusal/attach/occupied
 refusal/actual undocks/prepared-then-fenced); undock~8s. No boarding/human same-pad
 or two-native acceptance. Follow-up exec03 all11 phases PASS with stale Prepare/foreign Fence coverage.
-Need full native adapter/queued pose, relay/launcher and own-pilot denial handling.
+Relay/CDOCK and guarded own-pilot denial implemented;8 relay+26universe+9adapter
+checks PASS. Launcher flag still off. Full native adapter cycle currently running.
 
 WEAPONS
 reports/WEAPON-AIM-PRIMITIVES.txt: projectile warp/velocity and gun MD/C pose/
@@ -63,11 +64,13 @@ benchmark. Actual player aim transmission/replay remains open. Never infer a
 short normal gun-slew miss is a bug or report mocked tests as native acceptance.
 
 LIVE JOBS / TOOLS
-ACTIVE native aim-point-01/run.py: original invisible geometry-free navbeacon
-spatial aim reference, shoot_at stock pulse at point through victim then deliberate
-miss point. Source/AI schemas valid, result pending. No actual human aim getter
-yet. Prior health and dock03 runs finished and cleanup verified. Do not start
-concurrent native/install mutation; preserve raw failures and verify cleanup.
+ACTIVE native exec93377: .local/evidence-017-withheld, production saved-seed
+gate + real relay/Lua adapter, synthetic pilot; exact HQ cycle + occupied NPC bay.
+Aim-point03 finished: near collinear point12pulse shots/11hits, yaw0; far point
+plus manual trigger no shots. Original helper assets; common near point changes
+multi-gun convergence.01partial/02fixtureFAIL retained, all cleanup verified.
+Claude6ff3b76 NOT merged: initial stale Authority fix needs monotonic revocation
+follow-up (assigned). Await finer20Hz observer too. No concurrent native/install.
 Persistent schema worker exec48913: .local/evidence-244-withheld, JSON lines
 {"files":["relative/path.xml"]}; {"stop":true} at final cleanup.
 Python ../x4-playtest7/.venv/bin/python; schemas ../../preparation/game-schemas.

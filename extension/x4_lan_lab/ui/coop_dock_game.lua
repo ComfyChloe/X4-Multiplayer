@@ -5,7 +5,7 @@ local cfg,A=X4LAN_CONFIG,X4LAN_BUBBLE_API
 if not cfg or not cfg.coop_docks or not A or not A.coop then return end
 local c,s=A.coop,A.state
 local C=require('ffi').C
-local d={localRows={},remote={},closed=false};A.coopDocks=d
+local d={localRows={},remote={},published={},closed=false};A.coopDocks=d
 local modes={FREE=true,UNKNOWN=true,APPROACH=true,EXTERNAL=true,STORED=true}
 local function integer(v,max)
  local n=tonumber(v)
@@ -45,6 +45,9 @@ end
 function c.publishDock(e,seq,now)
  if not s.client or not s.client.lease then return end
  local r=localRow(e,now)
+ local old=d.published[e]
+ local mode,index=r and r.mode or 'UNKNOWN',r and r.dock or 0
+ d.published[e]={seq=seq,first=old and old.epoch==c.epochs[e] and old.mode==mode and old.dock==index and old.first or seq,epoch=c.epochs[e],mode=mode,dock=index,at=now}
  send(string.format('CDOCK|1|%s|%d|%d|%d|%s|%d',s.client.lease,e,c.epochs[e],seq,
   r and r.mode or 'UNKNOWN',r and r.dock or 0))
 end
@@ -67,8 +70,10 @@ function c.receive(f,now)
  if f[1]=='CDOCK_DENIED' then
   if #f~=7 then return true end
   local e,epoch,seq,dock=integer(f[4],2),integer(f[5],2147483647),integer(f[6],2147483647),integer(f[7],250000)
-  if e and e>0 and epoch==c.epochs[e] and c.owners[e]==cfg.slot and seq and dock and dock>0 then
+  local published=e and d.published[e]
+  if e and e>0 and epoch==c.epochs[e] and c.owners[e]==cfg.slot and seq and dock and dock>0 and published and published.epoch==epoch and published.dock==dock and seq>=published.first and seq<=published.seq then
    local old=d.denied
+   if old and old.entity==e and old.epoch==epoch and seq<=old.seq then return true end
    d.denied={entity=e,epoch=epoch,seq=seq,dock=dock,at=now}
    if not old or old.entity~=e or old.epoch~=epoch or old.dock~=dock then
     log(string.format('RESERVATION_DENIED entity=%d dock=%d',e,dock))
@@ -84,6 +89,15 @@ function c.receive(f,now)
  d.remote[e]={epoch=epoch,seq=seq,lease=f[4],mode=f[8],dock=dock,at=now}
  return true
 end
+local function cancelDenied(now)
+ local v=d.denied;local x=d.execution
+ if not v or not x or not x.ready or now-v.at>.75 or A.paused() or c.owners[v.entity]~=cfg.slot or c.epochs[v.entity]~=v.epoch then return end
+ local own=localRow(v.entity,now);local sent=d.published[v.entity]
+ if not own or own.dock~=v.dock or not sent or sent.first>v.seq or sent.dock~=v.dock then return end
+ if now<(d.nextDenied or 0) then return end
+ d.nextDenied=now+.25
+ AddUITriggeredEvent('X4LAN_CoopDocks','Denied',{seed=cfg.seed_id,epoch=x.epoch,ship=v.entity,native=A.id(c.ships[v.entity]),generation=x.generation[v.entity],dock=v.dock,stamp=own.stamp,age=own.age})
+end
 function c.frame(now)
  if c.ready and not d.setup and not d.closed then
   d.setup=true
@@ -95,6 +109,7 @@ function c.frame(now)
   d.nextRead=now+.05;AddUITriggeredEvent('X4LAN_CoopDocks','Read')
  end
  if d.executeFrame then d.executeFrame(now) end
+ cancelDenied(now)
  frame(now)
 end
 RegisterEvent('X4LAN_CoopDocks.Ready',function(_,id)

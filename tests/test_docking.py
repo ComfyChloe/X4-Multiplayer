@@ -76,5 +76,21 @@ class DockRelayTests(unittest.TestCase):
         self.assertEqual(self.s.coop_docks[2]['claim'], 0)
 
 
+class UniverseDockIntegrationTests(unittest.TestCase):
+    def test_universe_relay_forwards_matching_motion_and_attachment(self):
+        from x4lan.universe import UniverseSession
+        s=UniverseSession(TOKEN,'world1-test','bubble')
+        a=s.receive(hello(build='world1-test'),P1,0)[0].decode().split('|')[3]
+        b=s.receive(hello('p2','2'*32,build='world1-test'),P2,0)[0].decode().split('|')[3]
+        s.receive(f'CDOCK|1|{a}|1|1|7|APPROACH|12'.encode(),P1,.1)
+        s.receive(f'NAV2|1|{a}|1|1|7|cluster_14_sector001_macro|1|2|3|0|0|0|0|0|10|0|0|0|0|0|0'.encode(),P1,.1)
+        frames=[p.decode().split('|') for addr,p in s.snapshots(.2) if addr==P2]
+        kinds={f[0] for f in frames}
+        self.assertTrue({'CDOCK','NAV2','AUTH','HGEN'}<=kinds)
+        for kind in ('CDOCK','NAV2'):
+            packet=next(f for f in frames if f[0]==kind)
+            self.assertEqual(packet[2:7],[b,a,'1','1','7'])
+
+
 if __name__ == '__main__':
     unittest.main()

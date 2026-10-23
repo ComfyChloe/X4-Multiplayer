@@ -104,3 +104,24 @@ c5e5f32933d5b28ae9b20e84aac405952fb000c9220b55e7846b463b34d14818.
 Owned installation/preferences/slot and7 actual normal saves verified restored.
 This closes another ineffective primitive; actual free-aim transmission remains
 open, and selected-victim auto-lock is not an acceptable substitute.
+
+SPATIAL AIM REFERENCE (24 OCTOBER)
+Original dev-only navbeacon component/macro, no geometry/collision/explosion,
+radar hidden. This is a spatial point, not an automatic victim target.
+aim-point-01: point behind the player gave zero shots; deliberately leftward
+point produced12 shots, settled direction about-7.16deg with ship yaw0. Native
+IFF/obstruction inhibition is a hypothesis, not proven cause.
+aim-point-02 FAIL: nested delay fired the direct trigger before AI, and the
+fixture target was overwritten by Arena startup placement. Do not count it as
+correct aim or hit evidence. Raw retained.
+aim-point-03 delays fixture until after setup, logs poses continuously and puts
+the direct trigger after AI start. Farther point plus direct trigger still
+produces zero shots. Near collinear point(1050,10000,-1600), victim(1100,10000,
+-1200), shooter(1000,10000,-2000):12 pulse shots,11 confirmed player hits/396HP,
+ship yaw0; one delayed projectile sample absent. Raw SHA256
+ba5d0f96442cb185b5781274f40fb9585b66c6e1e8aff6845d3ef69fc989bb04.
+This qualifies a bounded spatial aiming primitive only. A nearer shared point
+changes convergence across gun offsets; it does not reproduce each sender shot
+exactly. Actual sender aim capture, per-gun targeting, native trigger/heat/budget
+and arbitrary friendly blockers still need work. Original gun spread/tolerance
+unchanged. All runs retain source/saves/restoration inventories.
