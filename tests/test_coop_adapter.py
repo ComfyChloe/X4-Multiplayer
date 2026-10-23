@@ -69,6 +69,35 @@ class CoopAdapterTests(unittest.TestCase):
    client:receiveExtension({'COOP_EXEC','1',client.lease,string.rep('c',32),'1','m2','energycells,10,1200'},now)
    assert(delivered[1]=='ORDER_EXEC' and delivered[5]=='p1' and delivered[6]=='m2' and delivered[7]=='energycells,10,1200')
   ''')
+ def test_ordinary_native_dock_blocks_pose_even_with_zero_market_index(self):
+  l=self.make();l.execute('''
+   local original=GetComponentData
+   local docked=false
+   GetComponentData=function(object,key)
+    if key=='isdocked' then return tonumber(object)==42 and docked end
+    return original(object,key)
+   end
+   local c=X4LAN_BUBBLE_API.coop;c.sectors.cluster_14_sector001_macro=22
+   nav(2,1,1,'cluster_14_sector001_macro',50);now=10.2;frames.onUpdate()
+   assert(#writes==1 and c.docks[2]==0)
+   docked=true;positions[42].x=700;nav(2,1,2,'cluster_14_sector001_macro',100)
+   now=10.3;frames.onUpdate();assert(#writes==1 and countRequest('Dock')==0)
+   docked=false;now=10.4;frames.onUpdate();assert(#writes==2)
+  ''')
+ def test_local_pilot_blocks_remote_pose_while_authority_update_is_pending(self):
+  l=self.make();l.execute('''
+   local c=X4LAN_BUBBLE_API.coop;c.sectors.cluster_14_sector001_macro=22
+   controlled=42;nav(2,1,1,'cluster_14_sector001_macro',50)
+   now=10.2;frames.onUpdate();assert(#writes==0 and countRequest('SectorMove')==0)
+   controlled=11;now=10.3;frames.onUpdate();assert(#writes==1)
+  ''')
+ def test_queued_sector_move_has_native_attachment_and_pilot_guards(self):
+  # Static boundary check: Lua doubles do not execute native MD queues.
+  import xml.etree.ElementTree as ET
+  root=ET.parse(UI.parent/'md/x4lan_coop.xml')
+  guard=root.find(".//cue[@name='SectorMove']/actions/do_if").get('value')
+  for condition in ('not $ship.dock','not $ship.isinternallystored','player.occupiedship != $ship'):
+   self.assertIn(condition,guard)
  def test_suit_remote_sector_and_absolute_coordinates_survive_original_ship_death(self):
   l=self.make();l.execute('''
    nextObject=90

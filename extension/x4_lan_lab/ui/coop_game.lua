@@ -337,14 +337,17 @@ function c.frame(now)
  for i=1,2 do
   local r=c.remote[i];local ship=c.ships[i];local p,linear=render(r,now);local velocityApplied=false
   if r and r.firing and (not p or now>(r.fireDeadline or 0)) then r.firing=false;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
-  if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) then
+  if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) and C.GetPlayerControlledShipID()~=ship then
    if (r.fireDeadline or 0)>now and not r.firing then r.firing=true;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=true}) end
    local sector=c.sectorId(r.sector)
    if c.docks[i]~=r.dock and sector and now>=(r.nextDock or 0) then
     r.nextDock=now+1
     AddUITriggeredEvent('X4LAN_Coop','Dock',{ship=i,market=r.dock,sector=A.id(sector),x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
    end
-   if sector and r.dock==0 and c.docks[i]==0 then
+   -- The legacy market index is zero at ordinary stations too. Recheck the
+   -- actual native attachment before a synchronous pose write; a stale/free
+   -- network sample must not pull a locally docked ship out of its parent.
+   if sector and r.dock==0 and c.docks[i]==0 and GetComponentData(A.id(ship),'isdocked')~=true then
     local value={x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}
     if C.GetContextByClass(ship,'sector',false)~=sector then
      if now>=(r.nextWarp or 0) then

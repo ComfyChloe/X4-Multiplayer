@@ -1,0 +1,30 @@
+WEAPON AIM PRIMITIVES — 23 OCTOBER 2026 — INTERNAL DEVELOPMENT
+
+FIRE2 carries weapon groups/counters and source time, but no projectile/gimbal
+orientation. Native MD shoot explicitly fires without a target. The hypothesis
+that missing aim causes guest-to-host misses remains under investigation.
+
+The isolated projectile-steering-02 run observes 24 actual Xperimental Shuttle
+bullets from a synthetic guest's four six-shot bursts in one native Linux host.
+Original sealed 7.3.1 source plus an unshipped observer; no production change.
+Each bullet is sampled after at least150ms. Native baseline, bullet warp yaw15,
+set_object_velocity and combined warp/velocity each cover six shots. Observed
+sector yaw ranges: baseline[-0.104,0.137], warp[-0.075,0.162], velocity
+[-0.076,0.106], combined[-0.219,-0.032] degrees. None reaches requested15deg.
+All12 velocity writes emit the native class error: the plasma bullet is not
+destructible. Warp alone also leaves actual forward/trajectory unchanged.
+RESULT: this MD steering primitive fails; it cannot be enabled for these bullets.
+This is not evidence about every projectile type or other native APIs.
+
+Raw log SHA256:
+9b147ae229148a001d723378b101cbf0f8e4e1fd4f052dd02031eca510970af4
+Private local capture: .local/evidence-229-withheld, including source inventory,
+24 trajectory records, analysis.json, per-run save manifests and restored-file
+inventory. Game/helpers closed; original installation, settings, test save and
+seven actual normal saves retained. The first run never reached gameplay within
+its observation deadline and remains separately failed/incomplete.
+
+Next bounded probe compares direct fire, aim_turret on primary weapons, and a
+minimal shoot_at AI script. It must read actual bullet direction AND unchanged
+ship orientation; no assumption that these actions accept primary guns, arbitrary
+aim offsets or synthetic targets. Actual network aim replay is not implemented.

@@ -147,7 +147,9 @@
     </actions></cue>
     <cue name="SectorMove" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'SectorMove'"/></conditions><actions>
      <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$arena.$ships.{$v.$ship}"/>
-     <do_if value="$ship.isoperational and $v.$sector.exists">
+     <!-- Recheck after the Lua/MD queue: the ship can have docked or acquired
+          a local pilot since the sector move was requested. -->
+     <do_if value="$ship.isoperational and $v.$sector.exists and not $ship.dock and not $ship.isinternallystored and player.occupiedship != $ship">
       <warp object="$ship" sector="$v.$sector"><position x="$v.$x * 1m" y="$v.$y * 1m" z="$v.$z * 1m"/><rotation yaw="$v.$yaw * 1deg" pitch="$v.$pitch * 1deg" roll="$v.$roll * 1deg"/></warp>
       <debug_text text="'[X4LAN] COOP_SECTOR ship=%s sector=%s position=%s'.[$v.$ship,$ship.sector.macro.id,$ship.position]"/>
      </do_if>
