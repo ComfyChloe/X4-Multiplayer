@@ -30,7 +30,9 @@ BEFORE THE RUN
 
 FOR EVERY ENABLED CASE
 Say or note the case ID and start time. Record BOTH views before firing, immediately
-after stopping and roughly 5 seconds later. Record hull and shield separately.
+after stopping and roughly 5 seconds later, using readings OR screenshots/video.
+Record hull and shield separately; do not transcribe numbers already clear in the
+attached evidence or captured by the candidate's assigned diagnostic telemetry.
 Shield regeneration can change later readings: note their times and any recharge;
 do not compare values captured at different times as if they were simultaneous.
 Record PASS / FAIL / INCONCLUSIVE / NOT RUN. A visible hit alone is not a PASS.

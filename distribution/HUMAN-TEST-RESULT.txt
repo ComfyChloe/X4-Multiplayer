@@ -20,6 +20,8 @@ Attacker (host/guest):
 Victim name/code as shown on HOST:
 Victim name/code as shown on GUEST:
 
+OPTIONAL READINGS: use this table OR reference screenshots/video/assigned telemetry.
+Do not transcribe the same values twice. Time, case, roles and observation matter most.
                          HOST VIEW                 GUEST VIEW
 Before: time             __________                __________
 Before: shield / hull    __________                __________
