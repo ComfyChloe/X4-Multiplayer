@@ -73,10 +73,17 @@ Claude has a bounded victim-pilot authority design/source feasibility task until
 20:00; separate draft only, no Windows profile/native changes. No after20:30 work
 is inferred. Ordinary station pad occupancy remains open;
 public mirror and7.3.0 sealed archives remain unchanged.
-A single separate dev-only victim-hit observation is being prepared under
-.local/evidence-262-withheld to test event_player_ship_hit; it is not packaged.
-Its controller must restore the retained7.3.1installation/settings and preserve
-the starting snapshot. Recheck that controller/evidence before any new native work.
+The dev-only victim-hit observation completed:16 unique correctly identified
+player projectiles /16shield callbacks,640shield damage;6attack notifications.
+This is NOT health-authority,lethality,transfer or a2%floor/setter test. Report:
+reports/victim-hit-native-observation-20261023.json. Full37-file7.3.1installation,
+test settings and new starting snapshot restored/preserved;game/helpers stopped,
+ports45841/45843/45844 free. Outer reports/FINAL-READINESS.json records final state.
+PR36 6f8d8cb is Claude's DESIGN-ONLY victim-pilot authority proposal. Requested
+explicit canonical handoff baseline/ack, execution-time MD epoch/pilot fencing,
+expiry policy/canonical WORLD publication and separate native guest-guard evidence.
+Await corrected design handoff; no further native tests or production edits planned
+for the sealed pair. No background timer or after-deadline work is authorized.
 
 TASK REFERENCES — OPEN WHEN RELEVANT
 - Setup/machine sync: DEVELOPMENT.txt. Collaboration/PR delivery: CONTRIBUTING.txt.
