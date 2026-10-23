@@ -41,4 +41,29 @@ events.gameSaved(nil,true);assert(not quit);now=12;frames.onUpdate();assert(quit
         lua=self.make("X4LAN_CONFIG.seed_content='different:1'")
         lua.execute('assert(X4LAN_SEED_CAPTURE.failed and saved==nil and frames.onUpdate==nil)')
 
+    def dock_capture(self):
+        lua=self.make('X4LAN_CONFIG.coop_docks=true')
+        lua.execute('''frames.onUpdate();now=4;frames.onUpdate();frames.onUpdate()
+events['X4LAN_Seed.State'](nil,'|1|0');now=6;frames.onUpdate()
+events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|0')
+assert(request=='Mark' and saved==nil and X4LAN_SEED_CAPTURE.pendingDocks)
+''');return lua
+
+    def test_optional_docks_require_matching_ack_and_new_pristine_readback(self):
+        lua=self.dock_capture();lua.execute('''
+now=7;frames.onUpdate();assert(saved==nil and not paused)
+events['X4LAN_SeedDocks.Marked'](nil,X4LAN_CONFIG.seed_id)
+assert(saved==nil);frames.onUpdate();assert(request=='Inspect')
+events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|1|0')
+assert(saved=='save_010' and pausedAtSave)
+''')
+
+    def test_dock_error_foreign_ack_timeout_or_changed_world_never_saves(self):
+        for action in ("events['X4LAN_SeedDocks.Error'](nil,'empty registry')",
+                       "events['X4LAN_SeedDocks.Marked'](nil,string.rep('b',32))",
+                       'now=181;frames.onUpdate()',
+                       "events['X4LAN_SeedDocks.Marked'](nil,X4LAN_CONFIG.seed_id);now=7;frames.onUpdate();events['X4LAN_Seed.State'](nil,X4LAN_CONFIG.seed_id..'|0|1')"):
+            lua=self.dock_capture();lua.execute(action)
+            lua.execute('assert(X4LAN_SEED_CAPTURE.failed and saved==nil and not paused and not quit)')
+
 if __name__=='__main__':unittest.main()

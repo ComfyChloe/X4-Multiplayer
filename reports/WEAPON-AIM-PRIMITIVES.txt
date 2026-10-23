@@ -77,3 +77,18 @@ This run also exposed missing early-HQ and obsolete research-entry errors in the
 new story preset, plus a native probe-pilot voice warning. The story portion is
 FAILED and separately corrected in story-preset-02; the pulse comparison was
 not repeated merely to refresh passing firing evidence. Original cleanup verified.
+
+WEAPON-COMPONENT POSE EXPERIMENT
+weapon-pose-01 (a7b0b2d plus private observer) uses the same single stock pulse
+weapon. Baseline12 shots, MD weapon warp12, FFI weapon pose15; all39 delayed
+trajectory samples have sector yaw0, while the requested weapon yaw is15deg.
+The ship stays yaw0 and the offset target takes no damage. MD weapon rotation
+readback remains0. IsComponentOperational and GetContextByClass succeed for the
+weapon reference, but GetObjectPositionInSector/SetObjectSectorPos emit three
+native failed-to-retrieve-object errors for that component. Lua pcall returning
+true does not establish native success. This is a FAILED setter experiment,
+not proof about every possible engine interface. No production aim change.
+Raw SHA256713b12cca8e14f195bf410bf610d5316062030f0bf6344997c7cdf55e5d17519.
+Source/readback/cleanup inventories and all native error lines are retained in
+.local/evidence-267-withheld Original installation/settings/save bytes and actual-save
+timestamps restored; game and helpers closed.

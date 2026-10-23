@@ -1,0 +1,38 @@
+COOPERATIVE STATION DOCKING — ACTIVE INTERNAL IMPLEMENTATION
+
+The shipped NAV2 market field names only two test markets; zero also describes
+ordinary station docking. First guards stop actual docked ships and locally
+controlled ships from receiving free-flight pose corrections. This is not yet
+shared occupancy. Same-pad crashes remain unproven at the exact native call.
+
+Next bounded path reuses our previously qualified saved dock-reference registry,
+not numeric process handles. Capture it inside the same pristine starting save.
+Two fixed co-op ship IDs may publish FREE/APPROACH/EXTERNAL/STORED/UNKNOWN with a
+saved dock index, movement epoch and sequence. The relay accepts only the current
+movement owner, arbitrates same-index player claims and repeats fresh state.
+A stale or unknown attachment never authorizes pose correction or pad release.
+
+On the recipient, native execution rechecks the saved dock's container, parent,
+macro, relative position, capacity/type, docking permission and actual occupancy.
+Use request_docking_at_dock for the exact approach reservation; never force an
+occupied/reserved foreign bay. Attach only the corresponding unpiloted replica;
+actual native readback is required before resuming free flight after undocking.
+Same-pad races reject the conflicting claim and must never overwrite a player
+or NPC occupant. Unresolved/rejected outcomes remain fenced and explicit.
+
+This path is separately gated and disabled until focused protocol/adapter/native
+checks pass. It covers initial saved stations/carriers and the two co-op ships;
+newly built docks, NPC authority, carrier-with-player transforms and long-term
+campaign persistence remain outside this bounded change. Existing broad saved-
+attachment evidence is in x4-attachment-session; it is not two-PC acceptance.
+
+Prepared source: x4lan/docking.py remains an unused CoopSession subclass; its
+request watermark advances even on conflict denial, so a delayed older FREE
+cannot release an existing claim. The existing native saved dock registry is
+reused unchanged. seed_capture.lua now has an optional coop_docks handshake:
+matching Marked acknowledgement, then a new pristine-world readback, then save.
+Missing/foreign/error acknowledgements prevent saving. Normal capture has no
+new registry dependency unless explicitly opted in. Launcher does not enable it.
+Eight dock-related tests and five capture tests passed under Linux/LuaJIT;
+registry MD schema VALID. Native capture/reload qualification is running under
+.local/evidence-251-withheld No ordinary-pad synchronization acceptance yet.
