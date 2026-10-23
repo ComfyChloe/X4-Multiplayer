@@ -1,0 +1,22 @@
+{
+  "status": "Historical reference only; superseded instructions are not active authorization.",
+  "date": "2026-10-23",
+  "source_commit": "bb83d32",
+  "files": [
+    {
+      "file": "CONTINUE-HERE.txt",
+      "sha256": "da19d621885d144acda6b23b9069e108487b33b63aa626fe6c686cc48faa1416",
+      "bytes": 19415
+    },
+    {
+      "file": "README-before.md",
+      "sha256": "4680caf101200652cdb66326220cbe1a49b77073cba7c5dd8e90fb0eef8ad20a",
+      "bytes": 6530
+    },
+    {
+      "file": "work-instructions-before.txt",
+      "sha256": "38213d09f5c29d78036f905733a4bc6da37f6ce1d90612c9fc6b3613a33db8b8",
+      "bytes": 6324
+    }
+  ]
+}
