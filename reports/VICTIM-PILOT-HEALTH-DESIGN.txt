@@ -1,0 +1,96 @@
+VICTIM-PILOT HEALTH AUTHORITY (option A) - DESIGN AND SOURCE FEASIBILITY
+23 Oct 2026, Claude (A:primary assignment 19:24 CEST). Base f29d3ef (7.3.0). DESIGN ONLY:
+no production change, not release-ready, no native run. Damage stays as in 7.3.0.
+
+WHY
+PR34 (HIT2) is withdrawn. Native Linux evidence on c5eae79 (A:primary, 19:10/19:24) showed
+that every attack notification is throttled to roughly one per second: event_object_attacked,
+event_object_attacked_object and the player-owned variants alike. Damage events are per hit
+and carry no source. A per-hit attacker exists only for the player's own controlled ship
+(event_player_ship_hit). Option A needs no attacker at all: the pilot's machine is the
+authority for the health of the co-op ship it pilots. All damage that the ship takes in the
+pilot's own world counts: local NPCs and the FIRE2-replayed shots of the other player.
+
+CURRENT SOURCE (f29d3ef)
+- Host health: x4lan_bubble.xml Publish (0.2 s) sends hullpercentage/shieldpercentage of both
+  co-op ships in WORLD. Guest Apply (bubble_game.lua) sets both ships' hull/shield from it on
+  every change, and at least every 1 s.
+- Death: x4lan_life.xml Tick (0.05 s), host only. A co-op ship with hull <= 1.01% (ships have
+  min hull 1, x4lan_bubble.xml:16) or not operational becomes Arena.$dead. The occupant is
+  ejected, then the ship is destroyed. The guest follows through WORLD (v <= 1.01 -> dead).
+  The relay dead() reads the same WORLD values.
+- Authority: x4lan/coop.py owners/epochs/pilot(entity). AUTH carries the revision, owner,
+  epoch and pilot of each ship. A HELLO with a new lease increments the epoch of the ships
+  that slot owns. coop_game.lua mirrors this as c.owners/c.epochs/c.pilots.
+- Result today: the guest ship's health is decided in the host world, where the host sees the
+  guest ship one latency late. Damage the guest takes from its own local NPCs is overwritten.
+
+PROPOSED WIRE: HEALTH|1|lease|entity|epoch|seq|hull%|shield%   (pilot -> relay -> other peer)
+- Sent by the machine whose slot both OWNS and PILOTS the entity (c.owners and c.pilots
+  equal cfg.slot), at 10 Hz and at once on a decrease. The host never sends HEALTH for a ship
+  it pilots: its native value is already the WORLD value.
+- Relay (coop.py, like FIRE2): accept only when owner == pilot == sender slot, the epoch is
+  current and the ship is not dead(). seq must be > the last seq of the same lease+epoch.
+  Values must be finite, 0..100. Keep the latest frame and forward it to the other peer for
+  0.75 s. A new epoch drops the old frame.
+- Order: one monotonic seq per lease/entity/epoch. A stale or out-of-order frame is dropped.
+  After an epoch change, nothing applies until the new pilot's first frame, which is the
+  baseline. Until then the host keeps its native value.
+
+HOST RULES (the remotely piloted proxy, entity e)
+1. On each accepted HEALTH: set_object_shield and set_object_hull to the reported values.
+   The host's own hits on the proxy are therefore overwritten, symmetric to the guest today.
+2. While e is remotely piloted with a current epoch, the proxy gets set_object_min_hull 2. So
+   host-world damage can never reach the 1.01% LifeTick threshold between frames. This
+   removes the life race that killed PR34.
+3. Lethal: a reported hull <= 1.01 restores min hull 1 and sets the reported value. LifeTick
+   then declares death exactly as today (eject, destroy, WORLD, relay dead()).
+4. Pilot loss or transfer (new epoch, pilot '0', HELLO lease change): restore min hull 1 and
+   keep the current native value. The host is authority again until a new pilot's baseline.
+   No health is invented.
+5. The WORLD the host publishes then carries the pilot's value back to the pilot: an echo.
+
+GUEST RULES (the ship it pilots, entity e)
+6. WORLD Apply must not write hull/shield of e while the guest owns and pilots e in the
+   current epoch. Otherwise the echo, about one RTT late, would heal or re-damage it.
+   Source change: one condition in x4lan_bubble.xml Apply, keyed on a session value that
+   coop_game.lua maintains from AUTH. This needs A:primary coordination (bubble owner).
+7. Dead state still comes from WORLD (v <= 1.01). Locally the guest ship stays at the 1% min
+   hull; the guest never destroys itself (unchanged: the coop LifeTick branch is host-only).
+
+FILES (estimate)
+x4lan/coop.py (HEALTH branch + snapshot), ui/coop_game.lua (send/receive, pilot flag),
+md/x4lan_coop.xml (Health apply, min-hull floor/restore), md/x4lan_bubble.xml (one Apply guard),
+tests (relay validation, order/epoch, LuaJIT doubles for floor/lethal/transfer/echo skip).
+Flag: pilot_health (default false). About 120 lines plus tests, no new MD event dependency.
+
+LIMITS (state them in any release note)
+- Victim-favoured: a shot counts when it hits in the victim's world. A shooter may see a hit
+  that does not count, or the reverse, by about one latency of relative motion. That is the
+  same lag as today, moved to the side whose health it is.
+- Co-op ships only. LAN targets, Arena.$donor (the test freighter, min hull 100 by
+  x4lan_trade.xml), stations and ordinary NPC combat are unchanged.
+- Shield regeneration runs locally on the pilot side. Host-side regeneration of the proxy is
+  overwritten at 10 Hz.
+- Lethal latency: death is declared on the host up to one HEALTH interval plus one-way
+  latency after the pilot's hull reaches the floor.
+
+UNVERIFIED NATIVELY
+(a) Repeated set_object_hull/shield at 10 Hz on a moving, FIRE2-driven proxy: side effects on
+    shield recharge delay or effects. A:primary's capture shows setters emit no damage events.
+(b) min hull 2 on the proxy holds against heavy bursts. Same mechanism as the existing 1%,
+    but a different value.
+(c) The guest Apply guard leaves no other writer of the piloted ship's health.
+
+SMALLEST HONEST NEXT TEST (native, after authorization; no human playtest needed first)
+One Linux host + synthetic or second native guest, profile-isolated, pilot_health=true:
+1. The guest-piloted ship takes 10 replayed host shots in the guest world. Expect: HEALTH seq
+   rises monotonically; the host proxy hull equals the reported value within 0.3 s;
+   no SHIP_LETHAL.
+2. Host-world damage to the proxy without any guest damage. Expect: overwritten at the next
+   frame; hull never below 2%; no SHIP_LETHAL.
+3. Drive the guest ship to the floor. Expect: one SHIP_LETHAL and SHIP_DESTROYED on the host,
+   and the guest dead via WORLD.
+4. Pilot transfer mid-fight. Expect: frames of the old epoch are dropped; min hull 1 is
+   restored; no health jump without a new baseline.
+Evidence: HEALTH send/accept/apply counts, LifeTick lines, readbacks at 5 Hz.
