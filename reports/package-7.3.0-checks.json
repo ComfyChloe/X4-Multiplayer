@@ -1,0 +1,93 @@
+{
+  "version": "7.3.0",
+  "channel": "internal",
+  "checked_at": "2026-10-23T10:10:26.845359+02:00",
+  "source_commit": "d3583ea0bd19048565cb5a0ae18ebfa2db008ddb",
+  "production_tree": "4fcdc748ebc36f3ce6d209767519c054f4c2468b",
+  "archives": {
+    "X4-LAN-7.3.0-Linux.zip": {
+      "sha256": "14e34550d9ac5ad90861c4d8165d54a38ba1f516ddf4f6963043efe32e269061",
+      "bytes": 76418959
+    },
+    "X4-LAN-7.3.0-Windows11.zip": {
+      "sha256": "87ad5742b13c0a7f88329a8c6e0c842dd8f50c8dcb4c76b714fd9e0b6856140b",
+      "bytes": 12854219
+    }
+  },
+  "clean_packaged_native_host": {
+    "package_version": "7.3.0",
+    "packaged_relay_and_receiver": true,
+    "native_host_plus_synthetic_peer": true,
+    "baselines": [
+      {
+        "revision": 1,
+        "sector": "cluster_14_sector001_macro",
+        "objects": 147,
+        "digest": 811961400
+      },
+      {
+        "revision": 2,
+        "sector": "cluster_14_sector001_macro",
+        "objects": 145,
+        "digest": 1020421112
+      }
+    ],
+    "world_snapshots": 235,
+    "identity_count": 152,
+    "player_and_fixture_scopes": [
+      [
+        "F",
+        "1"
+      ],
+      [
+        "F",
+        "2"
+      ],
+      [
+        "F",
+        "3"
+      ],
+      [
+        "F",
+        "4"
+      ],
+      [
+        "P",
+        "1"
+      ],
+      [
+        "P",
+        "2"
+      ]
+    ],
+    "md_adapter_errors": [],
+    "two_native_acceptance": false,
+    "duration": 111.41,
+    "success": true
+  },
+  "packaged_tcp_transfer": {
+    "verified": true,
+    "bytes": 25719126,
+    "sha256": "9cbeedfc7931cd11d8045547f6c67913a3075b91d5275b2c955928cb5c32631a"
+  },
+  "installed_files": 37,
+  "production_files_match_package": true,
+  "development_probes_absent": true,
+  "actual_normal_saves_preserved": 7,
+  "normal_save_bytes_and_timestamps_unchanged": true,
+  "normal_preferences_bytes_and_timestamps_unchanged": true,
+  "test_content_selection_bytes_unchanged": true,
+  "old_archives_unchanged": {
+    "X4-LAN-7.2.0-Linux.zip": "ef766016a2beb69d957aa9f08908409308cfe41d0ed660d0662598138a74cd4d",
+    "X4-LAN-7.2.0-Windows11.zip": "740aeb1c78e1e627f5b4294feba7a70410d673d463bc7eda1f243d5ec2331dda"
+  },
+  "game_relay_peer_closed": true,
+  "udp45841_tcp45844_free": true,
+  "new_internal_installation_retained": true,
+  "host_starting_world_prepared": true,
+  "owned_reserved_snapshot_retained": true,
+  "windows_native_execution": "PENDING human test",
+  "simultaneous_windows_linux_playtest": "PENDING human test",
+  "ongoing_universe_authority": false,
+  "campaign_resume": false
+}

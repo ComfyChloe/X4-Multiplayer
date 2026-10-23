@@ -1,4 +1,4 @@
-CURRENT SOURCE CANDIDATE —7.3.0 SHARED START,23 OCTOBER2026
+CURRENT DELIVERY — 7.3.0 SHARED START, 23 OCTOBER 2026
 
 User renewed implementation until18:00 Europe/Berlin for a new INTERNAL human-test
 version. Worktree x4-release-7-3-0, contrib/astra-7-3-0-delivery, based on834b86f.
@@ -19,12 +19,41 @@ Same numeric seed alone FAILED complete fresh-world agreement (46/47 differing
 station identities); it is not the shipped solution. All7 normal saves and the
 recorded33-file restoration verified. No Workshop selection/account writes.
 
-The actual package pair and clean final native delivery smoke are still pending
-in this source checkpoint. New preferences import, visible server console and
-withdrawn-helper containment are included from PR30. Latest human7.2 radar,
-ordinary cargo and Cooperative Trial results remain accepted; do not replay their
-full gameplay suites unnecessarily. Read the new distribution/README.txt and
-NEXT-TEST.txt for the new host/guest flow and focused station test.
+The INTERNAL Windows/Linux pair is delivered at:
+  /home/developer/Desktop/X4 Online/Internal Tests/7.3.0-2026-10-23
+Sealed package source: d3583ea0bd19048565cb5a0ae18ebfa2db008ddb.
+Production tree: 4fcdc748ebc36f3ce6d209767519c054f4c2468b.
+PR32: https://github.com/Lith7ium/X4-Multiplayer/pull/32 (stacked on PR30).
+Post-build handoff/report commits do not change those sealed source bytes.
+Both packages include the server, portable runtime and English instructions;
+complete inventories/hashes/runtime provenance passed. Preserve these archives.
+
+The actual clean packaged Linux host test PASSED: native world preparation and
+automatic save/exit, authenticated 25,719,126-byte transfer through the packaged
+server, reload/admission, two NPC baselines (147/145 objects), 235 WORLD snapshots
+and 152 identities, with no MD adapter errors. This run used a synthetic guest;
+the separate earlier instrumented Linux guest run is not a two-PC acceptance.
+All 7 actual normal saves and normal preferences retain their bytes/timestamps;
+test content selection is unchanged. The 37 installed files match the package
+and installation marker, with no development probes. Game/relay/peer are closed;
+UDP45841 and TCP45844 are free. Old 7.2 archives remain hash-identical.
+Evidence: reports/package-7.3.0-checks.json and the delivery folder's JSON files;
+raw final capture stays in .local/evidence-041-withheld
+
+The new Linux host installation and prepared starting world are retained for the
+user. Locally run 2-START-SERVER.sh, then 3-START-X4-TEST.sh from the extracted
+7.3.0 folder. Use its NEW private JOIN-SESSION.json on the guest; never publish it.
+Native Windows/Windows-host execution and simultaneous Windows/Linux gameplay
+remain for human testing. PR32 stays draft across that acceptance boundary.
+Shared initial layout does not implement ongoing economy, construction/destruction,
+full docked-object synchronization, campaign persistence or progressed-world join.
+
+New preferences import, visible server console and withdrawn-helper containment
+are included from PR30. Latest human 7.2 radar, ordinary cargo and Cooperative
+Trial results remain accepted; do not replay their full suites unnecessarily.
+Read distribution/README.txt and NEXT-TEST.txt for the focused station test.
+
+HISTORICAL 7.2 FOLLOW-UPS AND DELIVERY (superseded by the 7.3 delivery above)
 
 NEXT PACKAGE — PERSONAL DISPLAY AND CONTROL SETTINGS
 User requested normal game preferences for testers with custom resolution/bindings.
@@ -64,7 +93,7 @@ Only the extracted Linux launcher/checksum were patched, with originals backed
 up under backups/server-launcher-fix-1. Release ZIPs remain unchanged and do not
 contain this correction. No game/mod/session/invitation changes or native tests.
 
-CURRENT DELIVERY — INTERNAL 7.2.0, 22 OCTOBER 2026
+PREVIOUS DELIVERY — INTERNAL 7.2.0, 22 OCTOBER 2026
 User requested a human-test package by20:00, lower model usage and Windows hosting.
 Delivered folder: Desktop/X4 Online/Internal Tests/7.2.0-2026-10-22.
 Exact packaged source2775f83 includes reviewed main5fd786b sensor correction,
