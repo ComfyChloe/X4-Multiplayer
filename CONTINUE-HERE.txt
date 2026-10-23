@@ -20,20 +20,20 @@ oscillation after guest piloted/landed/exited host ship. “Overload” meant cr
 not FPS. Detailed triage in ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP
-Claude PR36 owns health relay/Lua/MD + bubble/life guards. Integrated7beea45 at
-18f36ee, pilot_health still disabled. Previous424 integrated tests PASS at4324cd0;
-29 affected health/probe/native-expression tests PASS at18f36ee, both MD VALID.
-Monotonic guest authority, named revokes, expiry closure and explicit own=true
-promotion now reviewed. Native host .local/evidence-047-withheld remains PARTIAL:
-authority/floor/expiry/lethal work, <=0.2s recovery unproven by5Hz samples.
-No guest-native or combat-hit acceptance yet. Review worktree ../x4-health-review
-at7beea45. Claude cannot use native Windows45841 due to Workshop restrictions.
-Current Claude assignment: separate dev-only guest observer/phase contract for
-Base/Based/HACK, WORLD guard, local setter/report, rebase and MD keep-watchdog
-with delayed Authority rejection. Primary owns controller/native execution.
-Primary also owns aim/docking/story/integration. Slack PRIVATECOORDINATIONID thread
-PRIVATE-THREAD-ID.01:15 checkpoint1792797285.216249; follow-up1792797455.471379.
-Quarter-hour coordination, no new timer/chat. Next01:30.
+Claude PR36 owns health relay/Lua/MD + bubble/life guards. Integrated9516cf5 at
+6e49f87, pilot_health still disabled.32 focused health tests PASS on reviewed/
+integrated source; schemas VALID. Previous424 whole suite at4324cd0 is historical.
+Native host health-function-01 PARTIAL: floor/authority/expiry/death work;
+<=0.2s recovery not proven by5Hz samples. Guest health-guest-01 FAILED: observer
+mutates native transport userdata, HEALTH STOPPED. It exposed a production bug:
+h.failed stops frames but receive/base/based keep granting new own generations.
+Claude notified01:44, assigned permanent health-failure closure + regression,
+and dev observer userdata-safe send logging. Need native failure phase7 after fix.
+Review worktree ../x4-health-review at9516cf5. Native Windows remains blocked by
+Workshop restrictions. Primary owns aim/docking/story/controller/native/integration.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last01:30 checkpoint1792798183.879429,
+01:40 observer report1792798839.482029, production finding1792799049.961589.
+Quarter-hour coordination; next01:45. No new timer/chat.
 
 IMPLEMENTATION / EVIDENCE
 Story native preset: hidden x4lan_internal start,14 completed plot choices and28
@@ -54,33 +54,39 @@ Native coop-dock-exec-02: all8 phases PASS (reserve/conflict refusal/attach/occu
 refusal/actual undocks/prepared-then-fenced); undock~8s. No boarding/human same-pad
 or two-native acceptance. Follow-up exec03 all11 phases PASS with stale Prepare/foreign Fence coverage.
 Relay/CDOCK and guarded own-pilot denial implemented;8 relay+26universe+10adapter
-checks PASS. Full adapter02 on6ce2af7 PASSES exact reserve/attach, both actual
-undock/residual-CANCEL cycles, NPC conflict refusal and stale queued warp after
-Fence (Lua correction frozen). Local denial02 PASSES actual physical player
-request cancellation after relay denial,11 native unassigned/undocked readbacks,
-then remote attachment. Prior adapter01 PARTIAL30s undock timeout; denial01
-INCOMPLETE request precondition, both retained. Only saved HQ bay qualified;
-new docks/boarding/platforms/human same-pad crash not accepted. Flag still off.
+checks PASS. Full adapter02 on6ce2af7 passes exact attach/reserve, both actual
+undock/residual-CANCEL cycles, NPC refusal and queued warp fence (Lua correction
+frozen). Local denial02 passes actual physical-player cancellation,11 native
+unassigned readbacks then remote attachment. Earlier failures retained.
+9660510 (pushed) creates both test stations before capture; Arena/Trade reuse
+saved refs, admission guards missing fixtures. Native seed-market-dock-02 proves
+both refs,24 unique indexed bays and complete Beta cycle; overall PARTIAL due
+Beta name-count failure. Explicit rename confirmed by health-guest-01 station
+witness (both refs/counts1), whose separate health portion FAILS.24 seed+23bubble+
+12trade tests pass; schema/generator deltas checked. Launcher coop_docks still off.
+No boarding/platform/two-native same-pad crash or post-seed new-station acceptance.
 
 WEAPONS
-reports/WEAPON-AIM-PRIMITIVES.txt: projectile warp/velocity and gun MD/C pose/
-PositionalOffset setters FAIL to steer actual bullets. Latest weapon-offset-01
-27 trajectories unchanged despite setter returning without error; cleanup verified.
-Sustained native shoot_at primitive hits fixed-offset target (206shots/52hits)
-with near-unchanged ship yaw; stock one-gun pulse12shots/11hits, not an accuracy
-benchmark. Actual player aim transmission/replay remains open. Never infer a
-short normal gun-slew miss is a bug or report mocked tests as native acceptance.
+reports/WEAPON-AIM-PRIMITIVES.txt: native shoot_at spatial helper can hit fixed
+pulse target, but actual player aim replay remains open. Preserve native misses,
+spread/gimbal motion; no selected-victim auto-lock or fake collision claims.
+Cursor04 captures168 actual physical-player shots/trajectories: GetPlayerTargetOffset
+stayszero during off-axis fire. ProjectileFFI01 SetPositionalOffset rotates visual
+forward15deg but NOT flight; SetObjectSectorPos rejects bullets. Prior gun setters
+and direct gun-object shooting also fail. No production aim change.
 
 LIVE JOBS / TOOLS
-ACTIVE native exec11762: .local/evidence-025-withheld Observes physical player's
-existing middle-button fire-at-cursor binding, owned PID/window-only input, actual
-projectile forward/displacement vs UI getters. First run atage0 lostownedwindow
-beforeprobe/input;SIGTERM failed, exactownedPID killed, cleanupverified. NotAPIproof.
-Per-weapon-object02 completed: shoot_at/shoot/stop all reject primary gun as not
-class defensible;0shots.01incomplete startup, retained. Aim-point03 bounded
-near-point12shots/11hits/396HP/yaw0; farpoint+manual trigger no shots. A shared
-nearpoint changes multi-gun convergence. No production aim transport yet.
-All completed native runs cleaned; no concurrent native/install mutation.
+ACTIVE native exec79459: .local/evidence-227-withheld, single6-shot
+add_object_velocity primitive (set velocity already rejected). All other native
+runs cleaned. aim-latch-01 completed: direct shooting after shoot_at release gives
+12 forward shots/no hits; AI cannot access md namespace, so phase labels failed
+and planned additive-velocity half was NOT exercised. Raw failure retained.
+Health guest next: clone .local/evidence-049-withheld controller after Claude fixes.
+It loads seed-market-dock-02 snapshot, synthetic p1 + real Linux p2,6 phases.
+Add deliberate callback-failure phase7 and gate ordinary HEALTH STOPPED early.
+CRITICAL: preserve original shaderquality2. Old temporaryquality1 caused native
+fatal1119 p1_glass compile (cursor03 screenshot/stacks). No graphics downgrade.
+No concurrent native/install mutation; normal saves never loaded.
 Persistent schema worker exec48913: .local/evidence-244-withheld, JSON lines
 {"files":["relative/path.xml"]}; {"stop":true} at final cleanup.
 Python ../x4-playtest7/.venv/bin/python; schemas ../../preparation/game-schemas.
