@@ -1,0 +1,6 @@
+<?xml version='1.0' encoding='utf-8'?>
+<diff>
+ <add sel="/mdscript/cues/cue[@name=&quot;Start&quot;]/conditions">
+  <check_value value="player.module != 'x4lan_internal'" comment="Story missions are disabled only in the internal multiplayer start." />
+ </add>
+</diff>

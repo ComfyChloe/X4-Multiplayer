@@ -22,7 +22,7 @@ from x4lan import seed
 
 TRANSFER_PORT = 45844
 GAME_ARGS = ['-applaunch', '392160', '-personalfolderid', '45841', '-module',
-             'custom_creative', '-skipintro', '-debug', 'scripts', '-logfile',
+             'x4lan_internal', '-skipintro', '-debug', 'scripts', '-logfile',
              'x4lan-debug.txt', '-nocputhrottle', '-noworkshopsync']
 
 

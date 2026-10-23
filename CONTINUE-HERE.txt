@@ -1,87 +1,72 @@
-X4 MULTIPLAYER — CURRENT HANDOFF — 23 OCTOBER 2026
+X4 MULTIPLAYER — ACTIVE DEVELOPMENT — 23 OCTOBER 2026
 
-START HERE
-Read AGENTS.md and current Git status, then only relevant references below.
-Historical instructions/deadlines are archived in reports/handoff-history/2026-10-23.
-Do not bulk-read old chats, logs or reports. User prefers fewer tokens and focused
-checks; quality first. Default INTERNAL; public releases need explicit instruction.
+Current checkout x4-weapons-7-4, branch contrib/astra-7-4-integration, based on
+37758ea. Read AGENTS.md and Git status, then only task-relevant references.
+User authorizes work with Claude through 24 October 12:00 Europe/Berlin;
+overrun is acceptable. Highest priority weapons/damage, then docking/crashes
+and disabling story missions. Default INTERNAL. No new public release/update.
+No spending, personal documents/mail or Workshop/subscription changes.
 
-DELIVERY
-7.3.1 sealed source f5f5bfe, branch contrib/astra-7-3-1-delivery, draft PR35.
-Later commits add reports/handoff only; preserve the sealed archives:
-/home/developer/Desktop/X4 Online/Internal Tests/7.3.1-2026-10-23
-Both OS packages contain server/runtime and English docs. Unique actions01–10,
-00-START-HERE, invitation picker, borderless test settings preserving personal
-resolution/controls, all4personal teleportation research levels. No HQ relocation.
-Weapon damage is UNCHANGED/unreliable. Ordinary station pad occupancy/barriers
-remain open: peer boarding may fail and NPC traffic overlap the peer ship.
-The private development repository and public restricted source mirror are separate;
-public mirror b4cb16c and all older sealed archives remain unchanged.
+HUMAN EVIDENCE
+7.3.1 Alt+Tab PASS on host and guest; retain prior radar/cargo/Cooperative Trial
+and initial station/asteroid alignment PASS. Do not repeat unchanged checks.
+Guest sees damage to host locally; host does not. Guest crashed on the pad
+already occupied by host. After restart/death/respawn, guest piloted host ship,
+landed and got out: host saw rapid oscillation. 58 guest dock1=1 readbacks over
+285 seconds align approximately to host dock1=0. Pilot transfer itself worked.
+"Overload" means edge-case crashes, NOT FPS/performance problems. No original
+crash dump or proven crashing native operation exists in the uploaded logs.
+Read ../x4-release-7-3-1/.local/evidence-055-withheld
 
-LAST VERIFIED PC STATE (7.3.1 DELIVERY)
-The clean37-file7.3.1Linux host installation and newly prepared starting snapshot
-are retained. Game/relay/helpers stopped; UDP45841/45843 and TCP45844 free.
-ZeroTier192.0.2.109 is assigned. Normal7save files/preferences preserve bytes and
-timestamps; recorded content selections unchanged. Previous owned7.3.0test save
-is archived; new owned save_010 matches the immutable new bundle. Test profile45841
-is borderless at the user's3840x2160,shaderquality2; normal profile untouched.
-Host can run03-START-SERVER-HOST then05-START-X4. Send the NEW private invitation
-from the new Linux folder to the guest. Never print/commit invitation/session keys.
-See outer reports/FINAL-READINESS.json and CLEAN-INSTALL-HASHES.json.
-Recheck live state before any installation/native action; another person may start X4.
+OWNERSHIP
+Claude: PR36 victim-pilot health relay/Lua/MD INCLUDING bubble health/dead guards
+and generator. Default pilot_health=false. Primary: integration, weapon aiming,
+docking, story policy, this PC's native tests. No overlapping health edits.
+Slack PRIVATECOORDINATIONID, existing threadPRIVATE-THREAD-ID; milestone updates only.
+No monitor or new chat. Last fetched PR36 7514606: independent 8 tests pass,
+but fast leave/reentry retains gen1 without intervening snapshots, and delayed
+HBASE gen4 rolls live gen5 backwards. Both reproduced and sent to Claude.
+Native Base/Owned/Apply/Release execution fences also need correction; no native
+health acceptance. Health alone cannot fix guest→host if replayed bullets miss.
 
-VALIDATION
-383 Python/LuaJIT tests PASS/no skips.47focused distribution/settings checks and
-PowerShell fixtures pass on Linux (nativeWindows metadata simulated); changed MD
-schema VALID. Full archive inventories/runtimes/HTML links/unique numbers pass.
-Clean packaged Linux host: native capture,25,557,786-byte authenticated TCP transfer,
-reload/admission,4research flags and2NPC baselines with a SYNTHETIC guest pass.
-Native background function:25.338s different-window focus,44unpaused samples and
-continuous NAV. X4 remained open, not explicitly minimized. NativeWindows,
-two-native play, minimize and actual long-range teleport destinations remain for humans.
-Human7.3station/asteroid alignment passed. Prior radar,ordinary cargo,smooth movement
-and Cooperative Trial results retained; unchanged gameplay was not retested.
-Evidence: reports/package-7.3.1-checks.json, BACKGROUND-TELEPORT-20261023.txt,
-release-7.3.1-checks.txt, automated-7.3.1-tests.txt. Raw .local/evidence-041-withheld
+CURRENT WORK
+- New hidden x4lan_internal gamestart and world launcher use it. 27 original
+  conditional story diffs/52 root gates, with optional DLC ordering. Ordinary
+  starts preserved. Corrected static audit applies actual diffs to native assets,
+  verifies restored original nodes, merged gamestart and 27 MD schemas. PASS.
+  Native runtime check pending; not a retroactive change to existing saves.
+- Cooperative motion now checks actual native isdocked before per-frame pose,
+  blocks local pilot overrides, and queued MD sector warp checks dock/storage/
+  occupied ship. 48 focused coop/fire2 tests pass. Native race test pending.
+  This does not yet synchronize ordinary station identity/pad reservations.
+- Native projectile-steering-01 never reached playable world (FAIL retained).
+  projectile-steering-02: 24 real shots, six per phase. Bullet warp yaw15,
+  velocity and both do not steer them; twelve native velocity errors report
+  non-destructible bullet class. All actual directions stay near zero degrees.
+  MD bullet rewriting is rejected for these weapons. Raw/analysis/cleanup in
+  .local/evidence-230-withheld Next isolated aim_turret/shoot_at probe prepared.
+- Active controller/schema jobs must be checked before starting any other game.
+  .local/evidence-254-withheld and .local/evidence-264-withheld are next captures.
+  Each harness records process ownership/source/save/restore hashes. Never reuse
+  a capture directory or run two installation/native controllers concurrently.
 
-DAMAGE / COLLABORATION
-Claude PR34 c5eae79 EXCLUDED: native43shield callbacks versus5notifications in each
-attacker stream;1,440replayed damage uncompensated. No guessed attacker acceptance.
-Reports damage-c5eae79*review.json; raw x4-pr34-review/.local/evidence-029-withheld
-A separate dev-only observation found16unique correctly identified player_ship_hit
-projectiles/16shield callbacks,640shield damage,6attack notifications. This does NOT
-validate pilot-health authority,lethality,transfer,2%floor or10Hz setters. The full
-7.3.1installation/settings/snapshot were restored. See victim-hit-native-observation-
-20261023.json and .local/evidence-263-withheld No experimental adapter is installed.
-Claude PR36 6f8d8cb is DESIGN ONLY. Requested canonical baseline/ack on handoff,
-execution-time MD epoch/pilot fencing, expiry/canonical WORLD policy and separate
-native guest-guard evidence. Requested corrected design handoff by20:00; it remains a separate unreviewed
-draft and does not block delivery. On the next development turn, read its latest
-head before implementation. Primary delivery work is finished; no game/test/relay
-is left running and no monitoring promise or automatic continuation is made.
-Slack PRIVATECOORDINATIONID, existing threadPRIVATE-THREAD-ID; last checkpoint19:45. No new
-monitor/chat was created and no after20:30 work is inferred.
+RETAINED DELIVERY AND LIMITS
+7.3.1 sealed f5f5bfe at /home/developer/Desktop/X4 Online/Internal Tests/7.3.1-2026-10-23.
+Both OS server/runtime packages stay sealed. Their owned37-file host install,
+pristine snapshot and isolated save_010 must be restored after probes. Profile
+45841 only, normal7saves and settings unchanged. Each harness temporarily uses
+shaderquality1 and restores original2. Recheck live processes/ownership first.
+Human finished-version playtests remain human-owned. Two players implemented.
+Shared starting save is not ongoing whole-universe authority or campaign
+persistence. Native Windows/two-PC weapon/docking acceptance remains outstanding.
+No public mirror updates (restricted source root b4cb16c remains sealed).
 
-ARCHITECTURE / NEXT WORK
-Host runs X4 AND relay; two players only. Both load ONE pristine starting save
-via authenticated TCP45844; gameplay uses UDP45841/profile45841. Every restart
-resets progress; stop/restart both games and relay together. Ongoing economy,
-construction/destruction, generalNPC orders/combat, full docking and persistent
-save/resume/absent-client catchup are unfinished. Same initial world is not complete
-host authority. Shared ordinary missions medium priority; ingame chat low priority.
-Equal numeric seed alone FAILED station agreement; do not repeat that approach.
-
-REFERENCES / SAFETY
-Human test support: distribution/HUMAN-DAMAGE-TEST.txt and HUMAN-TEST-RESULT.txt.
-Damage cases require a named reviewed candidate; they are not another7.3.1retest.
-reports/EGOSOFT-TECHNICAL-QUESTIONS.txt is an unsent owner-facing contact draft.
-Copies are under Desktop/X4 Online/Internal Tests/Test Procedures/2026-10-23.
-This documentation request starts no game, live monitor or external contact.
-Setup DEVELOPMENT.txt; collaboration CONTRIBUTING.txt; scope WORLD-SYNC-REQUIREMENTS.txt.
-Bootstrap distribution/world_launcher.py and reports/SHARED-START-20261023.txt.
-User follow-up reports/PLAYTEST-7.3.0-FOLLOWUP.txt; next check distribution/NEXT-TEST.txt.
-Preserve normal saves/settings, Workshop subscriptions, private credentials and
-synced sources/. No personal documents/mail/spending. Workshop isolation helper
-stays withdrawn; separate profile does not prove Steam account isolation. Use
-recorded ownership before replacing files. Humans perform finished playtests;
-authorized local isolated native function tests require X4 closed and full cleanup.
+TOOLS AND RESEARCH
+Use absolute ../x4-playtest7/.venv/bin/python resolved under this project for
+Python/LuaJIT tests; system python3 has lxml for native schemas. Local schemas:
+../../preparation/game-schemas. GH CLI under ../../build-cache/github-cli.
+Keep extracted native assets under ignored .local/evidence-043-withheld, never commit them.
+Existing own docking foundations: ../x4-attachment-session/reports/
+ATTACHMENT-NATIVE-ADAPTER.txt and ATTACHMENT-SESSION.txt, read bounded sections.
+They qualify saved dock references and guarded native attach/undock separately;
+not yet shipped or a co-op exact-pad/reservation solution. Reuse evidence.

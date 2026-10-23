@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<diff>
+ <add sel="/mdscript/cues/cue[@name=&quot;Start&quot;]/conditions">
+  <check_value value="player.module != 'x4lan_internal'" comment="Story missions are disabled only in the internal multiplayer start." />
+ </add>
+ <add sel="/mdscript/cues/cue[@name=&quot;Patch_Userdata&quot;]/conditions">
+  <check_value value="player.module != 'x4lan_internal'" comment="Story missions are disabled only in the internal multiplayer start." />
+ </add>
+ <add sel="/mdscript/cues/cue[@name=&quot;PatchCue_Check_AllDiplomaticChanges&quot;]/conditions">
+  <check_value value="player.module != 'x4lan_internal'" comment="Story missions are disabled only in the internal multiplayer start." />
+ </add>
+ <add sel="/mdscript/cues/cue[@name=&quot;PatchCue_AllDiplomaticChanges&quot;]/conditions">
+  <check_value value="player.module != 'x4lan_internal'" comment="Story missions are disabled only in the internal multiplayer start." />
+ </add>
+ <add sel="/mdscript/cues/cue[@name=&quot;Debug_Curbs_Jobs&quot;]" pos="prepend">
+  <conditions>
+   <check_value value="player.module != 'x4lan_internal'" comment="Story missions are disabled only in the internal multiplayer start." />
+  </conditions>
+ </add>
+</diff>
