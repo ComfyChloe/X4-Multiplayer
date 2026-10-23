@@ -1,0 +1,90 @@
+X4 MULTIPLAYER — HUMAN DAMAGE TEST PROCEDURE
+Revision 1 — 23 October 2026 — INTERNAL
+
+STATUS / WHEN TO USE
+Prepared for the next reviewed damage candidate. The developer must name the
+exact Windows/Linux package pair and enabled cases before this procedure starts.
+7.3.1 has NO damage correction: do not repeat known damage failures just to run
+this checklist. Its current setup/Alt+Tab/teleport checks remain in NEXT-TEST.txt.
+No game, relay, installation or monitoring is started by these documents.
+
+PURPOSE
+Check that two real games agree on damage to the two cooperative player ships.
+This does not accept NPC combat, LAN Targets, the test freighter or station damage.
+Each target type needs its own later implementation and acceptance procedure.
+Do not repeat accepted cargo, radar, station-layout or mission checks here.
+
+BEFORE THE RUN
+- Both testers use the exact assigned pair; the relay comes from that pair too.
+- Use only the multiplayer test profile and shared starting world. Do not load a
+  normal campaign. Follow the package's restart instructions when a reset is needed.
+- Copy HUMAN-TEST-RESULT.txt and fill in run ID, version, OS/roles and enabled cases.
+  Example run ID: damage-20261024-01. Use one agreed clock and record its timezone;
+  note a known clock difference rather than changing computer clock settings.
+- Use the supplied Shuttles and their default primary weapons/group. Record any
+  difference. Test in clear space, about 1 km apart and within weapon range.
+  Avoid NPC fire, station traffic, collisions, repairs and other concurrent actions.
+- Select the same victim ship on both screens. Record its name/code on each PC.
+  Read numeric hull/shield values where available. Otherwise mark them unavailable
+  and keep screenshots/video of the bars; do not invent a numeric reading.
+
+FOR EVERY ENABLED CASE
+Say or note the case ID and start time. Record BOTH views before firing, immediately
+after stopping and roughly 5 seconds later. Record hull and shield separately.
+Shield regeneration can change later readings: note their times and any recharge;
+do not compare values captured at different times as if they were simultaneous.
+Record PASS / FAIL / INCONCLUSIVE / NOT RUN. A visible hit alone is not a PASS.
+If values disagree, a ship unexpectedly dies, or controls/connection fail, stop
+shooting and collect both diagnostics before restarting. Do not repeat the failure
+several times unless the developer requests a specific follow-up.
+
+D01 — STATIONARY, HOST SHOOTS GUEST
+Both pilots stop their ships. Record starting values. Host fires one short burst
+at the guest's Shuttle, then stops. Guest does not shoot, repair or change seats.
+Observe damage on both screens and whether values jump back after firing ends.
+Expected: both views converge within the candidate's stated timing/tolerance;
+no duplicate damage or unexplained healing. Record actual observations even when
+the candidate's tolerance is not yet known; an unspecified threshold is INCONCLUSIVE.
+
+D02 — STATIONARY, GUEST SHOOTS HOST
+Repeat D01 with attacker/victim roles reversed. Record the new starting values;
+do not assume the previous target is fully repaired. Stop after the first mismatch.
+
+D03 — NONLETHAL HULL DAMAGE (ONLY AFTER D01/D02 PASS)
+Use the attacker/victim direction assigned by the developer. Fire short bursts
+with pauses until shields are depleted, then observe a small hull decrease.
+Stop promptly; preserve ample hull for a nonlethal check. Compare both views and
+watch for hull jumping back. Do not interpret shields alone as hull-damage success.
+
+D04 — MOVING VICTIM (ONLY AFTER STATIONARY CASES PASS)
+The assigned victim flies straight at a low steady speed. The attacker uses the
+same weapon/group and fires short bursts. Record both health views. Note visible
+hits/misses separately: visual shot alignment and shared health are different checks.
+
+LATER CASES — NOT ENABLED BY THIS DOCUMENT
+Lethal damage, pilot handoff during combat, reconnect, simultaneous attackers and
+NPC/station damage require their own candidate-specific instructions. In particular,
+do not depend on currently broken ordinary-station boarding for a pilot-transfer test.
+
+COLLECT EVIDENCE ON BOTH PCS BEFORE RESTARTING
+1. Run 06-DIAGNOSTICS.cmd (Windows) or 06-DIAGNOSTICS.sh (Linux) from the package.
+2. Copy these current files from that package's logs/ into a new run-and-role folder:
+   x4-debug.txt, x4-mod-diagnostics.txt, internal-test-info.json.
+   On the HOST also include server-status.json and the server-*.jsonl belonging
+   to this run. If a file is missing, note that; do not fabricate or rename another run.
+3. Add the completed result sheet and any screenshots/short clips. Zip the selected
+   files as RUN-ID-HOST.zip and RUN-ID-GUEST.zip. Preserve them before a later
+   diagnostics call can replace the copied engine logs. Do not edit raw log lines.
+4. Share privately in the development chat. Do not zip the entire game/package;
+   exclude JOIN-SESSION.json, session.json and ui/config.lua. The current launcher
+   redacts this session's key from collected text logs; paths/IPs can remain.
+
+VIDEO / LIVE OBSERVATION
+Video is optional. For a visual discrepancy, a short clip from each side showing
+the target, HUD, a case/time marker and a few seconds before/after the event is
+useful. Screenshots at the agreed points are sufficient for a first report.
+Announce the test in the active development chat if local live log observation is
+wanted. No unattended monitor is currently installed by this procedure. Remote
+guest logs still need to be supplied unless a separate read access is arranged.
+7.3.1 diagnostics are not a complete per-projectile trace; the next damage
+candidate may add targeted telemetry. Existing logs alone cannot prove every hit.

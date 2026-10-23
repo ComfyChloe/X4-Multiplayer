@@ -1,0 +1,44 @@
+X4 MULTIPLAYER — TARGETED ENGINE INFORMATION REQUEST
+Draft for the project owner — 23 October 2026 — not sent
+
+We are developing an original experimental cooperative multiplayer mod for X4.
+We would value technical guidance on authoritative damage and replicated combat.
+Our current target is X4 9.00 (611726), Steam build 23660954. A matching revision
+and the intended API contracts matter more initially than the entire codebase.
+
+OBSERVED PROBLEM
+In one isolated native Linux run, 43 shield-damage callbacks accompanied only five
+notifications in each tested attacker-notification stream. Replaying remote shots
+and also applying reported damage therefore cannot safely rely on pairing those
+notifications. This observation is bounded to that test, not a universal rate claim.
+The player_ship_hit event was separately observed once per projectile for 16 hits
+on the locally controlled ship; this does not establish a general NPC-hit interface.
+
+MOST USEFUL INFORMATION / SOURCE AREAS
+1. Projectile impact and damage processing: where attacker, projectile, victim,
+   damaged component and applied shield/hull damage are available together.
+2. MD/Lua event generation for event_object_attacked, event_object_attacked_object,
+   event_player_owned_attacked_object, event_object_shield_damaged,
+   event_object_hull_damaged and event_player_ship_hit. What is throttled or
+   aggregated, what is the ordering, and how long are event object references valid?
+3. Contracts/side effects of set_object_hull, set_object_shield and minimum-hull
+   protection: shield recharge delay, damage effects, component damage and the
+   ordering of lethal handling/ejection/destruction relative to these setters.
+4. Supported ways to separate remote firing/projectile presentation from local
+   damage authority, or to prevent a replica from independently applying damage.
+5. Relevant differences between high- and low-attention combat processing.
+
+ACCESS SCOPE
+Read-only access to these matching source areas, their exposed interface/binding
+definitions and a small amount of architecture/API documentation would be a useful
+starting point. Maintainer answers or selected annotated excerpts are also useful
+if broad source access is impractical. We do not initially need write access or
+the complete engine documentation.
+
+The collaboration uses AI coding assistants. Please specify which material may
+be supplied to those tools and how access should be provided. Engine source would
+remain separate from the mod repository and its public source mirror.
+
+Reading source can identify the right mechanism; it cannot expose an unavailable
+hook by itself. If necessary, a narrow supported API addition or an agreed debug
+build/instrumentation path could be discussed after the above questions are resolved.

@@ -18,7 +18,7 @@ remain open: peer boarding may fail and NPC traffic overlap the peer ship.
 The private development repository and public restricted source mirror are separate;
 public mirror b4cb16c and all older sealed archives remain unchanged.
 
-LIVE PC STATE
+LAST VERIFIED PC STATE (7.3.1 DELIVERY)
 The clean37-file7.3.1Linux host installation and newly prepared starting snapshot
 are retained. Game/relay/helpers stopped; UDP45841/45843 and TCP45844 free.
 ZeroTier192.0.2.109 is assigned. Normal7save files/preferences preserve bytes and
@@ -72,6 +72,11 @@ host authority. Shared ordinary missions medium priority; ingame chat low priori
 Equal numeric seed alone FAILED station agreement; do not repeat that approach.
 
 REFERENCES / SAFETY
+Human test support: distribution/HUMAN-DAMAGE-TEST.txt and HUMAN-TEST-RESULT.txt.
+Damage cases require a named reviewed candidate; they are not another7.3.1retest.
+reports/EGOSOFT-TECHNICAL-QUESTIONS.txt is an unsent owner-facing contact draft.
+Copies are under Desktop/X4 Online/Internal Tests/Test Procedures/2026-10-23.
+This documentation request starts no game, live monitor or external contact.
 Setup DEVELOPMENT.txt; collaboration CONTRIBUTING.txt; scope WORLD-SYNC-REQUIREMENTS.txt.
 Bootstrap distribution/world_launcher.py and reports/SHARED-START-20261023.txt.
 User follow-up reports/PLAYTEST-7.3.0-FOLLOWUP.txt; next check distribution/NEXT-TEST.txt.
