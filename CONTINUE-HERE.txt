@@ -51,7 +51,14 @@ EVIDENCE / NEXT CHECK
   Guest needs its NEW private JOIN-SESSION.json; never print or commit its secrets.
 
 CURRENT CHECKPOINT
-Production frozen for 7.3.1 usability delivery; final 383 Python/LuaJIT tests PASS,
+7.3.1 sealed source f5f5bfe; delivery directory:
+/home/developer/Desktop/X4 Online/Internal Tests/7.3.1-2026-10-23
+Both complete runtime/server archives pass full inventory/HTML/numbering checks.
+Clean installed Linux package passed native capture,25,557,786-byte authenticated
+transfer/reload,admission/research and2 NPC baselines with a synthetic guest.
+New host installation and starting world retained;7normal saves/preferences
+unchanged. See reports/package-7.3.1-checks.json. No nativeWindows acceptance.
+Final 383 Python/LuaJIT tests PASS,
 no skips. Launcher/settings47 focused checks and Linux PowerShell fixtures pass;
 teleport MD schema VALID. Native Linux background/research PASS at40e0e69:
 25.338s other-window focus, unpaused NAV and all4research flags true. Failed runs
@@ -64,8 +71,12 @@ All owned games/helpers closed; original37files/settings restored;7normal saves
 and reserved test save retain bytes/timestamps. Recheck live state before changes.
 Claude has a bounded victim-pilot authority design/source feasibility task until
 20:00; separate draft only, no Windows profile/native changes. No after20:30 work
-is inferred. Ordinary station pad occupancy remains open. Packaging is next;
+is inferred. Ordinary station pad occupancy remains open;
 public mirror and7.3.0 sealed archives remain unchanged.
+A single separate dev-only victim-hit observation is being prepared under
+.local/evidence-262-withheld to test event_player_ship_hit; it is not packaged.
+Its controller must restore the retained7.3.1installation/settings and preserve
+the starting snapshot. Recheck that controller/evidence before any new native work.
 
 TASK REFERENCES — OPEN WHEN RELEVANT
 - Setup/machine sync: DEVELOPMENT.txt. Collaboration/PR delivery: CONTRIBUTING.txt.
