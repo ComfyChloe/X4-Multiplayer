@@ -28,6 +28,8 @@ class CoopSession(EconomySession):
         self.navigation = {}
         # FIRE2: latest weapon-group/shot-counter frame per ship (see coop_game.lua).
         self.fire2 = {}
+        # HIT2: latest cumulative damage totals per shooting ship (see damage_game.lua).
+        self.hits = {}
         self.body_sectors = {}
         self.game_metrics = {}
         self.authority_revision = 1
@@ -43,6 +45,7 @@ class CoopSession(EconomySession):
         retained = live | {p.lease for p, _ in self.resumable.values()}
         self.body_sectors = {k: v for k, v in self.body_sectors.items() if k in retained}
         self.game_metrics = {k: v for k, v in self.game_metrics.items() if k in live}
+        self.hits = {k: v for k, v in self.hits.items() if v['lease'] in live}
 
     def pilot(self, entity):
         for slot, peer in self.peers.items():
@@ -64,7 +67,7 @@ class CoopSession(EconomySession):
         except UnicodeError: return []
         if len(f) < 3 or f[1] != '1': return []
         kind = f[0]
-        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
+        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'HIT2', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
             # Legacy movement/fire/dock frames must never override cooperative authority.
             if kind in ('STATE', 'FIRE', 'DOCKSTATE', 'BODY', 'ORDER'): return []
             old_leases = {s: p.lease for s, p in self.peers.items()}
@@ -146,6 +149,17 @@ class CoopSession(EconomySession):
                 if self.dead(entity): return []
                 self.fire2[entity] = dict(lease=peer.lease, epoch=epoch, seq=seq, time=source_time,
                                           shots=shots, at=now, fields=f[3:])
+            elif kind == 'HIT2' and len(f) == 14:
+                # entity|epoch|seq|shield1|hull1|...|shield4|hull4: cumulative damage the guest's
+                # own ship dealt in its world. Only host X4 applies it, as the increase.
+                entity, epoch, seq = integer(f[3], 2), sequence(f[4]), sequence(f[5])
+                if slot == 'p1' or entity not in (1, 2) or self.owners[entity] != slot or epoch != self.epochs[entity]: return []
+                totals = [float(v) for v in f[6:14]]
+                if not all(math.isfinite(v) and 0 <= v <= 1e9 for v in totals): return []
+                old = self.hits.get(entity)
+                if old and old['lease'] == peer.lease and old['epoch'] == epoch:
+                    if seq <= old['seq'] or any(n < o for n, o in zip(totals, old['totals'])): return []
+                self.hits[entity] = dict(lease=peer.lease, epoch=epoch, seq=seq, totals=totals, at=now, fields=f[3:])
             elif kind == 'BODY2' and len(f) == 14:
                 seq, mode, dead, gen = sequence(f[3]), f[4], integer(f[5], 1), sequence(f[6])
                 if mode not in ('ship', 'foot', 'suit') or (mode == 'suit' and not gen): return []
@@ -208,6 +222,10 @@ class CoopSession(EconomySession):
                 if (self.owners[entity] == slot or fire['epoch'] != self.epochs[entity] or
                         now - fire['at'] > .75 or self.dead(entity)): continue
                 result.append((peer.address, ('FIRE2|1|' + peer.lease + '|' + fire['lease'] + '|' + '|'.join(fire['fields'])).encode()))
+            for entity, hit in self.hits.items():
+                if (slot != 'p1' or hit['epoch'] != self.epochs[entity] or self.owners[entity] == slot or
+                        now - hit['at'] > 2): continue
+                result.append((peer.address, ('HIT2|1|' + peer.lease + '|' + hit['lease'] + '|' + '|'.join(hit['fields'])).encode()))
             other = self.peers.get('p2' if slot == 'p1' else 'p1')
             if other and other.lease in self.bodies and other.lease in self.body_sectors:
                 b = self.bodies[other.lease]
