@@ -20,6 +20,7 @@
     <set_value name="$arena.$healthBased" exact="[0,0]"/>
     <set_value name="$arena.$healthAt" exact="[0s,0s]"/>
     <set_value name="$arena.$healthKeptAt" exact="[0s,0s]"/>
+    <set_value name="$arena.$healthTop" exact="[0,0]"/>
     <raise_lua_event name="'X4LAN_Health.Ready'"/>
     <debug_text text="'[X4LAN] HEALTH_SETUP host=%s'.[$arena.$host]"/>
    </actions>
@@ -37,16 +38,20 @@
      </do_if>
      <raise_lua_event name="'X4LAN_Health.Own'" param="'%s|%s|%s|%s|%s|%s'.[player.age / 1s,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},$e,$g,$hull,$shield]"/>
     </actions></cue>
-    <!-- Guest: the generation it may write under (0 = none). A revocation always applies. A new
-         generation must be above the natively closed one ($healthClosed, advanced by the keepalive
-         watchdog), and own=true must follow its own generation within a fresh readback window, so
-         a queued old Authority can never re-enable the WORLD guard after an expiry. -->
+    <!-- Guest: the generation it may write under (0 = none). Native generations are monotonic:
+         $healthTop is the highest one started, $healthClosed the highest one ended (revocation or
+         keepalive watchdog). A start must be above both; own=true only for the current generation
+         within a fresh readback window; a revocation names the generation it ends and applies only
+         to the current one or newer. So no queued or reordered old Authority can downgrade the
+         current generation or re-enable the WORLD guard after an expiry. -->
     <cue name="Authority" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Authority'"/><check_value value="not $arena.$host"/></conditions><actions>
      <set_value name="$a" exact="event.param3"/><set_value name="$e" exact="$a.$entity"/>
-     <do_if value="$a.$gen == 0">
+     <do_if value="$a.$gen == 0 and $a.$ended gt 0 and $a.$ended ge $arena.$healthAuth.{$e}">
+      <set_value name="$arena.$healthClosed.{$e}" exact="[$arena.$healthClosed.{$e},$a.$ended].max"/>
       <set_value name="$arena.$healthAuth.{$e}" exact="0"/><set_value name="$arena.$healthOwn.{$e}" exact="false"/>
      </do_if>
-     <do_elseif value="$a.$gen gt $arena.$healthClosed.{$e} and not $a.$own">
+     <do_elseif value="$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen gt $arena.$healthTop.{$e} and not $a.$own">
+      <set_value name="$arena.$healthTop.{$e}" exact="$a.$gen"/>
       <set_value name="$arena.$healthAuth.{$e}" exact="$a.$gen"/><set_value name="$arena.$healthOwn.{$e}" exact="false"/>
      </do_elseif>
      <do_elseif value="$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen == $arena.$healthAuth.{$e} and @$a.$stamp and player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $a.$stamp and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline">

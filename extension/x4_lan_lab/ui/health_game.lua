@@ -46,8 +46,8 @@ local function window(args) args.stamp,args.from,args.deadline=h.mdStamp,h.mdAge
 local function authority(e,gen,own)
  local a=h.auth[e]
  if a[1]~=gen or a[2]~=own then
+  local args={entity=e,gen=gen,own=own,ended=gen==0 and a[1] or nil}   -- a revocation names its generation
   h.auth[e]={gen,own}
-  local args={entity=e,gen=gen,own=own}
   if own and h.mdStamp then args.stamp,args.from,args.deadline=h.mdStamp,h.mdAge,h.mdAge+TTL end
   AddUITriggeredEvent('X4LAN_Health','Authority',args)
  end

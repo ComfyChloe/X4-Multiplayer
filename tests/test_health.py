@@ -163,8 +163,8 @@ class HealthAdapterTests(unittest.TestCase):
          events['X4LAN_Health.Based'](nil,'2|5')
          own('51',2,5,10,0);now=10.4;frames.onUpdate()
          local stalled=order('Base');hgen(3,1,7);base(7)
-         return revoked.gen,revoked.own,stalled,order('Base'),#sentKind('HEALTH'),X4LAN_BUBBLE_API.health.live''')
-        self.assertEqual(tuple(out), (0, False, 'Base:5', 'Base:5,Base:7', 0, None))
+         return revoked.gen,revoked.own,revoked.ended,stalled,order('Base'),#sentKind('HEALTH'),X4LAN_BUBBLE_API.health.live''')
+        self.assertEqual(tuple(out), (0, False, 5, 'Base:5', 'Base:5,Base:7', 0, None))   # the revocation names gen 5
 
     def test_guest_never_readopts_an_older_baseline(self):
         out = self.make('p2').execute('''
@@ -282,7 +282,7 @@ class HealthAdapterTests(unittest.TestCase):
                  "and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline")
         own = '$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen == $arena.$healthAuth.{$e} and @$a.$stamp and ' + fresh
         self.assertTrue(own in md, 'own=true needs gen above the closed fence, its own gen and a fresh window')
-        self.assertTrue('<do_elseif value="$a.$gen gt $arena.$healthClosed.{$e} and not $a.$own">' in md)
+        self.assertTrue('<do_elseif value="$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen gt $arena.$healthTop.{$e} and not $a.$own">' in md)
         self.assertTrue('exact="[$arena.$healthClosed.{$i},$arena.$healthAuth.{$i}].max"' in md)   # keepalive watchdog fence
         self.assertEqual(md.count(fresh), 3)                       # Authority(own), Base, Apply
 
