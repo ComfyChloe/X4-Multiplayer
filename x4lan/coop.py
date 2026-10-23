@@ -28,8 +28,10 @@ class CoopSession(EconomySession):
         self.navigation = {}
         # FIRE2: latest weapon-group/shot-counter frame per ship (see coop_game.lua).
         self.fire2 = {}
-        # HEALTH: latest pilot-reported hull/shield per ship (see health_game.lua).
+        # HEALTH (health_game.lua): one generation per ship covers one (owner, epoch, pilot). Its
+        # pilot must acknowledge the host's canonical WORLD baseline (HBASE/HACK) before frames count.
         self.health = {}
+        self.health_gen, self.health_key, self.health_live = {1: 0, 2: 0}, {1: None, 2: None}, {1: 0, 2: 0}
         self.body_sectors = {}
         self.game_metrics = {}
         self.authority_revision = 1
@@ -60,6 +62,14 @@ class CoopSession(EconomySession):
     def dead(self, entity):
         return bool(self.world and self.world[(entity - 1) * 3] <= 1.01)
 
+    def health_generation(self, entity):
+        key = (self.owners[entity], self.epochs[entity], self.pilot(entity))
+        if key != self.health_key[entity]:
+            self.health_key[entity] = key
+            self.health_gen[entity] += 1
+            self.health.pop(entity, None)
+        return self.health_gen[entity]
+
     def receive(self, raw, address, now):
         self.expire(now)
         if len(raw) > 768: return []
@@ -67,7 +77,7 @@ class CoopSession(EconomySession):
         except UnicodeError: return []
         if len(f) < 3 or f[1] != '1': return []
         kind = f[0]
-        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'HEALTH', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
+        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'HEALTH', 'HACK', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
             # Legacy movement/fire/dock frames must never override cooperative authority.
             if kind in ('STATE', 'FIRE', 'DOCKSTATE', 'BODY', 'ORDER'): return []
             old_leases = {s: p.lease for s, p in self.peers.items()}
@@ -150,16 +160,21 @@ class CoopSession(EconomySession):
                 self.fire2[entity] = dict(lease=peer.lease, epoch=epoch, seq=seq, time=source_time,
                                           shots=shots, at=now, fields=f[3:])
             elif kind == 'HEALTH' and len(f) == 8:
-                # entity|epoch|seq|hull%|shield%: the pilot's own reading of the ship it owns
-                # and pilots. Host X4 applies it to its proxy; the life tick stays host-side.
-                entity, epoch, seq = integer(f[3], 2), sequence(f[4]), sequence(f[5])
-                if (entity not in (1, 2) or self.owners[entity] != slot or self.pilot(entity) != slot or
-                        epoch != self.epochs[entity] or self.dead(entity)): return []
+                # entity|gen|seq|hull%|shield%: the pilot's own reading of the ship it owns and
+                # pilots, after it acknowledged this generation's baseline. The life tick stays host-side.
+                entity, gen, seq = integer(f[3], 2), sequence(f[4]), sequence(f[5])
+                if entity not in (1, 2) or self.owners[entity] != slot or self.pilot(entity) != slot: return []
+                if gen != self.health_generation(entity) or gen != self.health_live[entity] or self.dead(entity): return []
                 values = [float(v) for v in f[6:8]]
                 if not all(math.isfinite(v) and 0 <= v <= 100 for v in values): return []
                 old = self.health.get(entity)
-                if old and old['lease'] == peer.lease and old['epoch'] == epoch and seq <= old['seq']: return []
-                self.health[entity] = dict(lease=peer.lease, epoch=epoch, seq=seq, at=now, fields=f[3:])
+                if old and seq <= old['seq']: return []
+                self.health[entity] = dict(lease=peer.lease, seq=seq, at=now, fields=f[3:])
+            elif kind == 'HACK' and len(f) == 5:
+                entity, gen = integer(f[3], 2), sequence(f[4])
+                if (entity in (1, 2) and self.owners[entity] == slot and self.pilot(entity) == slot and
+                        gen == self.health_generation(entity)):
+                    self.health_live[entity] = gen
             elif kind == 'BODY2' and len(f) == 14:
                 seq, mode, dead, gen = sequence(f[3]), f[4], integer(f[5], 1), sequence(f[6])
                 if mode not in ('ship', 'foot', 'suit') or (mode == 'suit' and not gen): return []
@@ -222,10 +237,14 @@ class CoopSession(EconomySession):
                 if (self.owners[entity] == slot or fire['epoch'] != self.epochs[entity] or
                         now - fire['at'] > .75 or self.dead(entity)): continue
                 result.append((peer.address, ('FIRE2|1|' + peer.lease + '|' + fire['lease'] + '|' + '|'.join(fire['fields'])).encode()))
-            for entity, hp in self.health.items():
-                if (self.owners[entity] == slot or hp['epoch'] != self.epochs[entity] or
-                        now - hp['at'] > .75 or self.dead(entity)): continue
-                result.append((peer.address, ('HEALTH|1|' + peer.lease + '|' + hp['lease'] + '|' + '|'.join(hp['fields'])).encode()))
+            for entity in (1, 2):
+                gen, hp = self.health_generation(entity), self.health.get(entity)
+                if hp and self.owners[entity] != slot and now - hp['at'] <= .75 and not self.dead(entity):
+                    result.append((peer.address, ('HEALTH|1|' + peer.lease + '|' + hp['lease'] + '|' + '|'.join(hp['fields'])).encode()))
+                if (slot != 'p1' and self.owners[entity] == slot and self.pilot(entity) == slot and
+                        self.health_live[entity] != gen and self.world and not self.dead(entity)):
+                    hull, shield = self.world[(entity - 1) * 3:(entity - 1) * 3 + 2]
+                    result.append((peer.address, f'HBASE|1|{peer.lease}|{entity}|{gen}|{hull:.3f}|{shield:.3f}'.encode()))
             other = self.peers.get('p2' if slot == 'p1' else 'p1')
             if other and other.lease in self.bodies and other.lease in self.body_sectors:
                 b = self.bodies[other.lease]
