@@ -1,0 +1,15 @@
+<?xml version='1.0' encoding='utf-8'?>
+<diff>
+  <add sel="/mdscript/cues/cue[@name=&quot;Patch_Userdata&quot;]/conditions">
+    <check_value value="player.module != 'x4lan_internal'" />
+  </add>
+  <add sel="/mdscript/cues/cue[@name=&quot;Skipped_Warp_Research_1&quot;]/conditions">
+    <check_value value="player.module != 'x4lan_internal'" />
+  </add>
+  <add sel="/mdscript/cues/cue[@name=&quot;Add_Player_Office_Trophy&quot;]/conditions">
+    <check_value value="player.module != 'x4lan_internal'" />
+  </add>
+  <add sel="/mdscript/cues/cue[@name=&quot;Start&quot;]/conditions">
+    <check_value value="player.module != 'x4lan_internal'" />
+  </add>
+</diff>
