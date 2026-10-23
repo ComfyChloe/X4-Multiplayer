@@ -19,6 +19,7 @@
     <set_value name="$arena.$healthAuth" exact="[0,0]"/>
     <set_value name="$arena.$healthBased" exact="[0,0]"/>
     <set_value name="$arena.$healthAt" exact="[0s,0s]"/>
+    <set_value name="$arena.$healthKeptAt" exact="[0s,0s]"/>
     <raise_lua_event name="'X4LAN_Health.Ready'"/>
     <debug_text text="'[X4LAN] HEALTH_SETUP host=%s'.[$arena.$host]"/>
    </actions>
@@ -41,7 +42,21 @@
      <set_value name="$a" exact="event.param3"/>
      <set_value name="$arena.$healthAuth.{$a.$entity}" exact="$a.$gen"/>
      <set_value name="$arena.$healthOwn.{$a.$entity}" exact="$a.$own and $a.$gen gt 0"/>
+     <set_value name="$arena.$healthKeptAt.{$a.$entity}" exact="player.age"/>
      <debug_text text="'[X4LAN] HEALTH_AUTHORITY entity=%s gen=%s own=%s'.[$a.$entity,$a.$gen,$a.$own]"/>
+    </actions></cue>
+    <cue name="Keep" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Keep'"/><check_value value="not $arena.$host"/></conditions><actions>
+     <do_if value="event.param3.$gen == $arena.$healthAuth.{event.param3.$entity}"><set_value name="$arena.$healthKeptAt.{event.param3.$entity}" exact="player.age"/></do_if>
+    </actions></cue>
+    <!-- Guest watchdog: without a keepalive for 2 s of game time (Lua hung or stopped) the ship's
+         WORLD guard is dropped, so the host's values apply again. -->
+    <cue name="KeepWatchdog" instantiate="true" checkinterval="0.5s"><conditions><check_value value="not $arena.$host"/></conditions><actions>
+     <do_all exact="2" counter="$i">
+      <do_if value="$arena.$healthOwn.{$i} and player.age - $arena.$healthKeptAt.{$i} gt 2s">
+       <set_value name="$arena.$healthOwn.{$i}" exact="false"/><set_value name="$arena.$healthAuth.{$i}" exact="0"/>
+       <debug_text text="'[X4LAN] HEALTH_KEEP_WATCHDOG entity=%s'.[$i]"/>
+      </do_if>
+     </do_all>
     </actions></cue>
     <!-- Pilot: write the host's canonical baseline on the ship it occupies, then confirm. -->
     <cue name="Base" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Base'"/><check_value value="not $arena.$host"/></conditions><actions>

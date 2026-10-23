@@ -23,7 +23,7 @@
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not cfg or not cfg.coop or not cfg.pilot_health or not A or not A.coop or not A.state.active then return end
 local c=A.coop;local s=A.state
-local h={seq=0,valid={},gen={0,0},last={0,0},closed={0,0},remote={},auth={{0,false},{0,false}}};A.health=h
+local h={seq=0,valid={},gen={0,0},last={0,0},closed={0,0},stale={0,0},remote={},auth={{0,false},{0,false}}};A.health=h
 local INTERVAL,FRESH,TTL,READING,RETRY=.1,1.0,1.0,.5,.5
 local function log(v) DebugError('[X4LAN] '..v) end
 local function number(v,max)
@@ -144,11 +144,22 @@ end
 
 function h.frame(now)
  if cfg.slot=='p1' then
-  -- Stale only: release the floor to the retained canonical value; the generation may resume.
+  -- A stale pilot stream is an authority boundary: close the generation (the ship returns to the
+  -- host from its canonical value) and tell the relay, which starts a new generation whose
+  -- baseline is the host's WORLD again; the old one never resumes.
   for e,r in pairs(h.remote) do
-   if now-r.at>FRESH then h.remote[e]=nil;AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=r.gen,closed=false}) end
+   if now-r.at>FRESH then h.stale[e]=r.gen;h.close(e,r.gen) end
+  end
+  for e=1,2 do
+   if h.stale[e]>0 and h.stale[e]==h.valid[e] and now>=(h.nextStale or 0) then
+    h.nextStale=now+.25;send(string.format('HSTALE|1|%s|%d|%d',s.client.lease,e,h.stale[e]))
+   end
   end
   return
+ end
+ -- Guest keepalive: MD drops the WORLD guard of its ship without it (hung or stopped Lua).
+ if h.live and now>=(h.nextKeep or 0) then
+  h.nextKeep=now+.5;AddUITriggeredEvent('X4LAN_Health','Keep',{entity=h.live.entity,gen=h.live.gen})
  end
  -- Each fresh MD readback is reported at most once; nothing while paused or from a stale one.
  local r=h.reading

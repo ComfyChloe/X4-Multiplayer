@@ -47,6 +47,25 @@ class HealthRelayTests(unittest.TestCase):
         self.assertEqual(self.rows(b'HEALTH'), [['HEALTH', '1', self.a, self.b, '2', str(self.g), '2', '80', '50']])
         self.assertEqual(self.rows(b'HEALTH', to=P2), [])
 
+    def test_a_stale_pilot_stream_ends_the_generation_and_rebases_on_host_world(self):
+        # A:primary fixture: gen HEALTH hull 80, stale, host WORLD hull 50, same-gen HEALTH hull 80.
+        self.ack(); self.health(seq=1, hull='80')
+        self.rows(b'HEALTH', now=1.2)                           # 1.0 s without a pilot frame
+        world = list(WORLD); world[3] = 50
+        self.s.receive(f'WORLD|1|{self.a}|2|{"|".join(map(str, world))}'.encode(), P1, 1.4)
+        self.health(seq=2, hull='80', now=1.5)
+        self.assertEqual(self.rows(b'HEALTH', now=1.55), [])
+        self.assertEqual(self.rows(b'HBASE', now=1.6, to=P2), [['HBASE', '1', self.b, '2', str(self.g + 1), '50.000', '30.000']])
+
+    def test_host_stale_report_ends_only_the_current_generation(self):
+        self.ack(); self.health(seq=1)
+        self.s.receive(f'HSTALE|1|{self.b}|2|{self.g}'.encode(), P2, .25)   # not the host: ignored
+        self.assertEqual(self.s.health_gen[2], self.g)
+        self.s.receive(f'HSTALE|1|{self.a}|2|{self.g}'.encode(), P1, .3)
+        self.s.receive(f'HSTALE|1|{self.a}|2|{self.g}'.encode(), P1, .32)   # repeat: already ended
+        self.health(seq=2, now=.35)
+        self.assertEqual((self.s.health_gen[2], self.rows(b'HEALTH', now=.4)), (self.g + 1, []))
+
     def test_hgen_names_the_generations_of_the_current_authority_revision(self):
         rows = self.rows(b'HGEN', to=P2)
         self.assertEqual(rows, [['HGEN', '1', self.b, str(self.s.authority_revision), str(self.s.health_gen[1]), str(self.g)]])
@@ -170,9 +189,9 @@ class HealthAdapterTests(unittest.TestCase):
          hp(4,1,'1.0');local lethal=last('Apply')
          now=10.5;frames.onUpdate();local fresh=countRequest('Release')
          now=11.6;frames.onUpdate();local stale=last('Release')
-         own('51.5',0,0,0,0);hp(4,2,'60');auth(2,2,'p2')
-         return early,a.gen,a.hull,a.deadline,applies,superseded.gen,tostring(superseded.closed),lethal.gen,lethal.hull,fresh,stale.gen,tostring(stale.closed),order('Release')''')
-        self.assertEqual(tuple(out), (0, 3, 80, 51, 1, 3, 'true', 4, 1.0, 1, 4, 'false', 'Release:3,Release:4,Release:4'))
+         own('51.5',0,0,0,0);hp(4,2,'60');auth(2,2,'p2')            -- the stale generation never resumes
+         return early,a.gen,a.hull,a.deadline,applies,superseded.gen,tostring(superseded.closed),lethal.gen,lethal.hull,fresh,stale.gen,tostring(stale.closed),order('Release'),countRequest('Apply')''')
+        self.assertEqual(tuple(out), (0, 3, 80, 51, 1, 3, 'true', 4, 1.0, 1, 4, 'true', 'Release:3,Release:4', 2))
 
     def test_host_auth_transition_without_a_frame_closes_the_generation(self):
         # A:primary: HEALTH gen5 seq1, AUTH pilot 0 then p2 before any frame, delayed gen5 seq2.
@@ -206,9 +225,13 @@ class HealthAdapterTests(unittest.TestCase):
     def test_host_closes_natively_even_after_a_stale_release(self):
         out = self.make('p1').execute('''
          hgen(1,1,3);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','1','80','50'},now)
-         now=11.3;frames.onUpdate();auth(2,1,'0')
-         return order('Apply','Release'),tostring(last('Release').closed)''')
-        self.assertEqual(tuple(out), ('Apply:3,Release:3,Release:3', 'true'))
+         now=11.3;frames.onUpdate();local stale=sentKind('HSTALE')
+         own('51.3',0,0,0,0);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','2','80','50'},now)
+         auth(2,1,'0')
+         return order('Apply','Release'),tostring(last('Release').closed),#stale,stale[1]''')
+        order, closed, nstale, stale = out
+        self.assertEqual((order, closed, nstale), ('Apply:3,Release:3', 'true', 1))   # A:primary: Apply:3,Release:3,Apply:3 before
+        self.assertTrue(stale.endswith('|2|3'), stale)
         md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
         self.assertTrue('<do_if value="$arena.$healthLive.{$i} and player.age - $arena.$healthAt.{$i} gt 2s">' in md, '<do_if value="$arena.$healthLive.{$i} and player.age - $arena.$healthAt.{$i} gt 2s">')  # watchdog
 
@@ -230,8 +253,10 @@ class HealthAdapterTests(unittest.TestCase):
          X4LAN_BUBBLE_API.paused=function() return false end
          now=11.5;frames.onUpdate();local stale=#sentKind('HEALTH')
          own('53',2,4,60,50);now=11.6;frames.onUpdate()
-         return once,paused,stale,#sentKind('HEALTH')''')
-        self.assertEqual(tuple(out), (1, 1, 1, 2))
+         return once,paused,stale,#sentKind('HEALTH'),last('Keep').gen''')
+        self.assertEqual(tuple(out), (1, 1, 1, 2, 4))
+        md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        self.assertTrue('<do_if value="$arena.$healthOwn.{$i} and player.age - $arena.$healthKeptAt.{$i} gt 2s">' in md)
 
     def test_no_queued_write_without_an_md_clock(self):
         out = self.make('p1', clock=False).execute('''

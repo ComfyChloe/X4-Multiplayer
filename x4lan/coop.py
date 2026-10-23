@@ -9,6 +9,7 @@ from .host import ATOM, HEX, sequence
 from .quests import QuestState
 
 POSITION_LIMIT = 50_000_000
+HEALTH_STALE = .75   # seconds without a pilot frame before a live health generation ends
 
 
 def pose(values):
@@ -32,6 +33,7 @@ class CoopSession(EconomySession):
         # pilot must acknowledge the host's canonical WORLD baseline (HBASE/HACK) before frames count.
         self.health = {}
         self.health_gen, self.health_key, self.health_live = {1: 0, 2: 0}, {1: None, 2: None}, {1: 0, 2: 0}
+        self.health_seen = {1: 0.0, 2: 0.0}      # last HACK or accepted HEALTH of the live generation
         self.body_sectors = {}
         self.game_metrics = {}
         self.authority_revision = 1
@@ -49,8 +51,13 @@ class CoopSession(EconomySession):
         self.game_metrics = {k: v for k, v in self.game_metrics.items() if k in live}
         self.health = {k: v for k, v in self.health.items() if v['lease'] in live}
         # Every message and snapshot starts here, so each authority transition gets its own
-        # generation even when no snapshot falls between a leave and a re-entry.
-        for entity in (1, 2): self.health_generation(entity)
+        # generation even when no snapshot falls between a leave and a re-entry. A live generation
+        # whose pilot stream stopped is an authority boundary too: the host takes the ship back and
+        # the pilot may only continue from a new generation with a fresh canonical baseline.
+        for entity in (1, 2):
+            gen = self.health_generation(entity)
+            if self.health_live[entity] == gen and now - self.health_seen[entity] > HEALTH_STALE:
+                self.end_health(entity)
 
     def pilot(self, entity):
         for slot, peer in self.peers.items():
@@ -64,6 +71,11 @@ class CoopSession(EconomySession):
 
     def dead(self, entity):
         return bool(self.world and self.world[(entity - 1) * 3] <= 1.01)
+
+    def end_health(self, entity):
+        self.health_gen[entity] += 1
+        self.health_live[entity] = 0
+        self.health.pop(entity, None)
 
     def health_generation(self, entity):
         key = (self.owners[entity], self.epochs[entity], self.pilot(entity))
@@ -80,7 +92,7 @@ class CoopSession(EconomySession):
         except UnicodeError: return []
         if len(f) < 3 or f[1] != '1': return []
         kind = f[0]
-        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'HEALTH', 'HACK', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
+        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'HEALTH', 'HACK', 'HSTALE', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
             # Legacy movement/fire/dock frames must never override cooperative authority.
             if kind in ('STATE', 'FIRE', 'DOCKSTATE', 'BODY', 'ORDER'): return []
             old_leases = {s: p.lease for s, p in self.peers.items()}
@@ -173,11 +185,17 @@ class CoopSession(EconomySession):
                 old = self.health.get(entity)
                 if old and seq <= old['seq']: return []
                 self.health[entity] = dict(lease=peer.lease, seq=seq, at=now, fields=f[3:])
+                self.health_seen[entity] = now
             elif kind == 'HACK' and len(f) == 5:
                 entity, gen = integer(f[3], 2), sequence(f[4])
                 if (entity in (1, 2) and self.owners[entity] == slot and self.pilot(entity) == slot and
-                        gen == self.health_generation(entity)):
-                    self.health_live[entity] = gen
+                        gen == self.health_generation(entity) and self.health_live[entity] != gen):
+                    self.health_live[entity], self.health_seen[entity] = gen, now
+            elif kind == 'HSTALE' and len(f) == 5:
+                # The host's own freshness release ends the generation it names, if still current.
+                entity, gen = integer(f[3], 2), sequence(f[4])
+                if slot == 'p1' and entity in (1, 2) and gen == self.health_generation(entity):
+                    self.end_health(entity)
             elif kind == 'BODY2' and len(f) == 14:
                 seq, mode, dead, gen = sequence(f[3]), f[4], integer(f[5], 1), sequence(f[6])
                 if mode not in ('ship', 'foot', 'suit') or (mode == 'suit' and not gen): return []

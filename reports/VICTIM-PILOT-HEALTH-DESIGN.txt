@@ -183,3 +183,13 @@ Stale, pause and failed-callback audit (after the MD wall-clock change):
   Release is not windowed (restorative, fenced by generation).
 - Lost or late network frames: the relay repeats HBASE/HGEN every snapshot. HEALTH counts only
   for the valid generation, in seq order. HACK is resent on each repeated HBASE.
+Fourth review round (A:primary on 4bf5163). This supersedes "a stale-only release may resume":
+- Staleness is an authority boundary. The relay ends a live generation after 0.75 s without a
+  pilot frame (checked at every message, so no-snapshot gaps are covered). The host ends it
+  after 1 s and sends HSTALE|1|lease|entity|gen, which the relay honours only for the current
+  generation. Either way the next generation starts from HBASE, i.e. the host's WORLD, which
+  includes any damage taken under host fallback. The old generation never resumes.
+- Hung guest: a guest whose Lua stops (with or without an error) stops its 0.5 s Keep events.
+  Its MD drops the WORLD guard and the authority after 2 s game time, so host values apply
+  again. Its relay generation also ends (no frames), so the host keeps authority until a new
+  baseline is acknowledged. The earlier hung-guest residual is closed.
