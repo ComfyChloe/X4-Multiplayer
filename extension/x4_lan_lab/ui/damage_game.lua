@@ -6,6 +6,9 @@
 -- on the host so nothing counts twice.
 -- HIT2|1|lease|entity|epoch|seq|shield1|hull1|shield2|hull2|shield3|hull3|shield4|hull4
 -- Victims 1-2 are the co-op ships, 3-4 the LAN targets. Totals are monotonic per entity epoch.
+-- Only the LAN targets are claimed: an undo cannot outrun the life check of a co-op ship at
+-- 1.01% hull, so co-op ship damage keeps the 7.3.0 FIRE2 replay path (ship totals stay 0).
+-- Arena.$donor (the test freighter) and ordinary NPCs are outside this scope.
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not cfg or not cfg.coop or not cfg.damage_claims or not A or not A.coop or not A.state.active then return end
 local c=A.coop;local s=A.state
@@ -26,7 +29,7 @@ local function hex(v) return type(v)=='string' and #v==32 and v:match('^[a-f0-9]
 -- attacker, or a health setter (WORLD Apply, host Apply/Undo) at that game time make it ambiguous:
 -- it is neither claimed nor undone.
 function d.attribute(v,sh,hu,e,own)
- if e<1 or e==v then return end                    -- another attacker, or a ship hitting itself
+ if e<1 or v<3 then return end                     -- another attacker, or a co-op ship victim
  if cfg.slot=='p1' then
   if c.owners[e]==cfg.slot then
    -- Host's own hit: LAN targets keep a 1% floor while claims are active; MD kills at the floor.
@@ -120,7 +123,7 @@ function d.receive(f)
  for i=1,8 do
   delta[i]=totals[i]-(old and old.totals[i] or 0)
   if delta[i]<0 then return true end
-  if delta[i]>0 then any=true end
+  if i<=4 then delta[i]=0 elseif delta[i]>0 then any=true end
  end
  if A.paused and A.paused() then return true end  -- applied after the pause from the same totals
  if any then AddUITriggeredEvent('X4LAN_Damage','Apply',{entity=e,values=delta}) end

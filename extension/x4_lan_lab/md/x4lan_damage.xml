@@ -13,7 +13,8 @@
     <set_value name="$victims" exact="[$arena.$ships.{1},$arena.$ships.{2},@$arena.$targets.{1},@$arena.$targets.{2}]"/>
     <set_value name="$setterAt" exact="-1s"/>
     <create_group groupname="$group"/>
-    <do_all exact="4" counter="$i"><do_if value="$victims.{$i}.exists"><add_to_group groupname="$group" object="$victims.{$i}"/></do_if></do_all>
+    <!-- Only the LAN targets are claimed (see ui/damage_game.lua); co-op ship events are not reported. -->
+    <do_all exact="2" counter="$i"><do_if value="@$victims.{$i + 2}.exists"><add_to_group groupname="$group" object="$victims.{$i + 2}"/></do_if></do_all>
     <!-- Host: a replayed remote hit must not kill a LAN target before Lua can undo it. Lethal
          damage comes only from a host-own hit at the floor (Floor) or a guest claim (Apply). -->
     <do_if value="$arena.$host"><do_all exact="2" counter="$i"><do_if value="@$victims.{$i + 2}.isoperational"><set_object_min_hull object="$victims.{$i + 2}" exact="1"/></do_if></do_all></do_if>
@@ -66,10 +67,11 @@
      <set_value name="$d" exact="event.param3.$values"/>
      <do_all exact="4" counter="$i">
       <set_value name="$o" exact="$victims.{$i}"/>
-      <do_if value="@$o.isoperational and ($d.{$i * 2 - 1} gt 0 or $d.{$i * 2} gt 0)">
+      <do_if value="$i ge 3 and @$o.isoperational and ($d.{$i * 2 - 1} gt 0 or $d.{$i * 2} gt 0)">
        <do_if value="$d.{$i * 2 - 1} gt 0 and $o.maxshield gt 0"><set_object_shield object="$o" exact="[0, ($o.shield - $d.{$i * 2 - 1}) * 100.0 / $o.maxshield].max"/></do_if>
        <do_if value="$d.{$i * 2} gt 0 and $o.maxhull gt 0">
-        <do_if value="$i ge 3 and ($o.hull - $d.{$i * 2}) * 100.0 / $o.maxhull le 1.01"><set_object_min_hull object="$o" exact="0"/><destroy_object object="$o" explosion="true"/></do_if>
+        <!-- Guest targets keep 1% min hull (x4lan_coop.xml): a claim reaching the floor kills. -->
+        <do_if value="$i ge 3 and ($o.hull - $d.{$i * 2}) * 100.0 / $o.maxhull le 1.05"><set_object_min_hull object="$o" exact="0"/><destroy_object object="$o" explosion="true"/></do_if>
         <do_else><set_object_hull object="$o" exact="[0, ($o.hull - $d.{$i * 2}) * 100.0 / $o.maxhull].max"/></do_else>
        </do_if>
        <debug_text text="'[X4LAN] DMG_APPLY entity=%s victim=%s shield=%s hull=%s'.[event.param3.$entity,$i,$d.{$i * 2 - 1},$d.{$i * 2}]"/>

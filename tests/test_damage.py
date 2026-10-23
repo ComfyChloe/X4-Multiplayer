@@ -77,18 +77,18 @@ class DamageAdapterTests(unittest.TestCase):
         ''')
         return l
 
-    def test_guest_reports_only_its_own_same_time_hits_as_cumulative_totals(self):
+    def test_guest_reports_only_its_own_same_time_target_hits_as_cumulative_totals(self):
         l = self.make('p2')
         out = l.execute('''
-         events['X4LAN_Damage.Attacked'](nil,'1|2|1|50.0')         -- own ship hits the host ship
-         events['X4LAN_Damage.Damaged'](nil,'1|s|30|50.0|0')
-         events['X4LAN_Damage.Damaged'](nil,'1|h|12.5|50.0|0')
-         events['X4LAN_Damage.Damaged'](nil,'1|h|9|50.05|0')        -- later damage, no attack event: dropped
-         events['X4LAN_Damage.Damaged'](nil,'3|h|99|50.0|0')        -- no attacker: not claimed
-         events['X4LAN_Damage.Attacked'](nil,'3|0|0|50.1')          -- an NPC hit a target
-         events['X4LAN_Damage.Damaged'](nil,'3|h|40|50.1|0')
-         events['X4LAN_Damage.Attacked'](nil,'2|1|0|50.2')          -- replayed host hits the guest: native host authority
-         events['X4LAN_Damage.Damaged'](nil,'2|h|70|50.2|0')
+         events['X4LAN_Damage.Attacked'](nil,'3|2|1|50.0')         -- own ship hits LAN target 1
+         events['X4LAN_Damage.Damaged'](nil,'3|s|30|50.0|0')
+         events['X4LAN_Damage.Damaged'](nil,'3|h|12.5|50.0|0')
+         events['X4LAN_Damage.Damaged'](nil,'3|h|9|50.05|0')        -- later damage, no attack event: dropped
+         events['X4LAN_Damage.Attacked'](nil,'1|2|1|50.0')          -- the host ship is out of HIT2 scope
+         events['X4LAN_Damage.Damaged'](nil,'1|h|5|50.0|0')
+         events['X4LAN_Damage.Damaged'](nil,'4|h|99|50.0|0')        -- no attacker: not claimed
+         events['X4LAN_Damage.Attacked'](nil,'4|0|0|50.1')          -- an NPC hit a target
+         events['X4LAN_Damage.Damaged'](nil,'4|h|40|50.1|0')
          events['X4LAN_Damage.Attacked'](nil,'4|2|1|50.2')          -- own hit in a WORLD Apply frame: dropped
          events['X4LAN_Damage.Damaged'](nil,'4|h|5|50.2|1')
          now=10.2;frames.onUpdate();local early=#hits();now=10.21;frames.onUpdate()
@@ -99,39 +99,39 @@ class DamageAdapterTests(unittest.TestCase):
          local h=hits();return early,#h,first,h[#h]''')
         early, count, first, latest = out
         self.assertEqual((early, count), (1, 2))
-        self.assertTrue(first.endswith('|2|1|1|30.000|12.500|0.000|0.000|0.000|0.000|0.000|0.000'), first)
-        self.assertTrue(latest.endswith('|2|1|2|30.000|12.500|0.000|0.000|0.000|0.000|8.000|0.000'), latest)
+        self.assertTrue(first.endswith('|2|1|1|0.000|0.000|0.000|0.000|30.000|12.500|0.000|0.000'), first)
+        self.assertTrue(latest.endswith('|2|1|2|0.000|0.000|0.000|0.000|30.000|12.500|8.000|0.000'), latest)
 
     def test_guest_resends_unchanged_totals_and_drops_them_on_authority_change(self):
         l = self.make('p2')
         out = l.execute('''
-         events['X4LAN_Damage.Attacked'](nil,'1|2|1|50.0');events['X4LAN_Damage.Damaged'](nil,'1|h|5|50.0|0')
+         events['X4LAN_Damage.Attacked'](nil,'3|2|1|50.0');events['X4LAN_Damage.Damaged'](nil,'3|h|5|50.0|0')
          now=10.19;frames.onUpdate();now=10.2;frames.onUpdate();now=10.3;frames.onUpdate();local quiet=#hits()
          now=10.5;frames.onUpdate();local resent=#hits()
          client:receiveExtension({'AUTH','1',client.lease,'2','p1','1','p1','p2','2','p2'},now)
          now=11;frames.onUpdate();local after=#hits()
-         events['X4LAN_Damage.Attacked'](nil,'1|2|1|60.0');events['X4LAN_Damage.Damaged'](nil,'1|h|1|60.0|0')
+         events['X4LAN_Damage.Attacked'](nil,'3|2|1|60.0');events['X4LAN_Damage.Damaged'](nil,'3|h|1|60.0|0')
          now=11.1;frames.onUpdate();now=11.11;frames.onUpdate();local h=hits()
          return quiet,resent,after,h[#h]''')
         quiet, resent, after, latest = out
         self.assertEqual((quiet, resent, after), (1, 2, 2))
-        self.assertTrue(latest.endswith('|2|2|3|0.000|1.000|0.000|0.000|0.000|0.000|0.000|0.000'), latest)
+        self.assertTrue(latest.endswith('|2|2|3|0.000|0.000|0.000|0.000|0.000|1.000|0.000|0.000'), latest)
 
     def test_host_applies_increases_once(self):
         l = self.make('p1')
         out = l.execute('''
          local src=string.rep('c',32)
          local function hit2(seq,epoch,...) client:receiveExtension({'HIT2','1',client.lease,src,'2',tostring(epoch),tostring(seq),...},now) end
-         hit2(1,1,'30','12.5','0','0','0','0','0','0')
-         local a=last('Apply');local first={a.entity,a.values[1],a.values[2]}
-         hit2(1,1,'90','90','0','0','0','0','0','0')                -- duplicate sequence
-         hit2(2,1,'30','12.5','0','0','0','0','0','0')              -- unchanged: nothing to apply
-         hit2(3,1,'20','12.5','0','0','0','0','0','0')              -- decreasing: rejected
-         hit2(4,1,'35','12.5','0','0','0','0','0','0')
+         hit2(1,1,'7','7','0','0','30','12.5','0','0')              -- ship totals are never applied
+         local a=last('Apply');local first={a.entity,a.values[1],a.values[2],a.values[5],a.values[6]}
+         hit2(1,1,'0','0','0','0','90','90','0','0')                -- duplicate sequence
+         hit2(2,1,'9','9','0','0','30','12.5','0','0')              -- only a ship total grew: nothing to apply
+         hit2(3,1,'9','9','0','0','20','12.5','0','0')              -- decreasing: rejected
+         hit2(4,1,'9','9','0','0','35','12.5','0','0')
          local b=last('Apply');local applies=countRequest('Apply')
-         hit2(5,2,'1','1','0','0','0','0','0','0')                  -- old epoch on the host: ignored
-         return first[1],first[2],first[3],b.values[1],applies,countRequest('Apply')''')
-        self.assertEqual(tuple(out), (2, 30, 12.5, 5, 2, 2))
+         hit2(5,2,'9','9','0','0','99','99','0','0')                -- old epoch on the host: ignored
+         return first[1],first[2],first[3],first[4],first[5],b.values[5],applies,countRequest('Apply')''')
+        self.assertEqual(tuple(out), (2, 0, 0, 30, 12.5, 5, 2, 2))
 
     def test_host_undoes_only_same_time_replayed_hits_and_floors_own_target_hits(self):
         l = self.make('p1')
@@ -143,7 +143,8 @@ class DamageAdapterTests(unittest.TestCase):
          events['X4LAN_Damage.Damaged'](nil,'3|h|6|50.1|0')
          events['X4LAN_Damage.Attacked'](nil,'4|2|0|50.2');events['X4LAN_Damage.Attacked'](nil,'4|1|1|50.2')
          events['X4LAN_Damage.Damaged'](nil,'4|h|9|50.2|0')         -- two attackers at once: dropped
-         events['X4LAN_Damage.Attacked'](nil,'1|2|0|50.3');events['X4LAN_Damage.Damaged'](nil,'1|h|4|50.3|1')  -- setter frame
+         events['X4LAN_Damage.Attacked'](nil,'3|2|0|50.3');events['X4LAN_Damage.Damaged'](nil,'3|h|4|50.3|1')  -- setter frame
+         events['X4LAN_Damage.Attacked'](nil,'1|2|0|50.4');events['X4LAN_Damage.Damaged'](nil,'1|h|4|50.4|0')  -- co-op ship: never undone
          now=10.5;frames.onUpdate();local early=countRequest('Undo');now=10.51;frames.onUpdate()
          local u=last('Undo')
          return early,countRequest('Undo'),u.victim,u.shield,u.hull,countRequest('Floor'),last('Floor').victim''')
