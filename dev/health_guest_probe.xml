@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in guest health observation in a disposable world; never shipped (dev/HEALTH-GUEST-PROBE.txt). -->
+<mdscript name="X4LAN_HealthGuestProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Observe" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+    <set_value name="$n" exact="0"/>
+    <!-- Enables the post-write readbacks ('written Base ...') inside md/x4lan_health.xml. -->
+    <set_value name="$arena.$healthProbe" exact="true"/>
+    <debug_text text="'[X4LAN] HEALTH_GUEST_PROBE observe host=%s'.[$arena.$host]"/>
+   </actions>
+   <cues>
+    <!-- 20 Hz native state of the guest's co-op ships: health and the guest-side fences. -->
+    <cue name="Sample" instantiate="true" checkinterval="0.05s"><conditions><check_value value="true"/></conditions><actions>
+     <set_value name="$n" operation="add" exact="1"/>
+     <do_all exact="2" counter="$i">
+      <set_value name="$s" exact="$arena.$ships.{$i}"/>
+      <debug_text text="'[X4LAN] HEALTH_GUEST_PROBE sample=%s age=%s wall=%s timewarp=%s entity=%s occupied=%s hull=%s shield=%s own=%s auth=%s top=%s closed=%s based=%s kept=%s dead=%s'.[$n,player.age,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},player.timewarp.factor,$i,player.occupiedship == $s,@$s.hullpercentage,@$s.shieldpercentage,@$arena.$healthOwn.{$i},@$arena.$healthAuth.{$i},@$arena.$healthTop.{$i},@$arena.$healthClosed.{$i},@$arena.$healthBased.{$i},@$arena.$healthKeptAt.{$i},@$arena.$dead.{$i}]"/>
+     </do_all>
+    </actions></cue>
+    <!-- Phase 3 only (requested by the Lua probe): scripted local damage on the own ship. -->
+    <cue name="LocalDamage" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_HealthGuestProbe'" control="'LocalDamage'"/></conditions><actions>
+     <set_value name="$s" exact="$arena.$ships.{event.param3.$entity}"/>
+     <do_if value="@$s.isoperational and player.occupiedship == $s">
+      <set_object_hull object="$s" exact="event.param3.$hull"/>
+      <debug_text text="'[X4LAN] HEALTH_GUEST_PROBE local_damage entity=%s requested=%s readback=%s'.[event.param3.$entity,event.param3.$hull,$s.hullpercentage]"/>
+     </do_if>
+    </actions></cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>
