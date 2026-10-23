@@ -64,13 +64,18 @@ benchmark. Actual player aim transmission/replay remains open. Never infer a
 short normal gun-slew miss is a bug or report mocked tests as native acceptance.
 
 LIVE JOBS / TOOLS
-ACTIVE native exec93377: .local/evidence-017-withheld, production saved-seed
-gate + real relay/Lua adapter, synthetic pilot; exact HQ cycle + occupied NPC bay.
-Aim-point03 finished: near collinear point12pulse shots/11hits, yaw0; far point
-plus manual trigger no shots. Original helper assets; common near point changes
-multi-gun convergence.01partial/02fixtureFAIL retained, all cleanup verified.
-Claude6ff3b76 NOT merged: initial stale Authority fix needs monotonic revocation
-follow-up (assigned). Await finer20Hz observer too. No concurrent native/install.
+ACTIVE native exec43530: .local/evidence-004-withheld; checks shoot_at/shoot
+with the individual primary weapon component, near point then deliberate miss.
+Prior .local/evidence-016-withheld completed/cleaned: real relay+Lua+MD cycle and
+NPC occupied-bay refusal work, but native X Shuttle undock keeps assignment after
+physical detach.30s timeout before CANCEL => PARTIAL. Executor now cancels that
+remaining reservation after verified detach;10 adapter tests pass. Prepared
+.local/evidence-018-withheld (NOT RUN) adds updated cycle plus old queued SectorMove
+after Fence, freezing Lua pose correction so rejection cannot be masked.
+Aim-point03 bounded near-point12shots/11hits/396HP/yaw0; far point+manual trigger
+no shots. Common point changes multi-gun convergence.02fixtureFAIL retained.
+Claude6ff3b76 NOT merged: guest Authority fix needs monotonic revoke follow-up;
+finer dev sampling pending. All finished runs cleaned. No concurrent native.
 Persistent schema worker exec48913: .local/evidence-244-withheld, JSON lines
 {"files":["relative/path.xml"]}; {"stop":true} at final cleanup.
 Python ../x4-playtest7/.venv/bin/python; schemas ../../preparation/game-schemas.

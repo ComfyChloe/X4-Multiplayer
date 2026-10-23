@@ -71,6 +71,11 @@ function d.executeFrame(now)
    local r=d.localRow(p.entity,now)
    if r and r.at>=p.applied and r.mode==p.want and r.dock==p.dock then
     outcome('CONFIRMED entity='..p.entity..' action='..p.action..' mode='..r.mode)
+   elseif r and r.at>=p.applied and p.action=='UNDOCK' and r.mode=='APPROACH' then
+    -- X Shuttle can physically detach yet retain its assignment. localRow also
+    -- checks native isdocked=false: only now may a separate guarded CANCEL
+    -- remove that reservation. Pose remains blocked until actual FREE readback.
+    outcome('DETACHED_WITH_RESERVATION entity='..p.entity)
    end
   end
   return

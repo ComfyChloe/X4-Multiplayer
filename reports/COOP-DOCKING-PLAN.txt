@@ -26,7 +26,7 @@ newly built docks, NPC authority, carrier-with-player transforms and long-term
 campaign persistence remain outside this bounded change. Existing broad saved-
 attachment evidence is in x4-attachment-session; it is not two-PC acceptance.
 
-Prepared source: x4lan/docking.py remains an unused CoopSession subclass; its
+Initial prepared source: x4lan/docking.py extends CoopSession; its
 request watermark advances even on conflict denial, so a delayed older FREE
 cannot release an existing claim. The existing native saved dock registry is
 reused unchanged. seed_capture.lua now has an optional coop_docks handshake:
@@ -55,7 +55,7 @@ Free-flight pose requires matching NAV/CDOCK sequence, source lease, epoch and
 fresh native FREE state. Missing/stale/unknown attachment cannot authorize pose.
 Four new LuaJIT adapter tests PASS;25 existing cooperative adapter tests and23
 FIRE2 tests PASS on the changed cooperative source. UI is registered, but the
-feature flag is unset and UniverseSession still does not inherit DockSession.
+feature flag is unset. UniverseSession now inherits DockSession (see integration below).
 Queued movement execution must also be tied to attachment transitions before
 activation; synchronous pose fencing alone does not close the MD queue race.
 
@@ -92,3 +92,16 @@ rechecks the local physical player, saved bay, session, generation and time
 window. Never force-undock/teleport a physical player.9 observer/executor adapter
 tests PASS; changed MD schema VALID. Full native transport/adapter function check
 .local/evidence-016-withheld is running; no new docking acceptance yet.
+
+FULL ADAPTER FIRST RUN / FOLLOW-UP
+coop-dock-adapter-01 passes native saved-seed admission, real UDP relay NAV/CDOCK
+pairing, exact reservation/attachment and occupied NPC bay refusal/recovery.
+Overall PARTIAL: both X Shuttle undocks physically detach at about8s but retain
+an assigned dock, so the executor waits30s before a separate CANCEL reachesFREE.
+Raw and restored inventories remain in that directory; controller completion is
+not full acceptance. The executor now detects the fresh native APPROACH state
+only after synchronous isdocked=false, then issues a separately checked CANCEL.
+Pose remains fenced until actual FREE.10 adapter tests PASS.
+coop-dock-adapter-02 is prepared to check this and a queued stale SectorMove
+after native fencing, with Lua pose correction frozen so it cannot mask a warp.
+This follow-up has not run yet.

@@ -75,4 +75,19 @@ class CoopDockExecutionTests(unittest.TestCase):
    assert(x.pending and x.pending.operation==op+1 and #writes==0)
   ''')
 
+ def test_physical_undock_with_retained_assignment_cancels_before_pose(self):
+  l=self.make();l.execute('''
+   nativeDocked=true;own('EXTERNAL',12);nextPose(2,'FREE');ackFences();frames.onUpdate()
+   local op=x.pending.operation
+   nativeEvent('Window',op..'|1');nativeEvent('Applied',op..'|applied')
+   now=now+.2;own('APPROACH',12);nextPose(3,'FREE');frames.onUpdate()
+   assert(x.pending and x.pending.operation==op and #writes==0) -- still physically attached
+   nativeDocked=false;now=now+.1;own('APPROACH',12);nextPose(4,'FREE');frames.onUpdate()
+   assert(x.pending==nil and #writes==0)
+   now=now+.51;own('APPROACH',12);nextPose(5,'FREE');frames.onUpdate()
+   assert(x.pending and x.pending.action=='CANCEL' and #writes==0)
+   op=x.pending.operation;nativeEvent('Window',op..'|1');nativeEvent('Applied',op..'|applied')
+   own('FREE');frames.onUpdate();assert(x.pending==nil and #writes==1)
+  ''')
+
 if __name__=='__main__':unittest.main()
