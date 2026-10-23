@@ -9,8 +9,8 @@
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not cfg or not cfg.coop or not cfg.damage_claims or not A or not A.coop or not A.state.active then return end
 local c=A.coop;local s=A.state
-local d={seq=0,applied={},attack={},pending={},undo={}};A.damage=d
-local VICTIMS,LIMIT,RESEND,ATTRIBUTION=4,1e9,.25,1.0
+local d={seq=0,applied={},records={},undo={}};A.damage=d
+local VICTIMS,LIMIT,RESEND=4,1e9,.25
 local function log(v) DebugError('[X4LAN] '..v) end
 local function number(v)
  local n=tonumber(v);if not n or n~=n or n<0 or n>LIMIT then return nil end;return n
@@ -20,16 +20,41 @@ local function integer(v,limit)
 end
 local function hex(v) return type(v)=='string' and #v==32 and v:match('^[a-f0-9]+$')~=nil end
 
--- Native damage events carry no attacker, attack events no amount. A victim's damage belongs to
--- its last attacker within ATTRIBUTION game seconds; damage reported before the attack event of
--- the same game time waits for it. Only the two co-op ships are attackers here.
-function d.attribute(v,sh,hu)
- local a=d.attack[v];local e=a.entity
+-- Native damage events carry no attacker, attack events no amount. A victim's damage belongs only
+-- to an attack event of the SAME game time; the record is resolved one UI frame after it opened, so
+-- the events of one game frame may arrive in either order. Two attackers, a non-co-op attacker, no
+-- attacker, or a health setter (WORLD Apply, host Apply/Undo) at that game time make it ambiguous:
+-- it is neither claimed nor undone.
+function d.attribute(v,sh,hu,e,own)
  if e<1 or e==v then return end                    -- another attacker, or a ship hitting itself
  if cfg.slot=='p1' then
-  -- The replayed remote ship: its pilot reports this hit from its own world.
-  if c.owners[e] and c.owners[e]~=cfg.slot then local u=d.undo[v] or {0,0};u[1],u[2]=u[1]+sh,u[2]+hu;d.undo[v]=u end
- elseif a.own then d.claim(e,v,sh,hu) end
+  if c.owners[e]==cfg.slot then
+   -- Host's own hit: LAN targets keep a 1% floor while claims are active; MD kills at the floor.
+   if v>=3 and hu>0 then AddUITriggeredEvent('X4LAN_Damage','Floor',{victim=v}) end
+  elseif c.owners[e] then
+   -- The replayed remote ship: its pilot reports this hit from its own world.
+   local u=d.undo[v] or {0,0};u[1],u[2]=u[1]+sh,u[2]+hu;d.undo[v]=u
+  end
+ elseif own then d.claim(e,v,sh,hu) end
+end
+
+function d.resolve(v)
+ local r=d.records[v];d.records[v]=nil
+ if not r or r.shield+r.hull<=0 then return end
+ local key,count,coop=nil,0,false
+ for k in pairs(r.attackers) do key,count=k,count+1;if k:sub(1,1)~='0' then coop=true end end
+ if count==1 and not r.setter and coop then
+  local e,own=key:match('^(%d):([01])$');d.attribute(v,r.shield,r.hull,tonumber(e),own=='1')
+ elseif coop then
+  log(string.format('DMG_DROP victim=%d attackers=%d setter=%s shield=%.3f hull=%.3f',v,count,tostring(r.setter==true),r.shield,r.hull))
+ end
+end
+
+local function record(v,t)
+ local r=d.records[v]
+ if r and r.at~=t then d.resolve(v);r=nil end
+ if not r then r={at=t,attackers={},shield=0,hull=0,frames=0};d.records[v]=r end
+ return r
 end
 
 -- 'victim|attackerEntity|own|gameSeconds'; attackerEntity 0 is not a co-op ship.
@@ -37,23 +62,18 @@ function d.attacked(payload)
  local v,e,own,t=payload:match('^(%d)|(%d)|([01])|([^|]+)$')
  v,e,t=integer(v,VICTIMS),integer(e,2),tonumber(t)
  if not v or v<1 or not e or not t or t~=t then return false end
- d.attack[v]={entity=e,own=own=='1',at=t}
- local p=d.pending[v]
- if p and p.at==t then d.pending[v]=nil;d.attribute(v,p.shield,p.hull) end
+ record(v,t).attackers[e..':'..own]=true
  return true
 end
 
--- 'victim|s or h|damage|gameSeconds'
+-- 'victim|s or h|damage|gameSeconds|setter'
 function d.damaged(payload)
- local v,kind,amount,t=payload:match('^(%d)|([sh])|([^|]+)|([^|]+)$')
+ local v,kind,amount,t,setter=payload:match('^(%d)|([sh])|([^|]+)|([^|]+)|([01])$')
  v,amount,t=integer(v,VICTIMS),number(amount),tonumber(t)
  if not v or v<1 or not amount or not t or t~=t then return false end
- local sh,hu=kind=='s' and amount or 0,kind=='h' and amount or 0
- local a=d.attack[v]
- if a and t>=a.at and t-a.at<=ATTRIBUTION then d.attribute(v,sh,hu);return true end
- local p=d.pending[v]
- if not p or p.at~=t then p={at=t,shield=0,hull=0};d.pending[v]=p end
- p.shield,p.hull=p.shield+sh,p.hull+hu
+ local r=record(v,t)
+ if kind=='s' then r.shield=r.shield+amount else r.hull=r.hull+amount end
+ if setter=='1' then r.setter=true end
  return true
 end
 
@@ -70,6 +90,7 @@ function d.claim(e,v,sh,hu)
 end
 
 function d.frame(now)
+ for v,r in pairs(d.records) do r.frames=r.frames+1;if r.frames>=2 then d.resolve(v) end end
  if cfg.slot=='p1' then
   for v,u in pairs(d.undo) do AddUITriggeredEvent('X4LAN_Damage','Undo',{victim=v,shield=u[1],hull=u[2]}) end
   d.undo={}
