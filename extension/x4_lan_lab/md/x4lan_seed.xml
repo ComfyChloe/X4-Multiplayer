@@ -13,7 +13,20 @@
   <cue name="Inspect" instantiate="true">
    <conditions><event_ui_triggered screen="'X4LAN_Seed'" control="'Inspect'"/></conditions>
    <actions>
-    <raise_lua_event name="'X4LAN_Seed.State'" param="'%s|%s|%s'.[if State.$id? then State.$id else '',if not md.X4LAN_Bubble.Arena.$ships? and not md.X4LAN_Bubble.PrepareShips.$own? then 1 else 0,if State.$loads? then State.$loads else 0]"/>
+    <set_value name="$pristine" exact="not md.X4LAN_Bubble.Arena.$ships? and not md.X4LAN_Bubble.PrepareShips.$own?"/>
+    <!-- An optional saved test station must still be the original fixture.
+         Never silently replace a missing station with different bay identities. -->
+    <do_if value="md.X4LAN_SeedDocks.State.$testStation?">
+     <set_value name="$station" exact="md.X4LAN_SeedDocks.State.$testStation"/>
+     <do_if value="not $station.exists"><set_value name="$pristine" exact="false"/></do_if>
+     <do_elseif value="not $station.isclass.station or not $station.isoperational or $station.macro.id != 'station_gen_factory_base_01_macro' or $station.owner != faction.player"><set_value name="$pristine" exact="false"/></do_elseif>
+    </do_if>
+    <do_if value="md.X4LAN_SeedDocks.State.$testStation2?">
+     <set_value name="$station" exact="md.X4LAN_SeedDocks.State.$testStation2"/>
+     <do_if value="not $station.exists"><set_value name="$pristine" exact="false"/></do_if>
+     <do_elseif value="not $station.isclass.station or not $station.isoperational or $station.macro.id != 'station_gen_factory_base_01_macro' or $station.owner != faction.player"><set_value name="$pristine" exact="false"/></do_elseif>
+    </do_if>
+    <raise_lua_event name="'X4LAN_Seed.State'" param="'%s|%s|%s'.[if State.$id? then State.$id else '',if $pristine then 1 else 0,if State.$loads? then State.$loads else 0]"/>
    </actions>
   </cue>
   <cue name="Loaded" instantiate="true">

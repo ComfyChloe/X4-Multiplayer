@@ -35,9 +35,12 @@ xml='''<?xml version="1.0" encoding="utf-8"?>
  </do_all>
  <add_to_group groupname="$weapons1" list="$ships.{1}.weapons.operational.list"/>
  <add_to_group groupname="$weapons2" list="$ships.{2}.weapons.operational.list"/>
- <create_station name="$station" macro="macro.station_gen_factory_base_01_macro" sector="$local.sector" owner="faction.player" state="componentstate.operational" constructionplan="'x4lan_market'" rawname="'LAN Test Station'">
+ <do_if value="md.X4LAN_SeedDocks.State.$testStation?">
+  <set_value name="$station" exact="md.X4LAN_SeedDocks.State.$testStation"/>
+ </do_if>
+ <do_else><create_station name="$station" macro="macro.station_gen_factory_base_01_macro" sector="$local.sector" owner="faction.player" state="componentstate.operational" constructionplan="'x4lan_market'" rawname="'LAN Test Station'">
   <position x="0m" y="10km" z="5km"/>
- </create_station>
+ </create_station></do_else>
  <do_if value="$host"><add_cargo object="$station" ware="ware.energycells" exact="200"/></do_if>
  <create_ship name="$donor" macro="macro.ship_arg_m_trans_container_01_a_macro" sector="$local.sector">
   <owner exact="faction.player"/><pilot><select race="race.argon"/></pilot><position x="0m" y="11km" z="0m"/>

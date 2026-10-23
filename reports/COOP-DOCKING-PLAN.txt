@@ -118,3 +118,22 @@ then succeed with bay count1. denial-01 remains INCOMPLETE: its player11km away
 never obtained the prerequisite native request. Both runs preserve raw evidence
 and verified installation/settings/save cleanup. No human boarding/platform,
 two-native same-pad crash acceptance or newly created bay support is claimed.
+
+SAVED TEST STATIONS
+Optional dock capture now creates both existing LAN fixture stations before bay
+enumeration. Arena/Trade reuse those saved references; feature-off/older seeds
+keep the previous creation path. Seed admission refuses a missing/changed saved
+fixture. Construction, stock and trading rules otherwise remain the same.
+seed-market-dock-01 FAIL: a probe source rewrite missed its exact node and chose
+the first generic factory, so its completed cycle does not qualify the intended
+test station. The required marker was absent and the gate correctly failed.
+seed-market-dock-02 proves both saved station references are reused and all24
+bays retain distinct positive registry indices. The complete reserve/attach/
+occupied-refusal/undock/cancel/fenced-warp cycle succeeds on Beta. Overall PARTIAL:
+the name-count gate finds Alpha once but Beta zero times after reload. Raw kept;
+an explicit Beta rename after owner assignment is added, with native confirmation
+confirmed by the station witness in health-guest-01: both exact saved references
+and one station of each name. Its health portion FAILS in the dev observer; that
+does not establish health acceptance. Do not relabel the older dock capture.
+24 seed +23 bubble +12 trade adapter tests PASS; changed MD schemas VALID and
+the two changed generator branches match. No unrelated cargo/mission reruns.

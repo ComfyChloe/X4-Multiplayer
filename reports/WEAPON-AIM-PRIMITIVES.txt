@@ -137,4 +137,28 @@ The next probe observes actual physical-player fire-at-cursor input and compares
 GetPlayerTargetOffset/GetLocalMousePosition with initial projectile forward and
 later displacement. cursor-aim-01 also failed before any probe/input at age0;
 its raw startup failure and verified cleanup are retained. No getter conclusion
-can be drawn from that run; cursor-aim-02 is pending.
+can be drawn from that run; subsequent observations follow below.
+
+CURSOR AND PROJECTILE FFI FOLLOW-UP
+cursor-aim-02 reached the cockpit but XSendEvent produced no shots.04 uses
+focused XTest input and observes168 physical-player shots plus168 delayed native
+trajectory samples. GetPlayerTargetOffset stays zero throughout off-axis fire
+(yaw9.293..10.032deg); no soft target. It is not a free-aim getter in this case.
+Initial projectile forward agrees with later displacement within0.181deg in this
+sample. Native mouse capture prevented the intended exact centre/left/right sweep;
+no coordinate calibration or replay is claimed. Raw SHA256
+c6efbced786c7ae634ed479bbb51f41c887d739a3d49d84e2fc080d9d2702334.
+cursor-aim-03 failed before input with native fatal1119: p1_glass shader failed
+to compile under the harness's temporary shaderquality1. Screenshot/stacks retained.
+Subsequent harnesses preserve the original shaderquality2. Do not infer earlier
+startup failures had the same cause without their own dialog evidence.
+
+projectile-ffi-01:24 actual X Shuttle shots,6 per phase. SetPositionalOffset on
+the bullet succeeds in rotating its native forward readback to15deg, but actual
+flight remains approximately straight (-0.067..0.154deg). SetObjectSectorPos
+rejects the bullet as not an object (12 errors across sector and combined phases).
+Combined setters likewise fail physical steering. A visual rotation is not a
+correct ballistic replay. Raw SHA256
+af50b0895f672eb162bb61dc3839f88e0ec1d345b0c38a8e6155ac912fa9d4c7.
+All these completed/aborted runs retain verified owned cleanup. No production
+weapon change or aim replay acceptance results from them.
