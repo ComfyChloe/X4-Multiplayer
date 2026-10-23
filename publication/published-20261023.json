@@ -1,0 +1,28 @@
+{
+  "url": "https://github.com/Lith7ium/X4-Multiplayer-Source",
+  "visibility": "public",
+  "owner": "Lith7ium",
+  "anonymous_repository_page": "PASS",
+  "anonymous_license_bytes": "PASS",
+  "anonymous_zip_inventory_and_hashes": "PASS",
+  "files": 189,
+  "github_zip_bytes": 413720,
+  "has_issues": false,
+  "has_wiki": false,
+  "has_discussions": false,
+  "published_commit": "b4cb16c98a417e2182ce5e5e6a09a8016a9227f6",
+  "private_source_commit": "f29d3efa7dfae2bf3c9ff113197572a3973c6085",
+  "verified_at_utc": "2026-10-23T15:10:26.013949+00:00",
+  "authorization": "Owner explicitly approved the reviewed license and publication on 23 October 2026.",
+  "branches": [
+    "main"
+  ],
+  "root_commit_parents": [],
+  "writers": [
+    "Lith7ium"
+  ],
+  "pending_invitations": 0,
+  "development_repository_visibility": "private",
+  "public_mod_release_created": false,
+  "original_review_record": "review-20261023.json"
+}

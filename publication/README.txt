@@ -1,10 +1,12 @@
-SOURCE-INSPECTION PUBLICATION PREPARATION — 23 OCTOBER 2026
+SOURCE-INSPECTION PUBLICATION — 23 OCTOBER 2026
 
 DECISION / STATUS
 The owner requested preparation for public read/download access and explicitly
-selected restrictions on further reuse and modified redistribution. Preparation
-is complete; no repository has been made public and no public repo was created.
-The proposed destination is a NEW repository, Lith7ium/X4-Multiplayer-Source.
+selected restrictions on further reuse and modified redistribution. The owner
+approved the reviewed license and publication on 23 October; publication is complete:
+https://github.com/Lith7ium/X4-Multiplayer-Source
+Anonymous page/license access and all 189 ZIP file hashes passed. Only Lith7ium
+has write access; no pending invitations. See published-20261023.json for evidence.
 Keep Lith7ium/X4-Multiplayer private. Do not change its visibility or rewrite it.
 
 Reviewable candidate:
@@ -17,7 +19,8 @@ Reviewable candidate:
 Snapshot commit: b4cb16c98a417e2182ce5e5e6a09a8016a9227f6
 Source revision: f29d3efa7dfae2bf3c9ff113197572a3973c6085 (internal 7.3.0)
 Source ZIP SHA256: c9a3173005d26206e99314aa625bafa4a93fc3578a306496387b94dddc75bdbc
-The snapshot has no origin and no link to the private repository's object store.
+The published Desktop checkout now has the public repository as origin. It has
+no link to the private repository's object store or private history.
 Only its reviewed source tree/commit and ZIP are publication candidates, not this
 private preparation folder or the entire Desktop review folder.
 
@@ -58,7 +61,7 @@ Machine-readable scope: review-20261023.json. Raw local audit/test evidence:
 .local/publication-review/. Original packages and installation were not changed.
 
 LICENSE AND OWNER REVIEW
-templates/LICENSE.txt is the proposed custom Source Inspection License, not an
+templates/LICENSE.txt is the approved custom Source Inspection License, not an
 open-source license. It permits viewing and retaining unchanged private copies
 for inspection. It grants no additional permission to modify, compile/run,
 redistribute, sublicense or commercially reuse the source. GitHub's applicable
@@ -66,13 +69,13 @@ hosting/viewing/forking rights and mandatory legal rights take precedence. The
 license cannot technically prevent copying or override platform terms. Separate
 internal tester/contributor permissions are preserved.
 
-The owner must approve the actual wording and have authority from relevant
-contributors to publish/license their code. This preparation did not obtain new
-third-party contributor consents or professional legal review. No claim is made
+The owner approved the actual wording and authorized publication. Their authority
+over contributions is not independently audited; this preparation did not obtain
+new third-party consents or professional legal review. No claim is made
 that GitHub grants can be narrowed by this custom license. Publication is not a
 blanket ownership claim over game APIs, trademarks or third-party dependencies.
 
-FINAL PUBLICATION STEP — ONLY AFTER EXPLICIT OWNER APPROVAL
+COMPLETED PUBLICATION PROCEDURE — RETAINED RECORD, DO NOT RE-RUN CREATION
 1. Review README.md, LICENSE.txt, POLICY.md, STATUS.md and SOURCE-MANIFEST.json in
    the candidate. Verify the candidate is still at the exact snapshot commit,
    with a clean working tree, only main, one commit and no remotes/alternates.
@@ -80,13 +83,14 @@ FINAL PUBLICATION STEP — ONLY AFTER EXPLICIT OWNER APPROVAL
    candidate only. Do not fork, mirror-push, rename or publicize the private repo.
    With authenticated gh, from the candidate directory, the intended command is:
      gh repo create Lith7ium/X4-Multiplayer-Source --public --source=. --remote origin --push --disable-issues --disable-wiki
-   This command has NOT been run. Stop if that repository already exists; inspect
-   its ownership/history before considering any update. Never force-push it.
+   This command completed after owner approval and pushed only the reviewed root
+   commit to main. The repository now exists; inspect its ownership/history before
+   considering any separately authorized update. Never force-push it.
 3. Do not invite read-only viewers as collaborators. They can view/download the
    public repository without write access. Keep publication writes owner-only.
    No workflow, private release assets or internal issue/PR history is supplied.
-4. Verify anonymous browsing/download, license, branch/tree and write permissions
-   after publication. Report the actual public URL, not a guessed pre-created URL.
+4. Anonymous browsing/download, license, branch/tree and write permissions were
+   verified after publication. The development repository still reports PRIVATE.
 
 FUTURE UPDATES
 Run prepare.py with an explicitly reviewed source revision and a NEW destination:
