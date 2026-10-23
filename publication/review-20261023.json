@@ -1,0 +1,69 @@
+{
+  "prepared_only": true,
+  "source_commit": "f29d3efa7dfae2bf3c9ff113197572a3973c6085",
+  "snapshot_commit": "b4cb16c98a417e2182ce5e5e6a09a8016a9227f6",
+  "suggested_public_repository": "Lith7ium/X4-Multiplayer-Source",
+  "existing_repository_visibility": "PRIVATE; unchanged",
+  "candidate_commits": 1,
+  "candidate_branches": [
+    "main"
+  ],
+  "candidate_remotes": [],
+  "snapshot_files": 189,
+  "original_source_files": 181,
+  "unchanged_original_files": 176,
+  "changed_test_fixtures": [
+    "tests/test_distribution.py",
+    "tests/test_game_adapter.py",
+    "tests/test_internal_sessions.py",
+    "tests/test_public.py",
+    "tests/test_windows_profiles.ps1"
+  ],
+  "history_pattern_audit": {
+    "scope": "All objects reachable from refs advertised to an authenticated mirror clone; pattern-based audit, not proof of absence of secrets. No unreachable server objects or private attachments audited.",
+    "commits": 280,
+    "refs": 73,
+    "pull_refs": 43,
+    "blobs": 1044,
+    "text_blobs": 1042,
+    "bytes_scanned": 8037300,
+    "finding_blob_counts": {
+      "personal_path": 10,
+      "slack_reference": 33,
+      "test_network": 27
+    }
+  },
+  "github_metadata": {
+    "actions_runs": 0,
+    "releases": 0,
+    "issue_and_pr_items": 32,
+    "ordinary_issues": 4,
+    "pull_requests": 28,
+    "scope": "Inventory only; issue/review bodies, attachments and inaccessible objects are not certified for publication. None is included in the new snapshot."
+  },
+  "checks": {
+    "publication_boundary_tests": {
+      "passed": 8,
+      "skipped": 0
+    },
+    "affected_python_luajit_fixture_tests": {
+      "passed": 42,
+      "skipped": 0
+    },
+    "powershell_fixture_tests": "PASS on Linux PowerShell 7; 2 Windows drive-root assertions not run; native metadata simulated.",
+    "source_and_manifest_hashes": "PASS",
+    "public_document_links": 28,
+    "python_parse": "PASS",
+    "zip_crc_inventory_bytes": "PASS"
+  },
+  "checks_scope": "Affected test fixtures were checked in a separate disposable copy with private release reports and existing native libraries supplied solely for tests. Those inputs are not in the source snapshot. No native game or full gameplay suite run.",
+  "archive": {
+    "name": "X4-Multiplayer-7.3.0-Source-Inspection.zip",
+    "bytes": 410371,
+    "sha256": "c9a3173005d26206e99314aa625bafa4a93fc3578a306496387b94dddc75bdbc"
+  },
+  "publication_pending": [
+    "Owner approval to create/publish the separate source repository.",
+    "Owner approval of the source-inspection license and authority to publish contributed code under it."
+  ]
+}

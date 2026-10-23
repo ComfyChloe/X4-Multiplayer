@@ -16,6 +16,10 @@ current HEAD. Main is not merged. Preserve the archives and prepared installatio
 Packages: /home/developer/Desktop/X4 Online/Internal Tests/7.3.0-2026-10-23
 Both OS packages include server, portable runtime and English documentation.
 Delivery and context-documentation maintenance are complete; human feedback is next.
+This branch, contrib/astra-source-publication, additionally prepares a restricted
+source-inspection mirror. See publication/README.txt for the exact reviewed tree,
+license and checks. No public repository exists yet; the development repo remains
+private. Source publication requires a final explicit owner instruction.
 Development was authorized until 23 October 18:00 Europe/Berlin; this is not an
 indefinite background assignment. Humans perform the finished-version playtest.
 No periodic Slack monitor is active/requested; the single 08:30 report was sent.
