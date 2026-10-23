@@ -4,16 +4,24 @@
 -- the reported values on its proxy and keeps the proxy at a 2% hull floor meanwhile, so
 -- host-world damage never reaches the 1.01% life threshold; a reported lethal value restores
 -- the 1% floor and the existing life tick declares the death.
--- The relay keeps one generation per (owner, epoch, pilot) of a ship. The pilot first adopts the
--- host's canonical WORLD baseline of that generation, acknowledges it, and only then reports:
+-- The relay keeps one generation per (owner, epoch, pilot) of a ship and announces the current
+-- ones with its AUTH revision in every snapshot. Every such change bumps that revision, so a
+-- generation is valid here only once an HGEN of the AUTH revision this machine holds names it.
+-- The pilot first adopts the host's canonical WORLD baseline of its generation, acknowledges it,
+-- and only then reports:
+--  HGEN|1|lease|authRevision|gen1|gen2           relay -> both peers (current generations)
 --  HBASE|1|lease|entity|gen|hull%|shield%        relay -> pilot (repeated until acknowledged)
 --  HACK|1|lease|entity|gen                       pilot -> relay
 --  HEALTH|1|lease|entity|gen|seq|hull%|shield%   pilot -> relay -> host (with the source lease)
+-- A generation ends for good on any accepted AUTH transition of its ship or when a newer one is
+-- valid; nothing of it is adopted or applied again. A frame that overtook its AUTH is ignored
+-- (its sender repeats it), so reordering delays a generation but never revives or stalls one. Queued MD writes carry their generation and
+-- an MD game-time deadline and are checked again when they execute.
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not cfg or not cfg.coop or not cfg.pilot_health or not A or not A.coop or not A.state.active then return end
 local c=A.coop;local s=A.state
-local h={seq=0,gen={0,0},last={0,0},closed={0,0},seen={0,0},remote={},auth={{0,false},{0,false}}};A.health=h
-local INTERVAL,FRESH=.1,1.0
+local h={seq=0,valid={},gen={0,0},last={0,0},closed={0,0},remote={},auth={{0,false},{0,false}}};A.health=h
+local INTERVAL,FRESH,TTL=.1,1.0,1.0
 local function log(v) DebugError('[X4LAN] '..v) end
 local function number(v,max)
  local n=tonumber(v);if not n or n~=n or n<0 or n>max then return nil end;return n
@@ -21,7 +29,11 @@ end
 local function integer(v,max) local n=number(v,max);if n and n%1==0 then return n end end
 local function hex(v) return type(v)=='string' and #v==32 and v:match('^[a-f0-9]+$')~=nil end
 local function send(v) if s.client and s.client.lease then s.transport:send(v) end end
+local function paused() return A.paused and A.paused() end
 function h.mine(e) return c.owners[e]==cfg.slot and c.pilots[e]==cfg.slot and c.epochs[e]~=nil end
+-- Deadline of a queued write on MD's own game clock (from the readback); nil before the first one.
+local function deadline() return h.mdAge and h.mdAge+TTL end
+
 -- Guest: MD keeps the authority it may write under; Base and the WORLD guards check it when they
 -- execute, so a queued write of an older or ended generation never lands.
 local function authority(e,gen,own)
@@ -29,79 +41,104 @@ local function authority(e,gen,own)
  if a[1]~=gen or a[2]~=own then h.auth[e]={gen,own};AddUITriggeredEvent('X4LAN_Health','Authority',{entity=e,gen=gen,own=own}) end
 end
 
--- Pilot: adopt a generation's baseline once; acknowledge every repeat of the adopted one. An
--- older generation than one already seen for that ship is never adopted again.
+-- End this machine's use of every generation up to gen for good (guest: its own; host: the
+-- remote pilot's, releasing the floor to the retained canonical value).
+function h.close(e,gen)
+ if gen>h.closed[e] then h.closed[e]=gen end
+ if cfg.slot=='p1' then
+  local r=h.remote[e]
+  if r and r.gen<=h.closed[e] then h.remote[e]=nil;AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=r.gen,closed=true}) end
+  return
+ end
+ for _,k in ipairs({'live','basing'}) do
+  if h[k] and h[k].entity==e and h[k].gen<=h.closed[e] then h[k]=nil;authority(e,0,false) end
+ end
+end
+
+local function valid(e,gen) return gen==h.valid[e] and gen>h.closed[e] end
+
+-- Pilot: adopt the current generation's baseline once; acknowledge every repeat of it.
 function h.base(f,now)
  if cfg.slot=='p1' or #f~=7 or not s.client or f[3]~=s.client.lease then return end
  local e,gen,hu,sh=integer(f[4],2),integer(f[5],2147483647),number(f[6],100),number(f[7],100)
- if not e or e<1 or not gen or not hu or not sh or not h.mine(e) or gen<h.seen[e] then return end
- h.seen[e]=gen
+ if not e or e<1 or not gen or not hu or not sh then return end
+ if not valid(e,gen) or not h.mine(e) then return end
  local live=h.live
  if live and live.entity==e and live.gen==gen then
   if now>=(h.nextAck or 0) then h.nextAck=now+.25;send(string.format('HACK|1|%s|%d|%d',s.client.lease,e,gen)) end
   return
  end
- if h.basing and h.basing.entity==e and h.basing.gen==gen then return end
+ if (h.basing and h.basing.entity==e and h.basing.gen==gen) or paused() or not deadline() then return end
  if live then authority(live.entity,0,false) end
  h.live,h.basing=nil,{entity=e,gen=gen}
  authority(e,gen,false)
- AddUITriggeredEvent('X4LAN_Health','Base',{entity=e,gen=gen,hull=hu,shield=sh})
+ AddUITriggeredEvent('X4LAN_Health','Base',{entity=e,gen=gen,hull=hu,shield=sh,deadline=deadline()})
 end
 
 -- MD 'entity|gen' once it wrote that baseline on the occupied ship.
 function h.based(payload)
  local e,gen=tostring(payload):match('^(%d)|(%d+)$');e,gen=tonumber(e),tonumber(gen)
  local b=h.basing
- if b and b.entity==e and b.gen==gen and h.mine(e) then
+ if b and b.entity==e and b.gen==gen and valid(e,gen) and h.mine(e) then
   h.live,h.basing,h.reading,h.seq,h.nextAck=b,nil,nil,0,0
   authority(e,gen,true)
   log(string.format('HEALTH_LIVE entity=%d gen=%d',e,gen))
  end
 end
 
--- Pilot side: MD reads back the occupied co-op ship at 10 Hz as 'entity|hull%|shield%'.
+-- MD readback at 10 Hz: 'gameSeconds|entity|gen|hull%|shield%'. entity 0 = not in a co-op ship;
+-- gen is the authority MD wrote under (0 until own), so a reading never crosses a baseline.
 function h.own(payload)
- local e,hu,sh=tostring(payload):match('^(%d)|([^|]+)|([^|]+)$')
- e,hu,sh=integer(e,2),number(hu,100),number(sh,100)
- if not e or e<1 or not hu or not sh or not h.live or h.live.entity~=e then return false end
+ local age,e,gen,hu,sh=tostring(payload):match('^([^|]+)|(%d)|(%d+)|([^|]+)|([^|]+)$')
+ age,e,gen,hu,sh=number(age,1e12),integer(e,2),tonumber(gen),number(hu,100),number(sh,100)
+ if not age then return false end
+ h.mdAge=age
+ local live=h.live
+ if not e or e<1 or not hu or not sh or not live or live.entity~=e or live.gen~=gen then return false end
  local old=h.reading;h.reading={entity=e,hull=hu,shield=sh}
  if old and (hu<old.hull or sh<old.shield) then h.urgent=true end
  return true
 end
 
--- Host: HEALTH|1|hostLease|sourceLease|entity|gen|seq|hull%|shield%
 function h.receive(f,now)
+ if f[1]=='HGEN' then
+  local rev=integer(f[4],2147483647)
+  if #f==6 and s.client and f[3]==s.client.lease and rev and rev==c.revision then
+   for e=1,2 do
+    local gen=integer(f[4+e],2147483647)
+    if gen and gen>h.closed[e] and gen>(h.valid[e] or 0) then
+     if h.valid[e] then h.close(e,gen-1) end          -- a newer generation ends every older one
+     h.valid[e]=gen
+    end
+   end
+  end
+  return true
+ end
  if f[1]=='HBASE' then h.base(f,now);return true end
  if f[1]~='HEALTH' then return false end
+ -- Host: HEALTH|1|hostLease|sourceLease|entity|gen|seq|hull%|shield%
  if cfg.slot~='p1' or #f~=9 or not hex(f[3]) or not hex(f[4]) then return true end
  local e,gen,seq=integer(f[5],2),integer(f[6],2147483647),integer(f[7],2147483647)
  local hu,sh=number(f[8],100),number(f[9],100)
  if not e or e<1 or not gen or not seq or not hu or not sh then return true end
  local owner=c.owners[e]
- if not owner or owner==cfg.slot or c.pilots[e]~=owner or gen<h.gen[e] or gen<=h.closed[e] then return true end
+ if not valid(e,gen) or not owner or owner==cfg.slot or c.pilots[e]~=owner then return true end
  if gen==h.gen[e] and seq<=h.last[e] then return true end
- if A.paused and A.paused() then return true end    -- a later frame carries the newer value
+ if paused() or not deadline() then return true end      -- a later frame carries the newer value
  h.gen[e],h.last[e]=gen,seq
- h.remote[e]={gen=gen,owner=owner,epoch=c.epochs[e],at=now}
- AddUITriggeredEvent('X4LAN_Health','Apply',{entity=e,gen=gen,hull=hu,shield=sh})
+ h.remote[e]={gen=gen,at=now}
+ AddUITriggeredEvent('X4LAN_Health','Apply',{entity=e,gen=gen,hull=hu,shield=sh,deadline=deadline()})
  return true
 end
 
 function h.frame(now)
  if cfg.slot=='p1' then
-  -- Authority ended (its generation is closed for good) or went stale (the same generation may
-  -- resume with newer frames): restore the 1% floor and the retained canonical value.
+  -- Stale only: release the floor to the retained canonical value; the generation may resume.
   for e,r in pairs(h.remote) do
-   local ended=c.owners[e]~=r.owner or c.pilots[e]~=r.owner or c.epochs[e]~=r.epoch
-   if ended or now-r.at>FRESH then
-    if ended then h.closed[e]=r.gen end
-    h.remote[e]=nil;AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=r.gen,closed=ended})
-   end
+   if now-r.at>FRESH then h.remote[e]=nil;AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=r.gen,closed=false}) end
   end
   return
  end
- if h.live and not h.mine(h.live.entity) then authority(h.live.entity,0,false);h.live=nil end
- if h.basing and not h.mine(h.basing.entity) then authority(h.basing.entity,0,false);h.basing=nil end
  local r=h.reading
  if not h.live or not r or r.entity~=h.live.entity then return end
  if not h.urgent and now<(h.nextSend or 0) then return end
@@ -109,8 +146,25 @@ function h.frame(now)
  send(string.format('HEALTH|1|%s|%d|%d|%d|%.3f|%.3f',s.client.lease,r.entity,h.live.gen,h.seq,r.hull,r.shield))
 end
 
+-- Any accepted AUTH transition of a ship (owner, epoch or pilot) ends its known generations at
+-- once, before any later frame is handled; frame sampling alone could miss a leave/re-enter.
 local receive,frame=c.receive,c.frame
-function c.receive(f,now) if h.receive(f,now) then return true end return receive(f,now) end
+local function key(e) return tostring(c.owners[e])..'|'..tostring(c.epochs[e])..'|'..tostring(c.pilots[e]) end
+function c.receive(f,now)
+ if h.receive(f,now) then return true end
+ if f[1]~='AUTH' then return receive(f,now) end
+ local before={key(1),key(2)}
+ local result=receive(f,now)
+ for e=1,2 do
+  if before[e]~=key(e) then
+   -- Close every generation used so far; the next valid one comes with an HGEN of this revision.
+   local used=math.max(h.gen[e],h.valid[e] or 0,h.remote[e] and h.remote[e].gen or 0)
+   for _,k in ipairs({'live','basing'}) do if h[k] and h[k].entity==e then used=math.max(used,h[k].gen) end end
+   h.valid[e]=nil;h.close(e,used)
+  end
+ end
+ return result
+end
 function c.frame(now)
  frame(now)
  if c.ready and not h.setup then h.setup=true;AddUITriggeredEvent('X4LAN_Health','Setup') end

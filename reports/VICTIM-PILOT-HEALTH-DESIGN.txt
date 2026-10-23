@@ -123,3 +123,16 @@ staleness/transfer release, flag/ui/bubble guard text). 94 focused tests pass. B
 validate against md.xsd.
 NOT FIXED BY OPTION A: guest-to-host damage (the 7.3.1 human report). The host ship's health is
 still decided in the host world, where FIRE2 replays guest shots one latency late.
+Second review round (A:primary, re-review of c7cb744):
+- Validity is bound to the AUTH revision. The relay sends HGEN|1|lease|authRevision|gen1|gen2 in
+  every snapshot. Every owner/epoch/pilot change bumps that revision, so a generation is valid
+  on a machine only once an HGEN of the AUTH revision it holds names it. HBASE, HEALTH and Based
+  count only for that valid generation. A frame that overtook its AUTH is ignored; its sender
+  repeats it.
+- Every accepted AUTH transition of a ship closes every generation used so far, at once: the
+  guest revokes live/basing, sets MD authority 0 and never re-adopts; the host releases the
+  floor (closed). A newer valid generation also ends the older one (host: closed Release).
+- The MD readback carries MD's game clock and the authority it was taken under. A reading taken
+  before the baseline can never be the first frame of a generation.
+- Queued Base/Apply carry a deadline on MD's game clock (TTL 1 s) that MD checks at execution.
+  Without a readback clock nothing is queued, and nothing is queued while paused.

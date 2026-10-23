@@ -47,6 +47,14 @@ class HealthRelayTests(unittest.TestCase):
         self.assertEqual(self.rows(b'HEALTH'), [['HEALTH', '1', self.a, self.b, '2', str(self.g), '2', '80', '50']])
         self.assertEqual(self.rows(b'HEALTH', to=P2), [])
 
+    def test_hgen_names_the_generations_of_the_current_authority_revision(self):
+        rows = self.rows(b'HGEN', to=P2)
+        self.assertEqual(rows, [['HGEN', '1', self.b, str(self.s.authority_revision), str(self.s.health_gen[1]), str(self.g)]])
+        before = self.s.authority_revision
+        self.crew(2, 0, now=.3)
+        row = self.rows(b'HGEN', now=.35, to=P1)[0]
+        self.assertGreater(int(row[3]), before); self.assertEqual(row[5], str(self.g + 1))
+
     def test_frames_need_owner_pilot_live_generation_order_and_valid_values(self):
         self.ack()
         self.health(entity=1)
@@ -79,7 +87,7 @@ class HealthRelayTests(unittest.TestCase):
 
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
 class HealthAdapterTests(unittest.TestCase):
-    def make(self, slot):
+    def make(self, slot, clock=True):
         l = LuaRuntime(unpack_returned_tuples=True); l.execute(MOCK + EXTRA)
         g = l.globals(); g.X4LAN_CONFIG.slot = slot; g.X4LAN_CONFIG.coop = True; g.X4LAN_CONFIG.pilot_health = True
         l.execute('''
@@ -91,82 +99,98 @@ class HealthAdapterTests(unittest.TestCase):
             l.execute((UI / file).read_text())
         l.execute('''events['X4LAN.Loaded']();now=10;frames.onUpdate();events['X4LAN_Bubble.Ready']();frames.onUpdate();events['X4LAN_Coop.Ready']()
          function auth(rev,e2,p2) client:receiveExtension({'AUTH','1',client.lease,tostring(rev),'p1','1','p1','p2',tostring(e2),p2},now) end
-         auth(1,1,'p2')
-         now=10.1;frames.onUpdate();assert(countRequest('Setup')>=1);events['X4LAN_Health.Ready']()
+         function hgen(rev,g1,g2) client:receiveExtension({'HGEN','1',client.lease,tostring(rev),tostring(g1),tostring(g2)},now) end
+         function base(gen) client:receiveExtension({'HBASE','1',client.lease,'2',tostring(gen),'64.5','30'},now) end
+         function own(age,e,gen,hull,shield) events['X4LAN_Health.Own'](nil,table.concat({age,e,gen,hull,shield},'|')) end
          function sentKind(kind) local out={};for _,p in ipairs(sent) do if p:sub(1,#kind+1)==kind..'|' then out[#out+1]=p end end;return out end
          function last(name) local r;for _,q in ipairs(requests) do if q[1]=='X4LAN_Health' and q[2]==name then r=q[3] end end;return r end
-         function base(gen) client:receiveExtension({'HBASE','1',client.lease,'2',tostring(gen),'64.5','30'},now) end
+         function order(...) local want={};for _,n in ipairs({...}) do want[n]=true end
+          local out={};for _,q in ipairs(requests) do if q[1]=='X4LAN_Health' and want[q[2]] then out[#out+1]=q[2]..':'..tostring(q[3].gen) end end
+          return table.concat(out,',') end
+         auth(1,1,'p2')
+         now=10.1;frames.onUpdate();assert(countRequest('Setup')>=1);events['X4LAN_Health.Ready']()
         ''')
+        if clock:
+            l.execute("own('50',0,0,0,0)")
         return l
 
-    def test_guest_adopts_the_baseline_once_then_acknowledges_and_reports(self):
+    def test_guest_adopts_the_valid_baseline_once_then_acknowledges_and_reports(self):
         out = self.make('p2').execute('''
-         events['X4LAN_Health.Own'](nil,'2|90|50');now=10.2;frames.onUpdate()
-         local early=#sentKind('HEALTH')                         -- no generation yet: silent
-         base(4);base(4);local b=last('Base');local bases=countRequest('Base')
-         events['X4LAN_Health.Based'](nil,'2|4')
-         now=10.25;frames.onUpdate();local owned=last('Authority')
+         own('50',2,0,90,50);now=10.2;frames.onUpdate();local early=#sentKind('HEALTH')
+         base(4);local unannounced=countRequest('Base')            -- not yet valid for this revision
+         hgen(1,1,4);base(4);base(4);local b=last('Base');local bases=countRequest('Base')
+         events['X4LAN_Health.Based'](nil,'2|4');local a=last('Authority')
          base(4);local acks=sentKind('HACK')
-         events['X4LAN_Health.Own'](nil,'2|64.5|30');now=10.3;frames.onUpdate()
-         events['X4LAN_Health.Own'](nil,'2|64.5|30');now=10.35;frames.onUpdate()   -- paced
-         events['X4LAN_Health.Own'](nil,'2|64.5|20');now=10.36;frames.onUpdate()   -- shield drop: at once
+         own('50.1',2,0,64.5,30);now=10.25;frames.onUpdate();local crossed=#sentKind('HEALTH')  -- pre-baseline readback
+         own('50.2',2,4,64.5,30);now=10.3;frames.onUpdate()
+         own('50.25',2,4,64.5,30);now=10.35;frames.onUpdate()     -- paced
+         own('50.3',2,4,64.5,20);now=10.36;frames.onUpdate()      -- shield drop: at once
          local h=sentKind('HEALTH')
-         return early,b.gen,b.hull,bases,owned.entity,owned.gen,owned.own,#acks,acks[1],#h,h[1],h[2]''')
-        early, gen, hull, bases, entity, agen, own, nacks, ack, count, first, second = out
-        self.assertEqual((early, gen, hull, bases, entity, agen, own, nacks, count), (0, 4, 64.5, 1, 2, 4, True, 1, 2))
+         return early,unannounced,b.gen,b.hull,b.deadline,bases,a.gen,a.own,#acks,acks[1],crossed,#h,h[1],h[2]''')
+        early, unannounced, gen, hull, deadline, bases, agen, own, nacks, ack, crossed, count, first, second = out
+        self.assertEqual((early, unannounced, gen, hull, deadline, bases, agen, own, nacks, crossed, count),
+                         (0, 0, 4, 64.5, 51, 1, 4, True, 1, 0, 2))
         self.assertTrue(ack.endswith('|2|4'), ack)
         self.assertTrue(first.endswith('|2|4|1|64.500|30.000'), first)
         self.assertTrue(second.endswith('|2|4|2|64.500|20.000'), second)
 
-    def test_guest_drops_its_generation_when_it_leaves_the_pilot_seat(self):
+    def test_guest_auth_transition_revokes_at_once_and_never_readopts(self):
+        # A:primary: base5/Based, AUTH pilot 0, AUTH pilot p2, delayed base5 queued a second Base5.
         out = self.make('p2').execute('''
-         base(4);events['X4LAN_Health.Based'](nil,'2|4');now=10.2;frames.onUpdate()
-         auth(2,1,'0');now=10.3;frames.onUpdate();local owned=last('Authority')
-         events['X4LAN_Health.Own'](nil,'2|50|0');now=10.5;frames.onUpdate()
-         events['X4LAN_Health.Based'](nil,'2|4')                 -- a late confirmation is ignored
-         return owned.own,owned.gen,#sentKind('HEALTH'),X4LAN_BUBBLE_API.health.live''')
-        self.assertEqual(tuple(out), (False, 0, 0, None))
+         hgen(1,1,5);base(5);events['X4LAN_Health.Based'](nil,'2|5')
+         auth(2,1,'0');local revoked=last('Authority');auth(3,1,'p2')
+         base(5);hgen(1,1,5);base(5)                               -- delayed frames of the old revision
+         events['X4LAN_Health.Based'](nil,'2|5')
+         own('51',2,5,10,0);now=10.4;frames.onUpdate()
+         local stalled=order('Base');hgen(3,1,7);base(7)
+         return revoked.gen,revoked.own,stalled,order('Base'),#sentKind('HEALTH'),X4LAN_BUBBLE_API.health.live''')
+        self.assertEqual(tuple(out), (0, False, 'Base:5', 'Base:5,Base:7', 0, None))
 
     def test_guest_never_readopts_an_older_baseline(self):
         out = self.make('p2').execute('''
-         base(5);events['X4LAN_Health.Based'](nil,'2|5');now=10.2;frames.onUpdate()
-         base(4)                                                  -- delayed older generation
-         local h=X4LAN_BUBBLE_API.health
-         local order={};for _,q in ipairs(requests) do if q[1]=='X4LAN_Health' and (q[2]=='Base' or q[2]=='Authority') then order[#order+1]=q[2]..':'..q[3].gen end end
-         return h.live.gen,h.basing,table.concat(order,',')''')
+         hgen(1,1,5);base(5);events['X4LAN_Health.Based'](nil,'2|5');now=10.2;frames.onUpdate()
+         base(4)
+         return X4LAN_BUBBLE_API.health.live.gen,X4LAN_BUBBLE_API.health.basing,order('Base','Authority')''')
         self.assertEqual(tuple(out), (5, None, 'Authority:5,Base:5,Authority:5'))
         md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
-        self.assertIn('$a.$gen == $arena.$healthAuth.{$a.$entity} and @$ship.isoperational', md)  # Base fence
+        self.assertIn('$a.$gen == $arena.$healthAuth.{$a.$entity} and player.age / 1s le $a.$deadline', md)
         self.assertIn('exact="$a.$own and $a.$gen gt 0"', md)
 
-    def test_host_applies_in_generation_order_and_releases_on_transfer_or_staleness(self):
+    def test_host_applies_valid_generations_in_order_and_releases(self):
         out = self.make('p1').execute('''
          local src=string.rep('c',32)
-         local function hp(gen,seq,hull) client:receiveExtension({'HEALTH','1',client.lease,src,'2',tostring(gen),tostring(seq),hull,'50'},now) end
-         hp(3,2,'80');local a=last('Apply')
+         function hp(gen,seq,hull) client:receiveExtension({'HEALTH','1',client.lease,src,'2',tostring(gen),tostring(seq),hull,'50'},now) end
+         hp(3,1,'90');local early=countRequest('Apply')             -- not yet valid
+         hgen(1,1,3);hp(3,2,'80');local a=last('Apply')
          hp(3,2,'10');hp(3,1,'10');hp(2,9,'10')                   -- duplicate, older, older generation
-         client:receiveExtension({'HEALTH','1',client.lease,src,'1','3','4','10','0'},now)   -- host's own ship
+         client:receiveExtension({'HEALTH','1',client.lease,src,'1','1','4','10','0'},now)   -- the host's own ship
          local applies=countRequest('Apply')
-         hp(4,1,'1.0');local lethal=last('Apply')                  -- a newer generation resets the order
+         hgen(1,1,4);local superseded=last('Release')             -- a newer generation ends generation 3
+         hp(4,1,'1.0');local lethal=last('Apply')
          now=10.5;frames.onUpdate();local fresh=countRequest('Release')
          now=11.6;frames.onUpdate();local stale=last('Release')
-         hp(4,2,'60');auth(2,2,'p2');now=11.7;frames.onUpdate()
-         return a.entity,a.gen,a.hull,applies,lethal.gen,lethal.hull,fresh,stale.gen,countRequest('Release')''')
-        self.assertEqual(tuple(out), (2, 3, 80, 1, 4, 1.0, 0, 4, 2))     # a stale generation may resume
+         hp(4,2,'60');auth(2,2,'p2')
+         return early,a.gen,a.hull,a.deadline,applies,superseded.gen,tostring(superseded.closed),lethal.gen,lethal.hull,fresh,stale.gen,tostring(stale.closed),order('Release')''')
+        self.assertEqual(tuple(out), (0, 3, 80, 51, 1, 3, 'true', 4, 1.0, 1, 4, 'false', 'Release:3,Release:4,Release:4'))
 
-    def test_queued_lethal_of_an_old_generation_never_follows_a_newer_release(self):
+    def test_host_auth_transition_without_a_frame_closes_the_generation(self):
+        # A:primary: HEALTH gen5 seq1, AUTH pilot 0 then p2 before any frame, delayed gen5 seq2.
         out = self.make('p1').execute('''
          local src=string.rep('c',32)
          local function hp(gen,seq,hull) client:receiveExtension({'HEALTH','1',client.lease,src,'2',tostring(gen),tostring(seq),hull,'0'},now) end
-         hp(5,1,'40');auth(2,1,'0');now=10.2;frames.onUpdate()     -- pilot left: release generation 5
-         auth(3,1,'p2');hp(5,2,'1.0')                               -- a late lethal frame of generation 5
-         local order={};for _,q in ipairs(requests) do if q[1]=='X4LAN_Health' and (q[2]=='Apply' or q[2]=='Release') then order[#order+1]=q[2]..':'..q[3].gen end end
-         return table.concat(order,','),tostring(last('Release').closed)''')
+         hgen(1,1,5);hp(5,1,'40');auth(2,1,'0');auth(3,1,'p2');hp(5,2,'1.0');hgen(1,1,5);hp(5,3,'1.0')
+         return order('Apply','Release'),tostring(last('Release').closed)''')
         self.assertEqual(tuple(out), ('Apply:5,Release:5', 'true'))
         md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
-        self.assertIn('$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen ge $arena.$healthGen.{$e}', md)
+        self.assertIn('$a.$gen gt $arena.$healthClosed.{$e} and $a.$gen ge $arena.$healthGen.{$e} and player.age / 1s le $a.$deadline', md)
         self.assertIn('<do_if value="event.param3.$closed"><set_value name="$arena.$healthClosed.{$e}"', md)
         self.assertIn('exact="$arena.$healthValue.{$e}.{1}"', md)  # release restores the canonical value
+
+    def test_no_queued_write_without_an_md_clock(self):
+        out = self.make('p1', clock=False).execute('''
+         hgen(1,1,3);client:receiveExtension({'HEALTH','1',client.lease,string.rep('c',32),'2','3','1','80','50'},now)
+         return countRequest('Apply')''')
+        self.assertEqual(out, 0)
 
     def test_disabled_flag_registration_and_bubble_guards(self):
         l = LuaRuntime(unpack_returned_tuples=True); l.execute(MOCK + EXTRA)

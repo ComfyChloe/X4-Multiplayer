@@ -240,6 +240,8 @@ class CoopSession(EconomySession):
                 if (self.owners[entity] == slot or fire['epoch'] != self.epochs[entity] or
                         now - fire['at'] > .75 or self.dead(entity)): continue
                 result.append((peer.address, ('FIRE2|1|' + peer.lease + '|' + fire['lease'] + '|' + '|'.join(fire['fields'])).encode()))
+            # HGEN names the generations of THIS authority revision (every change bumps both).
+            result.append((peer.address, f'HGEN|1|{peer.lease}|{self.authority_revision}|{self.health_generation(1)}|{self.health_generation(2)}'.encode()))
             for entity in (1, 2):
                 gen, hp = self.health_generation(entity), self.health.get(entity)
                 if hp and self.owners[entity] != slot and now - hp['at'] <= .75 and not self.dead(entity):
