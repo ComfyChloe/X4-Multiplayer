@@ -8,7 +8,7 @@ coordination schedules and release instructions are historical. Do not bulk-read
 
 DELIVERY / CURRENT TASK
 ACTIVE 23 October until 20:30 Europe/Berlin: INTERNAL 7.3.1 delivery requested.
-Worktree x4-release-7-3-1 / contrib/astra-7-3-1-delivery, base f29d3ef (PR32).
+Worktree x4-release-7-3-1 / contrib/astra-7-3-1-delivery, draft PR35, base f29d3ef (PR32).
 Human 7.3 playtest PASSED station and asteroid alignment. Docked peer ships at
 ordinary stations lack native occupancy/barrier registration; Alt+Tab stalls
 updates. User requests full teleportation research and clearer unique launchers;
@@ -52,10 +52,11 @@ EVIDENCE / NEXT CHECK
 
 CURRENT CHECKPOINT
 Launcher/settings47 targeted tests PASS; PowerShell fixtures PASS with native
-Windows metadata simulated. Teleport MD schema VALID. First Linux function test
-did not reach gameplay; raw failure +37-file restoration +unchanged save manifests
-retained in.local/evidence-009-withheld Focus-aware retry in.local/evidence-005-withheld
-teleport-focused is owned by primary; inspect live state before any native action.
+Windows metadata simulated. Teleport MD schema VALID. Native Linux final background/teleport function test PASS at40e0e69:25.338s
+other-window focus, continuous unpaused NAV, all4research flags true. Failed
+startup/window-selection runs retained. Game/runtime/helpers closed;37files and
+config restored,7normal saves +reserved save unchanged. See reports/BACKGROUND-
+TELEPORT-20261023.txt. Recheck live state before another native action.
 Claude PR34 385250c NOT integrated: source ordering regression undoes host40
 extra damage, lethal replay undo unproven. Asked Claude for fixes/native evidence.
 8 existing damage tests pass, not sufficient acceptance.
