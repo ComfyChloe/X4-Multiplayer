@@ -125,3 +125,16 @@ changes convergence across gun offsets; it does not reproduce each sender shot
 exactly. Actual sender aim capture, per-gun targeting, native trigger/heat/budget
 and arbitrary friendly blockers still need work. Original gun spread/tolerance
 unchanged. All runs retain source/saves/restoration inventories.
+
+INDIVIDUAL GUN OBJECTS
+aim-weapon-object-02 invokes shoot_at, shoot and stop_shooting on the actual
+single primary-gun component. All reject it as not of class defensible; no shots.
+Raw SHA256c3fecd609ea4314b44e636d8aaa0c29b7ac857cadc0ddd08d731e5d22e1fdca1.
+The first run never reached the probe after losing its owned window at age0;
+it is INCOMPLETE, not an API result. Owned cleanup verified for both.
+
+The next probe observes actual physical-player fire-at-cursor input and compares
+GetPlayerTargetOffset/GetLocalMousePosition with initial projectile forward and
+later displacement. cursor-aim-01 also failed before any probe/input at age0;
+its raw startup failure and verified cleanup are retained. No getter conclusion
+can be drawn from that run; cursor-aim-02 is pending.

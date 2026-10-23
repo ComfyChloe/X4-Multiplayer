@@ -209,4 +209,11 @@ first restored5Hz samples are0.2081–0.2215s after the drops. Do not silently r
 that gate. A finer probe can resolve the sampling ambiguity. Native guest Base/
 WORLD guards, queued guest Authority after watchdog, MD-only watchdog expiry and
 real combat damage remain unqualified. No two-native playtest or weapon aim proof.
-Claude is checking the guest queued-Authority fence and finer dev sampling.
+Reviewed7beea45 now integrates monotonic native guest generations, named revokes,
+watchdog closure and an explicit own=true condition for promotion. Repeating a
+current-generation own=false start with a fresh window cannot grant ownership.
+29 focused health/probe/MD-expression tests PASS on both reviewed and integrated
+source; both changed MD schemas VALID. The expression interpreter is a source
+regression check, not native engine evidence. The optional probe now samples20Hz
+and logs immediate native post-write readbacks. Native guest validation pending;
+the previous host capture remains PARTIAL and is not relabelled by these changes.

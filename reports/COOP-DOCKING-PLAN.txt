@@ -102,6 +102,19 @@ Raw and restored inventories remain in that directory; controller completion is
 not full acceptance. The executor now detects the fresh native APPROACH state
 only after synchronous isdocked=false, then issues a separately checked CANCEL.
 Pose remains fenced until actual FREE.10 adapter tests PASS.
-coop-dock-adapter-02 is prepared to check this and a queued stale SectorMove
-after native fencing, with Lua pose correction frozen so it cannot mask a warp.
-This follow-up has not run yet.
+coop-dock-adapter-02 PASSES the bounded full adapter cycle on6ce2af7. Both actual
+undocks finish through a separate residual CANCEL; the NPC-occupied bay refuses
+attachment and succeeds after release. A queued stale SectorMove after native
+Fence leaves three native pose readings unchanged while Lua correction is frozen.
+Raw SHA2568c3ffe80713a41ed8962cd4b9f84fe8fdab95a20f9ab0fe624810b3acab80212.
+One freshness refusal retries normally. Native voice/text warnings are retained.
+
+coop-dock-denial-02 also PASSES the bounded local approach conflict. The relay
+first claims the bay for synthetic p2 while its CDOCK snapshots to p1 are delayed.
+The actual physical player receives a native granted docking request. Production
+relay denial then cancels that approach; subsequent native readings show the
+local ship unassigned and undocked. The remote reservation and real attachment
+then succeed with bay count1. denial-01 remains INCOMPLETE: its player11km away
+never obtained the prerequisite native request. Both runs preserve raw evidence
+and verified installation/settings/save cleanup. No human boarding/platform,
+two-native same-pad crash acceptance or newly created bay support is claimed.

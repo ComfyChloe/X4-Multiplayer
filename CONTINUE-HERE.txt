@@ -20,18 +20,20 @@ oscillation after guest piloted/landed/exited host ship. “Overload” meant cr
 not FPS. Detailed triage in ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP
-Claude PR36 owns health relay/health_game.lua/x4lan_health.xml + bubble/life guards.
-pilot_health remains false. Integrated39758df at4324cd0, still disabled by default.424 combined Linux/LuaJIT
-tests PASS/no skips. Native host function check PARTIAL: authority/floor/expiry/
-lethal pass, original<=0.2s recovery timing unproven by5Hz samples (0.208–0.2215s).
-See .local/evidence-048-withheld and health design report. No guest-native
-or combat-hit acceptance. Review worktree ../x4-health-review at39758df.
-Claude cannot run native Windows45841 under retained Workshop restrictions.
-Latest assignment: first check queued guest Authority after native watchdog
-expiry, improve dev sampling, then actual firing-aim APIs; no native Windows run. Primary owns aim/docking/story/native/integration and
-will run Linux HEALTH observer/synthetic-peer contract after current dock run.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last checkpoint1792795014.125519.
-Existing quarter-hour coordination, no new timer/chat.
+Claude PR36 owns health relay/Lua/MD + bubble/life guards. Integrated7beea45 at
+18f36ee, pilot_health still disabled. Previous424 integrated tests PASS at4324cd0;
+29 affected health/probe/native-expression tests PASS at18f36ee, both MD VALID.
+Monotonic guest authority, named revokes, expiry closure and explicit own=true
+promotion now reviewed. Native host .local/evidence-047-withheld remains PARTIAL:
+authority/floor/expiry/lethal work, <=0.2s recovery unproven by5Hz samples.
+No guest-native or combat-hit acceptance yet. Review worktree ../x4-health-review
+at7beea45. Claude cannot use native Windows45841 due to Workshop restrictions.
+Current Claude assignment: separate dev-only guest observer/phase contract for
+Base/Based/HACK, WORLD guard, local setter/report, rebase and MD keep-watchdog
+with delayed Authority rejection. Primary owns controller/native execution.
+Primary also owns aim/docking/story/integration. Slack PRIVATECOORDINATIONID thread
+PRIVATE-THREAD-ID.01:15 checkpoint1792797285.216249; follow-up1792797455.471379.
+Quarter-hour coordination, no new timer/chat. Next01:30.
 
 IMPLEMENTATION / EVIDENCE
 Story native preset: hidden x4lan_internal start,14 completed plot choices and28
@@ -51,8 +53,14 @@ adapter +25 existing coop +23 FIRE2 tests PASS;3 changed MD schemas VALID.
 Native coop-dock-exec-02: all8 phases PASS (reserve/conflict refusal/attach/occupied
 refusal/actual undocks/prepared-then-fenced); undock~8s. No boarding/human same-pad
 or two-native acceptance. Follow-up exec03 all11 phases PASS with stale Prepare/foreign Fence coverage.
-Relay/CDOCK and guarded own-pilot denial implemented;8 relay+26universe+9adapter
-checks PASS. Launcher flag still off. Full native adapter cycle currently running.
+Relay/CDOCK and guarded own-pilot denial implemented;8 relay+26universe+10adapter
+checks PASS. Full adapter02 on6ce2af7 PASSES exact reserve/attach, both actual
+undock/residual-CANCEL cycles, NPC conflict refusal and stale queued warp after
+Fence (Lua correction frozen). Local denial02 PASSES actual physical player
+request cancellation after relay denial,11 native unassigned/undocked readbacks,
+then remote attachment. Prior adapter01 PARTIAL30s undock timeout; denial01
+INCOMPLETE request precondition, both retained. Only saved HQ bay qualified;
+new docks/boarding/platforms/human same-pad crash not accepted. Flag still off.
 
 WEAPONS
 reports/WEAPON-AIM-PRIMITIVES.txt: projectile warp/velocity and gun MD/C pose/
@@ -64,18 +72,15 @@ benchmark. Actual player aim transmission/replay remains open. Never infer a
 short normal gun-slew miss is a bug or report mocked tests as native acceptance.
 
 LIVE JOBS / TOOLS
-ACTIVE native exec43530: .local/evidence-004-withheld; checks shoot_at/shoot
-with the individual primary weapon component, near point then deliberate miss.
-Prior .local/evidence-016-withheld completed/cleaned: real relay+Lua+MD cycle and
-NPC occupied-bay refusal work, but native X Shuttle undock keeps assignment after
-physical detach.30s timeout before CANCEL => PARTIAL. Executor now cancels that
-remaining reservation after verified detach;10 adapter tests pass. Prepared
-.local/evidence-018-withheld (NOT RUN) adds updated cycle plus old queued SectorMove
-after Fence, freezing Lua pose correction so rejection cannot be masked.
-Aim-point03 bounded near-point12shots/11hits/396HP/yaw0; far point+manual trigger
-no shots. Common point changes multi-gun convergence.02fixtureFAIL retained.
-Claude6ff3b76 NOT merged: guest Authority fix needs monotonic revoke follow-up;
-finer dev sampling pending. All finished runs cleaned. No concurrent native.
+ACTIVE native exec11762: .local/evidence-025-withheld Observes physical player's
+existing middle-button fire-at-cursor binding, owned PID/window-only input, actual
+projectile forward/displacement vs UI getters. First run atage0 lostownedwindow
+beforeprobe/input;SIGTERM failed, exactownedPID killed, cleanupverified. NotAPIproof.
+Per-weapon-object02 completed: shoot_at/shoot/stop all reject primary gun as not
+class defensible;0shots.01incomplete startup, retained. Aim-point03 bounded
+near-point12shots/11hits/396HP/yaw0; farpoint+manual trigger no shots. A shared
+nearpoint changes multi-gun convergence. No production aim transport yet.
+All completed native runs cleaned; no concurrent native/install mutation.
 Persistent schema worker exec48913: .local/evidence-244-withheld, JSON lines
 {"files":["relative/path.xml"]}; {"stop":true} at final cleanup.
 Python ../x4-playtest7/.venv/bin/python; schemas ../../preparation/game-schemas.
