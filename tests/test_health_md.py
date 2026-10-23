@@ -17,6 +17,7 @@ TOKENS = [
     (re.escape(WALL), "P['wall']"),
     (r'player\.timewarp\.factor', "P['timewarp']"),
     (r'player\.age / 1s', "P['age']"), (r'player\.age', "P['age']"),
+    (r'@\$arena\.\$healthProbe', "S.get('Probe', False)"),             # dev probe switch (unindexed)
     (r'@?\$arena\.\$health(\w+)\.\{(\$\w+|\d+)\}', lambda m: "S['%s'][%s]" % (m[1], m[2].lstrip('$') if m[2].startswith('$') else m[2])),
     (r'@?\$arena\.\$dead\.\{(\$\w+)\}', lambda m: "S['dead'][%s]" % m[1].lstrip('$')),
     (r'@\$ship\.isoperational', "P['operational']"),
@@ -117,6 +118,14 @@ class AuthorityFenceTests(unittest.TestCase):
         run(cue('Authority'), S, dict(entity=2, gen=7, own=True, **WINDOW), P, 2)   # paused
         self.assertFalse(S['Own'][2])
         self.authority(S, gen=7, own=True, **WINDOW)
+        self.assertTrue(S['Own'][2])
+
+    def test_a_fresh_start_without_own_never_sets_own(self):
+        # A:primary: start G5 own=false, then the same G5 own=false WITH a fresh window set Own.
+        S = guest_state()
+        self.authority(S, gen=5, own=False); self.authority(S, gen=5, own=False, **WINDOW)
+        self.assertEqual((S['Auth'][2], S['Own'][2]), (5, False))
+        self.authority(S, gen=5, own=True, **WINDOW)
         self.assertTrue(S['Own'][2])
 
     def test_keepalive_watchdog_closes_natively_before_a_queued_own(self):

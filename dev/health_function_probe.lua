@@ -2,8 +2,9 @@
 -- Never packaged: a native harness copies it into ui/ after health_game.lua, together with
 -- dev/health_function_probe.xml in md/. Host p1 only, with pilot_health and health_probe set.
 -- Logs every native write request of health_game.lua in order (op sequence) and every HGEN
--- change and HEALTH frame with its outcome. The synthetic peer encodes its phase in the HEALTH
--- sequence (seq = phase * 1000 + n). In phase 3 every tenth accepted frame asks MD to drop the
+-- change and HEALTH frame with its outcome; the MD part samples at 20 Hz and enables native
+-- post-write readbacks ('written Base/Apply/Release') inside md/x4lan_health.xml. The synthetic
+-- peer encodes its phase in the HEALTH sequence (seq = phase * 1000 + n). In phase 3 every tenth accepted frame asks MD to drop the
 -- proxy hull to 1.5% (a labelled host-side setter, not combat damage) to show the 2% floor and
 -- the next pilot value. This observes; it is no gameplay acceptance and covers no guest-native code.
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG

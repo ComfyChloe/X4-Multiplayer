@@ -45,7 +45,11 @@ class HealthProbeTests(unittest.TestCase):
         out = self.make(probe=False).execute('return #probe()')
         self.assertEqual(out, 0)
         md = (ROOT / 'dev/health_function_probe.xml').read_text()
-        self.assertTrue("control=\"'Drop'\"" in md and 'checkinterval="0.2s"' in md)
+        self.assertTrue("control=\"'Drop'\"" in md and 'checkinterval="0.05s"' in md and '$arena.$healthProbe' in md)
+        prod = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        for op in ('Base', 'Apply', 'Release'):                    # post-write readbacks, probe-gated
+            self.assertTrue('HEALTH_PROBE written %s' % op in prod, op)
+        self.assertEqual(prod.count('<do_if value="@$arena.$healthProbe">'), 3)
 
 
 if __name__ == '__main__':

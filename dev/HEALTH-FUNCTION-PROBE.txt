@@ -9,7 +9,8 @@ Client config of the host: coop=true, fire2=true, pilot_health=true, health_prob
 test_profile="45841" (owned isolated profile). Copy dev/health_function_probe.lua into ui/,
 registered AFTER ui/health_game.lua, and dev/health_function_probe.xml into md/.
 Everything else is unchanged. Evidence: the host debug log lines
-  [X4LAN] HEALTH_PROBE ...   (samples at 5 Hz, op sequence, frames, drops)
+  [X4LAN] HEALTH_PROBE ...   (samples at 20 Hz, op sequence, frames, drops, and native
+                              'written Base/Apply/Release' readbacks right after each write)
   [X4LAN] HEALTH_* / SHIP_LETHAL / SHIP_DESTROYED   (production lines)
 plus the relay transcript of the synthetic peer.
 
