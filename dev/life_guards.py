@@ -14,17 +14,27 @@ def guard_bubble(xml):
             for slot in (1, 2):
                 ship = '$ships.{' + str(slot) + '}'
                 for prop in ('hullpercentage', 'shieldpercentage', 'cargo.{ware.energycells}.count'):
+                    value = ship + '.' + prop
+                    if prop.endswith('percentage') and node.tag == 'raise_lua_event':
+                        # Pilot health (health_game.lua): the last applied pilot value of a live ship.
+                        k = '1' if prop == 'hullpercentage' else '2'
+                        value = '(if @$healthLive.{%d} then $healthValue.{%d}.{%s} else %s)' % (slot, slot, k, value)
                     expression = expression.replace(ship + '.' + prop,
-                        '(if ' + ship + '.isoperational and not $dead.{' + str(slot) + '} then ' + ship + '.' + prop + ' else 0)')
+                        '(if ' + ship + '.isoperational and not $dead.{' + str(slot) + '} then ' + value + ' else 0)')
                 expression = expression.replace(ship + '.dock or', ship + '.isoperational and ' + ship + '.dock or')
                 expression = expression.replace('if ' + ship + '.dock then', 'if ' + ship + '.isoperational and ' + ship + '.dock then')
             node.set(attribute, expression)
     loop = root.find(".//cue[@name='Apply']/actions/do_all")
     gate = E.Element('do_if', value='$ship.isoperational and not Arena.$dead.{$i}')
     selected = list(loop)[1:6] # hull, shield, cargo delta and its two branches
-    for child in selected:
+    # Pilot health: the guest never writes health or dead of the ship it pilots from WORLD.
+    health = E.Element('do_if', value='not @Arena.$healthOwn.{$i}')
+    for child in selected[:2]:
+        loop.remove(child); health.append(child)
+    gate.append(health)
+    for child in selected[2:]:
         loop.remove(child); gate.append(child)
-    loop.insert(1, E.fromstring('''<do_if value="$v.{($i - 1) * 3 + 1} le 1.01"><set_value name="Arena.$dead.{$i}" exact="true"/></do_if>'''))
+    loop.insert(1, E.fromstring('''<do_if value="$v.{($i - 1) * 3 + 1} le (if @Arena.$healthOwn.{$i} then 0 else 1.01)"><set_value name="Arena.$dead.{$i}" exact="true"/></do_if>'''))
     loop.insert(2, gate)
     for node in loop.findall('do_if'):
         if node.get('value', '').startswith('$v.{13 + $i}'):

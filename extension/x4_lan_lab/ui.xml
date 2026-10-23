@@ -14,6 +14,7 @@
     <file name="ui/coop_game.lua" />
     <file name="ui/coop_dock_game.lua" />
     <file name="ui/coop_dock_exec.lua" />
+    <file name="ui/health_game.lua" />
     <file name="ui/universe_protocol.lua" />
     <file name="ui/universe_game.lua" />
     <file name="ui/life_game.lua" />

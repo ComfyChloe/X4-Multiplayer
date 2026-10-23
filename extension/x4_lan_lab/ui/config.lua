@@ -4,6 +4,7 @@ X4LAN_CONFIG = {
     bubble_actions = false,
     trading = false,
     fire2 = false, -- Matched internal packages select FIRE2 before any shot is played.
+    pilot_health = false, -- Dev only: pilot-reported co-op ship health (health_game.lua).
     interaction_test = false, -- Destructive fixtures ONLY in the disposable test world.
     test_profile = "45841",
     host = "127.0.0.1",
