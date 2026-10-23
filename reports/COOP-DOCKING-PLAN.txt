@@ -74,5 +74,11 @@ sampled after0.5s. Command invocation is not completion. Follow-up coop-dock-exe
 exact attachment, both actual undocks and a prepared-then-fenced operation. Native
 undock takes about8 seconds. Raw SHA256
 37535d753f746bdeed51496182f4df0a4e26bfb996cdc0b96887b7dc3d19f5e1.
-coop-dock-exec-03 is now testing the additional session/freshness checks; pending. No end-to-end/boarding/
+coop-dock-exec-03 PASSES11 phases with the additional session/freshness checks:
+stale Prepare rejected; foreign-session Fence ignored; subsequent valid attach
+and actual undock confirmed. The gate checks combined Prepare/Window/Lua/native
+readback/completion ordering and physical bay assignments/counts. Raw SHA256
+2bff5f8e8d2ac2889a0cbd6e38f980af0864c91dfac938619d37948c9fded6a6.
+This proves the native consumer; the complete network/client executor and queued
+SectorMove race remain separate checks. No end-to-end/boarding/
 same-pad crash acceptance. All completed runs have verified owned cleanup.

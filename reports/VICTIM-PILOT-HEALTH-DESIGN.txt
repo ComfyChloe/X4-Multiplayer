@@ -193,3 +193,20 @@ Fourth review round (A:primary on 4bf5163). This supersedes "a stale-only releas
   Its MD drops the WORLD guard and the authority after 2 s game time, so host values apply
   again. Its relay generation also ends (no frames), so the host keeps authority until a new
   baseline is acknowledged. The earlier hung-guest residual is closed.
+
+PRIMARY LINUX NATIVE FUNCTION CHECK,24 OCTOBER2026
+Integrated disabled-by-default source4324cd0 includes39758df. All424 integrated
+development checks PASS/no skips; Health/Bubble/probe MD schemas VALID.
+.local/evidence-047-withheld retains one real Linux host and a synthetic UDP pilot.
+110 native samples,153 Apply requests; baselines100→90→70, canonical WORLD stays
+90 during three labelled hull setters which request1.5 and read2. Closed-generation
+values4001/5006 deliberately delayed from the relay socket are refused. No Apply
+after a closing Release; reported lethal1 yields HEALTH_LETHAL then native
+SHIP_LETHAL/SHIP_DESTROYED next tick. Save/profile/install cleanup verified.
+Raw SHA25638ed132e0a7c67d5ec6094886ede722370622825e094db4ecd1ebc0331a9a390.
+PARTIAL acceptance: the original phase3 recovery deadline<=0.2s is NOT proven;
+first restored5Hz samples are0.2081–0.2215s after the drops. Do not silently relax
+that gate. A finer probe can resolve the sampling ambiguity. Native guest Base/
+WORLD guards, queued guest Authority after watchdog, MD-only watchdog expiry and
+real combat damage remain unqualified. No two-native playtest or weapon aim proof.
+Claude is checking the guest queued-Authority fence and finer dev sampling.
