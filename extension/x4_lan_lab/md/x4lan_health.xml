@@ -56,8 +56,14 @@
     <cue name="Release" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Release'"/><check_value value="$arena.$host"/></conditions><actions>
      <set_value name="$e" exact="event.param3.$entity"/><set_value name="$ship" exact="$arena.$ships.{$e}"/>
      <do_if value="event.param3.$gen ge $arena.$healthGen.{$e}">
+      <!-- Back to host authority from the retained canonical value, not the proxy's local HP. -->
+      <do_if value="@$ship.isoperational">
+       <set_object_min_hull object="$ship" exact="1"/>
+       <do_if value="$arena.$healthLive.{$e} and not $arena.$dead.{$e}">
+        <set_object_hull object="$ship" exact="$arena.$healthValue.{$e}.{1}"/><set_object_shield object="$ship" exact="$arena.$healthValue.{$e}.{2}"/>
+       </do_if>
+      </do_if>
       <set_value name="$arena.$healthLive.{$e}" exact="false"/>
-      <do_if value="@$ship.isoperational"><set_object_min_hull object="$ship" exact="1"/></do_if>
       <debug_text text="'[X4LAN] HEALTH_RELEASE entity=%s gen=%s'.[$e,event.param3.$gen]"/>
      </do_if>
     </actions></cue>

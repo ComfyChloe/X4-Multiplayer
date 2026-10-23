@@ -130,7 +130,20 @@ class HealthAdapterTests(unittest.TestCase):
          now=11.6;frames.onUpdate();local stale=last('Release')
          hp(4,2,'60');auth(2,2,'p2');now=11.7;frames.onUpdate()
          return a.entity,a.gen,a.hull,applies,lethal.gen,lethal.hull,fresh,stale.gen,countRequest('Release')''')
-        self.assertEqual(tuple(out), (2, 3, 80, 1, 4, 1.0, 0, 4, 2))
+        self.assertEqual(tuple(out), (2, 3, 80, 1, 4, 1.0, 0, 4, 2))     # a stale generation may resume
+
+    def test_queued_lethal_of_an_old_generation_never_follows_a_newer_release(self):
+        out = self.make('p1').execute('''
+         local src=string.rep('c',32)
+         local function hp(gen,seq,hull) client:receiveExtension({'HEALTH','1',client.lease,src,'2',tostring(gen),tostring(seq),hull,'0'},now) end
+         hp(5,1,'40');auth(2,1,'0');now=10.2;frames.onUpdate()     -- pilot left: release generation 5
+         auth(3,1,'p2');hp(5,2,'1.0')                               -- a late lethal frame of generation 5
+         local order={};for _,q in ipairs(requests) do if q[1]=='X4LAN_Health' and (q[2]=='Apply' or q[2]=='Release') then order[#order+1]=q[2]..':'..q[3].gen end end
+         return table.concat(order,',')''')
+        self.assertEqual(out, 'Apply:5,Release:5')
+        md = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        self.assertIn('$a.$gen ge $arena.$healthGen.{$e} and @$ship.isoperational and not $arena.$dead.{$e}', md)
+        self.assertIn('exact="$arena.$healthValue.{$e}.{1}"', md)  # release restores the canonical value
 
     def test_disabled_flag_registration_and_bubble_guards(self):
         l = LuaRuntime(unpack_returned_tuples=True); l.execute(MOCK + EXTRA)

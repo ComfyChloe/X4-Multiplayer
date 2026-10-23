@@ -12,7 +12,7 @@
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not cfg or not cfg.coop or not cfg.pilot_health or not A or not A.coop or not A.state.active then return end
 local c=A.coop;local s=A.state
-local h={seq=0,gen={0,0},last={0,0},remote={},owned={false,false}};A.health=h
+local h={seq=0,gen={0,0},last={0,0},closed={0,0},remote={},owned={false,false}};A.health=h
 local INTERVAL,FRESH=.1,1.0
 local function log(v) DebugError('[X4LAN] '..v) end
 local function number(v,max)
@@ -67,7 +67,7 @@ function h.receive(f,now)
  local hu,sh=number(f[8],100),number(f[9],100)
  if not e or e<1 or not gen or not seq or not hu or not sh then return true end
  local owner=c.owners[e]
- if not owner or owner==cfg.slot or c.pilots[e]~=owner or gen<h.gen[e] then return true end
+ if not owner or owner==cfg.slot or c.pilots[e]~=owner or gen<h.gen[e] or gen<=h.closed[e] then return true end
  if gen==h.gen[e] and seq<=h.last[e] then return true end
  if A.paused and A.paused() then return true end    -- a later frame carries the newer value
  h.gen[e],h.last[e]=gen,seq
@@ -78,9 +78,12 @@ end
 
 function h.frame(now)
  if cfg.slot=='p1' then
-  -- Authority ended or went stale: restore the 1% floor and the native value.
+  -- Authority ended (its generation is closed for good) or went stale (the same generation may
+  -- resume with newer frames): restore the 1% floor and the retained canonical value.
   for e,r in pairs(h.remote) do
-   if c.owners[e]~=r.owner or c.pilots[e]~=r.owner or c.epochs[e]~=r.epoch or now-r.at>FRESH then
+   local ended=c.owners[e]~=r.owner or c.pilots[e]~=r.owner or c.epochs[e]~=r.epoch
+   if ended or now-r.at>FRESH then
+    if ended then h.closed[e]=r.gen end
     h.remote[e]=nil;AddUITriggeredEvent('X4LAN_Health','Release',{entity=e,gen=r.gen})
    end
   end
