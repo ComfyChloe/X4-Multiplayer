@@ -49,12 +49,15 @@ class HealthGuestProbeTests(unittest.TestCase):
          S.remoteRevision=3001;tick(10.3);tick(10.4);local damage=count('LocalDamage')
          S.remoteRevision=5001;tick(10.5);local before=healths()
          own('50.6',4,50);tick(11.0);own('50.7',4,50);tick(12.0);local during=healths()-before   -- only health dispatch is suspended
+         local b0=count('Base');client:receiveExtension({'HBASE','1',client.lease,'2','5','40','10'},now)
+         client:receiveExtension({'HGEN','1',client.lease,'1','1','5'},now)
+         local lost=count('Base')-b0+(H.valid[2]==5 and 1 or 0)               -- controlled loss: nothing adopted
          own('52.6',4,50);tick(13.6)
          local injected=nil;for _,q in ipairs(requests) do if q[2]=='Authority' and q[3].own and q[3].gen==4 and q[3].stamp then injected=q[3] end end
          S.remoteRevision=6001;local bases=count('Base');tick(13.7)
-         return damage,during,injected and injected.deadline,count('Base')-bases,probe():find('inject old HBASE gen=4',1,true)~=nil''')
-        damage, during, deadline, rebased, logged = out
-        self.assertEqual((damage, during, rebased, logged), (1, 0, 0, True))
+         return damage,during,injected and injected.deadline,count('Base')-bases,probe():find('inject old HBASE gen=4',1,true)~=nil,lost,probe():find('dropping HGEN/HBASE during suspension',1,true)~=nil''')
+        damage, during, deadline, rebased, logged, lost, dropped = out
+        self.assertEqual((damage, during, rebased, logged, lost, dropped), (1, 0, 0, True, 0, True))
         self.assertAlmostEqual(deadline, 53.6)                             # fresh window from the latest readback
 
 

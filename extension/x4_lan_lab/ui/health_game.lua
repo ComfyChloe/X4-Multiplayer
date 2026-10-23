@@ -97,8 +97,13 @@ function h.based(payload)
  local e,gen=tostring(payload):match('^(%d)|(%d+)$');e,gen=tonumber(e),tonumber(gen)
  local b=h.basing
  if b and b.entity==e and b.gen==gen and valid(e,gen) and h.mine(e) then
-  h.live,h.basing,h.reading,h.seq,h.nextAck=b,nil,nil,0,0
+  h.live,h.basing,h.reading,h.seq=b,nil,nil,0
   authority(e,gen,true)
+  -- Acknowledge at once; every repeated HBASE of this generation re-sends it (bounded 0.25 s).
+  -- No HEALTH goes out before this first HACK.
+  if s.client and s.client.lease then
+   send(string.format('HACK|1|%s|%d|%d',s.client.lease,e,gen));h.nextAck=(h.now or 0)+.25
+  end
   log(string.format('HEALTH_LIVE entity=%d gen=%d',e,gen))
  end
 end
@@ -170,7 +175,7 @@ function h.frame(now)
  end
  -- Each fresh MD readback is reported at most once; nothing while paused or from a stale one.
  local r=h.reading
- if not h.live or not r or r.sent or r.entity~=h.live.entity or paused() or now-r.at>READING then return end
+ if not h.live or not h.nextAck or not r or r.sent or r.entity~=h.live.entity or paused() or now-r.at>READING then return end
  if not h.urgent and now<(h.nextSend or 0) then return end
  r.sent,h.urgent,h.nextSend,h.seq=true,false,now+INTERVAL,h.seq+1
  send(string.format('HEALTH|1|%s|%d|%d|%d|%.3f|%.3f',s.client.lease,r.entity,h.live.gen,h.seq,r.hull,r.shield))

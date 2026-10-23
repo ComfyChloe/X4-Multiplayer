@@ -42,6 +42,12 @@ function h.based(payload) op=op+1;log(string.format('op=%d Based %s phase=%d',op
 
 local receive=h.receive
 function h.receive(f,now)
+ -- Phase 5 controlled loss: while health frames are suspended, HGEN/HBASE are dropped here, so
+ -- the relay's own expiry cannot revoke before MD's 2 s keepalive watchdog fires.
+ if suspendUntil and (f[1]=='HGEN' or f[1]=='HBASE') then
+  if not done.dropLogged then done.dropLogged=true;log('dropping HGEN/HBASE during suspension') end
+  return true
+ end
  if f[1]=='HBASE' then
   if not oldBase then oldBase={};for i,v in ipairs(f) do oldBase[i]=v end end
   log(string.format('frame HBASE gen=%s hull=%s shield=%s valid=%s closed=%s',tostring(f[5]),tostring(f[6]),tostring(f[7]),tostring(h.valid[2]),h.closed[2]))

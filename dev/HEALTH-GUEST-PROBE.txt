@@ -27,8 +27,12 @@ SYNTHETIC HOST (p1) COMMAND INTERFACE, via the real relay
 PHASES with PASS criteria
 1  Handover, rev 1001..: WORLD ship 2 = 64.5 / 30.
    PASS order: frame HBASE gen=G -> op Authority gen=G own=false -> op Base gen=G -> 'written Base'
-   readback 64.5/30 -> op Based 2|G -> op Authority gen=G own=true -> sent HACK -> sent HEALTH
-   G seq 1 hull 64.5. Samples: own=true auth=G top=G based=G.
+   readback 64.5/30 -> op Based 2|G -> op Authority gen=G own=true -> sent HACK (immediately on
+   Based) -> sent HEALTH G. The guest sends no HEALTH before its first HACK; HACK repeats on
+   every HBASE repeat (0.25 s bound). The meaningful gate is the FIRST HEALTH the controller
+   receives (relay-accepted, i.e. after the relay saw HACK). Sent-but-unforwarded HEALTH frames
+   (HACK lost or late) are explicit: compare the guest's 'sent HEALTH' seqs with the forwarded
+   ones. Samples: own=true auth=G top=G based=G.
 2  WORLD guard, rev 2001..: WORLD ship 2 = 40 / 10 for 5 s.
    PASS: samples entity 2 stay at the local value (~64.5/30, shield may recharge), never 40; own
    stays true; the HEALTH frames report the local value.
@@ -40,7 +44,11 @@ PHASES with PASS criteria
    55/20 -> Base/written 55/20 -> Based -> own -> HACK -> HEALTH G' from 55. No sent HEALTH of
    G after HGEN G'.
 5  Keepalive watchdog, rev 5001..: the probe suspends ONLY health_game.lua's frame dispatch for
-   3 s (MD keeps running), then injects the old Authority(G', own=true) with a fresh window.
+   3 s (MD keeps running) and, as controlled loss, drops incoming HGEN/HBASE locally for that time
+   (logged once), so the relay's 0.75 s expiry cannot revoke first. AUTH is untouched; the relay
+   ending the generation does not change the AUTH key. No relay change is needed; a relay-side
+   loss of HGEN/HBASE to the guest is equivalent. Then the probe injects the old
+   Authority(G', own=true) with a fresh window.
    PASS: HEALTH_KEEP_WATCHDOG within ~2 s game time; samples own=false auth=0 closed>=G';
    op Authority gen=0 ended=G' (Lua handled Expired); the injected Authority logs now_own=false
    (no resurrection); no sent HEALTH of G' afterwards; the relay ends G' (stale) and a later

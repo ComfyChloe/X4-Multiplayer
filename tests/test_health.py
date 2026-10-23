@@ -154,6 +154,17 @@ class HealthAdapterTests(unittest.TestCase):
         self.assertTrue(first.endswith('|2|4|1|64.500|30.000'), first)
         self.assertTrue(second.endswith('|2|4|2|64.500|20.000'), second)
 
+    def test_guest_acknowledges_on_based_and_reports_only_after_it(self):
+        out = self.make('p2').execute('''
+         hgen(1,1,4);base(4);own('50.1',2,0,64.5,30);now=10.15;frames.onUpdate()
+         local before=#sentKind('HEALTH')
+         events['X4LAN_Health.Based'](nil,'2|4');local acks=sentKind('HACK')
+         own('50.2',2,4,64.5,30);now=10.2;frames.onUpdate()
+         local first=nil;for i,p in ipairs(sent) do if p:sub(1,5)=='HACK|' and not first then first=i end end
+         local health=nil;for i,p in ipairs(sent) do if p:sub(1,7)=='HEALTH|' and not health then health=i end end
+         return before,#acks,first<health''')
+        self.assertEqual(tuple(out), (0, 1, True))                  # HACK at Based, before any HEALTH
+
     def test_guest_auth_transition_revokes_at_once_and_never_readopts(self):
         # A:primary: base5/Based, AUTH pilot 0, AUTH pilot p2, delayed base5 queued a second Base5.
         out = self.make('p2').execute('''
