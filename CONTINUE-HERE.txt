@@ -63,7 +63,9 @@ follows100m move;285 fast frames at2332m/s,maxerror2.24mm. Removed/cleaned/audit
 pose01 PASS:12 actual off-axis locally piloted plasma bullets; C getter vs MD
 positions<0.756mm, measured velocity predicts to<3.6cm. Raw/audit in render report.
 loopback01 PASS:12 actual captures/12 harmless carriers,150ms delayed,1559 moves,
-197 MD reads, final0 objects. Raw/audit in report. No active native game/controller.
+197 MD reads, final0 objects. Raw/audit in report. pulse-loopback01 FAIL:6 native PulseMk1 guns reported, but no fired events after
+focused input and0 carriers; no pulse/moving acceptance. Cleaned/audited37 files,
+actual saves unchanged. No active native game/controller.
 Unregistered projectile_game.lua + guarded native x4lan_projectile.xml/assets now
 added;11 adapter/gate tests, existing32 FIRE2/visual + new suppression regression
 pass;2MD schemas valid. Not yet natively integrated. Motion/adapter22 checks after review fixes;

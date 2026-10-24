@@ -153,3 +153,16 @@ Audit:56 unchanged production files,9 dev overrides, explicit motion/probe UI
 registration,37-file restore, actual save bytes/timestamps, helpers/game closed.
 No MD/Lua/API errors. This is not a network adapter, matched two-native run,
 moving-shooter qualification, dense-fire performance test or other-weapon proof.
+
+PULSE / MOVING-SHOOTER FOLLOW-UP — projectile-pulse-loopback-01
+Source8725f85, raw22ed43c2e8bf219c0ae7aef8372522fa0e96fe8a10de10561679325afc398e3a.
+FAIL/incomplete: native SHIP_SPEC reports six operational PulseMk1 guns, but the
+focused physical press produces no weapon-fired events and final created count0.
+A constant-velocity ship command was also introduced in this fixture; neither
+the absence of firing nor weapon compatibility is inferred from this capture.
+Viewed screenshot has no visible weapon group indicators. Do not call the
+controller's completed=true an accepted firing/rendering run. Source69 files,
+3 overrides/UI registration,37-file restoration and actual saves audited; all
+owned processes closed. Pulse graphics and moving-shooter acceptance remain open.
+Next real-relay adapter run keeps the previously qualified stationary plasma
+fixture to separate the transport/native integration from this setup problem.
