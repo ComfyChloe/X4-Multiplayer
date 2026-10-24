@@ -1,0 +1,49 @@
+SHOT CAPTURE INTEGRATION — 24 OCTOBER 2026 — INTERNAL / FLAGS OFF
+
+PR39 exact75e61e2 was independently reviewed and merged at ae2603e. The original
+source-identity, admission-quarantine and false death on local proxy loss findings
+are corrected. Follow-up symmetric HEALTH closure checks and player.controlled
+witness now precede capture/restoration. Lost proxy health metadata remains
+canonical; the local loss is latched and never becomes a delayed player death.
+No silent proxy resurrection is introduced.
+
+Native capture requires fresh original-projectile proof from shot_visual.lua;
+remote FIRE2 uses harmless stock-referencing projectiles. Diagnostic HP undo
+remains OFF because it resets native shield recharge. Three supported uniform,
+unmodified stock guns: X Shuttle plasma, generic pulse Mk1/Mk2. This does not
+qualify other weapons, missiles, surface elements or every universe NPC.
+
+SOURCE CHECKS
+9adf2eb:78 independent affected Linux/LuaJIT checks PASS/no skips.
+75e61e2:22 changed capture checks PASS/no skips; all3 capture/health/life MD schemas
+VALID. Integrated ae2603e:57 SHOT/capture/visual checks PASS/no skips. The only
+merge conflict was ui.xml registration; order is SHOT, visual, capture.
+
+PHYSICAL HOST SHOOTER / SYNTHETIC GUEST AUTHORITY
+.local/evidence-245-withheld uses actual native local player ship1 guns and remote
+ship2 geometry, real UDP relay, and a labelled synthetic victim authority that
+returns the canonical shield value through HEALTH. Native capture counts feed
+the unchanged cumulative transport; no manual hit injection in this run.
+162 actual plasma bullets during the on-axis phase produce28 counted native
+shield callbacks (40 each), sequential Count1..28 and relay totals28. Native
+shield returns to3680/4800, a1120 loss. Thirty-nine settled readbacks preserve
+that result. Another162 bullets after moving the target off-axis produce no new
+capture/count. Hull stays4580. The player remains natively in control. The
+admission lifetime2.55s is obtained from native range/library speed; no first-hit
+quarantine reset. This run has no separate per-damage observer; the inverse-role
+run adds that independent callback witness.
+
+Bounded chain PASS, NOT two native games. Source ae2603e00facc7f8fcbdf357172bb8baec21d1cf.
+Raw SHA256 aa26f8ca41a87c1db2cd10ea84e3ceb69296ba928bdbac19525ea4c51cb3aee5.
+56 installed production files and both probes match pinned source/hashes.37-file
+installation and seven actual normal-save bytes/timestamps restored/verified;
+owned game/peer/helpers closed. Engine FSR3/signature/job warnings and harmless
+macro zero-damage warning are retained; no parser/API/adapter failure observed.
+Strict analyzer, full raw log, manifests and inventories stay in the local run.
+
+PENDING
+Inverse native guest shooter/host authority is running separately. Matched native
+Windows/Linux, arbitrary free aim VISUAL replay, in-flight authority transitions,
+overheat/burst continuity and human docking/boarding/crash acceptance remain open.
+Do not equate the existing scripted damage/application check with two native
+players. Default flags and sealed7.3.1 packages remain unchanged.

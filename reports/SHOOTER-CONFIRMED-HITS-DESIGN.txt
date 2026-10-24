@@ -1,7 +1,9 @@
 SHOOTER-CONFIRMED HITS (SHOT): CURRENT DECISIONS AND BLOCKERS
 Consolidated 24 Oct 2026 (Claude, after A:primary's native findings and reviews 02:11-02:39).
-This replaces the earlier layered revisions. Status: transport and authority application are
-implemented INERT (shot_claims=false, needs pilot_health). Capture and undo are NOT armed.
+Current status: transport, capture and harmless replay are integrated INERT. See
+reports/SHOT-CAPTURE-INTEGRATION.txt and reports/SHOT-VISUAL-PRIMITIVE.txt for the
+latest bounded native evidence; all flags remain OFF. Earlier milestones below
+retain their original limitations.
 
 GOAL AND POLICY
 Player-vs-player and player-vs-shared-target hits count as the shooter saw them. The FIRE2
@@ -78,7 +80,7 @@ authority-boundary error. Corrections on contrib/astra-shot-hardening:
 final changed MD schema VALID (8a37e78e2278d4d72e2cf3bd3595c73caab79ef682babd8cc8fb63dbcc7fb250).
 Native transport/application follow-up is recorded below; capture/undo still absent.
 
-NEW NATIVE EVIDENCE AND LIMITS
+EARLIER NATIVE EVIDENCE AND LIMITS (before capture integration)
 Primary damage-dedup-06 proves273 actual stock hits counted once across three
 shield states and excludes a real own-source collision (see primary report
 LAST-ATTACKER-NATIVE.txt). Same-pair collision+projectile in one frame remains
@@ -123,4 +125,5 @@ remain observed, but overall admission is PARTIAL and its unmodified-loadout
 claim is withdrawn. Correct adapter uses ConvertIDTo64Bit plus nonzero/operational
 validation BEFORE querying mods.27 affected checks PASS, including native-shaped
 hex IDs, zero/invalid IDs and unavailable mod queries. Actual modded native
-refusal is pending. Do not reuse run02 as admission acceptance.
+refusal was pending at that audit; zero-switch03 now verifies an actual installed
+mod is refused (SHOT-VISUAL-PRIMITIVE.txt). Run02 remains PARTIAL.

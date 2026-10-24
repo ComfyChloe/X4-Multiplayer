@@ -18,36 +18,32 @@ lands/exits host ship. "Overload" meant crashes, not FPS. Detailed triage:
 ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP / COORDINATION
-Claude active, contrib/claude-shot-capture draftPR39 latest9adf2eb. Primary review
-../x4-capture-review:78 affectedPASS, original shooter-ID/quarantine/proxy-loss
-findings fixed. Remaining symmetric native closure gaps reproduced (guest victim
-closed/host shooter closed still restore+count), plus actual pilot witness:
-Claude notified1792808431.267749/1792808475.071049; owns source/tests fixes.
-Primary owns native, visual/FIRE2, docking/integration. New983f5a4 visual module
-pushed, flagsOFF: native stopACK before setter, per-gun proof after, both Lua/MD
-FIRE2 fences. Interface agreed: arena.shotVisualMode/Gen/At lists1..2, mode0/1/2.
-Native shot-visual01 boundedPASS: remote/local/remote gens2/4/6, same6gunIDs,
-6zero bullets before+6after, local stage old/current queuedFIRE2 bothrefused.
-37restore/7normal saves verified. Followup passenger guard uses player.controlled
-(source/testonly so far). reports/SHOT-VISUAL-PRIMITIVE.txt retains qualification.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next04:30,04:15
-checkpoint1792808016.264479. No new timer/chat. NO active native game.
-Schema worker48913 remains active. Next: finalPR39 review then integrated physical
-capture/harmless-replay native test, including passenger case.
-SHOT hardened branch5a0f75d merged4ae1065: exact pending energy, duplicate ACK,
-native generation/authority/window fence, permanent Stop, stock uniform unmodified
-loadout gate. Local-closed generations now dropped before next HGEN too.
-56 affected SHOT/HEALTH checks PASS;51 adjacent relay/FIRE2/universe checks PASS
-before last Lua-only closure change. MD schema VALID. Flags OFF; capture absent.
-reports/SHOOTER-CONFIRMED-HITS-DESIGN.txt tracks boundaries and PR38 review fixes.
-shot-function-01 FAIL: native isbeamweapon is NUMBER0, not false. ad85b5e fixes
-query/fixtures;26 SHOT checks PASS. shot-function-02 manual native application checks PASS:
-3*40shield120, lostACK retry0damage, +2*40shield80; closedgen sixth refused;
-late Support/State cannot rearm Stop.28 readbacks, cleaned. BUT native mod query
-used ID0: overall admission PARTIAL, unmodified-loadout claim withdrawn.
-faeb16d (pushed) fixes ConvertIDTo64Bit + nonzero/operational check;27 SHOT tests
-PASS. Claude notified1792806484.695709; should include fix. Native gate nowqualified by actual mod insertion inzero-switch03.
-Manual counts only, not physical capture/paired games; reports retain raw hashes.
+Claude active: PR39 exact75e61e2 reviewed/merged atae2603e. Source-ID, quarantine,
+proxy-loss, native closure/pilot findings closed; independent78 prior +22 changed
+checksPASS,3MDschemasVALID; integrated57 SHOT/capture/visual checksPASS. FlagsOFF.
+Primary owns Linux native/docking/integration. Claude now assesses bounded Windows
+Get/SetWeaponLaunchedMacro readiness using his existing authorized isolated harness
+(stock/zero/stock same gun; no personal profile/Workshop writes); first readiness,
+not joint gameplay/package. Assignment1792808996.450949.
+New visual module uses native stopACK before setter and per-gun fresh proof;
+Lua/native FIRE2 gate. Mode/Gen/At lists1..2 agreed, modes0unknown/1original/2zero.
+reports/SHOT-VISUAL-PRIMITIVE.txt: native shot-visual01 boundedPASS, ownership
+gens2/4/6 same6gunIDs,6zero shots before+6after, old/current queuedFIRE2 locally
+refused. Passenger guard now player.controlled (source only until guest case).
+reports/SHOT-CAPTURE-INTEGRATION.txt: native shot-capture01 boundedPASS,162 physical
+p1 shots28counts ->real relay ->synthetic p2 HEALTH ->native shield3680/4800;
+162 deliberate misses add0.56source+2probe hashes/37restore/7normal saves audited.
+ACTIVE native shot-capture-guest-01 on ae2603e, exec33398: inverse p2 shooter/
+synthetic host; separate damage oracle. Do not start another native controller.
+shot-capture-01 exec18332 completed/cleaned. Next inspect guest raw/strict gate and
+cleanup, then continue remaining combat/boarding work. Schema worker48913 active.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour next04:45;04:30 checkpoint
+1792808996.450949, milestone1792809221.783749. No new timer/chat.
+SHOT hardened5a0f75d merged4ae1065: immutable energy/digest, duplicateACK0damage,
+native gen/authority/time fences, permanentStop, stock uniform unmodified gate.
+shot-function02 manual3*40 then2*40 application/retry/closure tests remain observed
+but overallPARTIAL (old mod query ID0). faeb16d fixes ConvertIDTo64Bit; actual
+installed1.17992 mod refusal qualifiedzero-switch03. Never reuse old admission.
 
 WEAPON NATIVE EVIDENCE
 reports/LAST-ATTACKER-NATIVE.txt: per-callback object.lastattacker identities correct
