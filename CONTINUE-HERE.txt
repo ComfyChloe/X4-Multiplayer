@@ -22,7 +22,7 @@ Primary owns Linux native/docking/integration. Claude source-only:
 BOLT/BEND relayPR42: exact695786a independently73 PASS; both sector-change
 retirement and54/s capacity reproductions fixed. Merged8832a15. Claude reviews
 production adapter/native guards source-only. CodecsPR41 exact2ae2284 merged.
-Motion review10b5d7b four bounds/loss findings corrected; primary owns adapter/native files. Windows remains unlaunched: only profile45841 exists and remains
+Motion review findings corrected; primary owns adapter/native files. Windows remains unlaunched: only profile45841 exists and remains
 restricted after Workshop incident; owner approval still needed there. PR40
 f6bb18e dev-only readiness reviewed9tests+schema and merged e174521, not installed.
 Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min, next07:15 CEST;
@@ -71,10 +71,12 @@ added;11 adapter/gate tests, existing32 FIRE2/visual + new suppression regressio
 pass;2MD schemas valid. Not yet natively integrated. Motion/adapter22 checks after review fixes;
 3 inserted effects schemaVALID.
 reports/PROJECTILE-VISUAL-PROTOCOL.txt holds current contract/scope; next real
-relay/capture/render integration after Claude relay review. Prepared ignored
-.local/evidence-226-withheld FAIL LuaID key userdata; audited clean. Next02 loads unregistered production
-adapter, real relay, synthetic12-bolt sender, stationary plasma physical input.
-Source8832a15 failed; key correction +12 adapter tests pass. Primary owns native.
+relay/capture/render integration after Claude relay review. Native full-adapter01 failed LuaID concat;65d6213 fixes stable-ID keys,12 adapter
+checks PASS.02 creates/removes12 remote effects but one native position jumps;
+no source shots during early input.03 failed dev readiness printf on size_t.
+All three archived/audited/restored.04 FAIL native zone-reparent displacement confirmed, still0 source shots;
+all owned work restored. Candidate one-retry owned carrier repair +remote-only
+Setup stop,14 adapter tests/schemaPASS. Next05 native pending; no acceptance.
 Schema worker48913 remains active.
 
 DOCKING / STORY

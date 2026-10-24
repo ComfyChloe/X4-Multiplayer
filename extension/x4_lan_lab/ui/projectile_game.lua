@@ -183,7 +183,17 @@ function x.renderFrame(now)
       local r=x.slots[slot];wantedSlots[slot]=true
       if r.object then
        if C.IsComponentClass(r.object,'object') and C.GetContextByClass(r.object,'sector',false)==q.sector then
-        local p=sample.pose;C.SetObjectSectorPos(r.object,q.sector,ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}))
+        local p=sample.pose;local pose=ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
+        -- A zone reparent can retain the previous zone's local coordinates on
+        -- the first write. Correct once within this frame, then remove a carrier
+        -- that still disagrees. Never apply this repair to ships or projectiles.
+        local placed=false
+        for attempt=1,2 do
+         C.SetObjectSectorPos(r.object,q.sector,pose)
+         local actual=C.GetObjectPositionInSector(r.object)
+         if math.abs(actual.x-pose.x)<=.01 and math.abs(actual.y-pose.y)<=.01 and math.abs(actual.z-pose.z)<=.01 then placed=true;break end
+        end
+        if not placed then remove(slot) end
        else remove(slot) end
       elseif now-r.at>.3 then remove(slot) end
      end

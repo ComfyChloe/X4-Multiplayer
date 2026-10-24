@@ -18,7 +18,7 @@
    <create_list name="$objects" exact="256"/><create_list name="$operations" exact="256"/><create_list name="$entities" exact="256"/>
    <create_list name="$expires" exact="256"/><create_list name="$objectEffects" exact="256"/>
    <do_all exact="256" counter="$i"><set_value name="$operations.{$i}" exact="0"/></do_all>
-   <do_all exact="2" counter="$e"><do_if value="@$arena.$ships.{$e}.isoperational"><stop_shooting object="$arena.$ships.{$e}"/></do_if><set_value name="$arena.$fireRemaining.{$e}" exact="[0,0]"/><set_value name="$arena.$fireManaged.{$e}" exact="false"/></do_all>
+   <do_all exact="2" counter="$e"><do_if value="@$arena.$ships.{$e}.isoperational and player.controlled != $arena.$ships.{$e}"><stop_shooting object="$arena.$ships.{$e}"/></do_if><set_value name="$arena.$fireRemaining.{$e}" exact="[0,0]"/><set_value name="$arena.$fireManaged.{$e}" exact="false"/></do_all>
    <raise_lua_event name="'X4LAN_Projectile.Ready'"/>
   </actions>
   <cues>

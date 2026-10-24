@@ -20,6 +20,7 @@ class ProjectileAdapterTests(unittest.TestCase):
           GetContextByClass=function(id) return sectors[id] or 0 end,
           GetPlayerControlledShipID=function() return controlled end,
           GetPlayerContainerID=function() return controlled end,
+          GetObjectPositionInSector=function(id) for i=#writes,1,-1 do if writes[i].id==id then return writes[i].p end end;error('unwritten object') end,
           GetPositionalOffset=function() return {x=100+170*(now-10),y=200-300*(now-10),z=300+2200*(now-10),yaw=.1,pitch=-.2,roll=0} end,
           SetObjectSectorPos=function(id,sector,p) writes[#writes+1]={id=id,sector=sector,p=p} end}
          local req=require;require=function(name) if name=='ffi' then return {C=api,cdef=function() end,new=function(n,t) return t end} else return req(name) end end
@@ -62,6 +63,21 @@ class ProjectileAdapterTests(unittest.TestCase):
          assert(not X.failed and X.contexts[2]==before and before.ticket==ticket)
          receive(packet());assert(before.buffer.count==1)
         ''')
+
+    def test_zone_reparent_is_corrected_once_and_persistent_displacement_removes_owned_carrier(self):
+        for persistent in (False, True):
+            with self.subTest(persistent=persistent):
+                self.make().execute('''
+                 receive(packet());clock(10.2);X.renderFrame(now);local a=last('Create');ackcreate(a)
+                 local read=api.GetObjectPositionInSector
+                 api.GetObjectPositionInSector=function(id)
+                  if #writes==1 or '''+str(persistent).lower()+''' then return {x=-50000,y=200,z=-5897} end
+                  return read(id)
+                 end
+                 X.renderFrame(now);assert(#writes==2)
+                 assert((X.slots[a.slot]==nil)=='''+str(persistent).lower()+''')
+                 for _,w in ipairs(writes) do assert(w.id==200) end
+                ''')
 
     def test_native_creation_ack_precedes_any_move_and_matches_delayed_actual_path(self):
         self.make().execute('''
@@ -131,6 +147,12 @@ class ProjectileAdapterTests(unittest.TestCase):
 
 
 class NativeProjectileGateTests(unittest.TestCase):
+    def test_setup_stops_only_remote_scripted_fire_and_preserves_player_input(self):
+        tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_projectile.xml')
+        stop=tree.find('cues/cue/actions/do_all/do_if')
+        self.assertEqual(stop.get('value'),'@$arena.$ships.{$e}.isoperational and player.controlled != $arena.$ships.{$e}')
+        self.assertIsNotNone(stop.find('stop_shooting'))
+
     def test_native_slot_cancel_fences_queued_create_and_cannot_remove_newer_object(self):
         tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_projectile.xml')
         cues={x.get('name'):x for x in tree.iter('cue')}

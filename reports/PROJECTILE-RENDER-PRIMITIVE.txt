@@ -174,3 +174,32 @@ returned by A.id. Corrected to stable native ID strings; MD/API arguments retain
 the typed LuaID. New engine-userdata regression plus11 existing adapter tests PASS.
 70 source files/2 probes/UI registration,37-file restoration and actual save
 bytes/timestamps independently audited. All owned processes closed.
+
+REAL RELAY ADAPTER SECOND RUN — projectile-adapter-02
+Source65d6213, rawec8301e47d2c8c768c19b73f92462a994b7e6a29fe47aa712eb486f97044ebf3.
+FAIL:12 remote carriers created and removed, but1 of126 independent MD position
+readbacks leaves its transmitted trajectory (slot5,operation7,age13.5281;
+x=-50008.496,z=-5897.971). Adjacent readbacks are on the expected line; cause
+unresolved. No original fired events during early physical input at native12s.
+70 source files/2 probes/UI registration,37-file restoration and actual save
+bytes/timestamps audited. Do not infer acceptance from controller completion.
+Next dev run adds cockpit readiness delay/count and native zone/C position
+observations; no production collision/teleport workaround based on inference.
+
+projectile-adapter-03 also FAILS: dev-only readiness logger passed size_t cdata to
+string.format %d, stopping the bubble adapter before work. Corrected only in next
+fixture with tonumber, not a production change. Raw
+ee7f4e8da66e05366beccfc104191add65e36516ec5065d8d79efcb976798de0;
+70 source/2 probes/UI registration,37-file restore and actual saves audited.
+
+projectile-adapter-04 FAIL: same65d6213 production. Native MD positions and
+immediate C readback both reproduce zone reparent displacement: old zone center
+(50742.008,0,5897.971) -> zero-center zone while retaining old local coordinates.
+C error peaks51083.632531m;2 of123 MD samples leave the line by5897.971m.
+Twelve effects expire; no source shots despite6 UI primary weapons/3s settle.
+Rawb6c406c95cea875838803a9afdd39cded02b4b0f8949f5fd06c140f8a2596106.
+70 source/2 probes/UI registration,37 restore and actual saves audited.
+Candidate repair reads back each owned meshless carrier, corrects at most once
+within the frame, removes persistent disagreement. Setup now stops only remote
+scripted fire, preserving actual local pilot input.14 adapter tests/schema PASS;
+native qualification remains pending. No other object's placement is repaired.
