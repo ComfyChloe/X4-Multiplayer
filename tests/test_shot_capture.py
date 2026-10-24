@@ -30,6 +30,7 @@ TOKENS = [
     (r'\$capVictims\.indexof\.\{\$o\}', "P['v']"),
     (r'@\$o\.lastattacker', "P['att']"),
     (r'\$arena\.\$ships\.indexof\.\{\$att\}', "P['ai']"),
+    (r'player\.controlled == \$arena\.\$ships\.\{\$capMe\}', "(P.get('controlled', S['capMe']) == S['capMe'])"),
     (r'\$o\.(shield|maxshield|hull|maxhull)\b', r"P['\1']"),
     (r'\$capCollisions\.count', "len(S['coll'])"),
     (r'\$capCollisions\.\{\$j\}\.\{(\d)\}', r"S['coll'][j-1][\1-1]"),
@@ -179,6 +180,20 @@ class CaptureRuleTests(unittest.TestCase):
         self.assertEqual(hit(state(**host), 's', v=2, ai=1, att='A1')[0], ['shield', 'count'])
         for kw in (dict(healthLive={1: False, 2: False}), dict(healthGen={1: 0, 2: 3}), dict(healthClosed={1: 0, 2: 4})):
             self.assertEqual(hit(state(**dict(host, **kw)), 's', v=2, ai=1, att='A1')[0], [], kw)
+
+    def test_closed_generations_fence_both_sides_before_any_restore(self):
+        # A:primary repros: guest on a closed host-victim gen; host shooter on its own closed gen.
+        self.assertEqual(hit(state(healthClosed={1: 3, 2: 0}), 's')[0], [])
+        host = dict(host=True, capMe=1, shotAuthority={1: True, 2: False}, capShooter={i: 1 for i in range(1, 5)},
+                    capSGen={i: 3 for i in range(1, 5)}, healthLive={1: False, 2: True}, healthGen={1: 0, 2: 4})
+        self.assertEqual(hit(state(**host), 's', v=2, ai=1, att='A1')[0], ['shield', 'count'])
+        self.assertEqual(hit(state(**dict(host, healthClosed={1: 3, 2: 0})), 's', v=2, ai=1, att='A1')[0], [])
+
+    def test_only_the_natively_controlled_ship_captures_or_undoes(self):
+        # Lua still says capMe=2, but the player left the controls (or is a passenger).
+        for c in (1, None):
+            self.assertEqual(hit(state(), 's', controlled=c)[0], [], c)
+            self.assertEqual(hit(state(capUndo=True), 's', v=2, ai=1, att='A1', controlled=c)[0], [], c)
 
     def test_undo_is_off_by_default(self):
         self.assertEqual(hit(state(), 's', v=2, ai=1, att='A1')[0], [])

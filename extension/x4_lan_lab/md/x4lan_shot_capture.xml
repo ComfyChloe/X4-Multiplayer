@@ -120,10 +120,12 @@
       <do_elseif value="$v gt 0"><set_value name="$mine" exact="@$arena.$shotAuthority.{$v}"/></do_elseif>
       <set_value name="$capture" exact="false"/><set_value name="$undo" exact="false"/>
       <!-- Native authority fences before any restore: the generations involved must be current
-           and not closed in THIS machine's HEALTH state (Lua's sender checks are not enough). -->
+           and not closed in THIS machine's HEALTH state (Lua's sender checks are not enough), on
+           both sides, and the player must natively be at the controls of $capMe right now (Lua's
+           state may lag after leaving them; a passenger is not a pilot). -->
       <set_value name="$own" exact="false"/><set_value name="$other" exact="false"/>
-      <do_if value="$fresh and $capMe gt 0">
-       <do_if value="$arena.$host"><set_value name="$own" exact="$arena.$shotCurrentGen.{$capMe} gt 0 and not $arena.$dead.{$capMe}"/></do_if>
+      <do_if value="$fresh and $capMe gt 0 and player.controlled == $arena.$ships.{$capMe}">
+       <do_if value="$arena.$host"><set_value name="$own" exact="$arena.$shotCurrentGen.{$capMe} gt $arena.$healthClosed.{$capMe} and $arena.$shotCurrentGen.{$capMe} gt 0 and not $arena.$dead.{$capMe}"/></do_if>
        <do_elseif value="@$arena.$healthOwn.{$capMe} and @$arena.$healthAuth.{$capMe} == $arena.$shotCurrentGen.{$capMe}">
         <set_value name="$own" exact="$arena.$healthAuth.{$capMe} gt $arena.$healthClosed.{$capMe}"/>
        </do_elseif>
@@ -132,7 +134,7 @@
       <do_elseif value="$fresh and $arena.$host and @$arena.$healthLive.{$v} and @$arena.$healthGen.{$v} == $arena.$shotCurrentGen.{$v}">
        <set_value name="$other" exact="$arena.$healthGen.{$v} gt $arena.$healthClosed.{$v}"/>
       </do_elseif>
-      <do_elseif value="$fresh and not $arena.$host"><set_value name="$other" exact="$arena.$shotCurrentGen.{$v} gt 0"/></do_elseif>
+      <do_elseif value="$fresh and not $arena.$host"><set_value name="$other" exact="$arena.$shotCurrentGen.{$v} gt $arena.$healthClosed.{$v} and $arena.$shotCurrentGen.{$v} gt 0"/></do_elseif>
       <do_if value="$fresh and $own and $other and $ai == $capMe and $v != $capMe and not $mine">
        <!-- A:primary's visual proof (x4lan_shot_visual.xml): my guns verifiably launch ORIGINAL
             bullets under the current generation, read back within 0.3 s; no proof, no claim. -->
