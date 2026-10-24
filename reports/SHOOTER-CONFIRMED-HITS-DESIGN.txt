@@ -98,3 +98,19 @@ No SHOT application ran. Corrected to require numeric0, with numeric fixtures an
 explicit1/nil/false refusals. Actual other per-shot/area channels all returned0.
 Raw SHA256fad188e953c4fbc8ddeb218e15e444994eba7e3b58f181f815b337d3bd1cdff5.
 Native run02 repeats the previously unreachable application gates;01 stays FAIL.
+
+NATIVE SHOT FUNCTION RUN02: bounded PASS (sourcead85b5e)
+One actual Linux p1, real UDP relay and synthetic p2 submitting manual cumulative
+counts. Both actual six-gun X-Shuttle loadouts pass the corrected native gate.
+3 hits cause120 shield damage (4800->4680). Dev observer drops the first Applied
+callback; retry produces an ACK with no second damage. Total5 causes only80 more
+(4680->4600). A labelled queued sixth hit follows native HEALTH Release of source
+gen2; count stays5, shield4600. Terminal Stop is followed by late Support123 and
+State999; neither re-arms the MD module.28 native readbacks retain matching hull,
+counts, authority closure and state; strict causal order is checked by retained
+.local/evidence-248-withheld Raw SHA256
+8f930c1ba8444de86e453ae2f5c94ac54974511d5782d0806112c34b4e168757.
+Both runs'37-file restorations and all actual save bytes/timestamps audited.
+26 affected SHOT unit/LuaJIT checks PASS after numeric-beam correction.
+This qualifies bounded native transport/application, NOT genuine shot capture,
+loss during handover, harmless visuals, real two-game combat or Windows.

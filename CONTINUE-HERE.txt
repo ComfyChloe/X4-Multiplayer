@@ -18,20 +18,26 @@ lands/exits host ship. "Overload" meant crashes, not FPS. Detailed triage:
 ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP / COORDINATION
-Claude stopped at usage limit02:54 (1792803297.836829), draftPR38 cf58725.
-Primary ACK03:00 takes further review/integration/capture ownership; no duplicate
-worker. PR36 health66169d2 integrated, pilot_health OFF. Retained native health
-limits in reports/VICTIM-PILOT-HEALTH-DESIGN.txt. Primary owns native/docking/story.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next03:30,
-last03:15 checkpoint1792804559.587959. No new timer/chat or repeated reset query.
+Claude resumed03:24 (1792805101.255159); primary assignment03:30
+1792805372.517159: SOURCE-ONLY inert capture/undo + canonical floor/life fixes on
+ad85b5e in separate PR. No native/package/flags; all-pair collision exclusion,
+shotApplying exclusion, native authority fences and verified lifetime quarantine.
+Primary retains native PC, harmless visual replay, docking/integration. No overlap.
+PR36 health66169d2 integrated, pilot_health OFF; health report retains native limits.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next03:45.
+No new timer/chat. Active native .local/evidence-270-withheld controller exec31870:
+stock/zero aligned/zero offset, original dev macros; no impact acceptance yet.
 SHOT hardened branch5a0f75d merged4ae1065: exact pending energy, duplicate ACK,
 native generation/authority/window fence, permanent Stop, stock uniform unmodified
 loadout gate. Local-closed generations now dropped before next HGEN too.
 56 affected SHOT/HEALTH checks PASS;51 adjacent relay/FIRE2/universe checks PASS
 before last Lua-only closure change. MD schema VALID. Flags OFF; capture absent.
 reports/SHOOTER-CONFIRMED-HITS-DESIGN.txt tracks boundaries and PR38 review fixes.
-Next isolated .local/evidence-247-withheld is prepared: real host/synthetic shooter,
-manual hit counts, lost ACK and queued closed-gen refusal. No physical hit claim.
+shot-function-01 FAIL: native isbeamweapon is NUMBER0, not false. ad85b5e fixes
+query/fixtures;26 SHOT checks PASS. shot-function-02 bounded native PASS:
+3*40shield120, lostACK retry0damage, +2*40shield80; closedgen sixth refused;
+late Support/State cannot rearm Stop.28 readbacks, cleaned. Manual synthetic
+counts only, not physical capture or paired games. Reports retain raw hashes.
 
 WEAPON NATIVE EVIDENCE
 reports/LAST-ATTACKER-NATIVE.txt: per-callback object.lastattacker identities correct
