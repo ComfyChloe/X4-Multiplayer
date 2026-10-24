@@ -26,16 +26,16 @@ because phase2 ran4s vs required5s. Host recovery02 only unresolved timing repea
 three restores~.10s within unchanged.2s gate. No real combat acceptance.
 Primary owns aim/docking/story/native/controller/integration. No concurrent native
 or installation writes. Claude Windows native blocked by Workshop restrictions.
-Slack PRIVATECOORDINATIONID, threadPRIVATE-THREAD-ID, quarter-hour; next02:45. No new timer/chat.
+Slack PRIVATECOORDINATIONID, threadPRIVATE-THREAD-ID, quarter-hour; next03:00 (02:45 checkpoint1792802722.629579). No new timer/chat.
 02:39 message1792802372.785509 authorizes Claude SOURCE-ONLY inert shot_claims=false
 uniform unmodified ordinary-bullet SHOT cumulative transport/application fences.
-Capture/undo NOT approved active. Design06f54b7 has superseded errors; see current
+02:48 message1792802908.525969 extends SOURCE-ONLY inert capture/undo; still OFF.
+Design06f54b7 has superseded errors; see current
 native report/corrections, not invented lastattackercomponent/weapon getter.
 
 CURRENT NATIVE / WEAPONS
-ACTIVE exec20600: .local/evidence-027-withheld Actual third-ship collisions
-after known pulse damage, with shield then without. No result yet. Other runs
-cleaned. NEVER read restored live profile log as evidence; use retained native.log.
+No active native game. All runs through damage-dedup-06 cleaned. NEVER read
+restored live profile log as evidence; use retained native.log.
 reports/LAST-ATTACKER-NATIVE.txt: per-callback object.lastattacker identities correct
 for player/NPC, including same-frame different shooters; timestamp STALE, not a
 freshness gate. Floor clips/suppresses callbacks; raw HP delta is not projectile
@@ -44,8 +44,12 @@ Undo02:34 real hits/68 synchronous shield+hull restores; one pair is ONE project
 Channel03: same at min1/baseline1.02%, no premature death;11 native damage-channel
 cases match; final intentional hit triggers death. All-zero identity reset FAILS.
 Stock runtime GetLibraryEntry hullshielddpshot: XShuttle40/pulseMk1 36/Mk2 46.
-Not equipment-mod qualification. Candidate ordinary-only dedup: count Shield;
-Hull only if restored shield is zero. NOT YET QUALIFIED. Health min2 proxy loses
+Not equipment-mod qualification. dedup06:332 actual births,273 canonical hits
+(256six-gun XShuttle,17pulse), exactly273 ordered claims across overflow/zero/full.
+Count Shield; Hull only if restored shield zero. Same-pair collision-frame exclusion
+keeps two286-point ram damages native, no claim. Simultaneous shot+collision remains
+ambiguous; production needs all collision pairs, not single last collider.
+Health min2 proxy loses
 callbacks below2%; needs coherent canonical-death/floor handling, Claude informed.
 Reports contain raw hashes, limits, cleanup. No production SHOT/aim activation.
 reports/WEAPON-AIM-PRIMITIVES.txt: native bullet orientation getters track flight,

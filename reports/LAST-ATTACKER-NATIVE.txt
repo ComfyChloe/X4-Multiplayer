@@ -107,3 +107,44 @@ save timestamps independently match. Sources/probes and full logs retained in
 Claude may implement an inert source-only uniform-stock-bullet SHOT transport
 and execution fences. Capture/undo remain disarmed pending collision attribution,
 shield/hull dedup and integration qualification. No new package/activation.
+
+COLLISION AND ORDINARY-BULLET COUNTING FOLLOW-UP
+damage-collision-04 INCONCLUSIVE for damage attribution: constant-velocity NPC
+ram produces two collision callbacks, no target damage, and an old lastattacker.
+Raw SHA256bb9e766c7d7c1ad2578b8bfe54671b054902d79a17246a773a9d1819350eab90.
+damage-dedup-05 PARTIAL:17 pulse hits count once across overflow/zero/full shield.
+X-Shuttle multigun coverage FAILS because the fixture omitted quotes around its
+loadout string; native lookup errors are retained. A moving physical-player ram
+then causes two277.3-point shield damage callbacks. Their lastattacker is the
+actual collider, not the preceding shooter. Therefore identity alone also cannot
+distinguish a player ram from that player's projectile. Before the damage,
+event_object_collided reports the same target/collider and native game age.
+Raw SHA256ddc2d83ce909fc3ee6983bddc1bd402f0dcba3b6b2f1d8971301784e1ed6c0bc.
+
+damage-dedup-06 bounded PASS after separately correcting the fixture:
+- Actual X-Shuttle has six stock plasma weapons; other shooter has stock pulse.
+  332 projectile births,273 canonical PlayerShipHit events (256plasma,17pulse).
+- Candidate counts each canonical hit exactly once, same attacker and event order:
+  64 at10-point shield/overflow;93 atzero shield;116 fully shield-absorbed.
+- Rule for these ORDINARY hullshield-only bullets: count Shield callback then
+  restore its exact delta. Hull callback counts only if the current, already
+  restored shield is zero; restore its hull delta too. No timestamp correlation.
+- All hit readbacks retain1.02% hull across the1% protection floor. No death.
+- A subsequent ram uses the previously firing pulse ship as collider, with undo
+  still armed. Record target/collider/game age from event_object_collided; exclude
+  matching damage from claim AND undo. Both286-point collision shield callbacks
+  are excluded; actual collision damage remains, no fabricated projectile claim.
+Raw SHA25676c84319e52fce792edd4d5aa66e44acded6934333cd8b0810d7c59464d1ed24.
+The retained analyzer checks strict claim/hit interleaving, distinct projectile
+identities, both sources/all three phases, real six-weapon installation, collision
+exclusion, zero death and restoration/save inventories.37 files restored.
+
+Limits: simultaneous same-victim/same-attacker collision AND projectile in one
+native frame remain conservatively ambiguous. A production collision map needs
+ALL pairs in that frame, not a single last collider that another contact could
+overwrite. These tests do not qualify beams, area damage, missiles, weapon mods,
+surface-element targeting or old-generation in-flight projectiles. Source-only
+inert capture/undo is now authorized for the bounded uniform unmodified stock
+ordinary-bullet path, with explicit unsupported-loadout refusal. Claude owns it;
+transport/application integration and health-floor/death fences still pending.
+No production flag/package activation or two-native acceptance.
