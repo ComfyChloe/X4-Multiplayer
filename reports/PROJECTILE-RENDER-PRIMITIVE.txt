@@ -100,3 +100,39 @@ Raw d8eb13a51326ec01b901e3d6683880a406d922fad5726e1ebb73a24cdb3da614.
 54 unchanged production files+10 dev overrides/UI registration,37 restored files
 and actual-save bytes/timestamps verified. No two-native, dense rendering, save
 lifecycle, original animation equivalence or network-projectile acceptance yet.
+
+ACTUAL PROJECTILE POSE / VELOCITY — projectile-pose-01
+Source705b30c, fresh owned45841; one real host/real relay/synthetic idle peer.
+No production flags activated. A focused, PID/start-ticks/profile-checked XTest
+right-button press fired the player's six original X Shuttle plasma guns toward
+an off-centre cursor. Targets were moved away; no selected-target substitution.
+The first12 actual event_weapon_fired projectiles were sampled by read-only
+GetPositionalOffset(bullet,sector) every Lua frame, guarded by IsComponentClass,
+and independently by MD relativeposition/relativerotation every100ms. All12 birth
+witnesses have player.controlled==source ship; each has native/Lua disappearance.
+
+PASS within this measurement scope:1577 C frames and202 MD frames, maximum matched
+position discrepancy0.000756m; Euler discrepancy<8.71e-7rad after converting MD
+angle units. Native bullet speed2300m/s; first>=30ms C position difference gave
+2300.0003..2300.0096m/s and predicted subsequent retained positions to<=0.03564m.
+Flight was10.49..11.10deg off the ship's near-zero forward yaw: this preserves the
+actual gun trajectory, not cursor/ship-forward guesses. GetCurRealTime minus
+native age was~0.0333s here; independent positions were matched before comparing
+clock offsets. No inference that those clocks are always interchangeable.
+
+Raw346e76afd7cd1227c9e56b8a5df962d9671b081d456b88c77b7605f46576d3a9.
+Local analysis.json/analyze.py retain all12 per-projectile errors and raw samples.
+Audit verifies56 production files+2 probes+UI registration,37 restored installation
+files, actual normal-save bytes/timestamps and selection preservation. All owned
+processes closed. Stock missing voice-text diagnostic retained; no MD/Lua/API
+errors. This does not prove moving-shooter capture, pause/lag, other weapons,
+network rendering, Windows or matched two-native gameplay.
+
+INERT PURE BUFFER
+ui/projectile_motion.lua is not registered or imported. It follows source-clock
+observed translation, preserves Euler orientation, caps active visuals256 and
+reorder tombstones2048, expires missing ends, rejects duplicates/end-before-birth,
+retains replay rejection through pause and refuses changed authority keys. Eight
+focused LuaJIT tests pass; no native/transport authority is conferred by this
+buffer. Later adapter must independently admit pilot/lease/generation/sector and
+map NAV2 source time before issuing any engine operation.
