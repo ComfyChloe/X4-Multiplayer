@@ -169,6 +169,12 @@ class HostFenceTests(unittest.TestCase):
         run(cue('Release'), S, dict(entity=2, gen=4, closed=True), dict(FRESH_P), 2)   # late old release
         self.assertEqual((S['Gen'][2], S['Live'][2], S['Closed'][2]), (5, True, 4))
 
+    def test_a_lost_proxy_keeps_canonical_authority_without_physical_writes(self):
+        S = self.host()
+        effects = run(cue('Apply'), S, dict(entity=2, gen=4, hull=60, shield=20, **WINDOW), dict(FRESH_P, operational=False), 2)
+        self.assertEqual([tag for tag, _ in effects if tag.startswith('set_object')], [])
+        self.assertEqual((S['Gen'][2], S['Live'][2], S['Value'][2], S['At'][2]), (4, True, [60, 20], FRESH_P['age']))
+
     def test_stale_window_or_pause_refuses_an_apply(self):
         S = self.host()
         self.assertEqual(run(cue('Apply'), S, dict(entity=2, gen=4, hull=80, shield=50, **WINDOW), dict(FRESH_P, timewarp=0), 2), [])

@@ -99,7 +99,8 @@ def state(**kw):
              capMe=2, capRemote={1: True, 2: False}, capLifetime=3.8, capUndo=False, capSGen={i: 4 for i in range(1, 5)},
              capVGen={1: 3, 2: 0, 3: 0, 4: 0}, capCount={i: 0 for i in range(1, 5)}, capQuarantine={i: 0 for i in range(1, 5)},
              capCollAge=-1, coll=[], shotAuthority={1: False, 2: True}, shotStrength={1: 40, 2: 40},
-             shotCurrentGen={1: 3, 2: 4})
+             shotCurrentGen={1: 3, 2: 4}, shotVisualMode={1: 1, 2: 1}, shotVisualGen={1: 3, 2: 4},
+             shotVisualAt={1: 99.9, 2: 99.9})
     S.update(kw); return S
 
 
@@ -141,6 +142,11 @@ class CaptureRuleTests(unittest.TestCase):
         self.assertEqual(hit(state(), 's', v=2, ai=2)[0], [])                            # my own ship
         self.assertEqual(hit(state(shotStrength={1: 40, 2: 0}), 's')[0], [])            # unsupported loadout
 
+    def test_no_original_bullet_proof_no_capture(self):
+        for kw in (dict(shotVisualMode={1: 1, 2: 2}), dict(shotVisualMode={1: 1, 2: 0}),
+                   dict(shotVisualGen={1: 3, 2: 3}), dict(shotVisualAt={1: 99.9, 2: 99.5})):
+            self.assertEqual(hit(state(**kw), 's')[0], [], kw)
+
     def test_undo_is_off_by_default(self):
         self.assertEqual(hit(state(shotAuthority={1: False, 2: True}), 's', v=2, ai=1, att='A1')[0], [])
 
@@ -158,7 +164,7 @@ class CaptureRuleTests(unittest.TestCase):
         self.assertEqual(hit(S, 's', age=100.0)[0], ['shield'])      # restored, not counted
         self.assertEqual((S['capVGen'][1], S['capCount'][1]), (5, 0))
         self.assertAlmostEqual(S['capQuarantine'][1], 104.05)
-        S['capStateAt'] = S['shotStateAt'] = 103.9                    # states keep refreshing meanwhile
+        S['capStateAt'] = S['shotStateAt'] = S['shotVisualAt'][2] = 103.9   # states keep refreshing meanwhile
         self.assertEqual(hit(S, 's', age=104.0)[0], ['shield'])
         self.assertEqual(hit(S, 's', age=104.1)[0], ['shield', 'count'])
         self.assertEqual(S['capCount'][1], 1)
@@ -246,7 +252,7 @@ class CanonicalFloorTests(unittest.TestCase):
     """B3: under a live pilot value only the canonical value decides death; the proxy never does."""
     LIFE = [(r'@?\$arena\.\$healthLive\.\{\$i\}', "S['live']"), (r'\$arena\.\$healthValue\.\{\$i\}\.\{1\}', "S['value']"),
             (r'@?\$arena\.\$healthProxyLost\.\{\$i\}', "S['lost']"), (r'\$ship\.isoperational', "P['op']"),
-            (r'\$ship\.hullpercentage', "P['hull']"), (r'\ble\b', '<='), (r'\btrue\b', 'True')]
+            (r'@?\$ship\.hullpercentage', "P['hull']"), (r'\ble\b', '<='), (r'\btrue\b', 'True')]
 
     def tick(self, S, P):
         node = [n for n in E.parse(ROOT / 'extension/x4_lan_lab/md/x4lan_life.xml').iter('do_if')
@@ -279,11 +285,14 @@ class CanonicalFloorTests(unittest.TestCase):
         S['value'] = 1.0
         self.assertEqual((self.tick(S, dict(op=True, hull=80)), S['dead']), (["SHIP_LETHAL"], True))
 
-    def test_lost_proxy_is_logged_once_and_decided_after_the_live_value_ends(self):
+    def test_a_lost_proxy_is_latched_and_never_becomes_a_death(self):
+        # A:primary 04:00: healthy canonical 50 + lost local proxy must not kill the live player later.
         S = dict(live=True, value=50, lost=False, dead=False)
         self.assertEqual(self.tick(S, dict(op=False, hull=0)), ['HEALTH_PROXY_LOST'])
         self.assertEqual((self.tick(S, dict(op=False, hull=0)), S['dead'], S['lost']), ([], False, True))
-        S['live'] = False                                            # health watchdog / release ended it
+        S['live'] = False                                            # even if the live value ends
+        self.assertEqual((self.tick(S, dict(op=False, hull=0)), S['dead']), ([], False))
+        S['live'], S['value'] = True, 1.0                            # a canonical lethal value still kills
         self.assertEqual((self.tick(S, dict(op=False, hull=0)), S['dead']), (["SHIP_LETHAL"], True))
 
     def test_without_a_live_value_the_proxy_decides_as_before(self):

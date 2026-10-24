@@ -104,7 +104,13 @@
       <do_elseif value="$v gt 0"><set_value name="$mine" exact="@$arena.$shotAuthority.{$v}"/></do_elseif>
       <set_value name="$capture" exact="false"/><set_value name="$undo" exact="false"/>
       <do_if value="$fresh and $capMe gt 0 and $ai == $capMe and $v != $capMe and not $mine">
-       <set_value name="$capture" exact="@$arena.$shotStrength.{$capMe} gt 0"/>
+       <!-- A:primary's visual proof (x4lan_shot_visual.xml): my guns verifiably launch ORIGINAL
+            bullets under the current generation, read back within 0.3 s; no proof, no claim. -->
+       <do_if value="@$arena.$shotVisualMode.{$capMe} == 1 and @$arena.$shotVisualGen.{$capMe} == $arena.$shotCurrentGen.{$capMe}">
+        <do_if value="player.age - $arena.$shotVisualAt.{$capMe} le 0.3s">
+         <set_value name="$capture" exact="@$arena.$shotStrength.{$capMe} gt 0"/>
+        </do_if>
+       </do_if>
       </do_if>
       <do_elseif value="$fresh and $capUndo and $ai != $capMe and $mine">
        <set_value name="$undo" exact="$capRemote.{$ai}"/>
