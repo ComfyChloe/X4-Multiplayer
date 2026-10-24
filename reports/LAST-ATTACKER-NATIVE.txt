@@ -70,3 +70,40 @@ includes hullshielddpshot, hullonlydpshot, shieldonlydpshot and hullnoshielddpsh
 plus area variants. These are native macro/library data, not inferred DPS/rate.
 Installed weapon modifiers, projectile-to-weapon identity and safe claim semantics
 still require work; do not guess them or use macro-only data for modded weapons.
+
+SYNCHRONOUS DAMAGE RESTORE AND CHANNELS
+damage-undo-01 FAIL: native parser requires all four damage channels when strength
+is omitted. The fixture never ran. Retained raw failure and verified cleanup;
+corrected fixture is a separate run, not a replacement of the failed evidence.
+damage-undo-02 bounded PASS: two real stock pulse shooters hit the player34 times.
+Each shot emits shield damage10 then clipped hull damage0.458. Both callbacks
+restore their own delta synchronously. All34 following canonical PlayerShipHit
+events see the original92.058 hull/10 shield and correct attacker.68 restores,
+no recursive damage or lethal event. The shield and hull events are ONE hit;
+counting both would double damage. This run uses min hull2%, baseline2.01%.
+Raw SHA256118ea860054dcdf6eaa0927f4450db8535b114843701067c413fa158dea70f81.
+Native GetLibraryEntry per-shot hullshield fields are40 for the installed
+X-Shuttle plasma,36 for pulse Mk1,46 for pulse Mk2; other/area damage channels
+are zero. This qualifies stock macro reads, not installed equipment modifiers.
+
+damage-channel-03 repeats only the unresolved life-boundary case: min hull1%,
+baseline1.02% =46.716 HP.34 actual hits/68 synchronous restores retain that hull
+and10 shield; no premature lethal event. Eleven labelled apply_attackstrength
+cases then match direct channel semantics on this visible-attention X-Shuttle:
+ordinary36/40 damage subtracts shield first and overflows to hull; hullonly,
+shieldonly and hullnoshield have their respective bounded expected effects.
+Example:1000 hull/10 shield +36 ordinary ->974 hull/0 shield. At46.716 hull,
+min1%,36 damage clamps45.8. After the channel checks restore a healthy baseline,
+one later intentional lethal application reaches45.8 and the existing LifeTick
+emits exactly one SHIP_LETHAL. No remote shot/replay or two-native claim.
+ZERO-RESET HYPOTHESIS FAILS: an attacker-less all-zero application leaves the
+previous lastattacker unchanged, causes no damage/callback. Do not implement
+identity consumption on that assumption. Overall03 remains PARTIAL with this
+explicit failed hypothesis, despite the passing restore/channel gates.
+Raw SHA25616484b2734a127029edbb2f84ceaf26e76be2c0377892ec06e14d37ce991c03b.
+Each run's installed/restored37-file inventories and normal-save hashes/actual
+save timestamps independently match. Sources/probes and full logs retained in
+.local/evidence-030-withheld, .local/evidence-032-withheld, .local/evidence-026-withheld
+Claude may implement an inert source-only uniform-stock-bullet SHOT transport
+and execution fences. Capture/undo remain disarmed pending collision attribution,
+shield/hull dedup and integration qualification. No new package/activation.

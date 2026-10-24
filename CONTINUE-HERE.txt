@@ -1,105 +1,79 @@
 X4 MULTIPLAYER — ACTIVE DEVELOPMENT — 24 OCTOBER 2026
 
 Checkout x4-weapons-7-4, contrib/astra-7-4-integration, draft PR37 based on
-contrib/astra-7-3-1-delivery. Read AGENTS.md and Git status, then relevant source
-and evidence only. Latest user says continue until last-playtest faults and
-correct weapons are fixed; former24Oct12:00 estimate is superseded. INTERNAL
-only. Conserve tokens with affected checks, not repeated unchanged broad suites.
-No personal docs/mail, spending, Workshop changes or public/package replacement.
+contrib/astra-7-3-1-delivery. Read AGENTS.md/Git status, then affected source only.
+Latest user: continue until last-playtest faults and weapons fixed; former noon
+estimate superseded. INTERNAL only. Conserve tokens: affected checks and retained
+evidence, no repeated unchanged suites. No personal docs/mail/spending/Workshop
+writes, normal-save changes, public publication or sealed package replacement.
 
-PRIORITY AND HUMAN EVIDENCE
-Weapons/damage first; ordinary station docking/occupied-pad crashes and host-ship
-handover oscillation next. Story suppression uses native completed states.
-Preserve actual native weapon slew/spread and misses; X Shuttle is inaccurate,
-other stock weapons are authorized. No selected-victim auto-lock. Human finished
-release playtests remain human-owned; isolated native function tests allowed.
-7.3.1 Alt+Tab PASS both roles; previous radar/cargo/Cooperative Trial/initial
-station-asteroid alignment PASS. Guest damages host proxy locally but real host
-is unaffected. Same-pad guest crash not in retained restarted log. Host observed
-oscillation after guest piloted/landed/exited host ship. “Overload” meant crashes,
-not FPS. Detailed triage in ../x4-release-7-3-1/.local/evidence-054-withheld
+PRIORITY / HUMAN EVIDENCE
+Weapons/damage; station docking/occupied-pad crash/host-ship handover oscillation;
+completed-story preset. Preserve native weapon slew/spread/misses/free aim.
+Human finished-release playtests stay human-owned; isolated native tests allowed.
+7.3.1 Alt+Tab both roles PASS. Earlier radar/cargo/Cooperative Trial/initial
+station-asteroid alignment PASS. Guest damages host proxy but real host unaffected.
+Same-pad crash not in retained restarted log. Handover oscillates after guest
+lands/exits host ship. "Overload" meant crashes, not FPS. Detailed triage:
+../x4-release-7-3-1/.local/evidence-054-withheld
 
-OWNERSHIP
-Claude PR36 owns health relay/Lua/MD + bubble/life guards. Integrated66169d2 at
-adfcff5, pilot_health still disabled.34 affected health tests independently PASS.
-Permanent failure closure now prevents the guest01 rearm bug. guest02 native:
-125 reports forwarded, local damage~.02s, watchdog/old-generation refusal and
-phase7 terminal failure/WORLD fallback pass bounded checks. Contract PARTIAL:
-phase2 ran4s instead of specified5s; do not hide this mismatch. Host recovery02
-repeats ONLY unresolved timing:3 native floor drops recover~.10s, unchanged.2s gate
-PASS. Earlier full host/failed guest captures retain their original statuses.
-Details/raw hashes in reports/VICTIM-PILOT-HEALTH-DESIGN.txt. No real combat claim.
-Review worktree ../x4-health-review at66169d2. Native Windows remains blocked by
-Workshop restrictions. Primary owns aim/docking/story/controller/native/integration.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last02:15 checkpoint1792800924.910189; design corrections1792801043.488749.
-Quarter-hour coordination; next02:30. No new timer/chat.
+OWNERSHIP / COORDINATION
+Claude PR36 owns health relay/Lua/MD and related guards. Integrated66169d2 at
+adfcff5, pilot_health OFF.34 affected tests PASS. Health terminal-failure closure
+and native recovery verified; reports/VICTIM-PILOT-HEALTH-DESIGN.txt retains limits.
+Guest02:125 reports, watchdog/old-generation/terminal failure positive; PARTIAL
+because phase2 ran4s vs required5s. Host recovery02 only unresolved timing repeated:
+three restores~.10s within unchanged.2s gate. No real combat acceptance.
+Primary owns aim/docking/story/native/controller/integration. No concurrent native
+or installation writes. Claude Windows native blocked by Workshop restrictions.
+Slack PRIVATECOORDINATIONID, threadPRIVATE-THREAD-ID, quarter-hour; next02:45. No new timer/chat.
+02:39 message1792802372.785509 authorizes Claude SOURCE-ONLY inert shot_claims=false
+uniform unmodified ordinary-bullet SHOT cumulative transport/application fences.
+Capture/undo NOT approved active. Design06f54b7 has superseded errors; see current
+native report/corrections, not invented lastattackercomponent/weapon getter.
 
-IMPLEMENTATION / EVIDENCE
-Story native preset: hidden x4lan_internal start,14 completed plot choices and28
-research skips, native HQ precreated;29 blanket story patches WITHDRAWN. Fresh
-42 flags/oneHQ and native capture/reload mission observations pass bounded~70s;
-only upkeep/Trial. Not campaign-wide proof or old-save conversion. Rationale and
-limits in reports/STORY-TEST-PRESET.txt.16 launcher checks PASS.
-Dock registry: saved seed d1041307b01d6f6db5055fba7ffc4b17;51504/51506 reload
-witnesses valid,2wrong-type mobile docks explicitly rejected. Strict registry
-FAIL retained; original ship was under attack, cause not proven serialization.
-reports/COOP-DOCKING-PLAN.txt links raw evidence. Optional capture/observer/executor
-are registered but coop_docks unset, UniverseSession now derives from DockSession. New executor
-requires native Fence ACK, fresh paired NAV/CDOCK for new operations, waits actual
-FREE after undock. Temporary UDP pairing gaps do not restart native undock.
-Queued movement/Prepare have session/generation/wall/game-age fences.8 new dock
-adapter +25 existing coop +23 FIRE2 tests PASS;3 changed MD schemas VALID.
-Native coop-dock-exec-02: all8 phases PASS (reserve/conflict refusal/attach/occupied
-refusal/actual undocks/prepared-then-fenced); undock~8s. No boarding/human same-pad
-or two-native acceptance. Follow-up exec03 all11 phases PASS with stale Prepare/foreign Fence coverage.
-Relay/CDOCK and guarded own-pilot denial implemented;8 relay+26universe+10adapter
-checks PASS. Full adapter02 on6ce2af7 passes exact attach/reserve, both actual
-undock/residual-CANCEL cycles, NPC refusal and queued warp fence (Lua correction
-frozen). Local denial02 passes actual physical-player cancellation,11 native
-unassigned readbacks then remote attachment. Earlier failures retained.
-9660510 (pushed) creates both test stations before capture; Arena/Trade reuse
-saved refs, admission guards missing fixtures. Native seed-market-dock-02 proves
-both refs,24 unique indexed bays and complete Beta cycle; overall PARTIAL due
-Beta name-count failure. Explicit rename confirmed by health-guest-01 station
-witness (both refs/counts1), whose separate health portion FAILS.24 seed+23bubble+
-12trade tests pass; schema/generator deltas checked. Launcher coop_docks still off.
-Handover01 PASS: p2 claims host ship(epoch2), docks/exits; p1 reclaims(epoch3)/exits.
-175 retained readbacks stay docked/one occupant/zero local position spread. Native
-teleport seat changes; no walking/two-native crash/post-seed new-station acceptance.
+CURRENT NATIVE / WEAPONS
+ACTIVE exec20600: .local/evidence-027-withheld Actual third-ship collisions
+after known pulse damage, with shield then without. No result yet. Other runs
+cleaned. NEVER read restored live profile log as evidence; use retained native.log.
+reports/LAST-ATTACKER-NATIVE.txt: per-callback object.lastattacker identities correct
+for player/NPC, including same-frame different shooters; timestamp STALE, not a
+freshness gate. Floor clips/suppresses callbacks; raw HP delta is not projectile
+energy. Mixed no-attacker scripted damage clears identity; collisions unqualified.
+Undo02:34 real hits/68 synchronous shield+hull restores; one pair is ONE projectile.
+Channel03: same at min1/baseline1.02%, no premature death;11 native damage-channel
+cases match; final intentional hit triggers death. All-zero identity reset FAILS.
+Stock runtime GetLibraryEntry hullshielddpshot: XShuttle40/pulseMk1 36/Mk2 46.
+Not equipment-mod qualification. Candidate ordinary-only dedup: count Shield;
+Hull only if restored shield is zero. NOT YET QUALIFIED. Health min2 proxy loses
+callbacks below2%; needs coherent canonical-death/floor handling, Claude informed.
+Reports contain raw hashes, limits, cleanup. No production SHOT/aim activation.
+reports/WEAPON-AIM-PRIMITIVES.txt: native bullet orientation getters track flight,
+but setters only rotate visuals, MD/FFI primary steering rejected. PlayerTargetOffset
+zero off-axis. No selected-victim auto-lock. Egosoft questions drafted, NOT sent.
 
-WEAPONS
-reports/WEAPON-AIM-PRIMITIVES.txt: native shoot_at spatial helper can hit fixed
-pulse target, but actual player aim replay remains open. Preserve native misses,
-spread/gimbal motion; no selected-victim auto-lock or fake collision claims.
-Cursor04 captures168 actual physical-player shots/trajectories: GetPlayerTargetOffset
-stayszero during off-axis fire. ProjectileFFI01 SetPositionalOffset rotates visual
-forward15deg but NOT flight; SetObjectSectorPos rejects bullets. Prior gun setters
-and direct gun-object shooting also fail. No production aim change.
+OTHER IMPLEMENTATION / EVIDENCE
+reports/COOP-DOCKING-PLAN.txt: coop_docks OFF. Saved bay registry + native Fence ACK,
+paired fresh NAV/CDOCK, queued movement guards, actual undock/residual cancel,
+precise own-pilot denial. Native executor03/adapter02/denial02 bounded PASS.
+Handover01: remote takes host ship(epoch2), docks/exits; host reclaims(epoch3)/exits;
+175 readbacks stay exact bay/one occupant/zero position spread. Native teleport
+seat transitions only; walking/barriers/two-native occupied-pad crash unqualified.
+9660510 creates both test stations BEFORE seed capture; Beta naming confirmed
+separately. seed-market-dock-02 PARTIAL retained;24 indexed bays/full Beta cycle.
+reports/STORY-TEST-PRESET.txt:14 completed plots+28 research skips, native HQ;
+42flags/capture/reload bounded~70s; only upkeep/Trial.29 blanket patches withdrawn.
+No old-save conversion/campaign-wide claim. Preserve accepted existing gameplay.
 
-LIVE JOBS / TOOLS
-ACTIVE native exec19271: .local/evidence-031-withheld Native player victim,
-2 pulse shooters; low shield10HP/hull2.01%, min2%, undo each actual delta INSIDE
-its callback. Checks recursion/life timing and per-hit Shield+Hull ordering.
-Also read-only GetLibraryEntry weapon macro per-shot fields, used by native UI.
-All other runs cleaned. last-attacker01/02: identities correct even8 same-frame
-mixed pairs, BUT timestamp stale and floor clips/suppresses damage callbacks.
-NPC03:36 shield/hull events correct by stock36/46 damage,19 old timestamps.
-Mixed04: synchronous7point no-attacker hull callback clears getter to null; next
-explicit-B3point callback resolvesB. Not physical collision/area/repair proof.
-reports/LAST-ATTACKER-NATIVE.txt has evidence. Claude source-only design429aa6f
-not merged/approved: stale shield-vs-hull state and clipped damage are blockers.
-No production hit claims/aim change. New raw per-shot macro data might support a
-strictly bounded ordinary unmodified projectile path; not yet designed/qualified.
-CRITICAL: preserve original shaderquality2. Old temporaryquality1 caused native
-fatal1119 p1_glass compile (cursor03 screenshot/stacks). No graphics downgrade.
-No concurrent native/install mutation; normal saves never loaded.
-Persistent schema worker exec48913: .local/evidence-244-withheld, JSON lines
-{"files":["relative/path.xml"]}; {"stop":true} at final cleanup.
-Python ../x4-playtest7/.venv/bin/python; schemas ../../preparation/game-schemas.
-GH ../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh. Native sources only
-ignored.local. Normal saves never loaded; each run restores37-file owned mod,
-45841preferences/ownedslot010,7actualnormal-save bytes/timestamps.
-Sealed7.3.1f5f5bfe unchanged at /home/developer/Desktop/X4 Online/Internal Tests/
-7.3.1-2026-10-23. New bothOS internal packages need server/runtime English.
-Two players implemented. Initial shared save is not ongoing universal authority.
-No7.4package, public restricted mirror b4cb16c unchanged.
+TOOLS / SAFETY / DELIVERY
+Schema worker exec48913: .local/evidence-244-withheld; JSON {"files":["relative.xml"]};
+{"stop":true} at final cleanup. Schemas ../../preparation/game-schemas.
+Python ../x4-playtest7/.venv/bin/python (absolute invocation); GH
+../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh.
+Fresh owned45841 only; never normal70000001. Preserve original shaderquality2:
+old temporary1 caused fatal1119. Controllers verify owned process start ticks,
+restore37-file mod/preferences/owned save010, verify7 actual normal saves.
+Sealed7.3.1f5f5bfe remains /home/developer/Desktop/X4 Online/Internal Tests/
+7.3.1-2026-10-23. No7.4 package. Both futureOS internal packages include server/runtime
+and English docs. Two players; initial shared save != ongoing universal authority.
+Public restricted mirror b4cb16c unchanged.
