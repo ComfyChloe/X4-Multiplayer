@@ -245,6 +245,8 @@ local function render(r,now)
 end
 -- Play FIRE2 trigger evidence back at the same source time as the rendered NAV2 pose.
 local function fire2Frame(i,r,ship,now)
+ -- Observed-projectile mode never aims/fires a native replay gun.
+ if cfg.projectile_visuals then stopFire2(i);return end
  local q=c.fire2[i]
  if not q then return end
  local visualGen=A.health and A.health.valid[i]

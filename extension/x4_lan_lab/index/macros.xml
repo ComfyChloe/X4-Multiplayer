@@ -5,4 +5,10 @@
     <entry name="x4lan_visual_pulse_mk1_bullet_macro" value="extensions/x4_lan_lab/assets/x4lan/macros/x4lan_visual_pulse_mk1_bullet_macro" />
     <entry name="x4lan_visual_pulse_mk2_bullet_macro" value="extensions/x4_lan_lab/assets/x4lan/macros/x4lan_visual_pulse_mk2_bullet_macro" />
   </add>
+  <add sel="/index">
+    <entry name="x4lan_projectile_carrier_macro" value="extensions/x4_lan_lab/assets/x4lan/projectiles/x4lan_projectile_carrier_macro" />
+    <entry name="x4lan_projectile_plasma_macro" value="extensions/x4_lan_lab/assets/x4lan/projectiles/x4lan_projectile_plasma_macro" />
+    <entry name="x4lan_projectile_pulse1_macro" value="extensions/x4_lan_lab/assets/x4lan/projectiles/x4lan_projectile_pulse1_macro" />
+    <entry name="x4lan_projectile_pulse2_macro" value="extensions/x4_lan_lab/assets/x4lan/projectiles/x4lan_projectile_pulse2_macro" />
+  </add>
 </diff>

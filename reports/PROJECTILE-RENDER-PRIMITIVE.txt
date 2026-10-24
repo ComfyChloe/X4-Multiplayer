@@ -136,3 +136,20 @@ retains replay rejection through pause and refuses changed authority keys. Eight
 focused LuaJIT tests pass; no native/transport authority is conferred by this
 buffer. Later adapter must independently admit pilot/lease/generation/sector and
 map NAV2 source time before issuing any engine operation.
+
+OBSERVED-SHOT LOCAL LOOPBACK — projectile-loopback-01
+Source10b5d7b,12 actual local plasma shots, no network projectile transport. The
+unregistered pure buffer follows measured positions/velocity on the source clock
+with150ms render delay. Meshless carriers and finite attached effects are offset
+150m vertically for this dev comparison; no real gun is aimed or replayed.
+PASS within this scope:12 captured/created/ended/removed identities,1559 C move
+frames,197 independent MD readbacks. Largest setter error0.000499m; native position
+readbacks stay within0.001099m of each measured trajectory line. Removal requests
+follow actual projectile disappearance by152..161ms, matching delay/frame rounding.
+Final native count:12 ever-created,zero live. Screenshot retained/viewed (cockpit
+and native/rendered shots coexist; it is not independent visual identity proof).
+Raw e1140d18497cbd57591b13da4ba2d16185c2ad7f16ccd1031c83bd2ffbb853b8.
+Audit:56 unchanged production files,9 dev overrides, explicit motion/probe UI
+registration,37-file restore, actual save bytes/timestamps, helpers/game closed.
+No MD/Lua/API errors. This is not a network adapter, matched two-native run,
+moving-shooter qualification, dense-fire performance test or other-weapon proof.

@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='utf-8'?>
+<components>
+  <component class="effectobject" name="x4lan_projectile_pulse2">
+    <source geometry="assets\fx\weaponFx\bullet_gen_s_laser_01_mk2_data" />
+    <connections>
+      <connection name="position" tags="position" value="1" />
+      <connection name="space" tags="effectobject" />
+      <connection name="visual" tags="part">
+        <parts>
+          <part name="bullet_s_mk2">
+            <lods>
+              <lod index="0">
+                <materials>
+                  <material id="1" ref="p2fx.fx_p2_bullets_01" />
+                </materials>
+              </lod>
+            </lods>
+            <size>
+              <max x="1" y="1" z="7" />
+              <center x="0" y="0" z="-4" />
+            </size>
+          </part>
+        </parts>
+      </connection>
+      <connection name="rendereffects" tags="rendereffect" value="0" optional="1" />
+    </connections>
+  </component>
+</components>

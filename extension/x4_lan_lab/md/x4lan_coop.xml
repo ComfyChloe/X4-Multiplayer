@@ -105,7 +105,7 @@
      <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$arena.$ships.{$v.$ship}"/>
      <do_if value="$ship.isoperational">
       <!-- Recheck after the queue: Prepare may have stopped fire and changed projectile mode. -->
-      <do_if value="not (@$arena.$shotVisualEnabled or @$v.$visual) or not ($v.$primary or $v.$secondary) or (not @$arena.$shotFailed and @$arena.$shotVisualMode.{$v.$ship} == 2 and @$v.$visualGen gt 0 and $v.$visualGen == $arena.$shotVisualGen.{$v.$ship} and $v.$visualGen == $arena.$shotCurrentGen.{$v.$ship} and $v.$visualGen gt $arena.$healthClosed.{$v.$ship} and player.age - $arena.$shotVisualAt.{$v.$ship} le 0.3s and player.age - $arena.$shotStateAt le 0.3s and player.controlled != $ship)">
+      <do_if value="not (@$arena.$shotVisualEnabled or @$v.$visual or @$arena.$projectileVisualEnabled) or not ($v.$primary or $v.$secondary) or (not @$arena.$projectileVisualEnabled and not @$arena.$shotFailed and @$arena.$shotVisualMode.{$v.$ship} == 2 and @$v.$visualGen gt 0 and $v.$visualGen == $arena.$shotVisualGen.{$v.$ship} and $v.$visualGen == $arena.$shotCurrentGen.{$v.$ship} and $v.$visualGen gt $arena.$healthClosed.{$v.$ship} and player.age - $arena.$shotVisualAt.{$v.$ship} le 0.3s and player.age - $arena.$shotStateAt le 0.3s and player.controlled != $ship)">
       <do_if value="$arena.$fireEpoch.{$v.$ship} != $v.$epoch">
        <stop_shooting object="$ship"/>
        <set_value name="$arena.$fireRemaining.{$v.$ship}" exact="[0,0]"/>

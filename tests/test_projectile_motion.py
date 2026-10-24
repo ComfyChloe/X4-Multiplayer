@@ -68,6 +68,33 @@ class ProjectileMotionTests(unittest.TestCase):
          assert(P.birth(B,K,birth(20002),10));assert(P.birth(B,K,birth(20001),10))
         ''')
 
+    def test_expired_unsampled_capacity_is_reclaimed_before_admission(self):
+        self.lua.execute("""
+         for id=1,P.capacity do assert(P.birth(B,K,birth(id),10)) end
+         assert(P.birth(B,K,birth(257,13),13));assert(B.count==1)
+         P.finish(B,K,257,13.1);assert(P.birth(B,K,birth(258,13.2),13.2));assert(B.count==1)
+        """)
+
+    def test_delayed_render_tail_survives_admission_and_future_retry_is_not_burned(self):
+        self.lua.execute("""
+         local r=birth(1);r.ttl=.2;assert(P.birth(B,K,r,10,9.85))
+         assert(P.birth(B,K,birth(2,10.25),10.25,10.1));assert(P.sample(B,10.1)[1])
+         assert(not P.birth(B,K,birth(3,10.7),10.3,10.15));assert(not B.seen[3])
+         assert(P.birth(B,K,birth(3,10.7),10.7,10.55))
+        """)
+
+    def test_huge_forward_ids_and_invalid_kind_never_poison_the_reorder_window(self):
+        self.lua.execute("""
+         assert(P.birth(B,K,birth(1),10))
+         assert(not P.birth(B,K,birth(2147483647),10));assert(B.latest==1)
+         assert(not P.finish(B,K,2147483000,10));assert(B.latest==1)
+         for _,k in ipairs({99,'x',false}) do local r=birth(2);r.kind=k;assert(not P.birth(B,K,r,10)) end
+         local r=birth(2);r.kind=nil;assert(not P.birth(B,K,r,10))
+         assert(P.birth(B,K,birth(2),10))
+         local fresh=P.new('new key',0);assert(P.finish(fresh,'new key',10000,10)) -- arbitrary first baseline
+         assert(P.birth(fresh,'new key',birth(10001),10))
+        """)
+
     def test_velocity_preserves_observed_motion_and_refuses_bad_samples(self):
         self.lua.execute('''
          local a={time=10,pose={100,200,300,0,0,0}}

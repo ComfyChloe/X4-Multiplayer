@@ -1,0 +1,11 @@
+<?xml version='1.0' encoding='utf-8'?>
+<macros>
+  <macro class="effectobject" name="x4lan_projectile_pulse2_macro">
+    <component ref="x4lan_projectile_pulse2" />
+    <properties>
+      <ai>
+        <type global="" local="" />
+      </ai>
+    </properties>
+  </macro>
+</macros>

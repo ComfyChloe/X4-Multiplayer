@@ -18,12 +18,13 @@ crash was not captured in the restarted log. Detailed triage lives in
 ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP / COORDINATION
-Primary owns Linux native/docking/integration. Claude source-only: unused pure
-BOLT/BEND Python/Lua codecs and focused tests under the committed visual protocol. Windows remains unlaunched: only profile45841 exists and remains
+Primary owns Linux native/docking/integration. Claude source-only:
+BOLT/BEND relay helper/hooks/tests; codecsPR41 exact2ae2284 reviewed/merged.
+Motion review10b5d7b four bounds/loss findings corrected; primary owns adapter/native files. Windows remains unlaunched: only profile45841 exists and remains
 restricted after Workshop incident; owner approval still needed there. PR40
 f6bb18e dev-only readiness reviewed9tests+schema and merged e174521, not installed.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min, next06:00 CEST;
-06:00 checkpoint1792814568.531309. No new timer/chat. No duplicate native owner.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min, next06:45 CEST;
+06:30 checkpoint1792816249.906119. No new timer/chat. No duplicate native owner.
 
 COMBAT INTEGRATION / QUALIFIED LIMITS
 SHOT5a0f75d merged4ae1065: immutable energy/digest, duplicateACK0damage, native
@@ -59,9 +60,16 @@ effect-carrier01 boundedPASS: meshless class object + finite effectobject graphi
 follows100m move;285 fast frames at2332m/s,maxerror2.24mm. Removed/cleaned/audited.
 pose01 PASS:12 actual off-axis locally piloted plasma bullets; C getter vs MD
 positions<0.756mm, measured velocity predicts to<3.6cm. Raw/audit in render report.
-No active native game/controller. Unregistered pure projectile_motion.lua has
-8 focused LuaJIT checks; next actual capture/render integration. Claude to implement unused pure codecs under
-reports/PROJECTILE-VISUAL-PROTOCOL.txt; no relay/UI registration/native changes.
+loopback01 PASS:12 actual captures/12 harmless carriers,150ms delayed,1559 moves,
+197 MD reads, final0 objects. Raw/audit in report. No active native game/controller.
+Unregistered projectile_game.lua + guarded native x4lan_projectile.xml/assets now
+added;11 adapter/gate tests, existing32 FIRE2/visual + new suppression regression
+pass;2MD schemas valid. Not yet natively integrated. Motion/adapter22 checks after review fixes;
+3 inserted effects schemaVALID.
+reports/PROJECTILE-VISUAL-PROTOCOL.txt holds current contract/scope; next real
+relay/capture/render integration after Claude relay review. Prepared ignored
+.local/evidence-226-withheld (NOT launched) loads the unregistered production
+adapter, real relay, synthetic12-bolt sender and original physical input.
 Schema worker48913 remains active.
 
 DOCKING / STORY
