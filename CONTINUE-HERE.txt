@@ -18,17 +18,21 @@ lands/exits host ship. "Overload" meant crashes, not FPS. Detailed triage:
 ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP / COORDINATION
-Claude resumed03:24 (1792805101.255159); primary assignment03:30
-1792805372.517159: SOURCE-ONLY inert capture/undo + canonical floor/life fixes on
-ad85b5e in separate PR. No native/package/flags; all-pair collision exclusion,
-shotApplying exclusion, native authority fences and verified lifetime quarantine.
-Primary retains native PC, harmless visual replay, docking/integration. No overlap.
-PR36 health66169d2 integrated, pilot_health OFF; health report retains native limits.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next04:00;03:45 checkpoint1792806283.755739.
-No new timer/chat. Active native .local/evidence-271-withheld controller exec35313. Dev-only getter/setter
-ABI experiment + actual equipment-mod refusal.01 failed BEFORE setter: hex IDs
-converted with decimal API ->0. Linux exported ABI inspected/pinned locally;
-no setter acceptance yet. Never infer Windows API qualification from this probe.
+Claude active, branch contrib/claude-shot-capture draftPR39 d8b4620. Primary
+review worktree ../x4-capture-review:74 focusedPASS; review posted04:04 (Slack
+1792807448.984469), NOT accepted: lost proxy kills canonical50 afterwatchdog;
+delayed source2/gen4 count becomes source1/gen4; quarantine starts atfirsthit;
+native closed-gen/current-authority fences missing beforeHPrestore. Claude owns
+corrections + health/life/capture, no native/flags/package. Primary owns native,
+visual/FIRE2, docking/integration. faeb16d gate fix merged by Claude.
+Visual contract proposed1792806995.897099 awaitingACK: native shotVisualMode
+(0unknown/1original/2zero), Gen/At; capture needs fresh own original proof.
+Primary next implements NEW inert shot_visual.lua/x4lan_shot_visual.xml with
+native Stop/ACK before setter and both Lua/native FIRE2 proof fences. See
+reports/SHOT-VISUAL-PRIMITIVE.txt. No shadow weapon replacement needed.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next04:15,
+04:00 checkpoint1792807231.882289. No new timer/chat. NO active native game.
+All throughzero-switch03 cleaned; schema worker48913 remains active.
 SHOT hardened branch5a0f75d merged4ae1065: exact pending energy, duplicate ACK,
 native generation/authority/window fence, permanent Stop, stock uniform unmodified
 loadout gate. Local-closed generations now dropped before next HGEN too.
@@ -41,7 +45,7 @@ query/fixtures;26 SHOT checks PASS. shot-function-02 manual native application c
 late Support/State cannot rearm Stop.28 readbacks, cleaned. BUT native mod query
 used ID0: overall admission PARTIAL, unmodified-loadout claim withdrawn.
 faeb16d (pushed) fixes ConvertIDTo64Bit + nonzero/operational check;27 SHOT tests
-PASS. Claude notified1792806484.695709; should include fix. Native mod gate pending.
+PASS. Claude notified1792806484.695709; should include fix. Native gate nowqualified by actual mod insertion inzero-switch03.
 Manual counts only, not physical capture/paired games; reports retain raw hashes.
 
 WEAPON NATIVE EVIDENCE
@@ -64,7 +68,9 @@ Reports contain raw hashes, limits, cleanup. No production SHOT/aim activation. 
 (14.7183s vs control9.0214s). 08 zero path missed. zero-impact02 then8 real zero impacts/0HP damage vs8stock
 hits/288shield; offset9misses. recharge09 confirms17 real zero hits/0damage events,
 9.0589s recharge vscontrol9.0461s (undone stock14.7577s). Harmless primitive PASS;
-role switching/aim fidelity unqualified. Reports retain all earlier failures.
+zero-switch03 preserves all6gunIDs/customgroups acrossstock/zero/stock;56zero
+hits0HP,56restored2240shield. Mod1.17992 caught. Fullrole/inflight/heat/Windows/
+aim fidelity unqualified. Reports retain all earlier failures.
 reports/WEAPON-AIM-PRIMITIVES.txt: native bullet orientation getters track flight,
 but setters only rotate visuals, MD/FFI primary steering rejected. PlayerTargetOffset
 zero off-axis. No selected-victim auto-lock. Egosoft questions drafted, NOT sent.
