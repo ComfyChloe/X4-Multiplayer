@@ -9,11 +9,29 @@
 local cfg=X4LAN_CONFIG
 if not cfg or not cfg.visual_switch_probe or cfg.test_profile~='45841' then return end
 local ffi=require('ffi');local C=ffi.C
+local function log(v) DebugError('[X4LAN] VISUAL_SWITCH_PROBE '..v) end
+-- Own declarations in the stock layouts: the production modules that also declare them return
+-- early with their flags off, and another file's declaration order is never relied on.
 for _,decl in ipairs({'const char* GetWeaponLaunchedMacro(UniverseID);','void SetWeaponLaunchedMacro(UniverseID,const char*);',
  'size_t GetNumUpgradeSlots(UniverseID,const char*,const char*);','UniverseID GetUpgradeSlotCurrentComponent(UniverseID,const char*,size_t);',
- 'UniverseID GetPlayerControlledShipID(void);','bool IsComponentOperational(UniverseID);',
+ 'UniverseID GetPlayerControlledShipID(void);','bool IsComponentOperational(UniverseID);','const char* GetSaveFolderPath(void);',
  'typedef struct { bool primary; uint32_t idx; } UIWeaponGroup;','uint32_t GetNumWeaponGroupsByWeapon(UniverseID,UniverseID);',
- 'uint32_t GetWeaponGroupsByWeapon(UIWeaponGroup*,uint32_t,UniverseID,UniverseID);'}) do pcall(ffi.cdef,decl) end
+ 'uint32_t GetWeaponGroupsByWeapon(UIWeaponGroup*,uint32_t,UniverseID,UniverseID);',
+ 'typedef struct { const char* Name; const char* RawName; const char* Ware; uint32_t Quality; const char* PropertyType; float DamageFactor; float CoolingFactor; float ReloadFactor; float SpeedFactor; float LifeTimeFactor; float MiningFactor; float StickTimeFactor; float ChargeTimeFactor; float BeamLengthFactor; uint32_t AddedAmount; float RotationSpeedFactor; float SurfaceElementFactor; } UIWeaponMod;',
+ 'bool GetInstalledWeaponMod(UniverseID,UIWeaponMod*);'}) do pcall(ffi.cdef,decl) end
+-- Arms only with every type and native function resolvable and the ACTUAL save folder inside the
+-- isolated test profile (the config label alone is not enough).
+local armed,why=pcall(function()
+ for _,t in ipairs({'UIWeaponGroup','UIWeaponMod'}) do assert(pcall(ffi.typeof,t),'missing FFI type '..t) end
+ for _,name in ipairs({'GetWeaponLaunchedMacro','SetWeaponLaunchedMacro','GetNumUpgradeSlots','GetUpgradeSlotCurrentComponent',
+  'GetPlayerControlledShipID','IsComponentOperational','GetSaveFolderPath','GetNumWeaponGroupsByWeapon','GetWeaponGroupsByWeapon',
+  'GetInstalledWeaponMod'}) do
+  local found,fn=pcall(function() return C[name] end);assert(found and fn~=nil,'missing native '..name)
+ end
+ local path=ffi.string(C.GetSaveFolderPath()):gsub('\\','/'):gsub('/+$','')
+ assert(path:sub(-#'/45841/save')=='/45841/save','actual save folder is not the isolated profile 45841')
+end)
+if not armed then log('NOT ARMED '..tostring(why));return end
 -- Same stock/harmless pairs as ui/shot_visual.lua.
 local BULLETS={
  weapon_ter_s_plasma_01_mk1_macro={'bullet_ter_s_plasma_01_mk1_macro','x4lan_visual_plasma_bullet_macro'},
@@ -21,7 +39,8 @@ local BULLETS={
  weapon_gen_s_laser_01_mk2_macro={'bullet_gen_s_laser_01_mk2_macro','x4lan_visual_pulse_mk2_bullet_macro'},
 }
 local p={stage=0}
-local function log(v) DebugError('[X4LAN] VISUAL_SWITCH_PROBE '..v) end
+-- Native UniverseIDs are uint64 cdata ('18ULL'); GetComponentData needs a Lua ID.
+local function luaid(id) return ConvertStringToLuaID((tostring(id):gsub('ULL$',''))) end
 local function launched(id) local s=C.GetWeaponLaunchedMacro(id);assert(s~=nil,'no launched macro');return ffi.string(s) end
 local function groups(ship,id)
  local n=tonumber(C.GetNumWeaponGroupsByWeapon(ship,id));assert(n and n>=0 and n<=8,'group bounds')
@@ -37,7 +56,7 @@ local function guns(ship)
   local id=C.GetUpgradeSlotCurrentComponent(ship,'weapon',slot)
   if id~=0 then
    assert(C.IsComponentOperational(id),'weapon unavailable')
-   out[#out+1]={slot=slot,id=id,macro=GetComponentData(ConvertStringTo64Bit(tostring(id)),'macro'),
+   out[#out+1]={slot=slot,id=id,macro=GetComponentData(luaid(id),'macro'),
     mod=C.GetInstalledWeaponMod(id,ffi.new('UIWeaponMod',{})),groups=groups(ship,id),launched=launched(id)}
   end
  end

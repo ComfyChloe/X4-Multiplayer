@@ -24,14 +24,15 @@ SOURCE READINESS (checked 24 Oct 2026, read-only, Windows X4 9.00 build 23660954
   from the three x4lan_visual_* macros ONLY in damage value (36/46/40 -> 0).
 
 INSTALL (harness)
-Client config: visual_switch_probe=true, test_profile="45841"; production flags unchanged (all
+Client config: visual_switch_probe=true, test_profile="45841", X4 started with -personalfolderid 45841; production flags unchanged (all
 SHOT/visual flags may stay off: the probe is independent of them). Copy dev/visual_switch_probe.lua
 into ui/ (registered last) and dev/visual_switch_probe.xml into md/. The extension's
 index/macros.xml and assets/x4lan/macros must be installed (the harmless macros). The player sits in
 a ship with at least one UNMODIFIED weapon_ter_s_plasma_01_mk1, weapon_gen_s_laser_01_mk1 or _mk2.
 
 EVIDENCE (debug log), one MD tick per second of unpaused game time:
-  [X4LAN] VISUAL_SWITCH_PROBE armed
+  [X4LAN] VISUAL_SWITCH_PROBE armed   (or NOT ARMED <reason>: the ACTUAL GetSaveFolderPath is not
+        .../45841/save, or one of its own FFI types/native functions does not resolve; no write)
   ... base slot=N id=... weapon=... groups=P1,S3 guns=K
   ... harmless written and read back
   ... harmless persisted one tick; stock written and read back
