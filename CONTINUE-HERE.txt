@@ -18,33 +18,36 @@ Primary owns Linux/native/integration. Claude ACTIVE again since08:02; his08:34
 independent stock heat calculation agrees with498 shots/18 overheat events.
 PR39/40/41/42 merged. Windows45841 still unlaunched after Workshop incident;
 owner permission required there. No matched Windows/Linux run.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min; last09:30 checkpoint
-1792827050.153049. Next09:45. Claude completed source-only PR43 d33c9ea; reviewed
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min; last09:45 checkpoint (accepted PR43,
+sealed pair, audited cleanup, pending human D01/D02). No new autonomous task
+assigned; retain15min cadence while active development resumes. Claude completed source-only PR43 d33c9ea; reviewed
 and merged: sanitized monitor combat diagnostics, no authority/wire/native change.
 No further Claude assignment pending. Primary owns implementation/native.
 
-CURRENT STATE
-No active native game. Startup diagnostic reloads original failed seed and admits
-both (4 reports/ship,48 unmodified operational reads); first refusal unexplained.
-Transporter01 native ended/restored/audited: menu shows docked ship, no confirmed
-entry,3,320 stable bay reads. Human boarding remains required; no repeated GUI
-attempts without concrete input/entrance finding. Schema worker48913 remains.
-HEAD implementation a3341e4; package/evidence docs pending commit.
-Sealed7.3.1/public mirror unchanged. No delivered7.4 pair yet. Build/verify final
-Desktop/Internal Tests pair after these updated reports are committed.
+CURRENT STATE / DELIVERY
+No active native game/controller/relay; schema worker48913 stopped. The final
+37-file installation and7actual normal-save bytes/timestamps match retained
+cleanup. Pristine diagnostic01..04 all admit both; first historical refusal still
+unexplained. Batch02..04 uses e7bbe76,24 reports/144 operational unmodified reads.
+Transporter01 shows docked ship in the ordinary menu but no aboard confirmation;
+human B02 required. Do not repeat GUI walking without a concrete new finding.
 
-CANDIDATE
-VERSION7.4.0, extension11. Source config inert; internal launcher enables
-pilot_health/shot_claims/shot_visual/shot_capture/projectile_visuals/coop_docks;
-shot_undo=false. Projectile modules registered once in ui.xml. Capture marks saved
-bays; sealing requires ordered DOCKS_MARKED/SAVE_REQUESTED/SAVED/EXIT. Both platform
-server trees contain docking/projectile dependencies. Focused English human
-procedures included by builder. Final delivery assembly follows integrated checks. Temporaryassembly02 validated
-both inventories/imports/realUDP; Windows Python logic tested on Linux only.
-Linux tar.xz preserves runtime links; preset9 measured21.37MB, WindowsZIP12.93MB.
-New runtime credits/report files pendingcommit. Use .local/evidence-012-withheld for
-actualfinalarchives; builderreportgate remainsreal, nofixtureproof in delivery. Two players; no persistent
-played campaign/whole-universe authority. No public package authorized.
+Matched INTERNAL7.4.0 archives are sealed/verified at:
+/home/developer/Desktop/X4 Online/Internal Tests/7.4.0-2026-10-24
+Linux tar.xz21,378,864 bytes; Windows ZIP12,934,196 bytes. Both have server/runtime,
+English procedures, unique actions01-10, licenses, full checksums. Actual extracted
+inventories/imports/realUDP/monitor pass. Windows Python logic checked on Linux,
+NOT native Windows. reports/INTERNAL-7-4-DELIVERY.txt records source/hash/scope.
+Package source e7bbe76; implementation a3341e4;572PASS/no skips. Later commits are
+delivery/evidence docs only. Do not overwrite this sealed pair or7.3.1.
+
+Human readiness question pending: start with NEXT-TEST D01/D02, then remaining
+combat/dock cases as specified. Cannot claim guest-host/boarding/crash acceptance
+without those results. Keep PR37 draft; latest body describes delivered pair.
+Source config inert; launcher enables pilot_health/shot_claims/shot_visual/
+shot_capture/projectile_visuals/coop_docks; shot_undo=false. VERSION7.4.0,extension11.
+Two players; pristine shared starting snapshot, no played-campaign persistence or
+complete shared economy. No public package authorized.
 
 COMBAT / COMBINED NATIVE EVIDENCE
 reports/SHOT-CAPTURE-INTEGRATION.txt: separate native host/guest actual-hit capture

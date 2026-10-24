@@ -1,0 +1,36 @@
+X4 MULTIPLAYER 7.4.0 — INTERNAL CANDIDATE DELIVERY
+24 October 2026
+
+Package source: e7bbe76d88849ed50eb4d8e1b811ed3aa11d23e7
+Implementation: a3341e4d9ef53f3e05ddf07fa162794d7a5a71eb
+572 integrated Linux/LuaJIT checks pass, no skips.
+
+Local delivery: Desktop/X4 Online/Internal Tests/7.4.0-2026-10-24
+Both platforms include server/runtime and focused English human procedures.
+
+X4-LAN-7.4.0-Linux.tar.xz
+21,378,864 bytes; SHA256 1df8dc7a6605e11b8c56c2d4971890d9a344d09c916cee2dbc065548e9a9368d
+
+X4-LAN-7.4.0-Windows11.zip
+12,934,196 bytes; SHA256 1d7b3124c54cb5068100a6403b647564759624f54ff645b8836f7d41cc3c6716
+
+Actual archive extraction, full inventory/checksums, unique actions01-10, local
+HTML links, licenses and platform binaries verified. Linux preserves1,048
+runtime aliases and executable modes. Bundled Linux Python imports the package,
+serves a real UDP PING/PONG, and reads the monitor snapshot. Windows Python source
+passes those checks on Linux; native Windows execution remains untested here.
+No credentials, generated invitation, world bundle or installation state shipped.
+
+These are human-test candidates, not full completion of the user's fault list.
+First intermittent loadout refusal remains unexplained despite subsequent passes;
+reason diagnostics are included. Complete boarding and two-native occupied-pad
+crash checks remain open. Native and synthetic peer results are kept distinct.
+Use NEXT-TEST D01/D02 first; humans were asked to announce test readiness.
+
+The source refusal predicate was not weakened. PR43 d33c9ea monitor diagnostics
+were independently reviewed (572 checks,12 monitor checks,20 populated snapshots
+without mutation/credential leakage) and integrated. No protocol/authority change.
+
+Sealed7.3.1 and public mirror unchanged. No public release. The final startup
+batch restored37 installed files and seven actual normal saves; no owned game or
+relay remains. Schema helper stopped. No further blind GUI/native retry scheduled.

@@ -63,3 +63,14 @@ Raw load.log SHA256:
 03b447294a0ab660713d2a7c55d26353941c5cc08a2b657348dfef379218418a
 Audit verifies70 production files,5 dev probes/UI/config,37 restored files and
 seven actual normal-save bytes/timestamps. Controller and owned game closed.
+
+BOUNDED STARTUP REPEATS — 24 OCTOBER 2026
+Production e7bbe76, original failed pristine seed, three fresh processes:
+loadout-diag-02 raw SHA256 ec261e2b9829ea75fc7b679a6371754370e27710821fec81ec564cdbe1b36a2d
+loadout-diag-03 raw SHA256 63d6ca9a85fdf09f7b321bd433c5c32c337f9f6439fd9bb89c62da2d4f589e08
+loadout-diag-04 raw SHA256 709d5e812f71531253469615de8b2630efbf9bb6217cf5adf685bc7639d69185
+All three admit both ships:24 total reports,144 successful operational/unmodified
+gun reads. Each run has70 exact production source hashes plus5 probes/UI/config,
+37-file restore and seven actual normal-save bytes/timestamps audited. No firing
+or docking was repeated. No rejection recurred; the original cause stays OPEN.
+The batch is complete; no further unattended retries. Final owned X4/relay closed.
