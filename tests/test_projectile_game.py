@@ -25,6 +25,7 @@ class ProjectileAdapterTests(unittest.TestCase):
           SetObjectSectorPos=function(id,sector,p) writes[#writes+1]={id=id,sector=sector,p=p} end}
          local req=require;require=function(name) if name=='ffi' then return {C=api,cdef=function() end,new=function(n,t) return t end} else return req(name) end end
          GetComponentData=function() return 'sector_macro' end;ConvertIDTo64Bit=tonumber
+         IsValidComponent=function(id) return classes[tonumber(id)]~=nil end
          DebugError=function() end;RegisterEvent=function(n,f) events[n]=f end
          AddUITriggeredEvent=function(s,c,a) requests[#requests+1]={screen=s,control=c,a=a} end
          X4LAN_CONFIG={slot='p1',projectile_visuals=true,shot_visual=true,shot_capture=true,shot_claims=true,pilot_health=true,fire2=true}
@@ -160,6 +161,17 @@ class ProjectileAdapterTests(unittest.TestCase):
          assert(m.time==10 and m.yaw==.1 and m.ttl==1.7)
          classes[101]=nil;clock(10.04);X.captureFrame(now);m=assert(W.parse(sent[2],'client'));assert(m.type=='BEND' and m.time==10.04)
          clock(10.10);X.captureFrame(now);clock(10.16);X.captureFrame(now);assert(#sent==4 and not next(X.captures))
+        ''')
+
+    def test_expired_native_id_is_checked_before_class_query_and_still_sends_end(self):
+        self.make().execute('''
+         local classify=api.IsComponentClass
+         api.IsComponentClass=function(id,k) assert(classes[id], 'invalid native class query');return classify(id,k) end
+         X.born('1|3|'..X.contexts[1].ticket..'|999|22|1|170|-300|2200')
+         assert(not next(X.captures))
+         X.born('1|3|'..X.contexts[1].ticket..'|101|22|1|170|-300|2200');X.captureFrame(now)
+         classes[101]=nil;clock(10.02);X.captureFrame(now)
+         assert(#sent==2 and W.parse(sent[2],'client').type=='BEND')
         ''')
 
     def test_native_velocity_invalid_payloads_are_rejected_and_far_pose_cannot_change_velocity(self):

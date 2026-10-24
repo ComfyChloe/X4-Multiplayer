@@ -1,4 +1,4 @@
--- Opt-in observed shots. This file is initially unregistered; no native or network
+-- Guarded observed shots. No native or network
 -- work occurs without the complete damage/proof/capture stack and explicit flag.
 local A,cfg=X4LAN_BUBBLE_API,X4LAN_CONFIG
 if not cfg or not cfg.projectile_visuals or not cfg.shot_visual or not cfg.shot_capture
@@ -19,6 +19,10 @@ local x={contexts={},slots={},captures={},serial=0,shotId=0,now=0};A.projectiles
 local KINDS={weapon_ter_s_plasma_01_mk1_macro=1,weapon_gen_s_laser_01_mk1_macro=2,weapon_gen_s_laser_01_mk2_macro=3}
 local TTL={1.7,.7,.7};local DELAY=.15
 local function log(t) DebugError('[X4LAN] PROJECTILE '..t) end
+local function liveBullet(id)
+ -- The engine logs an error if IsComponentClass sees an already expired ID.
+ return IsValidComponent(A.id(id)) and C.IsComponentClass(id,'bullet')
+end
 local function event(control,args) AddUITriggeredEvent('X4LAN_Projectile',control,args or {}) end
 local function serial() x.serial=x.serial+1;assert(x.serial<=2147483647,'operation exhausted');return x.serial end
 local function closePosition(actual,wanted)
@@ -111,7 +115,7 @@ function x.born(payload)
  local q=e and x.contexts[e];local cur=e and wanted(e,x.now)
  if not ready(q,x.now) or not cur or cur.key~=q.key or q.mode~=1 or q.gen~=g or q.ticket~=t or q.kind~=kind then return end
  local native,space=ConvertIDTo64Bit(id),ConvertIDTo64Bit(sector)
- if space~=q.sector or not C.IsComponentClass(native,'bullet') then return end
+ if space~=q.sector or not liveBullet(native) then return end
  local key=q.key..'|'..id;local n=0;for _ in pairs(x.captures) do n=n+1 end
  if x.captures[key] or n>=P.capacity then return end
  x.shotId=x.shotId+1;assert(x.shotId<=2147483647,'shot IDs exhausted')
@@ -127,7 +131,7 @@ function x.captureFrame(now)
   if not cur or cur.key~=q.key or not ready(q,now) or b.ticket~=q.ticket then x.captures[key]=nil
   else
    if not b.ended then
-    if C.IsComponentClass(b.native,'bullet') then
+    if liveBullet(b.native) then
      local p=C.GetPositionalOffset(b.native,b.space)
      local sample={time=now,pose={p.x,p.y,p.z,p.yaw,p.pitch,p.roll}};b.first=b.first or sample
      if not b.birth then
