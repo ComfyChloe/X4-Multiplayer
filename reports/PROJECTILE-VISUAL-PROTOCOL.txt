@@ -32,7 +32,9 @@ successful packet decoding.
 
 LIFECYCLE / LATER INTEGRATION REQUIREMENTS
 The relay must independently verify current lease/address, pilot ownership,
-authority epoch, live HEALTH generation, live ship and admitted sector. The
+authority epoch, current health generation, canonical live ship and fresh NAV2
+sector. Guest pilots additionally require health_live==generation after HACK;
+the canonical host has no separate HBASE/HACK flow. The
 receiver repeats its current authority/generation/sector/pause checks before
 any engine operation. Native handles come only from locally created owned objects.
 A birth record is immutable under(sourceLease,entity,epoch,gen,id); duplicate
@@ -68,3 +70,17 @@ when observed-projectile mode is active. No target substitution or damage writes
 11 focused adapter/native-gate checks; prior32 FIRE2/visual checks plus new replay
 suppression regression pass. Both changed MD scripts validate. Native integration
 of this adapter, pulse graphics and real BOLT/BEND relay path still pending.
+
+MOTION REVIEW CORRECTIONS (Claude10b5d7b review,24 October06:15)
+The buffer now purges expired/ended unsampled entries before testing capacity.
+Admission takes an undelayed source estimate plus an optional delayed render
+cursor, preserving that last visible tail while reclaiming stale capacity. A
+fully occupied, still-live buffer deliberately remembers refused IDs; this caps
+pressure without later changed-packet resurrection. A birth too far in the future
+is refused WITHOUT burning its ID, so an unchanged later repeat can be admitted.
+Kind is checked as1..3 inside the buffer too. After an arbitrary first ID, a
+forward jump greater than2048 is refused without moving the replay watermark,
+for both births and ends. Excessive consecutive loss can therefore suppress
+visuals until a new authority key; it cannot affect damage. The adapter already
+uses the undelayed clock for admission and diffs rendered IDs to remove every
+owned carrier. Three added focused regressions;22 motion/adapter tests PASS.

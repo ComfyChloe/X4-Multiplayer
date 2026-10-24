@@ -141,7 +141,7 @@ function x.receive(f,now)
  if not ready(q,now) or not cur or cur.key~=q.key or q.mode~=2 or m.source_lease~=q.sourceLease or m.epoch~=q.epoch or m.gen~=q.gen then return true end
  if m.type=='BOLT' then
   if m.sector==q.sectorName and m.kind==q.kind then
-   P.birth(q.buffer,q.key,{id=m.id,time=m.time,ttl=m.ttl,kind=m.kind,pose={m.x,m.y,m.z,m.yaw,m.pitch,m.roll},velocity={m.vx,m.vy,m.vz}},cur.sourceNow)
+   P.birth(q.buffer,q.key,{id=m.id,time=m.time,ttl=m.ttl,kind=m.kind,pose={m.x,m.y,m.z,m.yaw,m.pitch,m.roll},velocity={m.vx,m.vy,m.vz}},cur.sourceNow,cur.sourceNow-DELAY)
   end
  else P.finish(q.buffer,q.key,m.id,m.time) end
  return true
