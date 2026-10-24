@@ -24,9 +24,11 @@ ad85b5e in separate PR. No native/package/flags; all-pair collision exclusion,
 shotApplying exclusion, native authority fences and verified lifetime quarantine.
 Primary retains native PC, harmless visual replay, docking/integration. No overlap.
 PR36 health66169d2 integrated, pilot_health OFF; health report retains native limits.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next03:45.
-No new timer/chat. Active native .local/evidence-270-withheld controller exec31870:
-stock/zero aligned/zero offset, original dev macros; no impact acceptance yet.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next04:00;03:45 checkpoint1792806283.755739.
+No new timer/chat. Active native .local/evidence-271-withheld controller exec35313. Dev-only getter/setter
+ABI experiment + actual equipment-mod refusal.01 failed BEFORE setter: hex IDs
+converted with decimal API ->0. Linux exported ABI inspected/pinned locally;
+no setter acceptance yet. Never infer Windows API qualification from this probe.
 SHOT hardened branch5a0f75d merged4ae1065: exact pending energy, duplicate ACK,
 native generation/authority/window fence, permanent Stop, stock uniform unmodified
 loadout gate. Local-closed generations now dropped before next HGEN too.
@@ -34,10 +36,13 @@ loadout gate. Local-closed generations now dropped before next HGEN too.
 before last Lua-only closure change. MD schema VALID. Flags OFF; capture absent.
 reports/SHOOTER-CONFIRMED-HITS-DESIGN.txt tracks boundaries and PR38 review fixes.
 shot-function-01 FAIL: native isbeamweapon is NUMBER0, not false. ad85b5e fixes
-query/fixtures;26 SHOT checks PASS. shot-function-02 bounded native PASS:
+query/fixtures;26 SHOT checks PASS. shot-function-02 manual native application checks PASS:
 3*40shield120, lostACK retry0damage, +2*40shield80; closedgen sixth refused;
-late Support/State cannot rearm Stop.28 readbacks, cleaned. Manual synthetic
-counts only, not physical capture or paired games. Reports retain raw hashes.
+late Support/State cannot rearm Stop.28 readbacks, cleaned. BUT native mod query
+used ID0: overall admission PARTIAL, unmodified-loadout claim withdrawn.
+faeb16d (pushed) fixes ConvertIDTo64Bit + nonzero/operational check;27 SHOT tests
+PASS. Claude notified1792806484.695709; should include fix. Native mod gate pending.
+Manual counts only, not physical capture/paired games; reports retain raw hashes.
 
 WEAPON NATIVE EVIDENCE
 reports/LAST-ATTACKER-NATIVE.txt: per-callback object.lastattacker identities correct
@@ -56,8 +61,10 @@ ambiguous; production needs all collision pairs, not single last collider.
 Health min2 proxy loses
 callbacks below2%; needs coherent canonical-death/floor handling, Claude informed.
 Reports contain raw hashes, limits, cleanup. No production SHOT/aim activation. Recharge08 shows HP undo delays shield recharge
-(14.7183s vs control9.0214s). Dev zero bullet9.0386s but impacts/visual fidelity
-unqualified;07 startup crash retained. Need a complete replay solution.
+(14.7183s vs control9.0214s). 08 zero path missed. zero-impact02 then8 real zero impacts/0HP damage vs8stock
+hits/288shield; offset9misses. recharge09 confirms17 real zero hits/0damage events,
+9.0589s recharge vscontrol9.0461s (undone stock14.7577s). Harmless primitive PASS;
+role switching/aim fidelity unqualified. Reports retain all earlier failures.
 reports/WEAPON-AIM-PRIMITIVES.txt: native bullet orientation getters track flight,
 but setters only rotate visuals, MD/FFI primary steering rejected. PlayerTargetOffset
 zero off-axis. No selected-victim auto-lock. Egosoft questions drafted, NOT sent.
@@ -69,6 +76,8 @@ precise own-pilot denial. Native executor03/adapter02/denial02 bounded PASS.
 Handover01: remote takes host ship(epoch2), docks/exits; host reclaims(epoch3)/exits;
 175 readbacks stay exact bay/one occupant/zero position spread. Native teleport
 seat transitions only; walking/barriers/two-native occupied-pad crash unqualified.
+Dock-walk01 PARTIAL: bay/cockpit walkable/current/unlocked, but NPC route0 bothways;
+not player barrier proof. All37 installation/save cleanup verified. See report.
 9660510 creates both test stations BEFORE seed capture; Beta naming confirmed
 separately. seed-market-dock-02 PARTIAL retained;24 indexed bays/full Beta cycle.
 reports/STORY-TEST-PRESET.txt:14 completed plots+28 research skips, native HQ;
