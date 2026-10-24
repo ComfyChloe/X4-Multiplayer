@@ -235,5 +235,15 @@ class CaptureAdapterTests(unittest.TestCase):
         self.assertTrue('shot_capture = false' in (UI / 'config.lua').read_text())
 
 
+class CanonicalFloorTests(unittest.TestCase):
+    """B3: under a live pilot value the proxy hull never decides death and never clips at 2%."""
+    def test_life_tick_reads_the_canonical_value_and_the_proxy_keeps_the_ordinary_floor(self):
+        life = (ROOT / 'extension/x4_lan_lab/md/x4lan_life.xml').read_text()
+        self.assertTrue('(if @$arena.$healthLive.{$i} then $arena.$healthValue.{$i}.{1} else $ship.hullpercentage) le 1.01' in life)
+        health = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        self.assertTrue('set_object_min_hull object="$ship" exact="2"' not in health)
+        self.assertTrue('<do_else><set_object_min_hull object="$ship" exact="1"/></do_else>' in health)   # Apply, non-lethal
+
+
 if __name__ == '__main__':
     unittest.main()

@@ -28,7 +28,8 @@
             <do_all exact="2" counter="$i">
               <set_value name="$ship" exact="$arena.$ships.{$i}" />
               <do_if value="$arena.$host and not $arena.$dead.{$i}">
-                <do_if value="not $ship.isoperational or $ship.hullpercentage le 1.01">
+                <!-- A live pilot value (x4lan_health.xml) is canonical; the proxy hull is only a view. -->
+                <do_if value="not $ship.isoperational or (if @$arena.$healthLive.{$i} then $arena.$healthValue.{$i}.{1} else $ship.hullpercentage) le 1.01">
                   <set_value name="$arena.$dead.{$i}" exact="true" />
                   <debug_text text="'[X4LAN] SHIP_LETHAL slot=%s'.[$i]" />
                 </do_if>
