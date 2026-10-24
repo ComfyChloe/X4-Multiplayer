@@ -124,6 +124,25 @@ class ProjectileAdapterTests(unittest.TestCase):
          assert(#writes==1 and writes[1].id==201)
         ''')
 
+    def test_native_rejection_retries_live_observation_without_reviving_ended_or_other_slots(self):
+        self.make().execute('''
+         receive(packet());clock(10.2);X.renderFrame(now);local old=last('Create')
+         local reject='2|'..old.ticket..'|'..old.slot..'|'..old.operation
+         X.rejected(reject);clock(10.24);X.renderFrame(now);assert(count('Create')==1)
+         clock(10.26);X.renderFrame(now);assert(not X.slots[old.slot])
+         clock(10.27);X.renderFrame(now);local new=last('Create');assert(new.operation>old.operation)
+         X.rejected(reject);assert(not X.slots[new.slot].retryAt)
+         ackcreate(new);X.renderFrame(now);assert(#writes==1)
+         X.rejected('2|'..new.ticket..'|'..new.slot..'|'..new.operation)
+         assert(not X.slots[new.slot].retryAt)
+        ''')
+        self.make().execute('''
+         receive(packet());clock(10.2);X.renderFrame(now);local old=last('Create')
+         X.rejected('2|'..old.ticket..'|'..old.slot..'|'..old.operation)
+         receive({type='BEND',direction='forwarded',lease=S.client.lease,source_lease=string.rep('c',32),entity=2,epoch=1,gen=4,id=1,time=50.05})
+         clock(10.3);X.renderFrame(now);assert(not next(X.slots) and count('Create')==1)
+        ''')
+
     def test_pause_cutoff_and_duplicate_packets_never_respawn(self):
         self.make().execute('''
          receive(packet());clock(10.2);X.renderFrame(now);local a=last('Create');ackcreate(a)

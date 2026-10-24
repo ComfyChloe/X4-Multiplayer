@@ -73,7 +73,9 @@
      <create_object name="$objects.{$i}" macro="macro.x4lan_projectile_carrier_macro" sector="$sectors.{$e}"><position x="$a.$x * 1m" y="$a.$y * 1m" z="$a.$z * 1m"/><rotation yaw="$a.$yaw * 1deg" pitch="$a.$pitch * 1deg" roll="$a.$roll * 1deg"/></create_object>
      <add_effect object="$objects.{$i}" effect="$objectEffects.{$i}"/>
      <raise_lua_event name="'X4LAN_Projectile.Created'" param="'%s|%s|%s|%s|%s|%s'.[$e,$tickets.{$e},$i,$operations.{$i},$objects.{$i},$sectors.{$e}]"/>
-    </do_if>
+    </do_if><do_else>
+     <raise_lua_event name="'X4LAN_Projectile.Rejected'" param="'%s|%s|%s|%s'.[$e,$a.$ticket,$i,$a.$operation]"/>
+    </do_else>
    </actions></cue>
    <cue name="Remove" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Projectile'" control="'Remove'"/></conditions><actions>
     <set_value name="$a" exact="event.param3"/><set_value name="$i" exact="$a.$slot"/>

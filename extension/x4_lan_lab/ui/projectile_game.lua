@@ -173,6 +173,16 @@ function x.created(payload)
  if space~=q.sector or not C.IsComponentClass(object,'object') then remove(slot);return end
  r.object=object
 end
+function x.rejected(payload)
+ local e,t,slot,op=tostring(payload):match('^(%d)|(%d+)|(%d+)|(%d+)$')
+ e,t,slot,op=tonumber(e),tonumber(t),tonumber(slot),tonumber(op)
+ local r=slot and x.slots[slot]
+ if r and r.entity==e and r.ticket==t and r.operation==op and not r.object then
+  -- A queued request can cross a freshness boundary. Retry while this exact
+  -- observation is still live, without spending most of a short pulse's TTL.
+  r.retryAt=x.now+.05
+ end
+end
 function x.renderFrame(now)
  local wantedSlots={}
  for e,q in pairs(x.contexts) do
@@ -208,7 +218,7 @@ function x.renderFrame(now)
         end
         if not placed then remove(slot) end
        else remove(slot) end
-      elseif now-r.at>.3 then remove(slot) end
+      elseif r.retryAt and now>=r.retryAt or not r.retryAt and now-r.at>.3 then remove(slot) end
      end
     end
    end
@@ -241,3 +251,4 @@ RegisterEvent('X4LAN_Projectile.Ready',function() x.ready=true;log('READY') end)
 RegisterEvent('X4LAN_Projectile.State',guard(x.state))
 RegisterEvent('X4LAN_Projectile.Born',guard(x.born))
 RegisterEvent('X4LAN_Projectile.Created',guard(x.created))
+RegisterEvent('X4LAN_Projectile.Rejected',guard(x.rejected))
