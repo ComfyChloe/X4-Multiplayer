@@ -1,0 +1,44 @@
+VISUAL SWITCH PROBE: WINDOWS READINESS OF THE EXPORTED PROJECTILE SWITCH (dev only)
+Scope: one native Windows X4 instance, single player, no co-op connection, no firing. It checks only
+that GetWeaponLaunchedMacro / SetWeaponLaunchedMacro (ui/shot_visual.lua) switch ONE original gun
+stock -> harmless -> stock on this platform, with the gun's identity, mod state and weapon groups
+preserved. Not gameplay, Windows or FIRE2 acceptance.
+
+NOT RUN. Preconditions before any launch:
+- The user's explicit OK in chat for a native Windows run. The only test profile on this PC (45841)
+  is the 22 Oct Workshop-subscription incident profile; A:primary's standing restriction applies.
+- Owned, isolated profile and a disposable save; no Workshop, subscription or content-selection
+  change; the user's normal profile is never touched; the game must NOT save while switched.
+- Content as in the Linux runs: VRO disabled (its ext_01 patches both pulse bullets),
+  ego_dlc_timelines present (it carries bullet_ter_s_plasma_01_mk1_macro), Ventures absent.
+
+SOURCE READINESS (checked 24 Oct 2026, read-only, Windows X4 9.00 build 23660954)
+- X4.exe export table (2378 names) contains GetWeaponLaunchedMacro, SetWeaponLaunchedMacro,
+  GetNumUpgradeSlots, GetUpgradeSlotCurrentComponent, GetInstalledWeaponMod,
+  IsComponentOperational, GetNumWeaponGroupsByWeapon, GetWeaponGroupsByWeapon. LuaJIT's ffi.C
+  resolves the main executable's exports on Windows, so no platform-specific binding is needed.
+- Stock UI Lua declares no Get/SetWeaponLaunchedMacro; the other signatures match the stock
+  declarations (menu_docked.lua, menu_map.lua, menu_ship_configuration.lua), including
+  UIWeaponGroup {bool primary; uint32_t idx}.
+- The effective Windows stock bullets (05.cat over 01.cat; plasma from ego_dlc_timelines) differ
+  from the three x4lan_visual_* macros ONLY in damage value (36/46/40 -> 0).
+
+INSTALL (harness)
+Client config: visual_switch_probe=true, test_profile="45841"; production flags unchanged (all
+SHOT/visual flags may stay off: the probe is independent of them). Copy dev/visual_switch_probe.lua
+into ui/ (registered last) and dev/visual_switch_probe.xml into md/. The extension's
+index/macros.xml and assets/x4lan/macros must be installed (the harmless macros). The player sits in
+a ship with at least one UNMODIFIED weapon_ter_s_plasma_01_mk1, weapon_gen_s_laser_01_mk1 or _mk2.
+
+EVIDENCE (debug log), one MD tick per second of unpaused game time:
+  [X4LAN] VISUAL_SWITCH_PROBE armed
+  ... base slot=N id=... weapon=... groups=P1,S3 guns=K
+  ... harmless written and read back
+  ... harmless persisted one tick; stock written and read back
+  ... PASS stock->harmless->stock, same slot/ID/weapon/no mod/groups, other guns unchanged
+or  ... FAIL stage=S <reason>  followed by  ... CLEANUP stock restored | CLEANUP FAILED <err>
+PASS needs the PASS line and no FAIL. Any FAIL is a readiness failure; CLEANUP FAILED additionally
+means the gun may still launch harmless bullets: quit without saving and discard the save.
+
+CLEANUP (harness-owned): quit without saving, remove the two probe files, restore every installed
+file it changed and verify the save bytes/timestamps are unchanged.

@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_VisualSwitchProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <!-- Dev-only tick for dev/visual_switch_probe.lua (dev/VISUAL-SWITCH-PROBE.txt); never packaged.
+      One tick per second of unpaused game time while the player controls a ship. -->
+ <cues>
+  <cue name="Tick" instantiate="true" checkinterval="1s"><conditions><check_value value="player.controlled"/></conditions><actions>
+   <raise_lua_event name="'X4LAN_VisualSwitchProbe.Tick'"/>
+  </actions></cue>
+ </cues>
+</mdscript>
