@@ -188,3 +188,13 @@ Both runs:56 installed production files and2 probes independently matched;
 original37 files and actual-save bytes/timestamps restored, owned game/helpers
 closed. Native gameplay warnings retained. Two-native same-pad crash acceptance
 and a complete walk through the remote ship entrance remain open.
+
+Board03 source7564b9c remains PARTIAL: actual XTest movement crosses the lowered
+boundary onto the occupied pad and reaches the ship exterior.5681 native reads
+retain exact bay/count1/fixed pose. No aboard readback; controller deadline ends
+the observation. Raw2383c4df2ed97143d0ba6e2b4202572e555713b530f6bd599dfbd23f66372d92.
+70source+2probes/37restore/7actual normal-save hashes+mtime audited. The very short
+walk distance during nominal8s commands matches the separately reproduced XTest
+client-lifetime issue in projectile-heat01/02; corrected one-process input in
+heat03 produces a full20s firing interval. Board04 uses that corrected helper;
+no earlier boarding result is upgraded.

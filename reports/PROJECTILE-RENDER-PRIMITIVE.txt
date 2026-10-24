@@ -318,3 +318,22 @@ modules. An isolated packaged-server import/constructor check reproduced missing
 imports in BOTH artifacts before correction and passes after it. This executes
 both platform-neutral server trees on Linux, not the Windows executable runtime.
 Only disposable test archives were built; sealed7.3.1 was not touched.
+
+PHYSICAL HELD TRIGGER / OVERHEAT,24 October
+Heat01 (9195696) FAIL54 shots/no overheat; raw
+f2a96bd0d14df12308a83f66fae64615db84c5f6e93ef3cde1d95164458dd343.
+Heat02 same source FAIL60 shots/no overheat despite deferred screenshots and
+focus assertions; rawc37a1f46c189c82cd2da22772b2b8f25ae581cbdda4f8f3cb00c40de9df87b0b.
+The screenshot explanation is not established. Both used separate short-lived
+xdotool down/up clients: intended20s hold produced only~1s of actual gun events.
+Heat03 sourcecca3301 keeps one XTest client alive for down/sleep20/up, still
+asserting owned focus and deferring screenshots. PASS498 actual native plasma
+shots/498 captures/ends through real relay; six identical original gun IDs each
+fire83 times and report3 actual overheat events. First2 cycles per gun resume
+3..5s after overheat during the same20.10s hold. Third cycle reaches overheat
+before release. No source/module errors, no health change, final0 visual objects.
+Independent first12 MD trajectories agree within1.78mm; all12 synthetic remote
+effects render/retire. Rawb595fec2d3dc3b43d856b559e77257e6ac2f4f102f8948c85406a7d9e594615b.
+70production+2probes and exact registered UI audited;37restored files and7actual
+normal saves/ownedslot bytes+mtime preserved. One native/synthetic-peer scope.
+The same input-client lifetime correction is applied to the next walking fixture.
