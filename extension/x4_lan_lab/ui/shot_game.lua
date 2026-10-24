@@ -20,7 +20,7 @@ pcall(ffi.cdef,[[typedef struct {
 } UIWeaponMod;
 bool GetInstalledWeaponMod(UniverseID weaponid, UIWeaponMod* weaponmod);]])
 local c,s,h=A.coop,A.state,A.health
-local d={seq=0,totals={},sentAt={},support={},confirmed={},pending={},inflight={}};A.shot=d
+local d={seq=0,totals={},sentAt={},support={},refusals={},confirmed={},pending={},inflight={}};A.shot=d
 local STOCK={weapon_ter_s_plasma_01_mk1_macro=40,weapon_gen_s_laser_01_mk1_macro=36,weapon_gen_s_laser_01_mk2_macro=46}
 local OTHER={'shieldonlydpshot','hullonlydpshot','hullnoshielddpshot','hullshieldareadpshot',
  'shieldonlyareadpshot','hullonlyareadpshot','hullnoshieldareadpshot'}
@@ -43,33 +43,46 @@ function d.loadout(payload)
  local e,turrets,list=tostring(payload):match('^(%d)|([^|]*)|(.*)$');e=tonumber(e)
  if not e or e<1 or e>2 then return end
  local macro,ok,n=nil,turrets=='0',0
+ local reason=not ok and ('turrets='..turrets) or nil
  for id,m in list:gmatch('([^,;]+),([^;]+);') do
   n=n+1
-  if macro and m~=macro then ok=false end
+  if macro and m~=macro then ok=false;reason=reason or 'mixed-weapons' end
   macro=m
   local done,mod=pcall(function()
    local weapon=ConvertIDTo64Bit(id)
    assert(weapon and weapon~=0 and C.IsComponentOperational(weapon),'weapon identity unavailable')
    return C.GetInstalledWeaponMod(weapon,ffi.new('UIWeaponMod',{}))
   end)
-  if not done or mod then ok=false end
+  if not done or mod then
+   ok=false
+   reason=reason or ((not done and (tostring(mod):find('weapon identity unavailable',1,true)
+    and 'weapon-unavailable:' or 'weapon-query-failed:') or 'weapon-modified:')..id)
+  end
  end
  local strength
  if ok and n>0 and STOCK[macro] then
   local done,entry=pcall(function() return GetLibraryEntry(GetMacroData(macro,'infolibrary'),macro) end)
   ok=done and type(entry)=='table'
+  if not ok then reason=reason or 'library-unavailable' end
   strength=ok and number(entry.hullshielddpshot,1e6)
-  if not strength or strength~=STOCK[macro] or entry.isbeamweapon~=0 then ok=false end
-  for _,k in ipairs(OTHER) do if ok and tonumber(entry[k])~=0 then ok=false end end
- else ok=false end
+  if not strength or strength~=STOCK[macro] or entry.isbeamweapon~=0 then ok=false;reason=reason or 'damage-profile' end
+  for _,k in ipairs(OTHER) do if ok and tonumber(entry[k])~=0 then ok=false;reason=reason or ('damage-channel:'..k) end end
+ else ok=false;reason=reason or (n==0 and 'no-operational-weapons' or 'unsupported-weapon') end
  local v=ok and {macro=macro,strength=strength,digest=string.format('%s:%.3f',macro,strength)} or false
  local old=d.support[e]
- if old and (not v or old.digest~=v.digest) then d.fail('admitted loadout changed; reconnect required');return end
- if old==nil or (old and old.digest)~=(v and v.digest) then
+ if old and (not v or old.digest~=v.digest) then d.fail('admitted loadout changed; reconnect required; '..(reason or 'weapon-changed'));return end
+ local changed=old==nil or (old and old.digest)~=(v and v.digest)
+ if changed then
   d.support[e]=v
   AddUITriggeredEvent('X4LAN_Shot','Support',{entity=e,strength=v and v.strength or 0})
-  log(string.format('SHOT_SUPPORT entity=%d %s',e,v and v.digest or 'refused'))
  end
+ -- Report a reason once, and again only if it changes. Never expose exception
+ -- contents or repeat native writes merely to refresh an unchanged refusal.
+ if changed or d.refusals[e]~=reason then
+  log(string.format('SHOT_SUPPORT entity=%d %s',e,v and v.digest or
+   ('refused reason='..reason..' weapons='..n..' macro='..tostring(macro))))
+ end
+ d.refusals[e]=reason
 end
 
 -- Authority: am I the machine whose world decides victim v of generation vg?

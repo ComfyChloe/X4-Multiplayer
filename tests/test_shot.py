@@ -138,6 +138,22 @@ class ShotAdapterTests(unittest.TestCase):
          return ok,mixed,channel,modded,turret,empty,X4LAN_BUBBLE_API.shot.support[2].digest''')
         self.assertEqual(tuple(out), (40, 0, 0, 0, 0, 0, DIGEST))
 
+    def test_loadout_reason_is_bounded_and_refusal_can_recover_before_admission(self):
+        self.make('p1').execute('''
+         local d=X4LAN_BUBBLE_API.shot
+         loadout(2,'0x99,'..P..';');assert(d.refusals[2]=='weapon-unavailable:0x99' and support(2)==0)
+         local logged,written=#logs,#requests
+         for i=1,20 do loadout(2,'0x99,'..P..';') end
+         assert(#logs==logged and #requests==written and not d.failed)
+         api.GetInstalledWeaponMod=function() error('private exception contents') end
+         loadout(2,'0x11,'..P..';');assert(d.refusals[2]=='weapon-query-failed:0x11')
+         assert(not logs[#logs]:find('private exception contents',1,true))
+         api.GetInstalledWeaponMod=function() return false end
+         loadout(2,'0x11,'..P..';');assert(support(2)==40 and d.refusals[2]==nil and not d.failed)
+         api.GetInstalledWeaponMod=function() return true end
+         loadout(2,'0x11,'..P..';');assert(d.failed and logs[#logs]:find('weapon-modified:0x11',1,true))
+        ''')
+
     def test_host_applies_increases_with_compare_and_set_and_retries(self):
         out = self.make('p1').execute('''
          loadout(2,'0x11,'..P..';')
