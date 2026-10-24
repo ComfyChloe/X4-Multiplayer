@@ -224,7 +224,7 @@ def game_closed(ensure_closed):
 
 def capture_config(identity):
     return ('-- Temporary shared-world preparation; normal gameplay is disabled.\nX4LAN_CONFIG = {\n'
-            ' enabled=false, test_profile="45841", seed_capture=true,\n seed_id=' + json.dumps(identity['seed_id'])
+            ' enabled=false, test_profile="45841", seed_capture=true, coop_docks=true,\n seed_id=' + json.dumps(identity['seed_id'])
             + ',\n seed_content=' + json.dumps(content_string(identity['extensions'])) + ',\n}\n').encode()
 
 
@@ -242,11 +242,12 @@ def finish_capture(root, state, target, identity):
         raise RuntimeError('Native capture log missing or exceeds limit.')
     text = logfile.read_text(errors='replace')
     shutil.copy2(logfile, run / 'native.log')
+    docks = 'WORLD_CAPTURE DOCKS_MARKED id=' + identity['seed_id']
     requested = 'WORLD_CAPTURE SAVE_REQUESTED id=' + identity['seed_id']
     saved = 'WORLD_CAPTURE SAVED id=' + identity['seed_id'] + ' slot=save_010'
     exited = 'WORLD_CAPTURE EXIT id=' + identity['seed_id']
-    if (text.count(requested) != 1 or text.count(saved) != 1 or text.count(exited) != 1
-            or not text.index(requested) < text.index(saved) < text.index(exited)
+    if (text.count(docks) != 1 or text.count(requested) != 1 or text.count(saved) != 1 or text.count(exited) != 1
+            or not text.index(docks) < text.index(requested) < text.index(saved) < text.index(exited)
             or 'WORLD_CAPTURE STOPPED' in text):
         raise RuntimeError('Native world preparation did not complete. Capture log and saves were preserved.')
     files = save_files(state['profile'])

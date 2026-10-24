@@ -95,9 +95,9 @@ class WorldLauncher(unittest.TestCase):
         run=self.world/'capture';run.mkdir();cfg=self.target/'ui/config.lua';old=cfg.read_bytes();(run/'config-before.lua').write_bytes(old)
         cfg.write_bytes(w.capture_config(self.identity));w.write(run/'ownership.json',dict(identity=self.identity,capture_config_sha256=w.digest(cfg),before_config_sha256=w.digest(run/'config-before.lua')))
         saves=self.profile/'save';saves.mkdir();(saves/'save_010.xml').write_bytes(self.source.read_bytes())
-        key=self.session['bubble'];lines=['WORLD_CAPTURE SAVE_REQUESTED id='+key,'WORLD_CAPTURE SAVED id='+key+' slot=save_010','WORLD_CAPTURE EXIT id='+key]
+        key=self.session['bubble'];lines=['WORLD_CAPTURE DOCKS_MARKED id='+key,'WORLD_CAPTURE SAVE_REQUESTED id='+key,'WORLD_CAPTURE SAVED id='+key+' slot=save_010','WORLD_CAPTURE EXIT id='+key]
         logfile=self.profile/'x4lan-debug.txt'
-        for bad in (lines[::-1],lines[:2],lines+['WORLD_CAPTURE STOPPED failed'],lines+lines):
+        for bad in (lines[1:],lines[1:]+lines[:1],lines[::-1],lines[:2],lines+['WORLD_CAPTURE STOPPED failed'],lines+lines):
             logfile.write_text('\n'.join(bad))
             with self.assertRaises(RuntimeError):w.finish_capture(self.root,self.state,self.target,self.identity)
             self.assertFalse((self.world/'bundle').exists())
@@ -122,7 +122,7 @@ class WorldLauncher(unittest.TestCase):
         self.assertFalse((self.profile/'save').exists())
         def successful_launch(state):
             saves=self.profile/'save';saves.mkdir();(saves/'save_010.xml').write_bytes(self.source.read_bytes())
-            log.write_text('WORLD_CAPTURE BEGIN id='+key+'\nWORLD_CAPTURE SAVE_REQUESTED id='+key+
+            log.write_text('WORLD_CAPTURE BEGIN id='+key+'\nWORLD_CAPTURE DOCKS_MARKED id='+key+'\nWORLD_CAPTURE SAVE_REQUESTED id='+key+
                            '\nWORLD_CAPTURE SAVED id='+key+' slot=save_010\nWORLD_CAPTURE EXIT id='+key)
         closed=Mock(side_effect=[None,RuntimeError('running'),None])
         with patch.object(w,'launch',side_effect=successful_launch),patch.object(w.time,'sleep'):

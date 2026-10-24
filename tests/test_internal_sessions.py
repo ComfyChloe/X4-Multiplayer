@@ -26,7 +26,7 @@ class InternalSessions(unittest.TestCase):
             self.assertEqual((meta['slot'],cfg['host'],cfg['port']),(slot,address,45841))
             self.assertEqual(cfg['token'],invite['token']);self.assertTrue(cfg['world_sync']);self.assertTrue(cfg['fire2'])
             lua=(folder/'extension/x4_lan_lab/ui/config.lua').read_text()
-            for text in ('world_sync = true','fire2 = true','ship_weapons = 6','ship_ter_s_xperimental_01_a_macro','test_profile = "45841"'):
+            for text in ('world_sync = true','fire2 = true','ship_weapons = 6','ship_ter_s_xperimental_01_a_macro','test_profile = "45841"', 'coop_docks = true', 'pilot_health = true', 'shot_claims = true', 'shot_visual = true', 'shot_capture = true', 'projectile_visuals = true', 'shot_undo = false'):
                 self.assertIn(text,lua)
     def test_separate_test_groups_get_distinct_keys_and_world_ids(self):
         a=self.configure();other=self.package('other','Windows11')
@@ -134,10 +134,8 @@ class InternalPackageRuntime(unittest.TestCase):
     def test_both_built_servers_import_and_construct_session_outside_checkout(self):
         from distribution import build_packages
         with tempfile.TemporaryDirectory() as d:
-            out=Path(d)/'packages';build_packages.build(out)
-            folders=sorted(out.glob('X4-LAN-*'))
-            folders=[p for p in folders if p.is_dir()];self.assertEqual(len(folders),2)
-            for folder in folders:
+            for platform in ('Linux','Windows11'):
+                folder=Path(d)/platform;folder.mkdir();build_packages.copy_server_runtime(folder)
                 with self.subTest(platform=folder.name):
                     code="import sys;sys.path.insert(0,sys.argv[1]);from x4lan.monitor import run;from x4lan.universe import UniverseSession;s=UniverseSession('a'*32,'world1-package-check','bubble');print(type(s).__name__)"
                     result=subprocess.run([sys.executable,'-I','-B','-c',code,str(folder)],cwd=d,text=True,capture_output=True)

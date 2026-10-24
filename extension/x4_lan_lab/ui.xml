@@ -18,6 +18,9 @@
     <file name="ui/shot_game.lua" />
     <file name="ui/shot_visual.lua" />
     <file name="ui/shot_capture.lua" />
+    <file name="ui/projectile_motion.lua" />
+    <file name="ui/projectile_protocol.lua" />
+    <file name="ui/projectile_game.lua" />
     <file name="ui/universe_protocol.lua" />
     <file name="ui/universe_game.lua" />
     <file name="ui/life_game.lua" />

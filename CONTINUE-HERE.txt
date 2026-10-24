@@ -1,107 +1,92 @@
-X4 MULTIPLAYER — ACTIVE DEVELOPMENT — 24 OCTOBER 2026
+X4 MULTIPLAYER — ACTIVE INTERNAL DEVELOPMENT — 24 OCTOBER 2026
 
-Checkout x4-weapons-7-4, contrib/astra-7-4-integration, draft PR37 based on
-contrib/astra-7-3-1-delivery. Read AGENTS.md/Git status, then affected source only.
-Latest user: continue until last-playtest faults and correct weapons behavior
-are fixed; former noon estimate superseded. INTERNAL only. Conserve tokens:
-affected checks and retained evidence, no repeated unchanged suites. No personal
-docs/mail/spending/Workshop writes, normal-save changes or sealed-package changes.
+PRIMARY CHECKOUT / REQUEST
+work/x4-weapons-7-4, contrib/astra-7-4-integration, draft PR37 based on
+contrib/astra-7-3-1-delivery. Read AGENTS.md and affected source/evidence only.
+User: continue until last-playtest faults and correct weapons are fixed; former
+noon estimate superseded. Conserve tokens: affected checks, retained evidence,
+one integration suite before packaging. No personal docs/mail/spending/Workshop
+writes, ordinary saves or sealed-release changes. No extra agents/chats/timers.
 
-PRIORITIES / EXISTING HUMAN EVIDENCE
-Weapons/damage; station occupancy/barriers/boarding/same-pad crash; host-ship
-handover oscillation; completed-story preset. Preserve native gun slew/spread,
-misses/free aim. Human finished-release playtests stay human-owned; isolated
-native tests allowed. Human PASS: radar, ordinary cargo, Cooperative Trial,
-station/asteroid alignment, movement, Alt+Tab both roles. Do not repeat these
-without a new symptom. Guest damages host proxy but real host unchanged; same-pad
-crash was not captured in the restarted log. Detailed triage lives in
+PRIORITY / HUMAN EVIDENCE
+Weapons both directions; native dock occupancy/barriers/boarding/same-pad crash;
+host-ship pilot handover oscillation; completed-story preset. Preserve native
+spread/slew/misses/free aim. Humans test finished releases; local isolated native
+checks authorized. Human PASS radar/cargo/Trial/station+asteroid alignment/movement/
+Alt+Tab. Do not repeat those without symptoms. Triage artifacts in
 ../x4-release-7-3-1/.local/evidence-054-withheld
 
-OWNERSHIP / COORDINATION
-Primary owns Linux native/docking/integration. Claude source-only:
-BOLT/BEND relayPR42: exact695786a independently73 PASS; both sector-change
-retirement and54/s capacity reproductions fixed. Merged8832a15. Claude accepted65d6213 admission/ACK source; reviews af6a5ba delta. CodecsPR41 exact2ae2284 merged.
-Motion review findings corrected; primary owns adapter/native files. Windows remains unlaunched: only profile45841 exists and remains
-restricted after Workshop incident; owner approval still needed there. PR40
-f6bb18e dev-only readiness reviewed9tests+schema and merged e174521, not installed.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min, next08:00 CEST;
-07:45 checkpoint1792820778.159229. Claude usage-limited07:45, no open edits. No new timer/chat. No duplicate native owner.
+OWNERSHIP
+Primary owns Linux/native/integration. Claude usage-limited07:45; no open edits.
+PR39/40/41/42 merged. Relay695786a independently73PASS before merge8832a15;
+codecs2ae2284 reviewed/merged. Claude1b711bc review accepts early observed-mode
+latch; stale controlled FIRE2 budget reset fixedb0eb05d. Windows45841 remains
+unlaunched after Workshop incident; owner permission still needed there.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min; last08:15 checkpoint
+1792822546.140959, next08:30. No duplicate native owner; no reply needed from paused
+Claude. Sealed7.3.1/public restricted mirror unchanged; no7.4 package yet.
 
-COMBAT INTEGRATION / QUALIFIED LIMITS
-SHOT5a0f75d merged4ae1065: immutable energy/digest, duplicateACK0damage, native
-generation/authority/time fences, permanentStop and uniform unmodified stock gate.
-PR39 exact75e61e2 mergedae2603e: source-ID, quarantine, proxy-loss, native closure
-and actual-pilot checks corrected. Affected tests/schema passed; see reports.
-shot_visual.lua switches existing gun projectile macros only after native stop
-ACK; per-gun fresh proof gates Lua/native FIRE2. Same gun IDs/mod/groups preserved.
-3ce8d22 revokes dead-ship proof while surviving combat continues; source/native verified.
-reports/SHOT-CAPTURE-INTEGRATION.txt retains actual host and guest physical capture,
-misses, clipped hull, destruction and native guest receive/eject evidence. These
-are one-engine/real-relay/synthetic-peer chains, NOT matched Windows/Linux. Flags
-pilot_health/shot_claims/shot_capture/shot_visual remain OFF. Supported weapons:
-stock X Shuttle plasma and generic pulseMk1/Mk2 only. Diagnostic HP undo remains
-OFF: it delays recharge. Native floor clips deltas, so capture counts admitted
-impact energy. Retained failed fixtures are not relabelled as accepted runs.
-Primitive/failed aim experiments remain in linked SHOT/WEAPON-AIM reports.
+CANDIDATE PREPARATION (NOT RELEASE ACCEPTANCE)
+VERSION now7.4.0, extension11. Source config remains inert. Projectile modules
+registered behind their complete opt-in stack. Internal launcher now enables
+pilot_health/shot_claims/shot_visual/shot_capture/projectile_visuals/coop_docks;
+shot_undo=false. Capture config includes saved bays; sealing requires exactly one
+DOCKS_MARKED before SAVE_REQUESTED/SAVED/EXIT.33 launcher/world tests PASS.
+Both platform server trees include docking/projectile codec/relay; isolated
+packaged-server imports reproduced missing modules then passed. Full combined
+fresh capture/load/combat/docks native check and package docs/reports still needed.
+No public release. Two players; shared seed is not ongoing universe authority.
 
-CURRENT RENDERING — UNREGISTERED / FLAGS OFF
-reports/PROJECTILE-{RENDER-PRIMITIVE,VISUAL-PROTOCOL}.txt contain evidence/contract.
-Meshless carrier + finite effect references installed geometry; no copied meshes.
-Earlier geometry-bearing objects block real bullets; failed fixtures retained.
-Effect-carrier01:9 control +9 through-effect bullets survive, graphic follows
-100m move,285 fast moves within2.24mm. Pose01:12 actual off-axis plasma shots,
-C getter vs MD <0.756mm; measured velocity predicts within3.6cm. Loopback01:
-12 captured/rendered/ended,1559 moves/197 MD reads,150ms delay,final0 objects.
-Pulse/moving follow-up fails with0 shots despite6 guns; remains unqualified.
+COMBAT / OBSERVED SHOTS
+reports/SHOT-CAPTURE-INTEGRATION.txt retains separate native host and guest
+actual-hit capture through real relay to synthetic victim authority; misses,
+clipped hull/death, guest receive/ejection and surviving-ship proof. These are NOT
+matched native games. SHOT immutable cumulative counts/gen/pilot/time fences;
+original gun identities/groups retained, native macro/readback proof. Three
+uniform unmodified stock weapons only: Shuttle plasma, generic pulseMk1/Mk2.
+HP undo stays OFF (recharge delay). Mid-session reload remains unsupported.
 
-projectile_game.lua and x4lan_projectile.xml/assets implement capture, BOLT/BEND,
-owned finite-effect rendering, native ticket/ACK/proof and fixed256 operation
-slots. Source native Born velocity + first C pose/time, original TTL; no target substitution or damage.
-Native/Lua positive FIRE2 replay blocked when observed mode active. Three effects
-schema-valid.15 current adapter tests PASS, motion11 previously PASS.
-Native adapter01 FAIL LuaID userdata concat;65d6213 fixes stable native ID keys.
-02/04 FAIL zone-reparent displacement: old zone center(50742.008,0,5897.971)
-retained as local coordinates after reparent, confirmed by MD and C reads.
-03 FAIL dev logger's size_t formatting. All retained/restored/audited.
-af6a5ba adds immediate owned-carrier readback, one corrective write maximum,
-removal if still wrong; compares against rounded native pose. Setup stops only
-remote scripted fire.05 receiver subset:12 effects/127 MD reads all on line,
-max setter error1.966mm,final0. Whole run still FAIL: no physical source shots.
-06 FAIL: keyboard Space also0 shots, MD active group0 contains6 guns. Cleaned.
-07 bounded SCRIPTED-source path PASS:54 shots relayed,12 native source oracles
-within5.2cm,12 remote effects/final0. Physical phase still0; no input acceptance.
-08 dev override proves StopEntity cancels actual input:54 physical shots pass.
-Production candidate declares observed mode before Prepare, blocks every native
-replay route, preserves actual player input;59 tests/3schemas PASS. 09 production1b711bc PASS:54 physical shots/12 native oracles within4cm,
-12 remote effects,0 queued legacy shots,final0. Cleaned/audited. Pulse-moving01 PASS18 physical shots at>30m/s,12 ID-matched native oracles
-within1cm,12 effects/final0. Restored/audited. PulseMk2 far01 FAIL0.282m source error; native Born velocity matches12oracles
-within1.44cm. Production now uses transformed engine vector instead of float
-position differences; repeat pending. Fire2 stale budgets reset even for player.
-29 focused tests/2schemas PASS. Primary owns installation;48913 schema worker.
+reports/PROJECTILE-{RENDER-PRIMITIVE,VISUAL-PROTOCOL}.txt retain raw failures and
+bounds. Meshless carriers + finite stock-referenced effects never establish hits.
+Native zone reparent fixed with readback and max one corrective carrier-only write.
+Observed mode latched before Prepare suppresses all native replay while preserving
+actual player input. Production09:54 physical plasma shots. Moving PulseMk1:18.
+Far Mk2 first finite-difference capture FAIL0.282m. b0eb05d uses actual native Born
+velocity rotated into sector basis + first C pose/source timestamp. Far02 source
+subsetPASS but short receiver coverage FAIL.7564b9c adds operation-scoped native
+Rejected ACK/50ms live retry. Far03 PASS24 physical shots,12 independent MD paths
+within1.5cm,12 remote synthetic effects/final0. Forced stale Createop3 refuses,
+same observation recoversop5.37-file restoration and7actual-save hashes/mtime audited.
 
-DOCKING / STORY
-reports/COOP-DOCKING-PLAN.txt: coop_docks OFF. Saved bay registry/native Fence ACK,
-paired NAV/CDOCK, queued movement guards, real undock/residual cancel, own-pilot
-approach denial. Executor03/adapter02/denial02 bounded PASS. Handover01:175 retained
-readbacks exact bay/one occupant/zero spread across guest and host leave/reclaim.
-board02: actual player transported to exact remote bay, ship visible, walking
-works; entrance not reached before bounded finish. No completed boarding or
-matched same-pad crash acceptance. Earlier NPC route/actor placement failures
-retained. Both LAN stations now saved before capture; Beta name separately verified.
-reports/STORY-TEST-PRESET.txt:14 completed plots+28 research skips/native HQ;
-42flags/capture/reload bounded~70s, only upkeep/Trial.29 blanket patches withdrawn.
-No old-save conversion/campaign-wide claim. Focused future human combat/docking
-procedures under distribution/HUMAN-{DAMAGE,DOCK}-TEST.txt; no package enabled.
+ACTIVE DIAGNOSTIC
+No active native game after heat02 cleanup. Heat01/02 both FAIL required overheat:
+54/60 shots only~1s despite requested20s button hold.02 deferred screenshots and
+verified focus, so screenshot cause NOT established. Likely Xwayland releases
+XTest buttons when short-lived xdotool client exits. Next heat03 should keep ONE
+xdotool process alive through `mousedown 2 sleep 20 mouseup 2`; verify actual held
+state/focus. Correct walking helper likewise. Do not relabel old captures.
+Current controller templates in .local/evidence-228-withheld; new sourceui.xml now
+registers projectile files, so DO NOT append duplicate registration in new runs.
+Heat/burst and very-short-before-Lua/in-flight handover remain unqualified.
 
-TOOLS / SAFETY / DELIVERY
-Python ../x4-playtest7/.venv/bin/python (use absolute invocation). GH
-../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh. Schema worker48913 accepts
-JSON files array, {"stop":true} only at final cleanup; schemas ../../preparation/game-schemas.
-Fresh owned45841 only; never normal70000001. Preserve shaderquality2 (old temporary1
-caused fatal1119). Controllers verify PID/start ticks, restore37-file mod/settings/
-owned slot, verify7 actual normal-save bytes+mtime; steam_autocloud bytes only.
-Never read live45841 log after cleanup: it is the restored human log; use archived
-native.log/load.log. Preserve raw failures. Sealed7.3.1f5f5bfe stays on Desktop/
-X4 Online/Internal Tests/7.3.1-2026-10-23. No7.4/public package. Both future OS
-packages include server/runtime/English docs. Two players; initial shared save
-is not ongoing whole-universe authority. Public restricted mirror b4cb16c unchanged.
+DOCK / STORY
+reports/COOP-DOCKING-PLAN.txt: saved bays/reservations/execution freshness/native
+Fence ACK; occupied refusal, actual undock+residual cancellation, local approach
+denial and queued warp fence boundedPASS. Handover01 retains175 stable exact-bay
+reads through guest-land-exit/host-reclaim-exit. Board03 source7564b9c:5681 stable
+exact-bay/one-occupant reads; actual walking crosses lowered boundary to ship
+exterior, never aboard. Raw2383c4df2ed97143d0ba6e2b4202572e555713b530f6bd599dfbd23f66372d92.
+Audit70source+2probes/37restore/7save bytes+mtime. Full boarding/matched same-pad
+crash unaccepted. Correct input holding before another walking test.
+Story preset14completed plots+28research/nativeHQ;42flags verified fresh/capture/
+reload bounded~70s. No old-save conversion or campaign-wide claim. Human
+procedures distribution/HUMAN-{DAMAGE,DOCK}-TEST.txt need final candidate assignment.
+
+TOOLS / SAFETY
+Python ../x4-playtest7/.venv/bin/python (absolute); PYTHONPATH=tests:. for unittest.
+GH ../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh. Schema worker48913,
+JSON files array; schemas ../../preparation/game-schemas. Fresh owned45841 only,
+never70000001; shaderquality2, -noworkshopsync/-nocputhrottle. One install/controller
+at a time. Verify PID/startticks/profile/focus before input/signals. Restore37-file
+mod/settings/ownedslot; audit7normal saves bytes+mtime (vdf bytes only). Never read
+live45841 log AFTER cleanup; it is restored human log. Use archived native/load.log.

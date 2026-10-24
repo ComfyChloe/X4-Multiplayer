@@ -146,7 +146,9 @@ def configure(role, server=None, invite=None):
                    walking_avatars=False, test_profile=PROFILE, host=host, port=PORT,
                    token=session['token'], build=BUILD, bubble=session['bubble'], coop=True, fire2=True, world_sync=True, world_mode='replica',
                    ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental', ship_weapons=6,
-                   seed_id=session['bubble'], seed_verified=False,
+                   seed_id=session['bubble'], seed_verified=False, coop_docks=True,
+                   pilot_health=True, shot_claims=True, shot_visual=True, shot_capture=True,
+                   projectile_visuals=True, shot_undo=False,
                    slot=package['slot'], mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
         lua = '-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
         lua += ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n'
