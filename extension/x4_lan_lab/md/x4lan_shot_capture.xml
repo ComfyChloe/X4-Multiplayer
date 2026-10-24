@@ -12,9 +12,10 @@
                view, so every captured callback is restored; counted hits go to a native
                cumulative counter per victim and shooter/victim generation pair, after an
                in-flight quarantine of the bullet lifetime when that pair changes.
-      UNDO:    the replayed remote player ship hit an object I am authority for. Its real outcome
-               is that player's claim, so both channels are restored; nothing is counted. Known
-               side effect: an undone shield hit still resets native shield recharge delay.
+      UNDO:    DIAGNOSTIC ONLY (shot_undo, default off): the replayed remote player ship hit an
+               object I am authority for; both channels are restored, nothing is counted. Not a
+               replay solution: an undone hit still delays native shield recharge (A:primary
+               recharge08/09: 14.7 s vs 9.0 s control).
       Victims: 1-2 co-op ships, 3-4 LAN targets. -->
  <cues>
   <cue name="Session" namespace="this">
@@ -27,6 +28,7 @@
     <set_value name="$capFailed" exact="false"/>
     <set_value name="$capState" exact="0"/><set_value name="$capStateAt" exact="-10s"/>
     <set_value name="$capMe" exact="0"/><set_value name="$capRemote" exact="[false,false]"/><set_value name="$capLifetime" exact="0s"/>
+    <set_value name="$capUndo" exact="false"/>
     <set_value name="$capSGen" exact="[0,0,0,0]"/><set_value name="$capVGen" exact="[0,0,0,0]"/>
     <set_value name="$capCount" exact="[0,0,0,0]"/><set_value name="$capQuarantine" exact="[0s,0s,0s,0s]"/>
     <set_value name="$capCollisions" exact="[]"/><set_value name="$capCollAge" exact="-1s"/>
@@ -38,14 +40,24 @@
      <set_value name="$capFailed" exact="true"/>
     </actions></cue>
     <!-- Lua's capture state: my piloted entity (0 = none or refused), which co-op ships the other
-         player flies (replayed here), and the admitted bullet lifetime; fresh window only. -->
+         player flies (replayed here), the conservative in-flight lifetime and whether the
+         diagnostic undo is on (default off: an undone hit still delays native shield recharge);
+         fresh window only. -->
     <cue name="State" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_ShotCapture'" control="'State'"/></conditions><actions>
      <set_value name="$a" exact="event.param3"/>
      <do_if value="not $capFailed and $a.$revision gt $capState and player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $a.$stamp and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline">
       <set_value name="$capState" exact="$a.$revision"/><set_value name="$capStateAt" exact="player.age"/>
       <set_value name="$capMe" exact="$a.$me"/><set_value name="$capRemote" exact="[$a.$r1,$a.$r2]"/>
-      <set_value name="$capLifetime" exact="$a.$lifetime * 1s"/>
+      <set_value name="$capLifetime" exact="$a.$lifetime * 1s"/><set_value name="$capUndo" exact="$a.$undo == true"/>
      </do_if>
+    </actions></cue>
+    <!-- Native runtime laser range of both co-op ships, for Lua's lifetime (range / bulletspeed). -->
+    <cue name="Range" instantiate="true" checkinterval="2s"><conditions><check_value value="true"/></conditions><actions>
+     <do_all exact="2" counter="$i">
+      <do_if value="@$arena.$ships.{$i}.isoperational">
+       <raise_lua_event name="'X4LAN_ShotCapture.Range'" param="'%s|%s'.[$i,@$arena.$ships.{$i}.maxcombatrange.lasers.all]"/>
+      </do_if>
+     </do_all>
     </actions></cue>
     <!-- All contact pairs of the current native frame, both orientations. -->
     <cue name="Collided" instantiate="true"><conditions><event_object_collided group="$capGroup"/></conditions><actions>
@@ -94,7 +106,7 @@
       <do_if value="$fresh and $capMe gt 0 and $ai == $capMe and $v != $capMe and not $mine">
        <set_value name="$capture" exact="@$arena.$shotStrength.{$capMe} gt 0"/>
       </do_if>
-      <do_elseif value="$fresh and $ai != $capMe and $mine">
+      <do_elseif value="$fresh and $capUndo and $ai != $capMe and $mine">
        <set_value name="$undo" exact="$capRemote.{$ai}"/>
       </do_elseif>
      </actions>

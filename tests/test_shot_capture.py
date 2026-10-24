@@ -96,7 +96,7 @@ def run(cue, S, P):
 
 def state(**kw):
     S = dict(shotFailed=False, shotApplying=False, shotStateAt=99.9, host=False, capFailed=False, capStateAt=99.9,
-             capMe=2, capRemote={1: True, 2: False}, capLifetime=3.8, capSGen={i: 4 for i in range(1, 5)},
+             capMe=2, capRemote={1: True, 2: False}, capLifetime=3.8, capUndo=False, capSGen={i: 4 for i in range(1, 5)},
              capVGen={1: 3, 2: 0, 3: 0, 4: 0}, capCount={i: 0 for i in range(1, 5)}, capQuarantine={i: 0 for i in range(1, 5)},
              capCollAge=-1, coll=[], shotAuthority={1: False, 2: True}, shotStrength={1: 40, 2: 40},
              shotCurrentGen={1: 3, 2: 4})
@@ -141,14 +141,17 @@ class CaptureRuleTests(unittest.TestCase):
         self.assertEqual(hit(state(), 's', v=2, ai=2)[0], [])                            # my own ship
         self.assertEqual(hit(state(shotStrength={1: 40, 2: 0}), 's')[0], [])            # unsupported loadout
 
-    def test_replayed_remote_hits_on_my_authority_are_undone_not_counted(self):
-        S = state(capMe=2, shotAuthority={1: False, 2: True})
+    def test_undo_is_off_by_default(self):
+        self.assertEqual(hit(state(shotAuthority={1: False, 2: True}), 's', v=2, ai=1, att='A1')[0], [])
+
+    def test_diagnostic_undo_restores_replayed_remote_hits_without_counting(self):
+        S = state(capMe=2, shotAuthority={1: False, 2: True}, capUndo=True)
         effects, P = hit(S, 's', v=2, ai=1, att='A1')
         self.assertEqual((effects, P['shield']), (['shield'], 100.0))
         effects, P = hit(S, 'h', v=2, ai=1, att='A1', shield=100.0)
         self.assertEqual(effects, ['hull'])
         self.assertEqual(sum(S['capCount'].values()), 0)
-        self.assertEqual(hit(state(capRemote={1: False, 2: False}, shotAuthority={1: False, 2: True}), 's', v=2, ai=1, att='A1')[0], [])
+        self.assertEqual(hit(state(capRemote={1: False, 2: False}, shotAuthority={1: False, 2: True}, capUndo=True), 's', v=2, ai=1, att='A1')[0], [])
 
     def test_a_new_generation_pair_restarts_and_quarantines_in_flight_bullets(self):
         S = state(shotCurrentGen={1: 5, 2: 4})                       # victim generation moved 3 -> 5
@@ -175,10 +178,12 @@ class CaptureAdapterTests(unittest.TestCase):
          GetComponentData=function() return 'cluster_14_sector001_macro' end
          P='weapon_ter_s_plasma_01_mk1_macro'
          entries={[P]={hullshielddpshot=40,isbeamweapon=0,shieldonlydpshot=0,hullonlydpshot=0,hullnoshielddpshot=0,
-          hullshieldareadpshot=0,shieldonlyareadpshot=0,hullonlyareadpshot=0,hullnoshieldareadpshot=0,range=4560,bulletspeed=1200}}
+          hullshieldareadpshot=0,shieldonlyareadpshot=0,hullonlyareadpshot=0,hullnoshieldareadpshot=0,bulletspeed=2300}}
          GetMacroData=function(m,k) return k=='infolibrary' and 'weapons' or nil end
          GetLibraryEntry=function(lib,m) return entries[m] end
          api.GetInstalledWeaponMod=function() return false end
+         local operational=api.IsComponentOperational
+         api.IsComponentOperational=function(id) return id==0x11 or operational(id) end   -- the equipped gun
         ''')
         for file in ('bubble_game.lua', 'motion.lua', 'coop_game.lua', 'health_game.lua', 'shot_game.lua', 'shot_capture.lua'):
             l.execute((UI / file).read_text())
@@ -189,6 +194,7 @@ class CaptureAdapterTests(unittest.TestCase):
          client:receiveExtension({'HGEN','1',client.lease,'1','3','4'},now)
          events['X4LAN_Health.Own'](nil,'50|2026-10-24T03:50:00|0|0|0|0')
          events['X4LAN_Shot.Loadout'](nil,'2|0|0x11,'..P..';')
+         events['X4LAN_ShotCapture.Range'](nil,'2|3910')               -- native runtime laser range
          function last(control) local r;for _,q in ipairs(requests) do if q[1]=='X4LAN_ShotCapture' and q[2]==control then r=q[3] end end;return r end
          function tick(t) now=t;frames.onUpdate() end
         ''')
@@ -198,16 +204,17 @@ class CaptureAdapterTests(unittest.TestCase):
         out = self.make().execute('''
          client:receiveExtension({'HBASE','1',client.lease,'2','4','64.5','30'},now);events['X4LAN_Health.Based'](nil,'2|4')
          tick(10.2);local st=last('State')
-         return st.me,tostring(st.r1),tostring(st.r2),st.lifetime,st.stamp,st.deadline''')
-        me, r1, r2, life, stamp, deadline = out
-        self.assertEqual((me, r1, r2, stamp, deadline), (2, 'true', 'false', '2026-10-24T03:50:00', 51))
-        self.assertAlmostEqual(life, 3.8)
+         return st.me,tostring(st.r1),tostring(st.r2),st.lifetime,st.stamp,st.deadline,tostring(st.undo)''')
+        me, r1, r2, life, stamp, deadline, undo = out
+        self.assertEqual((me, r1, r2, stamp, deadline, undo), (2, 'true', 'false', '2026-10-24T03:50:00', 51, 'false'))
+        self.assertAlmostEqual(life, 1.5 * 3910 / 2300)              # margin * native range / library speed
 
-    def test_no_lifetime_refuses_capture(self):
-        out = self.make().execute('''
-         entries[P].range=nil;client:receiveExtension({'HBASE','1',client.lease,'2','4','64.5','30'},now);events['X4LAN_Health.Based'](nil,'2|4')
-         tick(10.2);return last('State').me,last('State').lifetime''')
-        self.assertEqual(tuple(out), (0, 0))
+    def test_no_native_range_or_speed_refuses_capture(self):
+        for setup in ("events['X4LAN_ShotCapture.Range'](nil,'2|null')", 'entries[P].bulletspeed=nil'):
+            out = self.make().execute(setup + '''
+             client:receiveExtension({'HBASE','1',client.lease,'2','4','64.5','30'},now);events['X4LAN_Health.Based'](nil,'2|4')
+             tick(10.2);return last('State').me,last('State').lifetime''')
+            self.assertEqual(tuple(out), (0, 0), setup)
 
     def test_native_cumulative_counts_feed_totals_idempotently(self):
         out = self.make().execute('''
@@ -236,13 +243,57 @@ class CaptureAdapterTests(unittest.TestCase):
 
 
 class CanonicalFloorTests(unittest.TestCase):
-    """B3: under a live pilot value the proxy hull never decides death and never clips at 2%."""
-    def test_life_tick_reads_the_canonical_value_and_the_proxy_keeps_the_ordinary_floor(self):
-        life = (ROOT / 'extension/x4_lan_lab/md/x4lan_life.xml').read_text()
-        self.assertTrue('(if @$arena.$healthLive.{$i} then $arena.$healthValue.{$i}.{1} else $ship.hullpercentage) le 1.01' in life)
+    """B3: under a live pilot value only the canonical value decides death; the proxy never does."""
+    LIFE = [(r'@?\$arena\.\$healthLive\.\{\$i\}', "S['live']"), (r'\$arena\.\$healthValue\.\{\$i\}\.\{1\}', "S['value']"),
+            (r'@?\$arena\.\$healthProxyLost\.\{\$i\}', "S['lost']"), (r'\$ship\.isoperational', "P['op']"),
+            (r'\$ship\.hullpercentage', "P['hull']"), (r'\ble\b', '<='), (r'\btrue\b', 'True')]
+
+    def tick(self, S, P):
+        node = [n for n in E.parse(ROOT / 'extension/x4_lan_lab/md/x4lan_life.xml').iter('do_if')
+                if n.get('value') == '$arena.$host and not $arena.$dead.{$i}'][0]
+        logs = []
+
+        def ev(expr):
+            for pattern, repl in self.LIFE: expr = re.sub(pattern, repl, expr)
+            if '$' in expr: raise AssertionError('unsupported: ' + expr)
+            return eval(expr, dict(S=S, P=P))
+
+        def block(nodes):
+            done = None
+            for n in nodes:
+                if n.tag in ('do_if', 'do_elseif', 'do_else'):
+                    if n.tag == 'do_if': done = False
+                    if done: continue
+                    if n.tag == 'do_else' or ev(n.get('value')): done = True; block(list(n))
+                elif n.tag == 'set_value':
+                    name = {'$arena.$dead.{$i}': 'dead', '$arena.$healthProxyLost.{$i}': 'lost'}[n.get('name')]
+                    S[name] = ev(n.get('exact'))
+                elif n.tag == 'debug_text': logs.append(n.get('text').split(' ')[1])
+                else: raise AssertionError('unsupported action ' + n.tag)
+        block(list(node))
+        return logs
+
+    def test_live_pilot_value_alone_decides_death(self):
+        S = dict(live=True, value=50, lost=False, dead=False)
+        self.assertEqual((self.tick(S, dict(op=True, hull=0.5)), S['dead']), ([], False))      # proxy hull: a view
+        S['value'] = 1.0
+        self.assertEqual((self.tick(S, dict(op=True, hull=80)), S['dead']), (["SHIP_LETHAL"], True))
+
+    def test_lost_proxy_is_logged_once_and_decided_after_the_live_value_ends(self):
+        S = dict(live=True, value=50, lost=False, dead=False)
+        self.assertEqual(self.tick(S, dict(op=False, hull=0)), ['HEALTH_PROXY_LOST'])
+        self.assertEqual((self.tick(S, dict(op=False, hull=0)), S['dead'], S['lost']), ([], False, True))
+        S['live'] = False                                            # health watchdog / release ended it
+        self.assertEqual((self.tick(S, dict(op=False, hull=0)), S['dead']), (["SHIP_LETHAL"], True))
+
+    def test_without_a_live_value_the_proxy_decides_as_before(self):
+        for hull, dead in ((1.0, True), (50, False)):
+            S = dict(live=False, value=0, lost=False, dead=False)
+            self.tick(S, dict(op=True, hull=hull))
+            self.assertEqual(S['dead'], dead)
         health = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
         self.assertTrue('set_object_min_hull object="$ship" exact="2"' not in health)
-        self.assertTrue('<do_else><set_object_min_hull object="$ship" exact="1"/></do_else>' in health)   # Apply, non-lethal
+        self.assertTrue('<set_value name="$arena.$healthProxyLost" exact="[false,false]"/>' in health)
 
 
 if __name__ == '__main__':

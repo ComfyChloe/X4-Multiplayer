@@ -22,6 +22,7 @@
     <set_value name="$arena.$healthBased" exact="[0,0]"/>
     <set_value name="$arena.$healthAt" exact="[0s,0s]"/>
     <set_value name="$arena.$healthKeptAt" exact="[0s,0s]"/>
+    <set_value name="$arena.$healthProxyLost" exact="[false,false]"/>   <!-- x4lan_life.xml: logged once, never recreated -->
     <set_value name="$arena.$healthTop" exact="[0,0]"/>
     <raise_lua_event name="'X4LAN_Health.Ready'"/>
     <debug_text text="'[X4LAN] HEALTH_SETUP host=%s'.[$arena.$host]"/>
