@@ -24,8 +24,8 @@ retirement and54/s capacity reproductions fixed. Merged8832a15. Claude accepted6
 Motion review findings corrected; primary owns adapter/native files. Windows remains unlaunched: only profile45841 exists and remains
 restricted after Workshop incident; owner approval still needed there. PR40
 f6bb18e dev-only readiness reviewed9tests+schema and merged e174521, not installed.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min, next07:30 CEST;
-07:15 checkpoint1792818903.674119. No new timer/chat. No duplicate native owner.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min, next08:00 CEST;
+07:45 checkpoint1792820778.159229. Claude usage-limited07:45, no open edits. No new timer/chat. No duplicate native owner.
 
 COMBAT INTEGRATION / QUALIFIED LIMITS
 SHOT5a0f75d merged4ae1065: immutable energy/digest, duplicateACK0damage, native
@@ -56,7 +56,7 @@ Pulse/moving follow-up fails with0 shots despite6 guns; remains unqualified.
 
 projectile_game.lua and x4lan_projectile.xml/assets implement capture, BOLT/BEND,
 owned finite-effect rendering, native ticket/ACK/proof and fixed256 operation
-slots. Source samples20..200ms, original TTL; no target substitution or damage.
+slots. Source native Born velocity + first C pose/time, original TTL; no target substitution or damage.
 Native/Lua positive FIRE2 replay blocked when observed mode active. Three effects
 schema-valid.15 current adapter tests PASS, motion11 previously PASS.
 Native adapter01 FAIL LuaID userdata concat;65d6213 fixes stable native ID keys.
@@ -74,9 +74,10 @@ within5.2cm,12 remote effects/final0. Physical phase still0; no input acceptance
 Production candidate declares observed mode before Prepare, blocks every native
 replay route, preserves actual player input;59 tests/3schemas PASS. 09 production1b711bc PASS:54 physical shots/12 native oracles within4cm,
 12 remote effects,0 queued legacy shots,final0. Cleaned/audited. Pulse-moving01 PASS18 physical shots at>30m/s,12 ID-matched native oracles
-within1cm,12 effects/final0. Restored/audited. Next PulseMk2 at249km; new dev
-Born velocity/basis observation tests float-difference precision, no production
-capture change. Primary owns installation;48913 schema worker.
+within1cm,12 effects/final0. Restored/audited. PulseMk2 far01 FAIL0.282m source error; native Born velocity matches12oracles
+within1.44cm. Production now uses transformed engine vector instead of float
+position differences; repeat pending. Fire2 stale budgets reset even for player.
+29 focused tests/2schemas PASS. Primary owns installation;48913 schema worker.
 
 DOCKING / STORY
 reports/COOP-DOCKING-PLAN.txt: coop_docks OFF. Saved bay registry/native Fence ACK,

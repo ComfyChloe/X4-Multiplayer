@@ -133,10 +133,9 @@ class ProjectileAdapterTests(unittest.TestCase):
          receive(packet(3,50.4));assert(X.contexts[2].buffer.count==1)
         ''')
 
-    def test_actual_native_samples_produce_velocity_and_end_without_selected_target(self):
+    def test_actual_native_velocity_and_first_pose_send_immediately_without_selected_target(self):
         self.make().execute('''
-         X.born('1|3|'..X.contexts[1].ticket..'|101|22|1');X.captureFrame(now);assert(#sent==0)
-         clock(10.03);X.captureFrame(now);assert(#sent==1)
+         X.born('1|3|'..X.contexts[1].ticket..'|101|22|1|170|-300|2200');X.captureFrame(now);assert(#sent==1)
          local m=assert(W.parse(sent[1],'client'));assert(m.entity==1 and m.gen==3)
          assert(math.abs(m.vx-170)<1e-8 and math.abs(m.vy+300)<1e-8 and math.abs(m.vz-2200)<1e-8)
          assert(m.time==10 and m.yaw==.1 and m.ttl==1.7)
@@ -144,11 +143,22 @@ class ProjectileAdapterTests(unittest.TestCase):
          clock(10.10);X.captureFrame(now);clock(10.16);X.captureFrame(now);assert(#sent==4 and not next(X.captures))
         ''')
 
+    def test_native_velocity_invalid_payloads_are_rejected_and_far_pose_cannot_change_velocity(self):
+        for values in ('', '|nan|0|1', '|inf|0|1', '|100001|0|1', '|1||2', '|1|2|3|4'):
+            with self.subTest(values=values):
+                self.make().execute("X.born('1|3|'..X.contexts[1].ticket..'|101|22|1"+values+"');assert(not next(X.captures))")
+        self.make().execute('''
+         api.GetPositionalOffset=function() return {x=249000.015625,y=10000,z=40,yaw=.1,pitch=-.2,roll=0} end
+         X.born('1|3|'..X.contexts[1].ticket..'|101|22|1|855.05|-840.615|4849.231');X.captureFrame(now)
+         local m=assert(W.parse(sent[1],'client'))
+         assert(m.x==249000.015625 and m.vx==855.05 and m.vy==-840.615 and m.vz==4849.231)
+        ''')
+
     def test_capture_rejects_wrong_native_context_and_stops_on_handover(self):
         self.make().execute('''
-         X.born('1|4|'..X.contexts[1].ticket..'|101|22|1');assert(not next(X.captures))
-         X.born('1|3|'..X.contexts[1].ticket..'|101|23|1');assert(not next(X.captures))
-         X.born('1|3|'..X.contexts[1].ticket..'|101|22|1');assert(next(X.captures))
+         X.born('1|4|'..X.contexts[1].ticket..'|101|22|1|170|-300|2200');assert(not next(X.captures))
+         X.born('1|3|'..X.contexts[1].ticket..'|101|23|1|170|-300|2200');assert(not next(X.captures))
+         X.born('1|3|'..X.contexts[1].ticket..'|101|22|1|170|-300|2200');assert(next(X.captures))
          controlled=42;clock(10.03);X.captureFrame(now);assert(not next(X.captures) and #sent==0)
         ''')
 

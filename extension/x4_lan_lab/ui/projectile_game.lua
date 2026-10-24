@@ -104,8 +104,10 @@ function x.state(payload)
  if q and cur and cur.key==q.key and q.enabled and q.ticket==t then q.ackAt=x.now end
 end
 function x.born(payload)
- local e,g,t,id,sector,kind=tostring(payload):match('^(%d)|(%d+)|(%d+)|([^|]+)|([^|]+)|(%d)$')
+ local e,g,t,id,sector,kind,vx,vy,vz=tostring(payload):match('^(%d)|(%d+)|(%d+)|([^|]+)|([^|]+)|(%d)|([^|]+)|([^|]+)|([^|]+)$')
  e,g,t,kind=tonumber(e),tonumber(g),tonumber(t),tonumber(kind)
+ local velocity={tonumber(vx),tonumber(vy),tonumber(vz)}
+ for i=1,3 do local n=velocity[i];if not n or n~=n or math.abs(n)>W.MAX_VELOCITY then return end end
  local q=e and x.contexts[e];local cur=e and wanted(e,x.now)
  if not ready(q,x.now) or not cur or cur.key~=q.key or q.mode~=1 or q.gen~=g or q.ticket~=t or q.kind~=kind then return end
  local native,space=ConvertIDTo64Bit(id),ConvertIDTo64Bit(sector)
@@ -113,7 +115,7 @@ function x.born(payload)
  local key=q.key..'|'..id;local n=0;for _ in pairs(x.captures) do n=n+1 end
  if x.captures[key] or n>=P.capacity then return end
  x.shotId=x.shotId+1;assert(x.shotId<=2147483647,'shot IDs exhausted')
- x.captures[key]={native=native,space=space,q=q,ticket=q.ticket,id=x.shotId}
+ x.captures[key]={native=native,space=space,q=q,ticket=q.ticket,id=x.shotId,velocity=velocity}
 end
 local function message(b,kind,time)
  local q=b.q
@@ -129,12 +131,12 @@ function x.captureFrame(now)
      local p=C.GetPositionalOffset(b.native,b.space)
      local sample={time=now,pose={p.x,p.y,p.z,p.yaw,p.pitch,p.roll}};b.first=b.first or sample
      if not b.birth then
-      local velocity=P.velocity(b.first,sample)
-      if velocity then
-       local m=message(b,'BOLT',b.first.time);local a=b.first.pose
-       m.sector,m.kind,m.x,m.y,m.z,m.vx,m.vy,m.vz,m.yaw,m.pitch,m.roll,m.ttl=q.sectorName,q.kind,a[1],a[2],a[3],velocity[1],velocity[2],velocity[3],a[4],a[5],a[6],TTL[q.kind]
-       b.birth=assert(W.serialize(m));b.birthAt=now;b.nextBirth=now;b.repeats=0
-      elseif now-b.first.time>.2 then x.captures[key]=nil end
+      -- Native velocity includes inherited motion and actual barrel spread.
+      -- Differencing float sector positions amplifies rounding far from origin.
+      local velocity=b.velocity
+      local m=message(b,'BOLT',b.first.time);local a=b.first.pose
+      m.sector,m.kind,m.x,m.y,m.z,m.vx,m.vy,m.vz,m.yaw,m.pitch,m.roll,m.ttl=q.sectorName,q.kind,a[1],a[2],a[3],velocity[1],velocity[2],velocity[3],a[4],a[5],a[6],TTL[q.kind]
+      b.birth=assert(W.serialize(m));b.birthAt=now;b.nextBirth=now;b.repeats=0
      end
     else
      b.ended=now

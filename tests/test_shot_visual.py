@@ -162,6 +162,17 @@ class NativeReplayGateTests(unittest.TestCase):
         on=next(x for x in bubble.iter('cue') if x.get('name')=='FireOn')
         self.assertEqual(on.find('actions/do_if').get('value'),'not @$projectileVisualEnabled')
 
+    def test_observed_controlled_ship_discards_stale_replay_budget_without_stopping_input(self):
+        tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_coop.xml')
+        cue=next(x for x in tree.iter('cue') if x.get('name')=='Fire2')
+        refused=cue.find('actions/do_else');self.assertIsNotNone(refused)
+        self.assertFalse(list(refused.iter('stop_shooting')))
+        state={'$arena.$fireRemaining.{$v.$ship}':[7,4], '$arena.$fireManaged.{$v.$ship}':True}
+        for node in refused:
+            if node.tag=='set_value':
+                state[node.get('name')]={'[0,0]':[0,0],'false':False}[node.get('exact')]
+        self.assertEqual(state,{'$arena.$fireRemaining.{$v.$ship}':[0,0], '$arena.$fireManaged.{$v.$ship}':False})
+
     def test_queued_positive_grant_is_refused_after_mode_gen_closure_or_expiry_change(self):
         tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_coop.xml')
         cue=next(c for c in tree.iter('cue') if c.get('name')=='Fire2')

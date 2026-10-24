@@ -270,3 +270,21 @@ Raweb5bf2759a9f65bd85c559e47b7bedfbe6366274506e4ec2f8bdd91fa8d9f857.
 69 production/3 overrides (PulseMk1 loadout plus probes)/UI registration,37-file
 restore and actual saves audited. Previous constant-velocity pulse fixture stays
 FAIL. This uses real player strafe, not a forced constant-velocity command.
+
+24 October, far-sector moving Pulse Mk2 capture correction
+Native projectile-pulse2-far-01 at source fa397df remains FAIL: shot8's observed
+trajectory differs by0.282061m, exceeding the unchanged0.2m gate. Raw SHA256
+6e77135ab97e38c6d4c1e3cd9c526203616aec90838c6e7f90d37edbad556e00.
+24 physical shots with inherited ship motion; independent native Born velocity
+transformed through bullet relative-rotation basis matches12 MD trajectories /
+84 readbacks within0.014374m. Differencing global float sector positions caused
+precision loss. Source capture now uses that actual native velocity with its
+first alive C pose/source timestamp, without selected-target substitution or a
+wire change. No short-lived-before-Lua admission claim. Production repeat pending.
+69 production files +3 overrides audited;37-file installation,7 actual normal
+save bytes/timestamps and owned slot restored, helpers/game closed.
+Claude1b711bc review accepts early latch/replay gates; Fire2 now clears stale
+replay budgets even when it must preserve actual-controlled input. Observed
+sessions still start from pristine seed; arbitrary mid-session save reload is
+not accepted. Legacy InteractionTest assets excluded by both package builders.
+29 affected adapter/visual tests PASS; projectile and coop MD schemas VALID.

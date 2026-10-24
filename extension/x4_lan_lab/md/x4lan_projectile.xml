@@ -51,7 +51,16 @@
    </actions></cue>
    <library name="Born"><actions>
     <do_if value="not $failed and not @$arena.$shotFailed and $modes.{$e} == 1 and player.controlled == $ships.{$e} and $ships.{$e} == $arena.$ships.{$e} and $ships.{$e}.sector == $sectors.{$e} and $gens.{$e} == $arena.$shotCurrentGen.{$e} and $gens.{$e} gt $arena.$healthClosed.{$e} and $arena.$shotVisualMode.{$e} == 1 and $arena.$shotVisualGen.{$e} == $gens.{$e} and player.age - $at.{$e} le 0.3s and player.age - $arena.$shotVisualAt.{$e} le 0.3s and player.timewarp.factor gt 0s">
-     <do_if value="event.param.isclass.bullet and event.param.macro.id == $bullets.{$kinds.{$e}}"><raise_lua_event name="'X4LAN_Projectile.Born'" param="'%s|%s|%s|%s|%s|%s'.[$e,$gens.{$e},$tickets.{$e},event.param,$sectors.{$e},$kinds.{$e}]"/></do_if>
+     <do_if value="event.param.isclass.bullet and event.param.macro.id == $bullets.{$kinds.{$e}}">
+      <!-- Component velocity is expressed in its rotated basis. Transform the
+           real projectile's vector into the same sector frame as the C pose. -->
+      <set_value name="$velocity" exact="event.param.velocity"/>
+      <set_value name="$rotation" exact="event.param.relativerotation.{$sectors.{$e}}"/>
+      <set_value name="$vx" exact="$velocity.x * $rotation.right.x + $velocity.y * $rotation.up.x + $velocity.z * $rotation.forward.x"/>
+      <set_value name="$vy" exact="$velocity.x * $rotation.right.y + $velocity.y * $rotation.up.y + $velocity.z * $rotation.forward.y"/>
+      <set_value name="$vz" exact="$velocity.x * $rotation.right.z + $velocity.y * $rotation.up.z + $velocity.z * $rotation.forward.z"/>
+      <raise_lua_event name="'X4LAN_Projectile.Born'" param="'%s|%s|%s|%s|%s|%s|%s|%s|%s'.[$e,$gens.{$e},$tickets.{$e},event.param,$sectors.{$e},$kinds.{$e},$vx,$vy,$vz]"/>
+     </do_if>
     </do_if>
    </actions></library>
    <cue name="Born1" instantiate="true"><conditions><event_weapon_fired group="$guns1"/></conditions><actions><set_value name="$e" exact="1"/><include_actions ref="Born"/></actions></cue>

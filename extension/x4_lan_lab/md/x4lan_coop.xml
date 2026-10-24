@@ -144,7 +144,11 @@
        <set_value name="$arena.$fireRemaining.{$v.$ship}" exact="[0,0]"/>
        <set_value name="$arena.$fireManaged.{$v.$ship}" exact="false"/>
       </do_else>
-     </do_if>
+     </do_if><do_else>
+      <!-- Clear stale replay bookkeeping even when manual input must survive. -->
+      <set_value name="$arena.$fireRemaining.{$v.$ship}" exact="[0,0]"/>
+      <set_value name="$arena.$fireManaged.{$v.$ship}" exact="false"/>
+     </do_else>
     </actions></cue>
     <cue name="LeaveControls" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'LeaveControls'"/></conditions><actions>
      <set_value name="$ship" exact="$arena.$ships.{event.param3}"/>
