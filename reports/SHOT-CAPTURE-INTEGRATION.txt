@@ -84,6 +84,20 @@ and seven actual normal-save bytes/timestamps verified. No parser/API failure;
 raw baseline warnings preserved. These are still separate one-native/synthetic
 peer cases, not a joined Windows/Linux gameplay session.
 
+NATIVE GUEST RECEIVES CLAIMS / HARMLESS REPLAY / EJECTION
+shot-receive-guest-01, source3ce8d22: synthetic host sends3 admitted claims and6
+FIRE2 visual shots. Native guest applies120shield once (23stable4680 readbacks),
+while all6 actual replay bullets use the harmless macro. No capture feedback.
+A labelled fixture then sets own hull1.02%/shield0. One further claimed40-point
+hit yields native1% hull at the floor; native HEALTH reaches the synthetic host,
+its WORLD echo marks canonical death. The guest emergency-ejects BEFORE ship2
+is destroyed. Native final readback confirms an operational spacesuit, and remote
+ship1 still has valid replay proof; no combat module has failed. Strict bounded
+PASS, manual source counts (physical source capture qualified in separate runs).
+Raw 06e5c7049996dc57ab5940b51d2cd9c583b4a6f18f1fe8388017e25240061f2c.56source/probe hashes,37-file
+restoration and seven actual normal-save bytes/timestamps verified. Owned game
+and helpers closed. No matched two-native or Windows acceptance follows.
+
 PENDING
 Matched native Windows/Linux, arbitrary free-aim VISUAL replay, in-flight authority
 transitions, overheat/burst continuity and human docking/boarding/crash acceptance
