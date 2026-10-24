@@ -77,19 +77,19 @@ forward15deg but NOT flight; SetObjectSectorPos rejects bullets. Prior gun sette
 and direct gun-object shooting also fail. No production aim change.
 
 LIVE JOBS / TOOLS
-ACTIVE native exec14956: .local/evidence-106-withheld Tests non-player
-victim with stock pulse Mk1/Mk2(36/46), source independently labelled by damage.
-last-attacker01:22 interleaved hits all getters correct.02:34 hits,8 simultaneous
-DIFFERENT-attacker pairs all identities correct;12 shield callbacks match. BUT8
-hits retain OLD lastattacktime: timestamp equality is NOT a reliable freshness
-gate, relaxing risks stale attribution. Audit correction sent to Claude.
-BUT floor clips:22 hits at2% floor produce only1 hull event,amount0.458 not36.
-reports/LAST-ATTACKER-NATIVE.txt records limits/raw. Claude now owns source-only
-shooter-confirmed design (429aa6f not merged), NO implementation approval. Asked
-him to address stale shield/hull states and floor clipping; no time-bucket discard
-is justified by current per-callback evidence. Primary owns native work.
-All earlier runs cleaned; create_object bullet FAIL(6nulls), velocity FAIL(6class
-rejections). No production aim/hit change yet.
+ACTIVE native exec19271: .local/evidence-031-withheld Native player victim,
+2 pulse shooters; low shield10HP/hull2.01%, min2%, undo each actual delta INSIDE
+its callback. Checks recursion/life timing and per-hit Shield+Hull ordering.
+Also read-only GetLibraryEntry weapon macro per-shot fields, used by native UI.
+All other runs cleaned. last-attacker01/02: identities correct even8 same-frame
+mixed pairs, BUT timestamp stale and floor clips/suppresses damage callbacks.
+NPC03:36 shield/hull events correct by stock36/46 damage,19 old timestamps.
+Mixed04: synchronous7point no-attacker hull callback clears getter to null; next
+explicit-B3point callback resolvesB. Not physical collision/area/repair proof.
+reports/LAST-ATTACKER-NATIVE.txt has evidence. Claude source-only design429aa6f
+not merged/approved: stale shield-vs-hull state and clipped damage are blockers.
+No production hit claims/aim change. New raw per-shot macro data might support a
+strictly bounded ordinary unmodified projectile path; not yet designed/qualified.
 CRITICAL: preserve original shaderquality2. Old temporaryquality1 caused native
 fatal1119 p1_glass compile (cursor03 screenshot/stacks). No graphics downgrade.
 No concurrent native/install mutation; normal saves never loaded.

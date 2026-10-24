@@ -41,3 +41,32 @@ missiles, destroyed attackers, same-frame native/scripted damage, shield state
 disagreement, floor/death semantics, and end-to-end no-double-counting.
 Last-attacker-npc-03 compares stock pulse Mk1/Mk2 (native36/46) on a non-player
 victim's full shield/hull. No custom weapon stats or spread.
+
+NPC FOLLOW-UP
+last-attacker-npc-03:36 native damage callbacks (13shield,23hull) on a non-player
+victim. Stock pulse Mk1=36 and Mk2=46 independently label the shooter; every
+callback's lastattacker matches that label. No custom weapon stats.19 callbacks
+retain old timestamps, confirming that timestamp equality would reject valid
+NPC hits too. No damage callbacks from the scheduled shield/hull setters.
+Raw SHA25673d545828d5e9f437c2dae7203d4b8cbf0dc31bbd18394ae38c1c8b14b833f21.
+Native mixed-04 next applies labelled7 hull-only damage without an attacker and3
+with explicit B inside a native shield-hit callback. It checks getter behaviour
+for mixed native/scripted sources, not a general environmental-damage proof.
+
+MIXED SCRIPTED DAMAGE
+last-attacker-mixed-04: during a real shield-hit callback, apply_attackstrength
+without attacker (7 hull-only points) synchronously emits a hull callback whose
+lastattacker is null. A following3-point application with explicit B resolves B.
+Both callbacks occur at the same game age as the preceding native hit. The getter
+does not retain the preceding shooter for this labelled no-attacker path.
+Raw SHA25659f277178bd51cdbc10385d6975b7822c8853fa0315b1650c5a2293c1ee34885.
+Bounded PASS only; physical collision, environmental area effects and repairs
+remain separate cases. Original source/cleanup inventories are retained.
+
+NATIVE PER-SHOT DATA INTERFACE FOUND (not yet qualified as a damage adapter)
+Stock menu_encyclopedia.lua/helper.lua use GetLibraryEntry(infolibrary, macro),
+where GetMacroData(macro, 'infolibrary') supplies the library. The native table
+includes hullshielddpshot, hullonlydpshot, shieldonlydpshot and hullnoshielddpshot,
+plus area variants. These are native macro/library data, not inferred DPS/rate.
+Installed weapon modifiers, projectile-to-weapon identity and safe claim semantics
+still require work; do not guess them or use macro-only data for modded weapons.
