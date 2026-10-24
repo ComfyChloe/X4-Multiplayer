@@ -171,3 +171,25 @@ Raw SHA256da3cbaf0f9ec9ce656065ff6866fba431abc5519ba248156c31cf6581a9213ac.
 Retained after-cleanup inventories independently match all37 original mod files;
 actual normal saves and owned test save retain bytes/timestamps; steam_autocloud
 bytes unchanged. Owned game/helpers closed and settings restored by controller.
+
+CONFIRMED ZERO-DAMAGE IMPACTS AND RECHARGE
+zero-impact-01 FAILS its alignment prerequisite: all9 stock bullets miss, as do
+all zero bullets. A line through the ship origin is not proof of a hull collision.
+zero-impact-02 uses native shoot_at only as a controlled diagnostic. Stock pulse
+and zero clone each fire9 bullets, score8 canonical player_ship_hit events, and
+have8 bullet lifetimes around0.16-0.18s at impact. Their first shots miss while the
+weapon aligns, surviving about0.7s. Deliberately offset zero fire has9 births,
+zero hits, lifetimes~0.7s. Stock8hits cost288 shield; all8 zero impacts retain
+4580 hull/4800shield. Native callbacks establish actual zero impacts here.
+Raw SHA2563396815582adad187951b9f73c1816f0e339297bc21e7e8c768dc702f98330f4.
+This original dev clone adds native effect references and the stock3-round/.7s
+reload pattern; no game assets or third-party code are shipped. No production
+selected-victim autoaim or faithful free-aim replay is inferred from the fixture.
+
+damage-recharge-09 repeats the unresolved recharge case with actual zero impacts:
+17 stock hits undone ->14.7577s; control ->9.0461s;17 zero canonical hits with no
+shield/hull damage callbacks ->9.0589s. Bounded zero-impact/recharge primitive PASS,
+not shadow handover, projectile replay fidelity or multiplayer acceptance.
+Raw SHA25627d75f8b923e31641fa04f76f0b40f8ca26a1df12df3f87805e303b8fc914c8d.
+All completed runs have retained source/probe inventories,37-file restoration and
+unchanged actual save bytes/timestamps. Earlier alignment/startup failures remain.

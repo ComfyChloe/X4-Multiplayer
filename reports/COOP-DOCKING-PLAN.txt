@@ -154,3 +154,17 @@ preferences,owned test slot and7actual normal-save bytes/timestamps restored.
 This tests the reported ownership/docking oscillation path in one engine. It is
 not a two-native gameplay acceptance or walking/barrier test: seat changes were
 native teleports. Baseline engine warnings are preserved, not called error-free.
+
+WALKABILITY DIAGNOSTIC — bounded PARTIAL
+coop-dock-walk-01, sourced7fab12, repeats only remote station attachment then
+examines the walking prerequisite. Actual indexed bay43866 has one docked ship;
+local player remains on the station. Bay and ship controlroom are both walkable,
+currently walkable and unlocked. With a native pilot actor and supplied station
+airmarshal/cockpit slots, check_walk_path(checkstate=false) returns false in both
+directions. This is an NPC route query, not a player movement/barrier observation;
+it neither establishes a player barrier bug nor qualifies human boarding.
+Raw SHA256dd6ecd20de39d96950eddbf5bcbcb7de38219ce75b1e1e6c045e9e7b3a53fba2.
+37-file restoration and actual save bytes/timestamps independently match. No
+production unlock/teleport workaround follows this diagnostic. Compare the query
+with an ordinary local docking control and valid chair-approach slots before
+interpreting the negative NPC path as a synchronization defect.
