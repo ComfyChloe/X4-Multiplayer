@@ -70,9 +70,11 @@ max setter error1.966mm,final0. Whole run still FAIL: no physical source shots.
 06 FAIL: keyboard Space also0 shots, MD active group0 contains6 guns. Cleaned.
 07 bounded SCRIPTED-source path PASS:54 shots relayed,12 native source oracles
 within5.2cm,12 remote effects/final0. Physical phase still0; no input acceptance.
-Next08 dev-only excludes controlled ship from ShotVisual StopEntity to test
-quiescence hypothesis; do not remove production handover stop without proof.
-No active native game. Primary retains native ownership.
+08 dev override proves StopEntity cancels actual input:54 physical shots pass.
+Production candidate declares observed mode before Prepare, blocks every native
+replay route, preserves actual player input;59 tests/3schemas PASS. Next09 probes
+queued positive/negative legacy attempts with real source/relay/render. No native
+currently active. Primary owns installation; schema worker48913 remains active.
 
 DOCKING / STORY
 reports/COOP-DOCKING-PLAN.txt: coop_docks OFF. Saved bay registry/native Fence ACK,

@@ -5,6 +5,9 @@
   <actions>
    <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
    <set_value name="$arena.$shotVisualEnabled" exact="true"/>
+   <!-- Latch before Prepare: observed mode never starts scripted replay guns.
+        stop_shooting on the actual player ship also suppresses manual input. -->
+   <set_value name="$arena.$projectileVisualEnabled" exact="@event.param3.$observed == true"/>
    <set_value name="$arena.$shotVisualMode" exact="[0,0]"/>
    <set_value name="$arena.$shotVisualGen" exact="[0,0]"/>
    <set_value name="$arena.$shotVisualAt" exact="[-10s,-10s]"/>
@@ -18,7 +21,7 @@
     <set_value name="$arena.$shotVisualMode.{$e}" exact="0"/>
     <set_value name="$arena.$fireRemaining.{$e}" exact="[0,0]"/>
     <set_value name="$arena.$fireManaged.{$e}" exact="false"/>
-    <do_if value="@$arena.$ships.{$e}.isoperational"><stop_shooting object="$arena.$ships.{$e}"/></do_if>
+    <do_if value="@$arena.$ships.{$e}.isoperational and (not @$arena.$projectileVisualEnabled or player.controlled != $arena.$ships.{$e})"><stop_shooting object="$arena.$ships.{$e}"/></do_if>
    </actions></library>
    <library name="Window"><actions>
     <set_value name="$a" exact="event.param3"/><set_value name="$e" exact="$a.$entity"/>

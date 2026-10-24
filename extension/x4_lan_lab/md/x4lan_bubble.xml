@@ -64,8 +64,8 @@
   </do_if>
   <do_if value="$coop"><do_if value="player.occupiedship == $ships.{2}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="'2|%s'.[if $ships.{2}.primaryweapons.{$ships.{2}.activeweapongroup.primary}.list.indexof.{event.object} gt 0 then 'p' else 's']" /></do_if></do_if><do_elseif value="$localSlot == 2"><raise_lua_event name="'X4LAN_Bubble.Fire'" /></do_elseif>
  </actions></cue>
- <cue name="FireOn" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOn'" /></conditions><actions><shoot object="$proxy" /></actions></cue>
- <cue name="FireOff" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOff'" /></conditions><actions><stop_shooting object="$proxy" /></actions></cue>
+ <cue name="FireOn" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOn'" /></conditions><actions><do_if value="not @$projectileVisualEnabled"><shoot object="$proxy" /></do_if></actions></cue>
+ <cue name="FireOff" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOff'" /></conditions><actions><do_if value="not @$projectileVisualEnabled or player.controlled != $proxy"><stop_shooting object="$proxy" /></do_if></actions></cue>
  <cue name="Publish" instantiate="true" checkinterval="0.2s">
   <conditions><check_value value="$host" /></conditions>
   <actions>

@@ -98,12 +98,12 @@
     </cue>
     <cue name="Fire" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'Fire'"/></conditions><actions>
      <set_value name="$ship" exact="$arena.$ships.{event.param3.$ship}"/>
-     <do_if value="$ship.isoperational"><do_if value="event.param3.$on"><shoot object="$ship"/></do_if><do_else><stop_shooting object="$ship"/></do_else></do_if>
+     <do_if value="$ship.isoperational"><do_if value="event.param3.$on"><do_if value="not @$arena.$projectileVisualEnabled"><shoot object="$ship"/></do_if></do_if><do_elseif value="not @$arena.$projectileVisualEnabled or player.controlled != $ship"><stop_shooting object="$ship"/></do_elseif></do_if>
     </actions></cue>
     <!-- FIRE2 grants finite native shot counts. Weapon events stop each trigger at zero. -->
     <cue name="Fire2" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Coop'" control="'Fire2'"/></conditions><actions>
      <set_value name="$v" exact="event.param3"/><set_value name="$ship" exact="$arena.$ships.{$v.$ship}"/>
-     <do_if value="$ship.isoperational">
+     <do_if value="$ship.isoperational and (not @$arena.$projectileVisualEnabled or player.controlled != $ship)">
       <!-- Recheck after the queue: Prepare may have stopped fire and changed projectile mode. -->
       <do_if value="not (@$arena.$shotVisualEnabled or @$v.$visual or @$arena.$projectileVisualEnabled) or not ($v.$primary or $v.$secondary) or (not @$arena.$projectileVisualEnabled and not @$arena.$shotFailed and @$arena.$shotVisualMode.{$v.$ship} == 2 and @$v.$visualGen gt 0 and $v.$visualGen == $arena.$shotVisualGen.{$v.$ship} and $v.$visualGen == $arena.$shotCurrentGen.{$v.$ship} and $v.$visualGen gt $arena.$healthClosed.{$v.$ship} and player.age - $arena.$shotVisualAt.{$v.$ship} le 0.3s and player.age - $arena.$shotStateAt le 0.3s and player.controlled != $ship)">
       <do_if value="$arena.$fireEpoch.{$v.$ship} != $v.$epoch">

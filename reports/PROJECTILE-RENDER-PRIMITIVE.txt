@@ -235,3 +235,17 @@ Review follow-up: position tolerance now scales per axis with float precision
 accepts0.03125m rounding and rejects50742m displacement;15 adapter tests PASS.
 GetObjectPositionInSector/SetObjectSectorPos declarations explicit in adapter.
 The earlier .01m native run remains its recorded bounded scope.
+
+projectile-adapter-08: controlled dev correction makes PHYSICAL source work.
+Sourcebec0113 with one explicit ShotVisual StopEntity override skipping the
+actual controlled ship; no scripted shoot controls. Focused middle mouse fires54
+original plasma bullets,54 source births/ends pass real relay;12 MD oracles
+within0.047721m.12 synthetic remote visuals stay on line;final0,health100.
+Raw5371bf4764506f553f2d0d51bfd71de38bb9acdc2e43b3d5686c5d8408d34c8e.
+69 source/3 overrides/UI registration,37 restore and actual saves audited.
+This isolates native stop_shooting on the player as the physical-input blocker.
+Production candidate latches observed mode at ShotVisual.Setup before Prepare,
+blocks positive legacy/Bubble/FIRE2 replay, and in this mode never stops the
+actual controlled ship through those queued routes or StopEntity. Remote and
+legacy-mode quiescence remain.59 affected checks/3 MD schemas PASS; next09 tests
+the production implementation plus queued positive/negative legacy requests.

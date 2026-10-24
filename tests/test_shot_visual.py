@@ -50,6 +50,21 @@ class VisualAdapterTests(unittest.TestCase):
          prepared(1);proven(1);assert(V.readyOriginal(1,3,now) and #writes==1)
         ''')
 
+    def test_observed_mode_is_declared_before_native_prepare(self):
+        for observed in (False, True):
+            with self.subTest(observed=observed):
+                self.make().execute('''
+                 X4LAN_CONFIG.projectile_visuals='''+str(observed).lower()+'''
+                 D.ready=true;C.frame(now)
+                 local found=false
+                 for _,q in ipairs(requests) do
+                  if q[1]=='X4LAN_ShotVisual' and q[2]=='Setup' then
+                   assert(q[3].observed=='''+str(observed).lower()+''');found=true
+                  end
+                 end
+                 assert(found)
+                ''')
+
     def test_delayed_prepare_ack_cannot_change_a_new_owner_or_generation(self):
         for change in ('C.owners[2]="p1"', 'H.valid[2]=5', 'H.closed[2]=4', 'V.now=now+.31'):
             with self.subTest(change=change):
@@ -121,6 +136,32 @@ class VisualAdapterTests(unittest.TestCase):
 
 
 class NativeReplayGateTests(unittest.TestCase):
+    def test_observed_mode_latches_before_prepare_and_never_stops_actual_player_input(self):
+        root=ROOT/'extension/x4_lan_lab/md'
+        visual=E.parse(root/'x4lan_shot_visual.xml');session=visual.find('cues/cue')
+        actions=list(session.find('actions'))
+        flag=next(x for x in actions if x.get('name')=='$arena.$projectileVisualEnabled')
+        ready=next(x for x in actions if x.tag=='raise_lua_event')
+        self.assertEqual(flag.get('exact'),'@event.param3.$observed == true')
+        self.assertLess(actions.index(flag),actions.index(ready))
+        stop=next(x for x in visual.iter('library') if x.get('name')=='StopEntity').find('actions/do_if')
+        coop=E.parse(root/'x4lan_coop.xml')
+        fire2=next(x for x in coop.iter('cue') if x.get('name')=='Fire2').find('actions/do_if')
+        for expr in (stop.get('value'),fire2.get('value')):
+            expr=expr.replace('@$arena.$ships.{$e}.isoperational','operational').replace('$ship.isoperational','operational')
+            expr=expr.replace('@$arena.$projectileVisualEnabled','observed').replace('player.controlled != $arena.$ships.{$e}','not piloted').replace('player.controlled != $ship','not piloted')
+            self.assertNotIn('$',expr)
+            for observed in (False,True):
+                for piloted in (False,True):
+                    self.assertEqual(eval(expr,{},dict(operational=True,observed=observed,piloted=piloted)),not(observed and piloted))
+                    self.assertFalse(eval(expr,{},dict(operational=False,observed=observed,piloted=piloted)))
+        # Both pre-FIRE2 routes must also refuse positive native shooting.
+        legacy=next(x for x in coop.iter('cue') if x.get('name')=='Fire')
+        self.assertEqual(legacy.find('actions/do_if/do_if/do_if').get('value'),'not @$arena.$projectileVisualEnabled')
+        bubble=E.parse(root/'x4lan_bubble.xml')
+        on=next(x for x in bubble.iter('cue') if x.get('name')=='FireOn')
+        self.assertEqual(on.find('actions/do_if').get('value'),'not @$projectileVisualEnabled')
+
     def test_queued_positive_grant_is_refused_after_mode_gen_closure_or_expiry_change(self):
         tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_coop.xml')
         cue=next(c for c in tree.iter('cue') if c.get('name')=='Fire2')

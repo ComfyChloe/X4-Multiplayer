@@ -115,7 +115,7 @@ end
 local frame=c.frame
 function c.frame(now)
  frame(now);v.now=now
- if d.ready and not v.setup then v.setup=true;AddUITriggeredEvent('X4LAN_ShotVisual','Setup') end
+ if d.ready and not v.setup then v.setup=true;AddUITriggeredEvent('X4LAN_ShotVisual','Setup',{observed=cfg.projectile_visuals==true}) end
  if v.ready and not v.failed then local ok,err=pcall(v.frame,now);if not ok then v.fail(err) end end
 end
 local function guard(fn) return function(_,payload) local ok,err=pcall(fn,payload);if not ok then v.fail(err) end end end
