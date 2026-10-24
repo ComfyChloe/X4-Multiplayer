@@ -2,8 +2,8 @@ X4 MULTIPLAYER — HUMAN DAMAGE TEST PROCEDURE
 Revision 2 — 24 October 2026 — INTERNAL
 
 STATUS / WHEN TO USE
-For the matched7.4.0 INTERNAL Windows/Linux candidate and its server. Enabled
-cases and progression are assigned in NEXT-TEST.txt. Earlier7.3.1 packages have
+For the matched 7.4.0 INTERNAL Windows/Linux candidate and its server. Enabled
+cases and progression are assigned in NEXT-TEST.txt. Earlier 7.3.1 packages have
 no damage correction and must not join this session. This document launches
 nothing; the two humans operate their own games and collect results.
 
@@ -52,18 +52,19 @@ Repeat D01 with attacker/victim roles reversed. Record the new starting values;
 do not assume the previous target is fully repaired. Stop after the first mismatch.
 
 D03 — NONLETHAL HULL DAMAGE (ONLY AFTER D01/D02 PASS)
-Use the attacker/victim direction assigned by the developer. Fire short bursts
+Host shoots the guest. Fire short bursts
 with pauses until shields are depleted, then observe a small hull decrease.
 Stop promptly; preserve ample hull for a nonlethal check. Compare both views and
 watch for hull jumping back. Do not interpret shields alone as hull-damage success.
 
 D04 — MOVING VICTIM (ONLY AFTER STATIONARY CASES PASS)
-The assigned victim flies straight at a low steady speed. The attacker uses the
+Guest flies straight at a low steady speed; host shoots. The host uses the
 same weapon/group and fires short bursts. Record both health views. Note visible
 hits/misses separately: visual shot alignment and shared health are different checks.
 
 D05 — DELIBERATE MISS / FREE AIM
-Keep the victim selected, aim clearly beside it and fire a short burst into empty
+Run once in each direction. Keep the victim selected, aim clearly beside it
+and fire a short burst into empty
 space. Do not aim through other objects. Record both views. Expected: selection
 alone causes no damage; the remote visual follows the shooter's actual direction.
 Native spread and gun tracking can cause occasional misses even when aimed at a
@@ -71,13 +72,15 @@ ship. Those are not automatically synchronization failures. Never compare the
 number of visible tracers with damage without accounting for actual impacts.
 
 D06 — STOP FIRING / RECHARGE
-After a small shield loss, stop firing completely and observe both screens until
+Guest causes a small shield loss on the host, then stops firing completely.
+Observe both screens until
 recharge begins. Record the last hit and recharge times. Check for additional
 remote shots, repeated damage, or replay effects delaying recharge. Recharge
 parameters belong to the supplied shield; no universal delay is assumed here.
 
 D07 — LETHAL DAMAGE / SURVIVING PLAYER (ONLY IF EXPLICITLY ENABLED)
-Use the assigned target direction and disposable test ships. Continue short
+If you choose this optional case, host shoots the guest's disposable test ship.
+Continue short
 bursts until destruction. Expected: the victim ejects before ship destruction,
 the survivor remains controllable, and a later burst into empty space still
 works. Record the ejection/destruction order on both screens. Do not shoot the
@@ -109,5 +112,5 @@ useful. Screenshots at the agreed points are sufficient for a first report.
 Announce the test in the active development chat if local live log observation is
 wanted. No unattended monitor is currently installed by this procedure. Remote
 guest logs still need to be supplied unless a separate read access is arranged.
-7.3.1 diagnostics are not a complete per-projectile trace; the next damage
-candidate may add targeted telemetry. Existing logs alone cannot prove every hit.
+The diagnostics are not a complete per-projectile trace. HUD comparisons and
+case times still matter; a visible projectile alone cannot prove a native hit.

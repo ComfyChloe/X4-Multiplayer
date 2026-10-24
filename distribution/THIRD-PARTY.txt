@@ -1,0 +1,20 @@
+THIRD-PARTY RUNTIME NOTICES
+
+This internal package includes Python 3.14.8; no system Python install is needed.
+Windows: official CPython embeddable x64 distribution, Python Software Foundation.
+  https://www.python.org/downloads/release/python-3148/
+  License and bundled component notices: runtime/LICENSE.txt.
+Linux: Astral python-build-standalone release 20261009, x86_64 Linux GNU.
+  https://github.com/astral-sh/python-build-standalone/releases/tag/20261009
+  Python license: runtime/lib/python3.14/LICENSE.txt.
+  Upstream runtime/dependency license collection: licenses/python/.
+  Additional installed-package notices remain inside the runtime tree.
+RUNTIMES.json records upstream download URLs and pinned archive SHA256 hashes.
+The Windows import-path file includes this package's own scripts. Linux's Tar
+archive preserves runtime links and executable modes. Runtime files are not
+installed globally or downloaded by the launchers.
+
+X4: Foundations and its game assets are not included. Install X4 through Steam.
+This experimental mod is not an official Egosoft release. Steam and ZeroTier are
+separate products; neither is bundled here. Do not redistribute locally extracted
+X4 schemas, meshes, textures or other game assets with these packages.

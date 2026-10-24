@@ -1,9 +1,10 @@
 X4 Multiplayer {{VERSION}} — INTERNAL TEST
 24 October 2026 | Windows/Linux host or guest | Two players per session
-X4 9.00, Steam build23660954 | Matching official DLC including Timelines
+X4 9.00, Steam build 23660954 | Matching official DLC including Timelines
 
 Both packages include the server and a private Python runtime. No Python install
 or download is needed. Open 00-START-HERE.html for detailed instructions.
+Extract Linux's .tar.xz or Windows' .zip completely before running any action.
 
 WHAT CHANGED
 This candidate transmits damage from actual stock-weapon impacts and renders the
@@ -20,6 +21,10 @@ plasma or generic pulse Mk1/Mk2 guns. Other weapons, NPC/station combat, short-r
 shots that end before UI capture, and changing pilot during live fire are not
 qualified. Do not treat a visible replica as complete shared NPC gameplay.
 
+One combined startup check refused the second ship's weapon loadout; later runs
+did not reproduce it. If damage is unavailable after connection, collect both
+diagnostics before restarting. The refusal log now includes a specific reason.
+
 Normal profiles stay read-only. Personal resolution, quality, sound and bindings
 are imported into the isolated test profile, which uses borderless mode.
 Existing radar, ordinary cargo, movement, station/asteroid alignment, Alt+Tab and
@@ -29,7 +34,7 @@ host-authoritative. Saving/resuming a played multiplayer campaign is not ready.
 
 HOST
 1. Close X4 and the old server. Remove the previous mod using its ORIGINAL
-   package's REMOVE-MOD action (09 in7.3.1;5 in7.3.0). Extract into a new folder.
+   package's REMOVE-MOD action (09 in 7.3.1; 5 in 7.3.0). Extract into a new folder.
 2. Run 01-INSTALL, choose H, enter your reachable LAN/ZeroTier IPv4 address.
    Choose your normal settings profile if asked.
 3. Run 02-PREPARE-WORLD-HOST once. X4 opens, creates the shared world, saves and closes
@@ -48,7 +53,7 @@ GUEST
 
 The numbers identify actions; guests skip HOST-only actions 02 and 03.
 Windows: double-click the numbered .cmd files. Linux: run the matching .sh files
-from a terminal, for example bash 01-INSTALL.sh. Allow UDP45841 and TCP45844 to the
+from a terminal, for example bash 01-INSTALL.sh. Allow UDP 45841 and TCP 45844 to the
 host on your test network. A successful UDP check alone does not test the save
 transfer. No router forwarding is needed with a working ZeroTier connection.
 
@@ -67,16 +72,16 @@ is not resumed. To create a different world/session, use a fresh extracted pair
 and a new invitation. 02-PREPARE-WORLD-HOST never regenerates an existing world.
 
 ONLY the reserved, recorded save_010 belongs to the launcher. Other or changed
-saves are preserved and cause a refusal. Never save a normal campaign in45841.
+saves are preserved and cause a refusal. Never save a normal campaign in profile 45841.
 09-REMOVE-MOD removes its byte-matching reserved copy and archives the owned mod;
 the package keeps the immutable world bundle. Close X4 and the relay first.
 
 The setup does not change Workshop selections or subscribe/unsubscribe to mods.
-The withdrawn7.2 Fix-1 helper is not included. A separate profile does not by
+The withdrawn 7.2 Fix-1 helper is not included. A separate profile does not by
 itself isolate the Steam account. If content differs, stop and compare the two
 setups; no automatic mod-selection rewrite is performed.
 
-NEXT-TEST.txt describes tonight's focused test. Run06-DIAGNOSTICS on BOTH PCs before
+NEXT-TEST.txt describes tonight's focused test. Run 06-DIAGNOSTICS on BOTH PCs before
 restarting after a failure. Keep logs, role/OS, object code and approximate time.
 Do not share JOIN-SESSION.json, session.json or ui/config.lua publicly.
 This remains an INTERNAL test, with two simultaneous players per session.

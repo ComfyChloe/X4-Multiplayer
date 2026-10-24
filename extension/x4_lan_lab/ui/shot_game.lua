@@ -4,8 +4,8 @@
 -- increase through the native damage primitive (md/x4lan_shot.xml), so the engine resolves
 -- shields, hull, floor, death and kill credit at the authority's real state.
 -- Bounded: only a uniform, unmodified loadout of ordinary hullshield-only bullets without turrets
--- is supported; anything else refuses claims on that machine. CAPTURE AND UNDO ARE NOT ARMED:
--- nothing here reads damage callbacks; d.hit is the entry point a qualified capture will use.
+-- is supported; anything else refuses claims on that machine. shot_capture.lua supplies native
+-- cumulative hit counts when explicitly enabled; this module never guesses hits from visuals.
 --  SHOT|1|lease|shooter|shooterGen|victim|victimGen|seq|hits|macro:strength   shooter -> relay
 --  forwarded to the victim's authority with the source lease after the recipient lease.
 -- Generations are the relay's health generations (HGEN, health_game.lua); LAN targets use 0.
@@ -99,7 +99,7 @@ local function shooter()
  for e=1,2 do if not h.failed and c.owners[e]==cfg.slot and c.pilots[e]==cfg.slot and validGen(e) and
    (cfg.slot=='p1' or h.live and h.live.entity==e and h.live.gen==validGen(e)) then return e,validGen(e) end end
 end
--- Capture entry (unarmed): n native hits of my own ship on victim v.
+-- Incremental capture entry: n native hits of my own ship on victim v.
 function d.hit(v,n)
  local e,gen=shooter();local vg=v and v>=1 and v<=4 and victimGen(v)
  n=integer(n or 1,1000000)

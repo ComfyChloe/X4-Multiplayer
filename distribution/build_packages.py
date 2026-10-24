@@ -43,7 +43,7 @@ def build(destination: Path, runtime_cache: Path | None = None):
         if not (runtime_cache / 'licenses').is_dir(): raise ValueError('Runtime licenses are required.')
     destination.mkdir(parents=True, exist_ok=False)
     pair_id = 'internal-dist-' + secrets.token_hex(8)
-    folders = []
+    folders, archives = [], []
     for platform in ('Linux', 'Windows11'):
         root = destination / f'X4-LAN-{release}-{platform}'
         root.mkdir(); folders.append(root)
@@ -93,6 +93,7 @@ def build(destination: Path, runtime_cache: Path | None = None):
                 write(runtime / 'python314._pth', 'python314.zip\n.\n..\n')
             shutil.copytree(runtime_cache / 'licenses', root / 'licenses/python')
             write(root / 'RUNTIMES.json', json.dumps(runtimes, indent=2) + '\n')
+            shutil.copy2(DIST / 'THIRD-PARTY.txt', root / 'THIRD-PARTY.txt')
         actions = {'01-INSTALL': 'setup', '02-PREPARE-WORLD-HOST': 'prepare-world',
                    '03-START-SERVER-HOST': 'server', '04-TEST-CONNECTION': 'test',
                    '05-START-X4': 'start', '06-DIAGNOSTICS': 'diagnose',
@@ -114,11 +115,19 @@ def build(destination: Path, runtime_cache: Path | None = None):
         for cache in root.rglob('__pycache__'): shutil.rmtree(cache)
         files = sorted(p for p in root.rglob('*') if p.is_file())
         write(root / 'SHA256SUMS.txt', ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.relative_to(root).as_posix() + '\n' for p in files))
-        archive = destination / (root.name + '.zip')
-        with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
-            for path in sorted(root.rglob('*')):
-                if path.is_file(): z.write(path, path.relative_to(destination))
-    write(destination / 'PACKAGES-SHA256.txt', ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in sorted(destination.glob('*.zip'))))
+        if platform == 'Linux':
+            # Preserve runtime aliases and executable modes. ZIP follows these
+            # links and duplicates the large interpreter/shared-library files.
+            archive = destination / (root.name + '.tar.xz')
+            with tarfile.open(archive, 'w:xz', preset=9) as tar:
+                tar.add(root, arcname=root.name)
+        else:
+            archive = destination / (root.name + '.zip')
+            with zipfile.ZipFile(archive, 'w', zipfile.ZIP_DEFLATED) as z:
+                for path in sorted(root.rglob('*')):
+                    if path.is_file(): z.write(path, path.relative_to(destination))
+        archives.append(archive)
+    write(destination / 'PACKAGES-SHA256.txt', ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in sorted(archives)))
     for name in ('INSTALL.html', 'README.txt', 'NEXT-TEST.txt'):
         document(DIST / name, destination / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
     shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', destination / 'WORLD-SYNC-TEST.txt')

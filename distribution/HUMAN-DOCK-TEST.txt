@@ -1,8 +1,8 @@
 X4 MULTIPLAYER — HUMAN STATION DOCKING TEST
-24 October 2026 — INTERNAL7.4.0 CANDIDATE
+24 October 2026 — INTERNAL 7.4.0 CANDIDATE
 
-Use the matched7.4.0 pair/server and the case order in NEXT-TEST.txt. This
-document starts no game/server. Earlier7.3.1 is incompatible. Use the same
+Use the matched 7.4.0 pair/server and the case order in NEXT-TEST.txt. This
+document starts no game/server. Earlier 7.3.1 is incompatible. Use the same
 shared starting world, the supplied Shuttles, and the named LAN Trading Station
 Beta. Keep combat and NPC-order experiments out of this run.
 

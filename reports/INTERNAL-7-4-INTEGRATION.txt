@@ -52,3 +52,14 @@ Full integration suite after activation/test-contract updates:565 Linux/LuaJIT
 PASS/no skips. After portable test-fixture-only update:10 affected PASS. After
 expiry guard:18 affected PASS; final candidate suite/package checks still pending.
 No7.4 package or matched human acceptance follows from this report alone.
+
+TARGETED STARTUP DIAGNOSTIC — 24 OCTOBER 2026
+.local/evidence-110-withheld reloads the original integration01 sealed pristine seed
+using production c7e0b6f and an observation-only loadout probe. Both shooters
+admit at age15.22. Four reports per ship over15 seconds contain48 successful
+operational/unmodified gun reads and turret count0. No firing or dock sequence
+was repeated. The original refusal is STILL unresolved, not a claimed fix.
+Raw load.log SHA256:
+03b447294a0ab660713d2a7c55d26353941c5cc08a2b657348dfef379218418a
+Audit verifies70 production files,5 dev probes/UI/config,37 restored files and
+seven actual normal-save bytes/timestamps. Controller and owned game closed.
