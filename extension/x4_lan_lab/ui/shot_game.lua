@@ -55,7 +55,7 @@ function d.loadout(payload)
   local done,entry=pcall(function() return GetLibraryEntry(GetMacroData(macro,'infolibrary'),macro) end)
   ok=done and type(entry)=='table'
   strength=ok and number(entry.hullshielddpshot,1e6)
-  if not strength or strength~=STOCK[macro] or entry.isbeamweapon~=false then ok=false end
+  if not strength or strength~=STOCK[macro] or entry.isbeamweapon~=0 then ok=false end
   for _,k in ipairs(OTHER) do if ok and tonumber(entry[k])~=0 then ok=false end end
  else ok=false end
  local v=ok and {macro=macro,strength=strength,digest=string.format('%s:%.3f',macro,strength)} or false

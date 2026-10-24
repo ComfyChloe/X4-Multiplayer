@@ -90,3 +90,11 @@ substitution remain unqualified. Do not enable replay damage undo as a complete
 solution. In-flight shots across handovers, native loadout queries, floor/life
 coordination and whole capture-to-application protocol still need qualification.
 Claude reported a usage-limit stop; primary owns further review/integration work.
+
+NATIVE SHOT FUNCTION RUN01: FAIL (source1b04fdb)
+The real library returns isbeamweapon=0 (numeric), as stock helper.lua also uses;
+the initial boolean-false gate refused both actual six-gun X-Shuttle loadouts.
+No SHOT application ran. Corrected to require numeric0, with numeric fixtures and
+explicit1/nil/false refusals. Actual other per-shot/area channels all returned0.
+Raw SHA256fad188e953c4fbc8ddeb218e15e444994eba7e3b58f181f815b337d3bd1cdff5.
+Native run02 repeats the previously unreachable application gates;01 stays FAIL.

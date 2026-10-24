@@ -94,7 +94,7 @@ class ShotAdapterTests(unittest.TestCase):
          GetComponentData=function() return 'cluster_14_sector001_macro' end
          mods={};entries={weapon_ter_s_plasma_01_mk1_macro={hullshielddpshot=40},weapon_gen_s_laser_01_mk1_macro={hullshielddpshot=30,hullonlydpshot=5}}
          for _,entry in pairs(entries) do
-          entry.isbeamweapon=false
+          entry.isbeamweapon=0
           for _,k in ipairs({'shieldonlydpshot','hullnoshielddpshot','hullshieldareadpshot','shieldonlyareadpshot','hullonlyareadpshot','hullnoshieldareadpshot'}) do entry[k]=0 end
           entry.hullonlydpshot=entry.hullonlydpshot or 0
          end
@@ -196,7 +196,7 @@ class ShotAdapterTests(unittest.TestCase):
         self.assertEqual(tuple(out),(True,0,0,1))
 
     def test_stock_gate_refuses_beams_missing_channels_and_unknown_macros(self):
-        for mutation in ("entries[P].isbeamweapon=true", "entries[P].hullonlyareadpshot=nil",
+        for mutation in ("entries[P].isbeamweapon=1", "entries[P].isbeamweapon=nil", "entries[P].isbeamweapon=false", "entries[P].hullonlyareadpshot=nil",
                          "entries.unknown_weapon_macro=entries[P];P='unknown_weapon_macro'"):
             with self.subTest(mutation=mutation):
                 l=self.make('p1');l.execute(mutation)
