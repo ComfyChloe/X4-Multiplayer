@@ -59,11 +59,30 @@ and seven actual normal saves verified. Game/helpers closed. This separately
 checks native guest capture and WORLD readback; the earlier shot-function02
 checks native host claim application. It is still NOT two native games.
 
-A subsequent source fix treats an inoperative/dead ship as unavailable for
-visual proof instead of stopping the entire SHOT module while checking its guns.
-The native watchdog clears that entity; other ships keep working. Nine affected
-visual tests and changed MD schema PASS; integrated lethal/native continuation
-qualification is next. A new ship identity still needs a new Stop/readback proof.
+LETHAL HULL / CLIPPED CALLBACK / SURVIVING SHIP
+3ce8d22 changes dead/inoperative ship proof to revoke that entity instead of
+permanently stopping SHOT while querying its dead guns. Nine affected visual
+checks and changed MD schema PASS. New identities still require fresh proof.
+Native hull01 starts target1 at5%/0shield (229HP). Eight independent40HP hull
+callbacks produce Count1..8; the host accepts cumulative7 before ending the
+victim's generation (2->3). Its canonical hull reaches0 and the native guest
+destroys ship1 once. The eighth late old-generation count is not applied to the
+new generation. The surviving player's proof stays ready, all modules unfailed,
+and162 further original bullets fire. This run did NOT exercise floor clipping.
+Its fixture also sets an unused cargo field at death; economy mode does not apply
+that field. Raw c561f1df4a6da0428c0303fd19411a554906b77e98d2b22ac5123f574c376e46.
+
+Clipped01 removes that unused fixture assignment and starts target1 at1.02% hull
+(46.716HP),0shield. One independent native hull callback reports0.915999HP because
+of the1% proxy floor. Capture emits ONE hit at admitted strength40, not the small
+physical delta. The synthetic host computes0.1466375546% canonical hull, below
+the1.01% death threshold; native ship1 is destroyed once. The survivor's original
+proof remains ready and no SHOT/visual/capture module fails. Strict bounded PASS.
+Raw 15be522ed106bb05b7fac3e0f3a359eefa0613e97f4b3741a34ce24eba7431d3.
+Both runs source3ce8d22:56 installed production files/probes,37-file restoration
+and seven actual normal-save bytes/timestamps verified. No parser/API failure;
+raw baseline warnings preserved. These are still separate one-native/synthetic
+peer cases, not a joined Windows/Linux gameplay session.
 
 PENDING
 Matched native Windows/Linux, arbitrary free-aim VISUAL replay, in-flight authority
