@@ -1,0 +1,84 @@
+SHOOTER-CONFIRMED PER-HIT DAMAGE (design only; no code, no activation, no native run)
+24 Oct 2026, Claude, at A:primary's request after last-attacker-01: inside every native damage
+callback, target.lastattacker/lastattacktime matched the canonical per-projectile
+player_ship_hit attacker/time, switching within ~0.07 s. Unlike the throttled attack
+notifications (PR #34, withdrawn), this is a per-hit source primitive, still to be qualified
+for same-frame overlap.
+
+POLICY (one rule everywhere, so nothing is counted twice)
+Player-vs-player and player-vs-shared-target hits count as the SHOOTER saw them, in the
+shooter's world. Everything else (NPCs, collisions, environment) counts where the victim's
+authority lives today. Concretely, for every victim V and every machine M:
+ U  Undo: on V's authority machine, a native hit on V whose lastattacker is the REPLAYED remote
+    player ship (the FIRE2 proxy) is given back immediately, inside the same MD damage
+    callback (set_object_shield/hull += damage). That is the replay's copy of a shot whose
+    real outcome the shooter reports.
+ C  Claim: on the shooter's machine, a native hit by its OWN piloted co-op ship on a remote
+    player's ship or a shared host-authoritative target is reported as cumulative damage.
+ A  Apply: V's authority machine applies the increase of those totals natively.
+Victim authority machine: ship 1 (host-piloted) -> host; ship 2 (guest-piloted, HEALTH live)
+-> guest, whose HEALTH reports then carry the result to the host proxy; LAN targets / shared
+NPC objects -> host.
+
+NO DOUBLE COUNTING
+- Every player-vs-player hit exists twice: native in the shooter's world (claimed, C) and as a
+  FIRE2 replay in the victim's world (undone, U). Exactly one survives (the claim). A replay
+  shot that misses in the victim's world has no copy to undo; a shooter's miss produces no
+  claim. Intentional misses stay misses. There is no aim assistance.
+- The host's OWN hits on the guest proxy in the host world are native, but HEALTH overwrites that
+  proxy with the pilot's value, so they vanish; the host's claim (C) to the guest pilot is the
+  one copy. On the guest, the host's replayed shots on the guest's own ship are undone (U).
+  Symmetric.
+- Attribution per callback: lastattacker at callback time. Ambiguity rule (bounded,
+  conservative): if one game time sees damage callbacks on V with more than one distinct
+  lastattacker, or a lastattacker that is null or destroyed, those callbacks are neither undone
+  nor claimed. The native result stands. That is the residual error to measure.
+- Child components: hull events only where damaged component == V (as PR #34). Shield events on
+  V itself.
+
+HP FLOOR AND DEATH
+- U runs inside the damage callback, so it lands before any life tick (event cues run at
+  callback time; LifeTick is a 0.05 s checkinterval cue). Player ships keep min hull 1%, so a
+  replay hit can never destroy a ship before its undo.
+- Death stays with the victim authority: a claim that brings V to <= 1.01% leads to the existing
+  LifeTick (ships) or the LAN-target floor kill (targets keep the 1% floor while claims are
+  active; a claim reaching the floor destroys, as in PR #34).
+- Shields: an undo restores at most the damage of that callback, capped at maxshield. A claim
+  applies shield then hull as reported (the shooter's callbacks already split them).
+
+EPOCH, AUTHORITY AND TRANSPORT (reuses the HEALTH fences)
+- SHOT|1|lease|shooterEntity|shooterGen|victim|victimGen|seq|shieldTotal|hullTotal: cumulative
+  totals per (shooter lease, shooter entity, shooter generation, victim, victim generation).
+  The relay accepts it only from the slot that owns AND pilots the shooter entity, in its
+  current HEALTH-style generation. It forwards it only to the victim's current authority machine
+  (ship 1 / targets -> host; ship 2 -> its pilot while its HEALTH generation is live; otherwise
+  host). A victim generation change starts new totals, so nothing is applied twice across
+  handovers.
+- The victim applies only increases, in seq order, as Lua -> MD writes with generation fences
+  and the same wall-second/game-age window as HEALTH. Refused writes are re-issued from the
+  totals, which stay monotonic.
+- Any AUTH transition of the shooter or victim ends the affected totals (as HEALTH generations).
+- Pause, stall and failure: the same rules as HEALTH. No claim is applied without a fresh
+  readback window. A failure closes the module permanently.
+
+INTERACTION WITH HEALTH
+- Required: the ship 2 victim path needs HEALTH live (the pilot applies claims, then reports).
+  Without HEALTH, ship 2 stays host-authoritative and receives claims on the host proxy, with
+  the guest's undo (U) off.
+- HEALTH's 2% proxy floor and generation fences are unchanged. Claims are just another local
+  damage source in the pilot's world.
+
+NATIVE QUALIFICATION NEEDED (A:primary, before any activation)
+1. Two attackers hitting V in the same game frame: does each callback see its own
+   lastattacker, or the last one? This decides whether the ambiguity rule fires rarely or often.
+2. Order within one hit: is lastattacker updated before BOTH shield_damaged and hull_damaged?
+3. Are lastattacker/lastattacktime stale for callbacks with no attacker (collision, area,
+   hull repair)? Does lastattacktime == player.age identify a fresh value?
+4. Missiles and bombs: is lastattacker the launching ship?
+5. set_object_hull/shield inside a damage callback: no recursion or extra events (your earlier
+   capture says setters emit none).
+6. Undo at the 1% floor: is the reported damage the applied amount when clamped at min hull?
+
+FILES (if approved, later): new ui/shot_game.lua, md/x4lan_shot.xml, an x4lan/coop.py SHOT branch,
+flag shot_claims (default false), tests incl. MD-interpreter fence tests. No changes to
+coop_game.lua, bubble or HEALTH semantics beyond reading their generations.
