@@ -17,7 +17,12 @@ TOKENS = [
     (re.escape(WALL), "P['wall']"),
     (r'player\.timewarp\.factor', "P['timewarp']"),
     (r'player\.age / 1s', "P['age']"), (r'player\.age', "P['age']"),
-    (r'@\$arena\.\$healthProbe', "S.get('Probe', False)"),             # dev probe switch (unindexed)
+    (r'@\$arena\.\$healthProbe', "S.get('Probe', False)"),
+    (r'@?\$arena\.\$shot(\w+)\.\{\$k\}', lambda m: "S['shot%s'][k]" % m[1]),
+    (r'@?\$arena\.\$shot(\w+)\.\{\$a\.\$(\w+)\}', lambda m: "S['shot%s'][A.get('%s', 0)]" % (m[1], m[2])),
+    (r'@?\$arena\.\$dead\.\{\$a\.\$(\w+)\}', lambda m: "S['dead'][A.get('%s', 0)]" % m[1]),
+    (r'@\$(victim|attacker)\.isoperational', "P['operational']"),
+    (r'(?<![.\w])\$(k|dead)\b', r'\1'),                 # MD locals of the shot Apply cue (not $arena.$dead)
     (r'@?\$arena\.\$health(\w+)\.\{(\$\w+|\d+)\}', lambda m: "S['%s'][%s]" % (m[1], m[2].lstrip('$') if m[2].startswith('$') else m[2])),
     (r'@?\$arena\.\$dead\.\{(\$\w+)\}', lambda m: "S['dead'][%s]" % m[1].lstrip('$')),
     (r'@\$ship\.isoperational', "P['operational']"),
@@ -58,15 +63,17 @@ def run(actions, S, A, P, e):
                 if tag == 'do_else' or eval(py(node.get('value')), env):
                     chain_done = True; block(list(node))
             elif tag == 'do_all':
-                for i in range(1, int(node.get('exact')) + 1):
-                    env[node.get('counter').lstrip('$')] = i; block(list(node))
+                exact = node.get('exact'); counter = (node.get('counter') or '$_').lstrip('$')
+                for i in range(1, int(exact if exact.isdigit() else eval(py(exact), env)) + 1):
+                    env[counter] = i; block(list(node))
             elif tag == 'set_value':
                 name = node.get('name')
-                if name in ('$a', '$e', '$ship', '$s', '$d', '$o'): continue      # local aliases
-                target = re.fullmatch(r'\$arena\.\$health(\w+)\.\{\$(\w+)\}', name)
+                if name in ('$k', '$dead'): env[name[1:]] = eval(py(node.get('exact')), env); continue
+                if name in ('$a', '$e', '$ship', '$s', '$d', '$o', '$attacker', '$victim'): continue      # local aliases
+                target = re.fullmatch(r'\$arena\.\$(health|shot)(\w+)\.\{\$(\w+)\}', name)
                 if not target: raise AssertionError('unsupported set_value ' + name)
-                S[target[1]][env[target[2]]] = eval(py(node.get('exact')), env)
-            elif tag in ('set_object_hull', 'set_object_shield', 'set_object_min_hull', 'debug_text', 'raise_lua_event'):
+                S[target[2] if target[1] == 'health' else 'shot' + target[2]][env[target[3]]] = eval(py(node.get('exact')), env)
+            elif tag in ('set_object_hull', 'set_object_shield', 'set_object_min_hull', 'debug_text', 'raise_lua_event', 'apply_attackstrength'):
                 effects.append((tag, node.get('exact')))
             else:
                 raise AssertionError('unsupported action ' + tag)
