@@ -90,6 +90,7 @@ end
 function d.hit(v,n)
  local e,gen=shooter();local vg=v and v>=1 and v<=4 and victimGen(v)
  n=integer(n or 1,1000000)
+ if cfg.shot_visual and (not A.shotVisual or not A.shotVisual.readyOriginal(e,gen)) then return false end
  if d.failed or not e or not d.support[e] or v==e or not vg or not n or n<1 or authority(v,vg) then return false end
  local k=key(e,gen,v,vg)
  d.totals[k]=math.min(1000000,(d.totals[k] or 0)+n);d.dirty=true

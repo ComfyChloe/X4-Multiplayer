@@ -247,7 +247,9 @@ end
 local function fire2Frame(i,r,ship,now)
  local q=c.fire2[i]
  if not q then return end
- if now-q.at>.35 or c.owners[i]==cfg.slot or not C.IsComponentOperational(ship) then
+ local visualGen=A.health and A.health.valid[i]
+ local visualReady=not cfg.shot_visual or A.shotVisual and A.shotVisual.readyReplay(i,visualGen,now)
+ if not visualReady or now-q.at>.35 or c.owners[i]==cfg.slot or not C.IsComponentOperational(ship) then
   -- Freshness: stop even if motion keeps rendering a frozen prediction.
   stopFire2(i);return
  end
@@ -283,7 +285,7 @@ local function fire2Frame(i,r,ship,now)
   -- MD stops the old group before activating a new one, in the same action block.
   q.on=on;AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,epoch=q.epoch,primary=on[1],secondary=on[2],
    primaryShots=grant[1],secondaryShots=grant[2],primaryGroup=q.group[1],secondaryGroup=q.group[2],
-   resetPrimary=reset[1],resetSecondary=reset[2]})
+   resetPrimary=reset[1],resetSecondary=reset[2],visual=cfg.shot_visual==true,visualGen=visualGen or 0})
  end
 end
 local function publishMetrics(now)

@@ -1,0 +1,21 @@
+<?xml version='1.0' encoding='utf-8'?>
+<macros>
+  <macro class="bullet" name="x4lan_visual_plasma_bullet_macro">
+    <component ref="bullet_ter_s_plasma_01_mk1" />
+    <properties>
+      <bullet amount="1" barrelamount="1" maxhits="1" ricochet="0" scale="0" attach="0" speed="2300" lifetime="1.7" timediff="0.1" angle="0.18" restitution="1" recoil="75" icon="weapon_plasma_mk1" />
+      <heat value="172" />
+      <reload rate="9" />
+      <damage value="0" repair="0" />
+      <effects>
+        <bigobjectimpact ref="impact_ter_s_plasma_01_mk1_bigobject" inside="impact_ter_s_plasma_01_mk1_bigobject_inside" />
+        <impact ref="impact_ter_s_plasma_01_mk1" inside="impact_ter_s_plasma_01_mk1_inside" />
+        <launch ref="muzzle_ter_s_plasma_01_mk1" />
+      </effects>
+      <sounds>
+        <firing ref="weapon_ter_s_plasma_01_mk1_loop" />
+      </sounds>
+      <weapon system="weapon_standard" />
+    </properties>
+  </macro>
+</macros>

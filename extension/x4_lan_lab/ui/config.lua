@@ -5,6 +5,7 @@ X4LAN_CONFIG = {
     trading = false,
     fire2 = false, -- Matched internal packages select FIRE2 before any shot is played.
     pilot_health = false, -- Dev only: pilot-reported co-op ship health (health_game.lua).
+    shot_visual = false, -- Dev only: verified harmless FIRE2 projectiles; requires fire2/SHOT/HEALTH.
     shot_claims = false, -- Dev only, needs pilot_health: shooter-confirmed hit counts (shot_game.lua).
     interaction_test = false, -- Destructive fixtures ONLY in the disposable test world.
     test_profile = "45841",
