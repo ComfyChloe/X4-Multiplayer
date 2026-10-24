@@ -47,7 +47,11 @@ function d.loadout(payload)
   n=n+1
   if macro and m~=macro then ok=false end
   macro=m
-  local done,mod=pcall(function() return C.GetInstalledWeaponMod(ConvertStringTo64Bit(id),ffi.new('UIWeaponMod',{})) end)
+  local done,mod=pcall(function()
+   local weapon=ConvertIDTo64Bit(id)
+   assert(weapon and weapon~=0 and C.IsComponentOperational(weapon),'weapon identity unavailable')
+   return C.GetInstalledWeaponMod(weapon,ffi.new('UIWeaponMod',{}))
+  end)
   if not done or mod then ok=false end
  end
  local strength

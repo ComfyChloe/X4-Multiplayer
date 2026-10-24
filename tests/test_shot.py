@@ -100,7 +100,9 @@ class ShotAdapterTests(unittest.TestCase):
          end
          GetMacroData=function(m,k) return k=='infolibrary' and 'weapons' or nil end
          GetLibraryEntry=function(lib,m) return entries[m] end
-         api.GetInstalledWeaponMod=function(id) return mods[id] or false end
+         local operational=api.IsComponentOperational
+         api.IsComponentOperational=function(id) return id and id>=0x11 and id<=0x41 or operational(id) end
+         modQueries={};api.GetInstalledWeaponMod=function(id) assert(type(id)=='number' and id>0);modQueries[#modQueries+1]=id;return mods[id] or false end
         ''')
         for file in ('bubble_game.lua', 'motion.lua', 'coop_game.lua', 'health_game.lua', 'shot_game.lua'):
             l.execute((UI / file).read_text())
@@ -130,7 +132,7 @@ class ShotAdapterTests(unittest.TestCase):
          loadout(2,'0x11,'..P..';0x12,'..P..';');local ok=support(2)
          loadout(1,'0x21,'..P..';0x22,weapon_gen_s_laser_01_mk1_macro;');local mixed=support(1)
          loadout(1,'0x23,weapon_gen_s_laser_01_mk1_macro;');local channel=support(1)
-         mods['0x31']=true;loadout(1,'0x31,'..P..';');local modded=support(1)
+         mods[0x31]=true;loadout(1,'0x31,'..P..';');local modded=support(1)
          loadout(1,'0x41,'..P..';','1');local turret=support(1)
          loadout(1,'');local empty=support(1)
          return ok,mixed,channel,modded,turret,empty,X4LAN_BUBBLE_API.shot.support[2].digest''')
@@ -201,6 +203,19 @@ class ShotAdapterTests(unittest.TestCase):
             with self.subTest(mutation=mutation):
                 l=self.make('p1');l.execute(mutation)
                 self.assertEqual(l.execute("loadout(2,'0x11,'..P..';');return support(2)"),0)
+
+    def test_native_hex_ids_use_id_conversion_and_invalid_objects_refuse(self):
+        out=self.make('p1').execute("""
+         ConvertStringTo64Bit=function() error('decimal conversion cannot read MD hexadecimal IDs') end
+         loadout(2,'0x11,'..P..';');return support(2),modQueries[1]
+        """)
+        self.assertEqual(tuple(out),(40,17))
+        for change in ("ConvertIDTo64Bit=function() return 0 end",
+                       "api.IsComponentOperational=function() return false end",
+                       "api.GetInstalledWeaponMod=function() error('unavailable') end"):
+            with self.subTest(change=change):
+                lua=self.make('p1');lua.execute(change)
+                self.assertEqual(lua.execute("loadout(2,'0x11,'..P..';');return support(2),#modQueries"),(0,0))
 
     def test_apply_waits_for_matching_native_state_ack(self):
         out=self.make('p1').execute("""

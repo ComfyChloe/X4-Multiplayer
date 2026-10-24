@@ -76,7 +76,7 @@ authority-boundary error. Corrections on contrib/astra-shot-hardening:
   dead/destroyed victims are not repeatedly attacked inside a batch.
 55 affected SHOT/HEALTH and51 co-op/FIRE2/universe checks pass without skips;
 final changed MD schema VALID (8a37e78e2278d4d72e2cf3bd3595c73caab79ef682babd8cc8fb63dbcc7fb250).
-No native SHOT transport/application acceptance; capture/undo still absent.
+Native transport/application follow-up is recorded below; capture/undo still absent.
 
 NEW NATIVE EVIDENCE AND LIMITS
 Primary damage-dedup-06 proves273 actual stock hits counted once across three
@@ -114,3 +114,13 @@ Both runs'37-file restorations and all actual save bytes/timestamps audited.
 26 affected SHOT unit/LuaJIT checks PASS after numeric-beam correction.
 This qualifies bounded native transport/application, NOT genuine shot capture,
 loss during handover, harmless visuals, real two-game combat or Windows.
+
+NATIVE ADMISSION AUDIT CORRECTION
+A later exact-ID audit found GetInstalledWeaponMod(): Failed to retrieve weapon
+with ID0 in run02. MD supplies hexadecimal component IDs; ConvertStringTo64Bit
+is the decimal-string interface. Thus run02's manual transport/application checks
+remain observed, but overall admission is PARTIAL and its unmodified-loadout
+claim is withdrawn. Correct adapter uses ConvertIDTo64Bit plus nonzero/operational
+validation BEFORE querying mods.27 affected checks PASS, including native-shaped
+hex IDs, zero/invalid IDs and unavailable mod queries. Actual modded native
+refusal is pending. Do not reuse run02 as admission acceptance.
