@@ -1,9 +1,9 @@
 -- Victim-pilot health authority (HEALTH), dev scope: reports/VICTIM-PILOT-HEALTH-DESIGN.txt.
 -- The machine that owns AND pilots a co-op ship reports that ship's own hull/shield; every hit
 -- it takes in that pilot's world counts, so no attacker attribution is needed. The host sets
--- the reported values on its proxy and keeps the proxy at a 2% hull floor meanwhile, so
--- host-world damage never reaches the 1.01% life threshold; a reported lethal value restores
--- the 1% floor and the existing life tick declares the death.
+-- the reported values on its proxy (ordinary 1% hull floor); while a pilot value is live the
+-- life tick reads that canonical value instead of the proxy hull, so host-world damage on the
+-- proxy never decides death and a reported lethal value makes the existing life tick declare it.
 -- The relay keeps one generation per (owner, epoch, pilot) of a ship and announces the current
 -- ones with its AUTH revision in every snapshot. Every such change bumps that revision, so a
 -- generation is valid here only once an HGEN of the AUTH revision this machine holds names it.

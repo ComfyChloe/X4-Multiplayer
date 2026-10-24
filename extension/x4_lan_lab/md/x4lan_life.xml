@@ -28,10 +28,27 @@
             <do_all exact="2" counter="$i">
               <set_value name="$ship" exact="$arena.$ships.{$i}" />
               <do_if value="$arena.$host and not $arena.$dead.{$i}">
-                <do_if value="not $ship.isoperational or $ship.hullpercentage le 1.01">
+                <!-- While a pilot value is live (x4lan_health.xml) it alone decides death; the proxy is
+                     only a view, neither its hull nor its loss counts. A lost proxy is latched and
+                     logged once ($healthProxyLost) and never recreated (no silent resurrection).
+                     The health Apply keeps accepting canonical values without physical writes, so
+                     the pilot stays authoritative; the latch also keeps the ordinary branch from
+                     ever turning that local loss into a death later. Only a canonical value at or
+                     below 1.01% kills such a ship. -->
+                <do_if value="@$arena.$healthLive.{$i}">
+                  <do_if value="$arena.$healthValue.{$i}.{1} le 1.01">
+                    <set_value name="$arena.$dead.{$i}" exact="true" />
+                    <debug_text text="'[X4LAN] SHIP_LETHAL slot=%s canonical=%s'.[$i,$arena.$healthValue.{$i}.{1}]" />
+                  </do_if>
+                  <do_elseif value="not $ship.isoperational and not @$arena.$healthProxyLost.{$i}">
+                    <set_value name="$arena.$healthProxyLost.{$i}" exact="true" />
+                    <debug_text text="'[X4LAN] HEALTH_PROXY_LOST slot=%s canonical=%s'.[$i,$arena.$healthValue.{$i}.{1}]" />
+                  </do_elseif>
+                </do_if>
+                <do_elseif value="(not $ship.isoperational and not @$arena.$healthProxyLost.{$i}) or ($ship.isoperational and @$ship.hullpercentage le 1.01)">
                   <set_value name="$arena.$dead.{$i}" exact="true" />
                   <debug_text text="'[X4LAN] SHIP_LETHAL slot=%s'.[$i]" />
-                </do_if>
+                </do_elseif>
               </do_if>
               <do_elseif value="not $arena.$host and not $arena.$coop and $i == $arena.$localSlot and $ship.isoperational and $ship.hullpercentage le 1.01">
                 <set_value name="$arena.$dead.{$i}" exact="true" />
