@@ -44,7 +44,7 @@
     </do_if>
    </actions></cue>
    <cue name="Watchdog" instantiate="true" checkinterval="0.05s"><conditions><check_value value="true"/></conditions><actions>
-    <do_all exact="2" counter="$e"><do_if value="$arena.$shotVisualMode.{$e} gt 0 and (player.age - $arena.$shotVisualAt.{$e} gt 0.3s or $arena.$shotVisualGen.{$e} != $arena.$shotCurrentGen.{$e} or $arena.$shotVisualGen.{$e} le $arena.$healthClosed.{$e} or @$arena.$shotFailed or $objects.{$e} != $arena.$ships.{$e})"><include_actions ref="StopEntity"/></do_if></do_all>
+    <do_all exact="2" counter="$e"><do_if value="$arena.$shotVisualMode.{$e} gt 0 and (player.age - $arena.$shotVisualAt.{$e} gt 0.3s or $arena.$shotVisualGen.{$e} != $arena.$shotCurrentGen.{$e} or $arena.$shotVisualGen.{$e} le $arena.$healthClosed.{$e} or @$arena.$shotFailed or not @$arena.$ships.{$e}.isoperational or $objects.{$e} != $arena.$ships.{$e})"><include_actions ref="StopEntity"/></do_if></do_all>
    </actions></cue>
    <cue name="Stop" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_ShotVisual'" control="'Stop'"/></conditions><actions>
     <set_value name="$failed" exact="true"/>

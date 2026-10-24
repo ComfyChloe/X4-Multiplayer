@@ -20,7 +20,8 @@ local function fresh() return h.mdStamp and v.now-(h.mdAt or -100)<=.3 and not A
 local function serial() v.serial=v.serial+1;assert(v.serial<2147483647,'serial exhausted');return v.serial end
 local function wanted(e)
  local g=h.valid[e]
- if not g or g<=(h.closed[e] or 0) or not c.owners[e] or not c.ships[e] then return nil end
+ if not g or g<=(h.closed[e] or 0) or not c.owners[e] or not c.ships[e]
+  or c.ships[e]==0 or not C.IsComponentOperational(c.ships[e]) then return nil end
  return g,c.owners[e]==cfg.slot and 1 or 2,c.ships[e]
 end
 local function current(e,r)

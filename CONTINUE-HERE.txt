@@ -33,8 +33,14 @@ refused. Passenger guard now player.controlled (source only until guest case).
 reports/SHOT-CAPTURE-INTEGRATION.txt: native shot-capture01 boundedPASS,162 physical
 p1 shots28counts ->real relay ->synthetic p2 HEALTH ->native shield3680/4800;
 162 deliberate misses add0.56source+2probe hashes/37restore/7normal saves audited.
-ACTIVE native shot-capture-guest-01 on ae2603e, exec33398: inverse p2 shooter/
-synthetic host; separate damage oracle. Do not start another native controller.
+Guest02 strict boundedPASS:8 independent shield events/captures/relay hits,
+320shield loss/nativeWORLD4480;162 misses0counts. Guest01 FAIL stray shot hit
+fixture target4 and single-victim peer aborted; raw/cleanup retained. Run02 moves
+NPCs out of corridor. Both games closed; report SHOT-CAPTURE-INTEGRATION.txt.
+NEW visual source fixes dead/inoperative ship proof to revoke that entity instead
+of permanently stopping SHOT globally;9 tests/schemaPASS, lethal native next.
+Windows native unavailable (Claude's45841 Workshop-incident profile restriction);
+source/export/harness readiness only. NO ACTIVE native game.
 shot-capture-01 exec18332 completed/cleaned. Next inspect guest raw/strict gate and
 cleanup, then continue remaining combat/boarding work. Schema worker48913 active.
 Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour next04:45;04:30 checkpoint

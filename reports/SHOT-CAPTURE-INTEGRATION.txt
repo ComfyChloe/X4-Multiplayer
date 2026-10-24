@@ -41,9 +41,33 @@ owned game/peer/helpers closed. Engine FSR3/signature/job warnings and harmless
 macro zero-damage warning are retained; no parser/API/adapter failure observed.
 Strict analyzer, full raw log, manifests and inventories stay in the local run.
 
+PHYSICAL GUEST SHOOTER / SYNTHETIC HOST AUTHORITY
+.local/evidence-246-withheld FAILS its fixture gate: after two intended victim1
+hits a stray plasma bullet legitimately hits fixture target4. The peer expected
+only victim1 and aborts. Raw10a14f32318fe78bd5ba7ac4118823287c22ad3ae7bba1a3cd37d30b39d54983
+retained;37-file restoration/save bytes/timestamps audited. No acceptance.
+
+Run02 moves both fixture NPC targets out of the firing corridor. Native guest2
+fires162 original plasma bullets toward host proxy1: eight independent native
+shield-damage events (actual expected attacker/victim,40 each), eight capture
+counts and relay totals8. The synthetic host returns WORLD shield93.33333%; the
+native proxy reads4480/4800, loss320. Another162 off-axis shots produce no damage
+observer event or count. All capture keys/generations match. Bounded chain PASS.
+Source af195a7 (production identical to ae2603e, documentation/config comment only).
+Raw be7c634e38c4d23ba61e3ca1341287d928367ced9f6060640735cc03acfa0131.56 installed production/probe hashes checked;37 restored files
+and seven actual normal saves verified. Game/helpers closed. This separately
+checks native guest capture and WORLD readback; the earlier shot-function02
+checks native host claim application. It is still NOT two native games.
+
+A subsequent source fix treats an inoperative/dead ship as unavailable for
+visual proof instead of stopping the entire SHOT module while checking its guns.
+The native watchdog clears that entity; other ships keep working. Nine affected
+visual tests and changed MD schema PASS; integrated lethal/native continuation
+qualification is next. A new ship identity still needs a new Stop/readback proof.
+
 PENDING
-Inverse native guest shooter/host authority is running separately. Matched native
-Windows/Linux, arbitrary free aim VISUAL replay, in-flight authority transitions,
-overheat/burst continuity and human docking/boarding/crash acceptance remain open.
-Do not equate the existing scripted damage/application check with two native
-players. Default flags and sealed7.3.1 packages remain unchanged.
+Matched native Windows/Linux, arbitrary free-aim VISUAL replay, in-flight authority
+transitions, overheat/burst continuity and human docking/boarding/crash acceptance
+remain open. Windows native launch is unavailable under the collaborator's current
+profile restriction; he prepares source/export/harness readiness only. All default
+flags and sealed7.3.1 packages remain unchanged.

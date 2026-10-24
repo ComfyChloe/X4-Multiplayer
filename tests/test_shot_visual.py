@@ -63,6 +63,19 @@ class VisualAdapterTests(unittest.TestCase):
          proven(2);assert(V.readyOriginal(2,5,now))
         ''')
 
+    def test_normal_proxy_death_revokes_only_its_proof_and_allows_new_identity(self):
+        self.make().execute('''
+         prepared(1);proven(1);prepared(2);proven(2)
+         local old=api.IsComponentOperational
+         api.IsComponentOperational=function(id) return id~=42 and old(id) end
+         assert(not V.readyReplay(2,4,now));V.frame(now)
+         assert(not V.failed and not D.failed and V.rows[2]==nil and V.readyOriginal(1,3,now))
+         -- A replacement object must get a fresh native Stop/readback proof.
+         C.ships[2]=43;slots[43]={0,18};H.valid[2]=5;V.frame(now)
+         assert(not V.readyReplay(2,5,now));prepared(2);proven(2)
+         assert(V.readyReplay(2,5,now) and not V.failed)
+        ''')
+
     def test_missing_expired_or_wrong_proof_never_authorizes_fire(self):
         self.make().execute('''
          prepared(2);local q=request('Proof',2)
