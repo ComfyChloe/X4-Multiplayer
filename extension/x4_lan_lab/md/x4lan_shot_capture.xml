@@ -1,0 +1,123 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_ShotCapture" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <!-- Shooter-side capture and victim-side undo for SHOT (ui/shot_capture.lua), dev scope, INERT:
+      shot_capture=false. Bounded to the admitted ordinary hullshield-only stock bullets
+      (x4lan_shot.xml Support). Rule qualified natively by A:primary (damage-dedup-06):
+      a shield callback counts and its exact delta is restored; a hull callback counts only if
+      the already-restored shield is zero, and its delta is restored too. Identity is the
+      victim's lastattacker read inside the callback. Every (victim, collider) pair reported by
+      event_object_collided in the same native frame is excluded from capture AND undo, so real
+      collision damage stays native. Nothing runs while SHOT applies its own native hits.
+      CAPTURE: my piloted ship hit an object whose authority is remote. My view of it is only a
+               view, so every captured callback is restored; counted hits go to a native
+               cumulative counter per victim and shooter/victim generation pair, after an
+               in-flight quarantine of the bullet lifetime when that pair changes.
+      UNDO:    the replayed remote player ship hit an object I am authority for. Its real outcome
+               is that player's claim, so both channels are restored; nothing is counted. Known
+               side effect: an undone shield hit still resets native shield recharge delay.
+      Victims: 1-2 co-op ships, 3-4 LAN targets. -->
+ <cues>
+  <cue name="Session" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_ShotCapture'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+    <set_value name="$capVictims" exact="[$arena.$ships.{1},$arena.$ships.{2},@$arena.$targets.{1},@$arena.$targets.{2}]"/>
+    <create_group groupname="$capGroup"/>
+    <do_all exact="4" counter="$i"><do_if value="@$capVictims.{$i}.exists"><add_to_group groupname="$capGroup" object="$capVictims.{$i}"/></do_if></do_all>
+    <set_value name="$capFailed" exact="false"/>
+    <set_value name="$capState" exact="0"/><set_value name="$capStateAt" exact="-10s"/>
+    <set_value name="$capMe" exact="0"/><set_value name="$capRemote" exact="[false,false]"/><set_value name="$capLifetime" exact="0s"/>
+    <set_value name="$capSGen" exact="[0,0,0,0]"/><set_value name="$capVGen" exact="[0,0,0,0]"/>
+    <set_value name="$capCount" exact="[0,0,0,0]"/><set_value name="$capQuarantine" exact="[0s,0s,0s,0s]"/>
+    <set_value name="$capCollisions" exact="[]"/><set_value name="$capCollAge" exact="-1s"/>
+    <raise_lua_event name="'X4LAN_ShotCapture.Ready'"/>
+    <debug_text text="'[X4LAN] SHOT_CAPTURE_SETUP host=%s victims=%s'.[$arena.$host,$capGroup.count]"/>
+   </actions>
+   <cues>
+    <cue name="Stop" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_ShotCapture'" control="'Stop'"/></conditions><actions>
+     <set_value name="$capFailed" exact="true"/>
+    </actions></cue>
+    <!-- Lua's capture state: my piloted entity (0 = none or refused), which co-op ships the other
+         player flies (replayed here), and the admitted bullet lifetime; fresh window only. -->
+    <cue name="State" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_ShotCapture'" control="'State'"/></conditions><actions>
+     <set_value name="$a" exact="event.param3"/>
+     <do_if value="not $capFailed and $a.$revision gt $capState and player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $a.$stamp and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline">
+      <set_value name="$capState" exact="$a.$revision"/><set_value name="$capStateAt" exact="player.age"/>
+      <set_value name="$capMe" exact="$a.$me"/><set_value name="$capRemote" exact="[$a.$r1,$a.$r2]"/>
+      <set_value name="$capLifetime" exact="$a.$lifetime * 1s"/>
+     </do_if>
+    </actions></cue>
+    <!-- All contact pairs of the current native frame, both orientations. -->
+    <cue name="Collided" instantiate="true"><conditions><event_object_collided group="$capGroup"/></conditions><actions>
+     <do_if value="$capCollAge != player.age"><set_value name="$capCollisions" exact="[]"/><set_value name="$capCollAge" exact="player.age"/></do_if>
+     <append_to_list name="$capCollisions" exact="[event.object,event.param]"/>
+     <append_to_list name="$capCollisions" exact="[event.param,event.object]"/>
+    </actions></cue>
+    <cue name="Shield" instantiate="true"><conditions><event_object_shield_damaged group="$capGroup"/></conditions><actions>
+     <set_value name="$o" exact="event.object"/><set_value name="$amount" exact="event.param3"/><set_value name="$kind" exact="'shield'"/>
+     <include_actions ref="Classify"/>
+     <do_if value="($capture or $undo) and $amount gt 0 and $o.maxshield gt 0">
+      <set_object_shield object="$o" exact="[100, ($o.shield + $amount) * 100.0 / $o.maxshield].min"/>
+     </do_if>
+     <do_if value="$capture and $amount gt 0"><include_actions ref="Count"/></do_if>
+    </actions></cue>
+    <cue name="Hull" instantiate="true"><conditions><event_object_hull_damaged group="$capGroup"/></conditions><actions>
+     <set_value name="$o" exact="event.object"/><set_value name="$amount" exact="event.param3"/><set_value name="$kind" exact="'hull'"/>
+     <do_if value="event.param == event.object">
+      <include_actions ref="Classify"/>
+      <!-- Overflow of an already counted shield hit when the restored shield is still up. -->
+      <set_value name="$counts" exact="$capture and $amount gt 0 and $o.shield le 0"/>
+      <do_if value="($capture or $undo) and $amount gt 0 and $o.maxhull gt 0">
+       <set_object_hull object="$o" exact="[100, ($o.hull + $amount) * 100.0 / $o.maxhull].min"/>
+      </do_if>
+      <do_if value="$counts"><include_actions ref="Count"/></do_if>
+     </do_if>
+    </actions></cue>
+    <!-- Sets $v, $ai, $capture and $undo for the callback on $o. -->
+    <library name="Classify">
+     <actions>
+      <set_value name="$v" exact="$capVictims.indexof.{$o}"/>
+      <set_value name="$att" exact="@$o.lastattacker"/>
+      <set_value name="$ai" exact="0"/>
+      <do_if value="$att"><set_value name="$ai" exact="$arena.$ships.indexof.{$att}"/></do_if>
+      <set_value name="$collided" exact="false"/>
+      <do_if value="$capCollAge == player.age">
+       <do_all exact="$capCollisions.count" counter="$j">
+        <do_if value="$capCollisions.{$j}.{1} == $o and $capCollisions.{$j}.{2} == $att"><set_value name="$collided" exact="true"/></do_if>
+       </do_all>
+      </do_if>
+      <set_value name="$fresh" exact="not $capFailed and not @$arena.$shotFailed and not @$arena.$shotApplying and player.age - $capStateAt le 0.3s and player.age - @$arena.$shotStateAt le 0.3s and not $collided and $v gt 0 and $ai gt 0"/>
+      <set_value name="$mine" exact="false"/>
+      <do_if value="$v gt 2"><set_value name="$mine" exact="$arena.$host"/></do_if>
+      <do_elseif value="$v gt 0"><set_value name="$mine" exact="@$arena.$shotAuthority.{$v}"/></do_elseif>
+      <set_value name="$capture" exact="false"/><set_value name="$undo" exact="false"/>
+      <do_if value="$fresh and $capMe gt 0 and $ai == $capMe and $v != $capMe and not $mine">
+       <set_value name="$capture" exact="@$arena.$shotStrength.{$capMe} gt 0"/>
+      </do_if>
+      <do_elseif value="$fresh and $ai != $capMe and $mine">
+       <set_value name="$undo" exact="$capRemote.{$ai}"/>
+      </do_elseif>
+     </actions>
+    </library>
+    <!-- One counted hit of my ship on $v under the current generation pair. -->
+    <library name="Count">
+     <actions>
+      <set_value name="$sg" exact="$arena.$shotCurrentGen.{$capMe}"/>
+      <set_value name="$vg" exact="0"/>
+      <do_if value="$v le 2"><set_value name="$vg" exact="$arena.$shotCurrentGen.{$v}"/></do_if>
+      <do_if value="$capSGen.{$v} != $sg or $capVGen.{$v} != $vg">
+       <!-- New pair: restart from 0 and drop hits of bullets possibly fired under the old one. -->
+       <set_value name="$capSGen.{$v}" exact="$sg"/><set_value name="$capVGen.{$v}" exact="$vg"/><set_value name="$capCount.{$v}" exact="0"/>
+       <set_value name="$capQuarantine.{$v}" exact="player.age + $capLifetime + 0.25s"/>
+      </do_if>
+      <do_if value="player.age ge $capQuarantine.{$v} and $sg gt 0">
+       <set_value name="$capCount.{$v}" exact="$capCount.{$v} + 1"/>
+       <raise_lua_event name="'X4LAN_ShotCapture.Count'" param="'%s|%s|%s|%s'.[$v,$sg,$vg,$capCount.{$v}]"/>
+       <do_if value="@$arena.$healthProbe"><debug_text text="'[X4LAN] SHOT_CAPTURED victim=%s kind=%s gens=%s/%s count=%s amount=%s'.[$v,$kind,$sg,$vg,$capCount.{$v},$amount]"/></do_if>
+      </do_if>
+     </actions>
+    </library>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>
