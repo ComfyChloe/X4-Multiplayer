@@ -203,3 +203,35 @@ Candidate repair reads back each owned meshless carrier, corrects at most once
 within the frame, removes persistent disagreement. Setup now stops only remote
 scripted fire, preserving actual local pilot input.14 adapter tests/schema PASS;
 native qualification remains pending. No other object's placement is repaired.
+
+projectile-adapter-05 (af6a5ba): bounded receiver subset PASS, overall FAIL.
+All12 carriers/127 MD readbacks remain on transmitted lines; maximum immediate
+setter residual1.966mm, final0 objects. One-write correction removes the observed
+zone transition jump within tested scope. Still0 original fired events: limiting
+Setup stop_shooting to remote ships does NOT explain/correct absent physical fire.
+Next fixture compares the verified primary keyboard binding (Space).
+Rawfb5db5081ec71d3ee9852fc5777855bd3a9ee49223cdaa31b9ac6a202599fba9.
+70 source/2 probes/UI registration,37 restore and actual saves audited.
+
+projectile-adapter-06 remains FAIL (af6a5ba): Space is the profile's primary-fire
+binding, focused physical press still causes0 events; native group0 has6 guns.
+Raw7c6d09108223cbecf7655749d7b0c341f32f8a9fcc2117fe3f539bda2d91c18b.
+70 source/2 probes/UI registration,37 restore and actual saves audited.
+Next dev diagnostic distinguishes direct input from explicit native shoot and
+records ready/group/mode/stance; scripted fire cannot prove physical input works.
+
+projectile-adapter-07 (af6a5ba): PASS only bounded SCRIPTED-source transport/render.
+Physical input first:0 shots, ready=false/grouped=true, no stance suppression.
+Explicit native shoot at18.70s:54 original plasma shots,54 observed births/ends
+through real relay,12 unique independent MD oracles within0.051015m of measured
+trajectories.12 synthetic remote observations render on their transmitted lines
+(<1e-9m perpendicular error), all objects/captures/slots expire; host health100.
+Later reset/group/scripted phase adds0 shots. This DOES NOT qualify real input.
+Raw4e30b06724a7bce550cbd0e436597399bef1691527195d14015e26cab3f37515.
+70 production files/2 probes/UI registration,37 restore and actual saves audited.
+
+Review follow-up: position tolerance now scales per axis with float precision
+(max0.01m,abs(command)*2^-21), covering250km zone-sum rounding. A regression
+accepts0.03125m rounding and rejects50742m displacement;15 adapter tests PASS.
+GetObjectPositionInSector/SetObjectSectorPos declarations explicit in adapter.
+The earlier .01m native run remains its recorded bounded scope.

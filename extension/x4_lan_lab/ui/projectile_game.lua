@@ -6,7 +6,8 @@ if not cfg or not cfg.projectile_visuals or not cfg.shot_visual or not cfg.shot_
  or not A.coop or not A.health or not A.shot or not A.shotVisual then return end
 local P,W=assert(X4LAN_PROJECTILE_MOTION),assert(X4LAN_PROJECTILE_PROTOCOL)
 local ffi=require('ffi');local C=ffi.C
-pcall(ffi.cdef,[[UIPosRot GetPositionalOffset(UniverseID,UniverseID);bool IsComponentClass(UniverseID,const char*);]])
+pcall(ffi.cdef,[[UIPosRot GetPositionalOffset(UniverseID,UniverseID);bool IsComponentClass(UniverseID,const char*);
+UIPosRot GetObjectPositionInSector(UniverseID);void SetObjectSectorPos(UniverseID,UniverseID,UIPosRot);]])
 local c,h,d,v,s=A.coop,A.health,A.shot,A.shotVisual,A.state
 local x={contexts={},slots={},captures={},serial=0,shotId=0,now=0};A.projectiles=x
 local KINDS={weapon_ter_s_plasma_01_mk1_macro=1,weapon_gen_s_laser_01_mk1_macro=2,weapon_gen_s_laser_01_mk2_macro=3}
@@ -14,6 +15,10 @@ local TTL={1.7,.7,.7};local DELAY=.15
 local function log(t) DebugError('[X4LAN] PROJECTILE '..t) end
 local function event(control,args) AddUITriggeredEvent('X4LAN_Projectile',control,args or {}) end
 local function serial() x.serial=x.serial+1;assert(x.serial<=2147483647,'operation exhausted');return x.serial end
+local function closePosition(actual,wanted)
+ -- Sector = zone + local can round again after the float-native command.
+ return math.abs(actual-wanted)<=math.max(.01,math.abs(wanted)*2^-21)
+end
 local function window(a)
  a.revision,a.stamp,a.from,a.deadline=d.stateRevision,h.mdStamp,h.mdAge,h.mdAge+.3
  return a
@@ -191,7 +196,7 @@ function x.renderFrame(now)
         for attempt=1,2 do
          C.SetObjectSectorPos(r.object,q.sector,pose)
          local actual=C.GetObjectPositionInSector(r.object)
-         if math.abs(actual.x-pose.x)<=.01 and math.abs(actual.y-pose.y)<=.01 and math.abs(actual.z-pose.z)<=.01 then placed=true;break end
+         if closePosition(actual.x,pose.x) and closePosition(actual.y,pose.y) and closePosition(actual.z,pose.z) then placed=true;break end
         end
         if not placed then remove(slot) end
        else remove(slot) end

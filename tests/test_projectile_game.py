@@ -79,6 +79,19 @@ class ProjectileAdapterTests(unittest.TestCase):
                  for _,w in ipairs(writes) do assert(w.id==200) end
                 ''')
 
+    def test_far_sector_float_rounding_is_tolerated_but_zone_sized_displacement_is_not(self):
+        for delta, accepted in ((.03125, True), (50742, False)):
+            with self.subTest(delta=delta):
+                self.make().execute('''
+                 local m=packet();m.x=250000;receive(m);clock(10.2);X.renderFrame(now)
+                 local a=last('Create');ackcreate(a);local read=api.GetObjectPositionInSector
+                 api.GetObjectPositionInSector=function(id)
+                  local p=read(id);return {x=p.x+'''+str(delta)+''',y=p.y,z=p.z}
+                 end
+                 X.renderFrame(now);assert((X.slots[a.slot]~=nil)=='''+str(accepted).lower()+''')
+                 assert(#writes=='''+('1' if accepted else '2')+''')
+                ''')
+
     def test_native_creation_ack_precedes_any_move_and_matches_delayed_actual_path(self):
         self.make().execute('''
          assert(receive(packet()));X.renderFrame(now);assert(count('Create')==0)
