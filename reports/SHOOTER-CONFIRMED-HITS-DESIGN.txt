@@ -121,3 +121,42 @@ NEW BLOCKERS before approval: (a) qualify apply_attackstrength in-sector (amount
 attacker credit, floor, death); (b) qualify fractional local min hull on a remote proxy;
 (c) equal bullet tables on both machines (mods); (d) mixed weapon groups where two equipped
 bullets share a nominal value are ambiguous: those hits are dropped.
+
+REVISION 2 (A:primary 02:33; supersedes rev 1 points 2-4). Design only, built only on native
+per-hit identity and qualified raw channels; every item below is a native qualification target.
+1 Identity: inside each damage callback, the victim's lastattacker plus lastattackercomponent
+  (expected: the firing weapon). No timestamps, no amount matching.
+2 Freshness by consumption, not inference: in the same callback, after reading the identity,
+  clear it natively. A:primary observed that an attacker-less nested apply_attackstrength
+  resets lastattackercomponent to null. A zero-strength attacker-less application (no damage,
+  no events) would then make every later callback without a new hit read null: collisions,
+  region damage and repairs are never claimed or undone. To qualify: zero strength clears both
+  lastattacker and lastattackercomponent, deals nothing and raises no callback.
+3 Raw channels from the running game, not tables: the firing weapon's library entry
+  (GetMacroData(weaponmacro,'infolibrary') + GetLibraryEntry per-shot damage fields, as the
+  stock UI does) gives its per-hit channels on each machine, so mods are read as installed. At
+  session start both machines exchange a digest of the library entries of every co-op ship's
+  equipped weapons; any difference disables claims. A claim is (weapon macro, hits); the
+  authority applies it through apply_attackstrength with that weapon's channels (hullshield /
+  hullonly / shieldonly / hullnoshield / shielddisruption) and attacker = its copy of the
+  shooter. The engine splits shields and hull at the authority's REAL state, gives kill credit
+  and handles floor and death. Observed amounts (clipped or not) are never applied.
+4 No disappearing callbacks (replaces the 0.1% floor): consume-and-restore for every object
+  whose authority is remote. In my world such an object's HP is only a view (WORLD / HEALTH).
+  So each callback on it is recorded (claimed if my own ship was the attacker, otherwise
+  ignored) and its shield/hull are restored inside the same callback. The view never sits at
+  a floor locally, so hits keep producing callbacks until the authority's value itself is at
+  its floor or dead. The authority's own floor and life tick are unchanged.
+5 Victim side (my own ship or my authoritative objects): a callback whose identity is the
+  replayed remote player ship is restored in the callback (that shot's real outcome is the
+  shooter's claim). All other callbacks are native. Then the identity is consumed (2).
+6 Transport and fences as before (SHOT totals per shooter gen and victim gen, relay
+  owner+pilot checks, increases applied in order with generation fences and the HEALTH
+  freshness window; failure closes permanently).
+QUALIFICATION LIST (A:primary native): (a) apply_attackstrength in high attention: per-hit
+amount and channels vs a real projectile of the same weapon, attacker/kill credit, behaviour at
+the floor and at death; (b) zero-strength attacker-less apply: clears identity, no damage, no
+callback; (c) lastattackercomponent == firing weapon (including turrets and missiles); (d)
+GetLibraryEntry per-shot channel fields for the X Shuttle loadout and for modded weapons;
+(e) synchronous restore inside the callback (your damage-undo-01): HP restored before any other
+cue observes it, no recursion.
