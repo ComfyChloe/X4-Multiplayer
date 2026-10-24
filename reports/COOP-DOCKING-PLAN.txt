@@ -208,3 +208,13 @@ f501c285313e3667574fd1b5f605c13b22aed02a6049a230b26ebc476a562a2a.
 UI registration,37-file restoration and7 actual-save bytes/timestamps. Late
 interaction commands were refused by the owned-PID guard after fixture exit;
 no successful interaction is inferred. This is walking/occupancy evidence only.
+
+Walking05 sourcef4f4280 uses integration03's new7.4 pristine seed. The player walks
+past the lowered boundary and around both sides of the ship, with normal F-key
+interaction attempts. No aboard/container transition is recorded. This remains
+INCONCLUSIVE for boarding, not proof that the correct entrance was activated.
+5,646 attached readbacks keep one exact pose/bay/occupant. Raw
+c43cf90e53372f85c49808dab1060112e091f6e3df38d9c67760066d709a3041.
+70 production files+4 probes, exact UI registration,37 restored files and7 actual
+normal-save bytes/timestamps verified. No further repeated UI walking is planned
+without a concrete entrance/interaction finding; human B02 remains required.
