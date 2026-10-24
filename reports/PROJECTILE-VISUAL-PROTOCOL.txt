@@ -50,13 +50,12 @@ class effectobject graphic; direct geometry-bearing objects absorb real bullets.
 CODE OWNERSHIP
 PR41 codecs2ae2284 independently reviewed and merged. Nine focused tests,1,000
 randomized Python/Lua canonical roundtrips and3,000 malformed variants passed;
-oversized-int serializer correction separately verified. Codec/adapter remain
-unregistered in ui.xml. PR42 relay695786a independently73 PASS and merged8832a15. Primary owns
+oversized-int serializer correction separately verified. The codecs and adapter are now registered for the7.4 internal candidate. PR42 relay695786a independently73 PASS and merged8832a15. Primary owns
 native capture/render/lifecycle and integration; Claude paused at usage limit.
 Parsers take explicit client/forwarded direction and return validated named fields.
 No native IDs, victim identity or damage amounts appear in this protocol.
 
-CURRENT UNREGISTERED ADAPTER
+CURRENT GUARDED ADAPTER
 projectile_game.lua / x4lan_projectile.xml provide local native sample capture and
 owned finite-effect rendering behind projectile_visuals=false. Source capture uses
 the actual native Born velocity transformed through the bullet's sector-relative
@@ -76,8 +75,11 @@ native trajectories within1.5cm. Receiver cases use12 labelled synthetic
 observations, including a deliberately refused/retried Create. All effects retire.
 These are one-native bounded tests, not matched Windows/Linux gameplay. Detailed
 source hashes, failures, gates and restoration audits are in the rendering report.
-Very short-lived-before-Lua capture, in-flight handover and heat continuity remain
-separate work. Flags stay off and projectile adapter stays unregistered.
+Heat03 now qualifies sustained native overheating/resumption with498 physical
+shots; details and input-fixture failures remain in the rendering report.
+Very short-lived-before-Lua capture and in-flight handover remain separate work.
+Source config stays inert; the7.4 internal launcher enables the complete stack.
+Matched two-native human acceptance remains pending.
 
 MOTION REVIEW CORRECTIONS (Claude10b5d7b review,24 October06:15)
 The buffer now purges expired/ended unsampled entries before testing capacity.

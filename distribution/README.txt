@@ -1,31 +1,35 @@
 X4 Multiplayer {{VERSION}} — INTERNAL TEST
-23 October 2026 | Windows/Linux host or guest | Two players per session
+24 October 2026 | Windows/Linux host or guest | Two players per session
 X4 9.00, Steam build23660954 | Matching official DLC including Timelines
 
 Both packages include the server and a private Python runtime. No Python install
 or download is needed. Open 00-START-HERE.html for detailed instructions.
 
 WHAT CHANGED
-Station and asteroid alignment passed the 7.3.0 human test. The same shared
-starting-save approach is retained. This update adds an invitation file picker,
-unique launcher numbers, borderless test-profile defaults for Alt+Tab, and all
-four PERSONAL teleportation research levels (including unlimited range).
-Your normal profile remains read-only. Resolution, quality, sound and custom
-bindings are imported; only the test display mode changes to borderless.
-Weapon/damage synchronization is UNCHANGED and remains unreliable. A candidate
-fix failed the native engine check and is not included in this package.
+This candidate transmits damage from actual stock-weapon impacts and renders the
+other pilot's observed projectiles, preserving native aim, spread and misses.
+It reserves the same saved station pad in both games and fences stale movement
+after landing or changing pilots. A fixed completed-story preset prevents the
+main story plots from starting during technical tests. It changes some campaign
+outcomes and grants research/HQ progression; it is not a normal campaign preset.
 
-Ordinary station docking remains incomplete: the other player's native landing
-pad occupancy/barriers are not shared, so boarding their docked ship may fail
-and NPC traffic may overlap it. Do not use station boarding as a supported flow.
+These corrections have local Linux engine and real-relay/synthetic-peer evidence.
+The Windows/Linux human pair still needs the checks in NEXT-TEST.txt. Supported
+combat scope: the two supplied player Shuttles with uniform, unmodified Shuttle
+plasma or generic pulse Mk1/Mk2 guns. Other weapons, NPC/station combat, short-range
+shots that end before UI capture, and changing pilot during live fire are not
+qualified. Do not treat a visible replica as complete shared NPC gameplay.
+
+Normal profiles stay read-only. Personal resolution, quality, sound and bindings
+are imported into the isolated test profile, which uses borderless mode.
+Existing radar, ordinary cargo, movement, station/asteroid alignment, Alt+Tab and
+Cooperative Trial human results remain valid unless a new regression appears.
 A shared starting save does not make ongoing station economy or all NPC decisions
 host-authoritative. Saving/resuming a played multiplayer campaign is not ready.
-Existing radar, ordinary cargo, smooth movement and Cooperative Trial evidence
-is retained. These do not need a repeat test unless a regression appears.
 
 HOST
 1. Close X4 and the old server. Remove the previous mod using its ORIGINAL
-   package's 5-REMOVE-MOD (7.3.0 and earlier). Extract this complete archive into a new folder.
+   package's REMOVE-MOD action (09 in7.3.1;5 in7.3.0). Extract into a new folder.
 2. Run 01-INSTALL, choose H, enter your reachable LAN/ZeroTier IPv4 address.
    Choose your normal settings profile if asked.
 3. Run 02-PREPARE-WORLD-HOST once. X4 opens, creates the shared world, saves and closes
@@ -52,10 +56,9 @@ BACKGROUND / TELEPORTATION
 Use Alt+Tab to another application while X4 stays open in borderless mode. Keep
 the server console running. Do not explicitly pause X4 or minimize it with the
 Windows desktop button; true minimization can suspend native rendering/UI ticks.
-The launcher includes -nocputhrottle. Background behavior is still part of the
-Windows human check. Personal teleportation is unlocked after Shuttle setup;
+The launcher includes -nocputhrottle. Alt+Tab passed the previous host/guest human test. Personal teleportation is unlocked after Shuttle setup;
 use the normal map/context menu and normal destination/ownership requirements.
-Station-HQ relocation research and campaign progression are separate features.
+The technical story preset is fixed for this release; there is no choice menu yet.
 
 RESTART / STOP
 Every retry requires BOTH games AND the relay to stop first. Restart the relay

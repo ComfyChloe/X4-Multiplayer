@@ -22,8 +22,8 @@ PR39/40/41/42 merged. Relay695786a independently73PASS before merge8832a15;
 codecs2ae2284 reviewed/merged. Claude1b711bc review accepts early observed-mode
 latch; stale controlled FIRE2 budget reset fixedb0eb05d. Windows45841 remains
 unlaunched after Workshop incident; owner permission still needed there.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min; last08:15 checkpoint
-1792822546.140959, next08:30. No duplicate native owner; no reply needed from paused
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID every15min; last08:30 checkpoint
+1792823454.371309, next08:45. No duplicate native owner; no reply needed from paused
 Claude. Sealed7.3.1/public restricted mirror unchanged; no7.4 package yet.
 
 CANDIDATE PREPARATION (NOT RELEASE ACCEPTANCE)
@@ -59,15 +59,21 @@ within1.5cm,12 remote synthetic effects/final0. Forced stale Createop3 refuses,
 same observation recoversop5.37-file restoration and7actual-save hashes/mtime audited.
 
 ACTIVE DIAGNOSTIC
-No active native game after heat02 cleanup. Heat01/02 both FAIL required overheat:
-54/60 shots only~1s despite requested20s button hold.02 deferred screenshots and
-verified focus, so screenshot cause NOT established. Likely Xwayland releases
-XTest buttons when short-lived xdotool client exits. Next heat03 should keep ONE
-xdotool process alive through `mousedown 2 sleep 20 mouseup 2`; verify actual held
-state/focus. Correct walking helper likewise. Do not relabel old captures.
-Current controller templates in .local/evidence-228-withheld; new sourceui.xml now
-registers projectile files, so DO NOT append duplicate registration in new runs.
-Heat/burst and very-short-before-Lua/in-flight handover remain unqualified.
+Heat03 sourcecca3301 PASS:498 physical native plasma shots/498 captures+ends,
+6 original guns83shots each,18 native overheat events. Continuous20.10s input
+resumes after each of first2 overheat cycles/gun.12 independent trajectories
+within1.78mm;12 synthetic effects/final0.37restore and7save bytes/mtime audited.
+Earlier heat01/02 FAIL preserved. Xwayland released short-lived xdotool input;
+ONE client must hold mousedown/key-down through sleep and release.
+Integration74-01 FAIL: real capture/sealing passes, load admits shooter1 but
+refuses shooter2 loadout, so combined scenario never begins. Raw/70source+5probe/
+37restore/7save audited. Capture probe nil-A error was dev-only; no capture clean
+claim. Integration74-02 controller58233 owns a load-only diagnostic of the SAME
+retained7.4 seed; guarded dev probe now logs native loadout/refusal details.
+No other native owner. Investigate before producing artifacts. New ui.xml already registers projectile files: never add twice.
+565-test suite now PASS/no skips after2 stale contract corrections (activation,
+package-report fixture); subsequent portable fixture-only change10 affected PASS.
+Candidate English human procedures included by builder; no7.4 artifacts yet.
 
 DOCK / STORY
 reports/COOP-DOCKING-PLAN.txt: saved bays/reservations/execution freshness/native
@@ -77,7 +83,7 @@ reads through guest-land-exit/host-reclaim-exit. Board03 source7564b9c:5681 stab
 exact-bay/one-occupant reads; actual walking crosses lowered boundary to ship
 exterior, never aboard. Raw2383c4df2ed97143d0ba6e2b4202572e555713b530f6bd599dfbd23f66372d92.
 Audit70source+2probes/37restore/7save bytes+mtime. Full boarding/matched same-pad
-crash unaccepted. Correct input holding before another walking test.
+crash unaccepted. Board04 correct held input:5734 exact/stationary bay reads, no aboard; audited70+2/37/7. Rawf501c285313e3667574fd1b5f605c13b22aed02a6049a230b26ebc476a562a2a.
 Story preset14completed plots+28research/nativeHQ;42flags verified fresh/capture/
 reload bounded~70s. No old-save conversion or campaign-wide claim. Human
 procedures distribution/HUMAN-{DAMAGE,DOCK}-TEST.txt need final candidate assignment.

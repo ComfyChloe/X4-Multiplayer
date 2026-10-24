@@ -1,3 +1,17 @@
+Version 7.4.0 — 24 October 2026 — INTERNAL candidate, human acceptance pending
+
+- Capture actual stock-gun hits; transmit cumulative counts to the victim's
+  authority, with generation/pilot/freshness checks and duplicate protection.
+- Render actual observed projectile directions/velocity without aiming remote
+  guns at a selected target. Preserve manual input, misses and native overheating.
+- Reserve saved station bays and apply real native attachments. Fence stale
+  poses after docking and pilot handoff; refuse an occupied bay.
+- Use a completed-story technical-test preset and native research/HQ setup.
+- Include new server dependencies in both Windows and Linux packages.
+- Keep both servers/runtimes, profile safeguards and prior human-tested features.
+- Separate local/synthetic evidence from pending two-native human acceptance;
+  follow NEXT-TEST.txt. Persistent shared campaign/economy remains unfinished.
+
 Version 7.3.1 — 23 October 2026 — INTERNAL candidate
 
 - Recognize station/asteroid alignment as passed in the human7.3.0 test.

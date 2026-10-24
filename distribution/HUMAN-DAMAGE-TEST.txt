@@ -2,11 +2,10 @@ X4 MULTIPLAYER — HUMAN DAMAGE TEST PROCEDURE
 Revision 2 — 24 October 2026 — INTERNAL
 
 STATUS / WHEN TO USE
-Prepared for the next reviewed damage candidate. The developer must name the
-exact Windows/Linux package pair and enabled cases before this procedure starts.
-7.3.1 has NO damage correction: do not repeat known damage failures just to run
-this checklist. Its current setup/Alt+Tab/teleport checks remain in NEXT-TEST.txt.
-No game, relay, installation or monitoring is started by these documents.
+For the matched7.4.0 INTERNAL Windows/Linux candidate and its server. Enabled
+cases and progression are assigned in NEXT-TEST.txt. Earlier7.3.1 packages have
+no damage correction and must not join this session. This document launches
+nothing; the two humans operate their own games and collect results.
 
 PURPOSE
 Check that two real games agree on damage to the two cooperative player ships.

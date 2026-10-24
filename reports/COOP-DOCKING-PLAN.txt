@@ -198,3 +198,13 @@ walk distance during nominal8s commands matches the separately reproduced XTest
 client-lifetime issue in projectile-heat01/02; corrected one-process input in
 heat03 produces a full20s firing interval. Board04 uses that corrected helper;
 no earlier boarding result is upgraded.
+
+Walking follow-up04 (24 October08:30CEST; sourcecca3301): correct single-client
+held keys allow longer normal movement around the parked ship. The bounded
+fixture ends without an aboard readback; full boarding remains NOT ACCEPTED.
+5,734 attached native reads retain exact pose/assigned bay/one occupant. Raw
+f501c285313e3667574fd1b5f605c13b22aed02a6049a230b26ebc476a562a2a.
+.local/evidence-019-withheld verifies70 production files+2 probes, exact
+UI registration,37-file restoration and7 actual-save bytes/timestamps. Late
+interaction commands were refused by the owned-PID guard after fixture exit;
+no successful interaction is inferred. This is walking/occupancy evidence only.

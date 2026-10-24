@@ -68,6 +68,8 @@ def build(destination: Path, runtime_cache: Path | None = None):
             document(DIST / name, root / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
         shutil.copy2(SOURCE / 'VERSIONING.txt', root / 'VERSIONING.txt')
         shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', root / 'WORLD-SYNC-TEST.txt')
+        for name in ('HUMAN-DAMAGE-TEST.txt','HUMAN-DOCK-TEST.txt','HUMAN-TEST-RESULT.txt'):
+            shutil.copy2(DIST / name, root / name)
         (root / 'reports').mkdir()
         shutil.copy2(reports[1], root / 'reports/RELEASE-CHECKS.txt')
         shutil.copy2(reports[0], root / 'reports/AUTOMATED-TESTS.txt')
