@@ -72,9 +72,11 @@ max setter error1.966mm,final0. Whole run still FAIL: no physical source shots.
 within5.2cm,12 remote effects/final0. Physical phase still0; no input acceptance.
 08 dev override proves StopEntity cancels actual input:54 physical shots pass.
 Production candidate declares observed mode before Prepare, blocks every native
-replay route, preserves actual player input;59 tests/3schemas PASS. Next09 probes
-queued positive/negative legacy attempts with real source/relay/render. No native
-currently active. Primary owns installation; schema worker48913 remains active.
+replay route, preserves actual player input;59 tests/3schemas PASS. 09 production1b711bc PASS:54 physical shots/12 native oracles within4cm,
+12 remote effects,0 queued legacy shots,final0. Cleaned/audited. Pulse-moving01 PASS18 physical shots at>30m/s,12 ID-matched native oracles
+within1cm,12 effects/final0. Restored/audited. Next PulseMk2 at249km; new dev
+Born velocity/basis observation tests float-difference precision, no production
+capture change. Primary owns installation;48913 schema worker.
 
 DOCKING / STORY
 reports/COOP-DOCKING-PLAN.txt: coop_docks OFF. Saved bay registry/native Fence ACK,

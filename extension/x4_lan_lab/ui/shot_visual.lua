@@ -1,4 +1,5 @@
--- Inert, opt-in harmless FIRE2 replay. Native Stop ACK precedes any projectile switch.
+-- Inert, opt-in projectile macro proof. Native preparation ACK precedes switching.
+-- Legacy replay is stopped; observed mode excludes scripted replay before Prepare.
 -- Original installed guns, equipment mods and weapon groups are never replaced.
 local A,cfg=X4LAN_BUBBLE_API,X4LAN_CONFIG
 if not cfg or not cfg.shot_visual or not cfg.fire2 or not cfg.shot_claims or not cfg.pilot_health
@@ -78,7 +79,7 @@ function v.prepared(payload)
  if not current(e,r) or r.phase~='preparing' or ticket~=r.ticket or g~=r.gen or mode~=r.mode
   or not fresh() or v.now-r.started>.3 or ConvertIDTo64Bit(id)~=r.ship then return end
  local list,pair=guns(e,r.ship)
- -- Native scripted fire and finite budgets have stopped; verify each write immediately.
+ -- Native scripted replay is stopped or excluded, budgets cleared; verify each write.
  for _,w in ipairs(list) do
   if w.macro~=pair[mode] then C.SetWeaponLaunchedMacro(w.id,pair[mode]) end
   assert(ffi.string(C.GetWeaponLaunchedMacro(w.id))==pair[mode],'projectile switch refused')

@@ -249,3 +249,24 @@ blocks positive legacy/Bubble/FIRE2 replay, and in this mode never stops the
 actual controlled ship through those queued routes or StopEntity. Remote and
 legacy-mode quiescence remain.59 affected checks/3 MD schemas PASS; next09 tests
 the production implementation plus queued positive/negative legacy requests.
+
+projectile-adapter-09 (production1b711bc): full bounded PHYSICAL-source path PASS.
+No production override.54 middle-mouse plasma shots produce54 observed births/ends
+through real relay;12 unique MD trajectories agree within0.039514m.12 synthetic
+remote effects remain on line; all carriers/slots/captures removed,health100.
+Queued positive/negative Coop Fire/FIRE2 and Bubble FireOn/Off requests produce
+zero remote native shots and do not suppress the actual player's input.
+Raw2c2f14e5bdfcc76f2d889bd603322ae6702fee804128eefa0634b12568729e5b.
+70 production/2 probes/UI registration,37 restore and actual saves audited.
+This is one Linux native engine with a real relay and synthetic peer, not a
+matched two-native or moving/pulse/heat-handover qualification.
+
+projectile-pulse-moving-01 (1b711bc): PASS in bounded moving PulseMk1 scope.
+Physical W strafe + middle fire:18 original shots, native ship speed>30m/s.
+Twelve independent MD trajectories are matched by retained native object IDs to
+local capture IDs, agreeing within0.009837m with transmitted measured velocity.
+12 synthetic kind2 effects render/expire,0 legacy remote shots,health100.
+Raweb5bf2759a9f65bd85c559e47b7bedfbe6366274506e4ec2f8bdd91fa8d9f857.
+69 production/3 overrides (PulseMk1 loadout plus probes)/UI registration,37-file
+restore and actual saves audited. Previous constant-velocity pulse fixture stays
+FAIL. This uses real player strafe, not a forced constant-velocity command.

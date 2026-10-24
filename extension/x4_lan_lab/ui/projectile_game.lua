@@ -6,8 +6,14 @@ if not cfg or not cfg.projectile_visuals or not cfg.shot_visual or not cfg.shot_
  or not A.coop or not A.health or not A.shot or not A.shotVisual then return end
 local P,W=assert(X4LAN_PROJECTILE_MOTION),assert(X4LAN_PROJECTILE_PROTOCOL)
 local ffi=require('ffi');local C=ffi.C
-pcall(ffi.cdef,[[UIPosRot GetPositionalOffset(UniverseID,UniverseID);bool IsComponentClass(UniverseID,const char*);
-UIPosRot GetObjectPositionInSector(UniverseID);void SetObjectSectorPos(UniverseID,UniverseID,UIPosRot);]])
+pcall(ffi.cdef,'typedef uint64_t UniverseID;')
+pcall(ffi.cdef,'typedef struct { float x,y,z,yaw,pitch,roll; } UIPosRot;')
+for _,definition in ipairs({
+ 'UIPosRot GetPositionalOffset(UniverseID,UniverseID);',
+ 'bool IsComponentClass(UniverseID,const char*);',
+ 'UIPosRot GetObjectPositionInSector(UniverseID);',
+ 'void SetObjectSectorPos(UniverseID,UniverseID,UIPosRot);',
+}) do pcall(ffi.cdef,definition) end
 local c,h,d,v,s=A.coop,A.health,A.shot,A.shotVisual,A.state
 local x={contexts={},slots={},captures={},serial=0,shotId=0,now=0};A.projectiles=x
 local KINDS={weapon_ter_s_plasma_01_mk1_macro=1,weapon_gen_s_laser_01_mk1_macro=2,weapon_gen_s_laser_01_mk2_macro=3}
