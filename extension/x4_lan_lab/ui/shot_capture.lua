@@ -49,11 +49,13 @@ function k.frame(now)
   undo=cfg.shot_undo==true,stamp=h.mdStamp,from=h.mdAge,deadline=h.mdAge+1})
 end
 
--- MD 'victim|shooterGen|victimGen|count': the native cumulative count of my own ship's hits.
+-- MD 'victim|shooter|shooterGen|victimGen|count': the native cumulative count of my own ship's
+-- hits under one admitted key; the shooter identity travels with it so a delayed count can never
+-- be credited to another shooter.
 function k.count(payload)
- local v,sg,vg,n=tostring(payload):match('^(%d)|(%d+)|(%d+)|(%d+)$')
+ local v,e,sg,vg,n=tostring(payload):match('^(%d)|(%d)|(%d+)|(%d+)|(%d+)$')
  if k.failed or not v then return end
- d.cumulative(tonumber(v),tonumber(sg),tonumber(vg),tonumber(n))
+ d.cumulative(tonumber(v),tonumber(sg),tonumber(vg),tonumber(n),tonumber(e))
 end
 
 -- A failure stops capture and undo natively for the session.

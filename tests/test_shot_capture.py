@@ -1,9 +1,9 @@
 """INERT SHOT capture/undo: LuaJIT doubles and an interpreter over the actual MD capture cues.
 
-The interpreter runs Shield/Hull with their Classify/Count libraries on a Python model of one
-victim callback. Native effects are modelled only as far as the rule needs them: a restore adds
-the callback's delta back. Any MD syntax it does not know fails the test. This checks the
-capture rule as written (A:primary damage-dedup-06), not native behaviour.
+The interpreter runs State, Shield and Hull (with their Classify/Count libraries) on a Python
+model of one victim callback. Native effects are modelled only as far as the rule needs them: a
+restore adds the callback's delta back. Any MD syntax it does not know fails the test. This checks
+the capture rule as written (A:primary damage-dedup-06), not native behaviour.
 """
 import re
 import unittest
@@ -16,6 +16,12 @@ ROOT = Path(__file__).resolve().parents[1]
 UI = ROOT / 'extension/x4_lan_lab/ui'
 MD = ROOT / 'extension/x4_lan_lab/md/x4lan_shot_capture.xml'
 WALL = "player.systemtime.{'%Y-%m-%dT%H:%M:%S'}"
+
+
+def idx(name):
+    return "S['%s']" % name if name.startswith('cap') else name
+
+
 TOKENS = [
     (r'\[([^\[\]]+)\]\.min', r'min(\1)'),
     (re.escape(WALL), "P['wall']"), (r'player\.timewarp\.factor', "P['timewarp']"),
@@ -27,13 +33,15 @@ TOKENS = [
     (r'\$o\.(shield|maxshield|hull|maxhull)\b', r"P['\1']"),
     (r'\$capCollisions\.count', "len(S['coll'])"),
     (r'\$capCollisions\.\{\$j\}\.\{(\d)\}', r"S['coll'][j-1][\1-1]"),
-    (r'@?\$arena\.\$shot(\w+)\.\{\$(\w+)\}', lambda m: "S['shot%s'][%s]" % (m[1], "S['%s']" % m[2] if m[2].startswith('cap') else m[2])),
+    (r'@?\$arena\.\$(shot|health)(\w+)\.\{\$(\w+)\}', lambda m: "S['%s%s'][%s]" % (m[1], m[2], idx(m[3]))),
+    (r'@?\$arena\.\$dead\.\{\$(\w+)\}', lambda m: "S['dead'][%s]" % idx(m[1])),
     (r'@?\$arena\.\$(shotFailed|shotApplying|shotStateAt|host)\b', r"S['\1']"),
-    (r'\$cap(?!ture\b)(\w+)\.\{\$(\w+)\}', r"S['cap\1'][\2]"),
+    (r'\$cap(?!ture\b)(\w+)\.\{\$(\w+)\}', lambda m: "S['cap%s'][%s]" % (m[1], idx(m[2]))),
     (r'\$cap(?!ture\b)(\w+)\b', r"S['cap\1']"),
+    (r'\$a\.\$(\w+)', lambda m: "A.get('%s', 0)" % m[1]),
     (r'event\.param == event\.object', "P['self']"),
     (r'\$o\b', "'V'"),
-    (r'\$(v|ai|att|collided|fresh|mine|capture|undo|amount|kind|counts|sg|vg)\b', r'\1'),
+    (r'\$(v|ai|att|collided|fresh|mine|capture|undo|amount|kind|counts|sg|vg|own|other|i)\b', r'\1'),
     (r'\b(\d+(?:\.\d+)?)s\b', r'\1'),
     (r'\bgt\b', '>'), (r'\bge\b', '>='), (r'\blt\b', '<'), (r'\ble\b', '<='),
     (r'\btrue\b', 'True'), (r'\bfalse\b', 'False'),
@@ -54,8 +62,8 @@ LIB = {l.get('name'): l.find('actions') for l in ROOT_MD.iter('library')}
 CUES = {c.get('name'): c.find('actions') for c in ROOT_MD.iter('cue')}
 
 
-def run(cue, S, P):
-    env = dict(S=S, P=P, min=min, len=len)
+def run(cue, S, P, A=None):
+    env = dict(S=S, P=P, A=A or {}, min=min, len=len)
     effects = []
 
     def block(nodes):
@@ -74,11 +82,13 @@ def run(cue, S, P):
                 block(list(LIB[node.get('ref')]))
             elif tag == 'set_value':
                 name, exact = node.get('name'), node.get('exact')
-                if name in ('$o', '$amount'):
-                    env[name[1:]] = 'V' if name == '$o' else P['amount']; continue
-                if name in ('$a',): continue
+                if name == '$o': env['o'] = 'V'; continue
+                if name == '$amount': env['amount'] = P['amount']; continue
+                if name == '$a': continue
                 m = re.fullmatch(r'\$cap(\w+)\.\{\$(\w+)\}', name)
                 if m: S['cap' + m[1]][env[m[2]]] = eval(py(exact), env); continue
+                m = re.fullmatch(r'\$cap(?!ture$)(\w+)', name)
+                if m: S['cap' + m[1]] = eval(py(exact), env); continue
                 m = re.fullmatch(r'\$(\w+)', name)
                 if not m: raise AssertionError('unsupported set_value ' + name)
                 env[m[1]] = eval(py(exact), env)
@@ -95,12 +105,15 @@ def run(cue, S, P):
 
 
 def state(**kw):
-    S = dict(shotFailed=False, shotApplying=False, shotStateAt=99.9, host=False, capFailed=False, capStateAt=99.9,
-             capMe=2, capRemote={1: True, 2: False}, capLifetime=3.8, capUndo=False, capSGen={i: 4 for i in range(1, 5)},
-             capVGen={1: 3, 2: 0, 3: 0, 4: 0}, capCount={i: 0 for i in range(1, 5)}, capQuarantine={i: 0 for i in range(1, 5)},
+    """Guest machine, piloting ship 2 under generation 4; ship 1 (host) is a remote view."""
+    S = dict(shotFailed=False, shotApplying=False, shotStateAt=99.9, host=False, capFailed=False, capState=1,
+             capStateAt=99.9, capMe=2, capRemote={1: True, 2: False}, capLifetime=3.8, capUndo=False,
+             capShooter={i: 2 for i in range(1, 5)}, capSGen={i: 4 for i in range(1, 5)},
+             capVGen={1: 3, 2: 4, 3: 0, 4: 0}, capCount={i: 0 for i in range(1, 5)}, capQuarantine={i: 0 for i in range(1, 5)},
              capCollAge=-1, coll=[], shotAuthority={1: False, 2: True}, shotStrength={1: 40, 2: 40},
              shotCurrentGen={1: 3, 2: 4}, shotVisualMode={1: 1, 2: 1}, shotVisualGen={1: 3, 2: 4},
-             shotVisualAt={1: 99.9, 2: 99.9})
+             shotVisualAt={1: 99.9, 2: 99.9}, healthOwn={1: False, 2: True}, healthAuth={1: 0, 2: 4},
+             healthClosed={1: 0, 2: 0}, healthLive={1: False, 2: False}, healthGen={1: 0, 2: 0}, dead={1: False, 2: False})
     S.update(kw); return S
 
 
@@ -108,6 +121,15 @@ def hit(S, kind, v=1, ai=2, att='A2', amount=40.0, shield=60.0, hull=900.0, age=
     P = dict(v=v, ai=ai, att=att, amount=amount, shield=shield, maxshield=100.0, hull=hull, maxhull=1000.0, age=age,
              timewarp=1, wall='x', self=True); P.update(p)
     return run(CUES['Shield' if kind == 's' else 'Hull'], S, P), P
+
+
+def admit(S, age, me=2, lifetime=2.0, revision=None):
+    """Run the actual State cue at game time `age` (fresh window)."""
+    revision = revision or S['capState'] + 1
+    A = dict(revision=revision, stamp='w', **{'from': age - 0.05}, deadline=age + 1, me=me, r1=True, r2=False,
+             lifetime=lifetime, undo=False)
+    run(CUES['State'], S, dict(age=age, timewarp=1, wall='w'), A)
+    S['shotStateAt'] = S['shotVisualAt'][2] = age
 
 
 class CaptureRuleTests(unittest.TestCase):
@@ -125,48 +147,72 @@ class CaptureRuleTests(unittest.TestCase):
 
     def test_every_collision_pair_of_the_frame_is_excluded_from_capture_and_undo(self):
         S = state(capCollAge=100.0, coll=[['X', 'Y'], ['V', 'A2'], ['A2', 'V']])
-        self.assertEqual(hit(S, 's')[0], [])                         # the second pair matches
+        self.assertEqual(hit(S, 's')[0], [])
         S2 = state(capCollAge=99.5, coll=[['V', 'A2']])                # an older frame: not this hit
         self.assertEqual(hit(S2, 's')[0], ['shield', 'count'])
-        S3 = state(capCollAge=100.0, coll=[['V', 'A1']], shotAuthority={1: True, 2: True})
-        self.assertEqual(hit(S3, 's', ai=1, att='A1')[0], [])        # undo excluded too
+        S3 = state(capCollAge=100.0, coll=[['V', 'A1']], capUndo=True)
+        self.assertEqual(hit(S3, 's', v=2, ai=1, att='A1')[0], [])   # undo excluded too
 
     def test_nothing_while_applying_failed_or_stale(self):
         for kw in (dict(shotApplying=True), dict(capFailed=True), dict(shotFailed=True), dict(capStateAt=99.0), dict(shotStateAt=99.0)):
-            S = state(**kw)
-            self.assertEqual(hit(S, 's')[0], [], kw)
+            self.assertEqual(hit(state(**kw), 's')[0], [], kw)
 
     def test_only_my_own_ship_on_a_remote_authority_view_is_captured(self):
-        self.assertEqual(hit(state(), 's', ai=0, att=None)[0], [])                       # NPC / no attacker
-        self.assertEqual(hit(state(shotAuthority={1: True, 2: True}), 's')[0], [])       # my authority: native
-        self.assertEqual(hit(state(), 's', v=2, ai=2)[0], [])                            # my own ship
-        self.assertEqual(hit(state(shotStrength={1: 40, 2: 0}), 's')[0], [])            # unsupported loadout
+        self.assertEqual(hit(state(), 's', ai=0, att=None)[0], [])
+        self.assertEqual(hit(state(shotAuthority={1: True, 2: True}), 's')[0], [])
+        self.assertEqual(hit(state(), 's', v=2, ai=2)[0], [])
+        self.assertEqual(hit(state(shotStrength={1: 40, 2: 0}), 's')[0], [])
 
     def test_no_original_bullet_proof_no_capture(self):
         for kw in (dict(shotVisualMode={1: 1, 2: 2}), dict(shotVisualMode={1: 1, 2: 0}),
                    dict(shotVisualGen={1: 3, 2: 3}), dict(shotVisualAt={1: 99.9, 2: 99.5})):
             self.assertEqual(hit(state(**kw), 's')[0], [], kw)
 
+    def test_native_health_fences_before_any_restore(self):
+        # Guest shooter: its own HEALTH authority must be owned, current and not closed natively.
+        for kw in (dict(healthOwn={1: False, 2: False}), dict(healthAuth={1: 0, 2: 3}), dict(healthClosed={1: 0, 2: 4})):
+            self.assertEqual(hit(state(**kw), 's')[0], [], kw)
+        # Host shooter on the guest's ship: the victim's live generation must be current and open.
+        host = dict(host=True, capMe=1, shotAuthority={1: True, 2: False}, shotVisualMode={1: 1, 2: 1},
+                    shotVisualGen={1: 3, 2: 4}, capShooter={i: 1 for i in range(1, 5)}, capSGen={i: 3 for i in range(1, 5)},
+                    capVGen={1: 3, 2: 4, 3: 0, 4: 0}, healthLive={1: False, 2: True}, healthGen={1: 0, 2: 4})
+        self.assertEqual(hit(state(**host), 's', v=2, ai=1, att='A1')[0], ['shield', 'count'])
+        for kw in (dict(healthLive={1: False, 2: False}), dict(healthGen={1: 0, 2: 3}), dict(healthClosed={1: 0, 2: 4})):
+            self.assertEqual(hit(state(**dict(host, **kw)), 's', v=2, ai=1, att='A1')[0], [], kw)
+
     def test_undo_is_off_by_default(self):
-        self.assertEqual(hit(state(shotAuthority={1: False, 2: True}), 's', v=2, ai=1, att='A1')[0], [])
+        self.assertEqual(hit(state(), 's', v=2, ai=1, att='A1')[0], [])
 
     def test_diagnostic_undo_restores_replayed_remote_hits_without_counting(self):
-        S = state(capMe=2, shotAuthority={1: False, 2: True}, capUndo=True)
+        S = state(capUndo=True)
         effects, P = hit(S, 's', v=2, ai=1, att='A1')
         self.assertEqual((effects, P['shield']), (['shield'], 100.0))
-        effects, P = hit(S, 'h', v=2, ai=1, att='A1', shield=100.0)
-        self.assertEqual(effects, ['hull'])
+        self.assertEqual(hit(S, 'h', v=2, ai=1, att='A1', shield=100.0)[0], ['hull'])
         self.assertEqual(sum(S['capCount'].values()), 0)
-        self.assertEqual(hit(state(capRemote={1: False, 2: False}, shotAuthority={1: False, 2: True}, capUndo=True), 's', v=2, ai=1, att='A1')[0], [])
+        self.assertEqual(hit(state(capRemote={1: False, 2: False}, capUndo=True), 's', v=2, ai=1, att='A1')[0], [])
 
-    def test_a_new_generation_pair_restarts_and_quarantines_in_flight_bullets(self):
-        S = state(shotCurrentGen={1: 5, 2: 4})                       # victim generation moved 3 -> 5
-        self.assertEqual(hit(S, 's', age=100.0)[0], ['shield'])      # restored, not counted
+    def test_quarantine_is_armed_at_admission_not_at_the_first_hit(self):
+        # A:primary: a first hit long after startup must count.
+        S = state(capShooter={i: 0 for i in range(1, 5)}, capSGen={i: 0 for i in range(1, 5)}, capVGen={i: 0 for i in range(1, 5)})
+        admit(S, 50.0)
+        self.assertAlmostEqual(S['capQuarantine'][1], 52.25)
+        S['capStateAt'] = 99.9; S['shotStateAt'] = S['shotVisualAt'][2] = 99.9
+        self.assertEqual(hit(S, 's', age=100.0)[0], ['shield', 'count'])
+        # A victim generation change re-keys at the next admission and quarantines in-flight bullets.
+        S['shotCurrentGen'][1] = 5; S['shotVisualGen'][2] = 4
+        self.assertEqual(hit(S, 's', age=100.05)[0], ['shield'])       # old key: restored, not counted
+        admit(S, 100.1)
         self.assertEqual((S['capVGen'][1], S['capCount'][1]), (5, 0))
-        self.assertAlmostEqual(S['capQuarantine'][1], 104.05)
-        S['capStateAt'] = S['shotStateAt'] = S['shotVisualAt'][2] = 103.9   # states keep refreshing meanwhile
-        self.assertEqual(hit(S, 's', age=104.0)[0], ['shield'])
-        self.assertEqual(hit(S, 's', age=104.1)[0], ['shield', 'count'])
+        S['capStateAt'] = S['shotStateAt'] = S['shotVisualAt'][2] = 100.9
+        self.assertEqual(hit(S, 's', age=101.0)[0], ['shield'])        # inside the quarantine
+        S['capStateAt'] = S['shotStateAt'] = S['shotVisualAt'][2] = 102.4
+        self.assertEqual(hit(S, 's', age=102.5)[0], ['shield', 'count'])
+
+    def test_a_shooter_change_never_credits_the_old_key(self):
+        # A:primary: after source 2 -> source 1 with the same gen, old counts must not move.
+        S = state(); hit(S, 's')
+        S['capMe'] = 1                                                 # Lua's next state, before admission
+        self.assertEqual(hit(S, 's', ai=1, att='A1')[0], [])           # no own authority for ship 1 here
         self.assertEqual(S['capCount'][1], 1)
 
     def test_child_hull_events_are_ignored(self):
@@ -175,7 +221,7 @@ class CaptureRuleTests(unittest.TestCase):
 
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
 class CaptureAdapterTests(unittest.TestCase):
-    def make(self, slot='p2', entry=None):
+    def make(self, slot='p2'):
         l = LuaRuntime(unpack_returned_tuples=True); l.execute(MOCK + EXTRA)
         cfg = l.globals().X4LAN_CONFIG
         cfg.slot, cfg.coop, cfg.pilot_health, cfg.shot_claims, cfg.shot_capture = slot, True, True, True, True
@@ -222,13 +268,15 @@ class CaptureAdapterTests(unittest.TestCase):
              tick(10.2);return last('State').me,last('State').lifetime''')
             self.assertEqual(tuple(out), (0, 0), setup)
 
-    def test_native_cumulative_counts_feed_totals_idempotently(self):
+    def test_native_cumulative_counts_feed_totals_only_for_their_own_shooter(self):
         out = self.make().execute('''
          client:receiveExtension({'HBASE','1',client.lease,'2','4','64.5','30'},now);events['X4LAN_Health.Based'](nil,'2|4')
          local S=X4LAN_BUBBLE_API.shot
-         events['X4LAN_ShotCapture.Count'](nil,'1|4|3|2');events['X4LAN_ShotCapture.Count'](nil,'1|4|3|1')
-         events['X4LAN_ShotCapture.Count'](nil,'1|4|9|5')               -- not the current victim generation
-         events['X4LAN_ShotCapture.Count'](nil,'2|4|4|5')               -- my own ship
+         events['X4LAN_ShotCapture.Count'](nil,'1|2|4|3|2');events['X4LAN_ShotCapture.Count'](nil,'1|2|4|3|1')
+         events['X4LAN_ShotCapture.Count'](nil,'1|1|4|3|7')             -- admitted for another shooter
+         events['X4LAN_ShotCapture.Count'](nil,'1|2|4|9|5')             -- not the current victim generation
+         events['X4LAN_ShotCapture.Count'](nil,'2|2|4|4|5')             -- my own ship
+         events['X4LAN_ShotCapture.Count'](nil,'1|4|3|2')               -- old 4-field format: ignored
          local t={};for k,v in pairs(S.totals) do t[#t+1]=k..'='..v end
          return table.concat(t,',')''')
         self.assertEqual(out, '2|4|1|3=2')
@@ -246,6 +294,7 @@ class CaptureAdapterTests(unittest.TestCase):
             l.execute((UI / file).read_text())
         self.assertIsNone(l.eval('X4LAN_BUBBLE_API.shotCapture'))
         self.assertTrue('shot_capture = false' in (UI / 'config.lua').read_text())
+        self.assertTrue('shot_undo = false' in (UI / 'config.lua').read_text())
 
 
 class CanonicalFloorTests(unittest.TestCase):

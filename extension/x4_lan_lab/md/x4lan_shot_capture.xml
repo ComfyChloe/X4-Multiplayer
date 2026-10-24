@@ -29,6 +29,8 @@
     <set_value name="$capState" exact="0"/><set_value name="$capStateAt" exact="-10s"/>
     <set_value name="$capMe" exact="0"/><set_value name="$capRemote" exact="[false,false]"/><set_value name="$capLifetime" exact="0s"/>
     <set_value name="$capUndo" exact="false"/>
+    <!-- Per victim: the admitted counting key (shooter entity, shooter gen, victim gen). -->
+    <set_value name="$capShooter" exact="[0,0,0,0]"/>
     <set_value name="$capSGen" exact="[0,0,0,0]"/><set_value name="$capVGen" exact="[0,0,0,0]"/>
     <set_value name="$capCount" exact="[0,0,0,0]"/><set_value name="$capQuarantine" exact="[0s,0s,0s,0s]"/>
     <set_value name="$capCollisions" exact="[]"/><set_value name="$capCollAge" exact="-1s"/>
@@ -49,6 +51,20 @@
       <set_value name="$capState" exact="$a.$revision"/><set_value name="$capStateAt" exact="player.age"/>
       <set_value name="$capMe" exact="$a.$me"/><set_value name="$capRemote" exact="[$a.$r1,$a.$r2]"/>
       <set_value name="$capLifetime" exact="$a.$lifetime * 1s"/><set_value name="$capUndo" exact="$a.$undo == true"/>
+      <!-- Admission: a new or changed key (shooter, shooter gen, victim gen) restarts that victim's
+           count at 0 and arms the in-flight quarantine NOW, not at the first hit. Hits whose key
+           does not match the admitted one are never counted. -->
+      <do_all exact="4" counter="$i">
+       <set_value name="$sg" exact="0"/><set_value name="$vg" exact="0"/>
+       <do_if value="$capMe gt 0">
+        <set_value name="$sg" exact="$arena.$shotCurrentGen.{$capMe}"/>
+        <do_if value="$i le 2"><set_value name="$vg" exact="$arena.$shotCurrentGen.{$i}"/></do_if>
+       </do_if>
+       <do_if value="$capShooter.{$i} != $capMe or $capSGen.{$i} != $sg or $capVGen.{$i} != $vg">
+        <set_value name="$capShooter.{$i}" exact="$capMe"/><set_value name="$capSGen.{$i}" exact="$sg"/><set_value name="$capVGen.{$i}" exact="$vg"/>
+        <set_value name="$capCount.{$i}" exact="0"/><set_value name="$capQuarantine.{$i}" exact="player.age + $capLifetime + 0.25s"/>
+       </do_if>
+      </do_all>
      </do_if>
     </actions></cue>
     <!-- Native runtime laser range of both co-op ships, for Lua's lifetime (range / bulletspeed). -->
@@ -103,7 +119,21 @@
       <do_if value="$v gt 2"><set_value name="$mine" exact="$arena.$host"/></do_if>
       <do_elseif value="$v gt 0"><set_value name="$mine" exact="@$arena.$shotAuthority.{$v}"/></do_elseif>
       <set_value name="$capture" exact="false"/><set_value name="$undo" exact="false"/>
-      <do_if value="$fresh and $capMe gt 0 and $ai == $capMe and $v != $capMe and not $mine">
+      <!-- Native authority fences before any restore: the generations involved must be current
+           and not closed in THIS machine's HEALTH state (Lua's sender checks are not enough). -->
+      <set_value name="$own" exact="false"/><set_value name="$other" exact="false"/>
+      <do_if value="$fresh and $capMe gt 0">
+       <do_if value="$arena.$host"><set_value name="$own" exact="$arena.$shotCurrentGen.{$capMe} gt 0 and not $arena.$dead.{$capMe}"/></do_if>
+       <do_elseif value="@$arena.$healthOwn.{$capMe} and @$arena.$healthAuth.{$capMe} == $arena.$shotCurrentGen.{$capMe}">
+        <set_value name="$own" exact="$arena.$healthAuth.{$capMe} gt $arena.$healthClosed.{$capMe}"/>
+       </do_elseif>
+      </do_if>
+      <do_if value="$fresh and $v gt 2"><set_value name="$other" exact="true"/></do_if>
+      <do_elseif value="$fresh and $arena.$host and @$arena.$healthLive.{$v} and @$arena.$healthGen.{$v} == $arena.$shotCurrentGen.{$v}">
+       <set_value name="$other" exact="$arena.$healthGen.{$v} gt $arena.$healthClosed.{$v}"/>
+      </do_elseif>
+      <do_elseif value="$fresh and not $arena.$host"><set_value name="$other" exact="$arena.$shotCurrentGen.{$v} gt 0"/></do_elseif>
+      <do_if value="$fresh and $own and $other and $ai == $capMe and $v != $capMe and not $mine">
        <!-- A:primary's visual proof (x4lan_shot_visual.xml): my guns verifiably launch ORIGINAL
             bullets under the current generation, read back within 0.3 s; no proof, no claim. -->
        <do_if value="@$arena.$shotVisualMode.{$capMe} == 1 and @$arena.$shotVisualGen.{$capMe} == $arena.$shotCurrentGen.{$capMe}">
@@ -112,26 +142,23 @@
         </do_if>
        </do_if>
       </do_if>
-      <do_elseif value="$fresh and $capUndo and $ai != $capMe and $mine">
+      <do_elseif value="$fresh and $own and $capUndo and $ai != $capMe and $mine">
        <set_value name="$undo" exact="$capRemote.{$ai}"/>
       </do_elseif>
      </actions>
     </library>
-    <!-- One counted hit of my ship on $v under the current generation pair. -->
+    <!-- One counted hit of my ship on $v: only under the key the State cue admitted (shooter,
+         shooter gen, victim gen) and after its quarantine; a hit under any other key is restored
+         but never counted, and never re-keys the counter. -->
     <library name="Count">
      <actions>
       <set_value name="$sg" exact="$arena.$shotCurrentGen.{$capMe}"/>
       <set_value name="$vg" exact="0"/>
       <do_if value="$v le 2"><set_value name="$vg" exact="$arena.$shotCurrentGen.{$v}"/></do_if>
-      <do_if value="$capSGen.{$v} != $sg or $capVGen.{$v} != $vg">
-       <!-- New pair: restart from 0 and drop hits of bullets possibly fired under the old one. -->
-       <set_value name="$capSGen.{$v}" exact="$sg"/><set_value name="$capVGen.{$v}" exact="$vg"/><set_value name="$capCount.{$v}" exact="0"/>
-       <set_value name="$capQuarantine.{$v}" exact="player.age + $capLifetime + 0.25s"/>
-      </do_if>
-      <do_if value="player.age ge $capQuarantine.{$v} and $sg gt 0">
+      <do_if value="$capShooter.{$v} == $capMe and $capSGen.{$v} == $sg and $capVGen.{$v} == $vg and $sg gt 0 and player.age ge $capQuarantine.{$v}">
        <set_value name="$capCount.{$v}" exact="$capCount.{$v} + 1"/>
-       <raise_lua_event name="'X4LAN_ShotCapture.Count'" param="'%s|%s|%s|%s'.[$v,$sg,$vg,$capCount.{$v}]"/>
-       <do_if value="@$arena.$healthProbe"><debug_text text="'[X4LAN] SHOT_CAPTURED victim=%s kind=%s gens=%s/%s count=%s amount=%s'.[$v,$kind,$sg,$vg,$capCount.{$v},$amount]"/></do_if>
+       <raise_lua_event name="'X4LAN_ShotCapture.Count'" param="'%s|%s|%s|%s|%s'.[$v,$capMe,$sg,$vg,$capCount.{$v}]"/>
+       <do_if value="@$arena.$healthProbe"><debug_text text="'[X4LAN] SHOT_CAPTURED victim=%s shooter=%s kind=%s gens=%s/%s count=%s amount=%s'.[$v,$capMe,$kind,$sg,$vg,$capCount.{$v},$amount]"/></do_if>
       </do_if>
      </actions>
     </library>

@@ -97,11 +97,12 @@ function d.hit(v,n)
 end
 
 -- Capture entry (shot_capture.lua): the NATIVE cumulative count of my own ship's hits on victim v
--- under (sgen, vgen); it only raises the total of the current key, never reinterprets it.
-function d.cumulative(v,sgen,vgen,total)
+-- by shooter entity `from` under (sgen, vgen); it only raises the total of the current key, never
+-- reinterprets it, and refuses a count admitted for another shooter.
+function d.cumulative(v,sgen,vgen,total,from)
  local e,gen=shooter();local vg=v and v>=1 and v<=4 and victimGen(v)
  total=integer(total,1000000)
- if d.failed or not e or not d.support[e] or v==e or not vg or gen~=sgen or vg~=vgen or not total or authority(v,vg) then return false end
+ if d.failed or not e or e~=from or not d.support[e] or v==e or not vg or gen~=sgen or vg~=vgen or not total or authority(v,vg) then return false end
  local k=key(e,gen,v,vg)
  if total>(d.totals[k] or 0) then d.totals[k]=total;d.dirty=true end
  return true
