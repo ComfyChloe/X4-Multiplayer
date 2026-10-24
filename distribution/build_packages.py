@@ -69,7 +69,7 @@ def build(destination: Path, runtime_cache: Path | None = None):
         shutil.copy2(DIST / 'world_launcher.py', root / 'world_launcher.py')
         shutil.copy2(DIST / 'action.py', root / 'action.py')
         (root / 'x4lan').mkdir()
-        for name in ('__init__', 'host', 'bubble', 'economy', 'coop', 'quests', 'monitor', 'universe', 'cargo', 'identity', 'seed'):
+        for name in ('__init__', 'host', 'bubble', 'economy', 'coop', 'quests', 'monitor', 'universe', 'cargo', 'identity', 'seed', 'docking', 'projectile_protocol', 'projectile_relay'):
             shutil.copy2(SOURCE / 'x4lan' / (name + '.py'), root / 'x4lan' / (name + '.py'))
         if platform == 'Linux': shutil.copy2(DIST / 'linux_setup.py', root / 'setup_linux.py')
         else: shutil.copy2(DIST / 'windows_setup.ps1', root / 'setup_windows.ps1')

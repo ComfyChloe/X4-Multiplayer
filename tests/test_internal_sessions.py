@@ -1,5 +1,5 @@
 """Internal Windows/Linux role and invitation boundaries."""
-import importlib.util,json,tempfile,unittest
+import importlib.util,json,subprocess,sys,tempfile,unittest
 from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
@@ -128,3 +128,18 @@ class InternalSessions(unittest.TestCase):
     def test_unavailable_dialog_falls_back_to_quoted_terminal_path(self):
         with patch.object(launcher.sys, 'platform', 'win32'), patch.object(launcher.subprocess, 'run', side_effect=FileNotFoundError), patch('builtins.input', return_value='"C:/Folder With Spaces/JOIN-SESSION.json"'):
             self.assertEqual(launcher.choose_invitation(), 'C:/Folder With Spaces/JOIN-SESSION.json')
+
+
+class InternalPackageRuntime(unittest.TestCase):
+    def test_both_built_servers_import_and_construct_session_outside_checkout(self):
+        from distribution import build_packages
+        with tempfile.TemporaryDirectory() as d:
+            out=Path(d)/'packages';build_packages.build(out)
+            folders=sorted(out.glob('X4-LAN-*'))
+            folders=[p for p in folders if p.is_dir()];self.assertEqual(len(folders),2)
+            for folder in folders:
+                with self.subTest(platform=folder.name):
+                    code="import sys;sys.path.insert(0,sys.argv[1]);from x4lan.monitor import run;from x4lan.universe import UniverseSession;s=UniverseSession('a'*32,'world1-package-check','bubble');print(type(s).__name__)"
+                    result=subprocess.run([sys.executable,'-I','-B','-c',code,str(folder)],cwd=d,text=True,capture_output=True)
+                    self.assertEqual(result.returncode,0,result.stderr)
+                    self.assertEqual(result.stdout.strip(),'UniverseSession')

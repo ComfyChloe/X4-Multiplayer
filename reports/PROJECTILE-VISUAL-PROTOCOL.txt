@@ -1,4 +1,4 @@
-OBSERVED PROJECTILE VISUALS — PROPOSED OPT-IN CONTRACT — 24 OCTOBER 2026
+OBSERVED PROJECTILE VISUALS — OPT-IN CONTRACT — 24 OCTOBER 2026
 
 INERT FOUNDATION. This channel may create only temporary harmless visuals.
 It never establishes a hit, grants damage, aims a real gun, or changes gun heat.
@@ -51,25 +51,33 @@ CODE OWNERSHIP
 PR41 codecs2ae2284 independently reviewed and merged. Nine focused tests,1,000
 randomized Python/Lua canonical roundtrips and3,000 malformed variants passed;
 oversized-int serializer correction separately verified. Codec/adapter remain
-unregistered in ui.xml. Claude now owns bounded relay hooks/helper/tests in a
-separate PR; primary owns native capture/render/lifecycle and later integration.
+unregistered in ui.xml. PR42 relay695786a independently73 PASS and merged8832a15. Primary owns
+native capture/render/lifecycle and integration; Claude paused at usage limit.
 Parsers take explicit client/forwarded direction and return validated named fields.
 No native IDs, victim identity or damage amounts appear in this protocol.
 
 CURRENT UNREGISTERED ADAPTER
 projectile_game.lua / x4lan_projectile.xml provide local native sample capture and
-owned finite-effect rendering behind projectile_visuals=false. Source samples use
-20..200ms actual position differences, original shot TTL1.7s plasma/.7s pulse,
-three birth/end transmissions at50ms spacing. The adapter repeats pilot, proof,
-health generation, current ship/sector and NAV2 source-lease gates; native State
-ACK and queued Create repeat identity, fresh readback and proof checks. Fixed256
-slots use monotonic operations; cancel-before-create and late-old-remove cannot
-revive/kill another slot use. Native watchdog/expiry and explicit effect removal
-bound cleanup if Lua stops. Positive FIRE2 replay is blocked in Lua and native MD
-when observed-projectile mode is active. No target substitution or damage writes.
-11 focused adapter/native-gate checks; prior32 FIRE2/visual checks plus new replay
-suppression regression pass. Both changed MD scripts validate. Native integration
-of this adapter, pulse graphics and real BOLT/BEND relay path still pending.
+owned finite-effect rendering behind projectile_visuals=false. Source capture uses
+the actual native Born velocity transformed through the bullet's sector-relative
+basis, plus first alive C pose/source timestamp; original shot TTL1.7s plasma/.7s
+pulse and three birth/end transmissions at50ms spacing. Far-sector float position
+differencing was withdrawn after a retained0.282m error. The adapter repeats pilot,
+proof, health generation, current ship/sector and NAV2 source-lease checks. Native
+State ACK and queued Create recheck identity/time/proof. Fixed256 slots use
+monotonic operations; cancellation and late-old replies cannot affect newer uses.
+Explicit native refusal retries after50ms only while the observation remains
+live; no ACK has a300ms timeout. Native expiry/watchdog removes effects/carriers.
+Observed mode is latched before Prepare; positive native gun replay is excluded,
+and stop requests clear budgets without suppressing actual-controlled input.
+The real-relay native full adapter captures54 physical plasma shots; a moving
+PulseMk1 case captures18; moving PulseMk2 at249km captures24, with12 independent
+native trajectories within1.5cm. Receiver cases use12 labelled synthetic
+observations, including a deliberately refused/retried Create. All effects retire.
+These are one-native bounded tests, not matched Windows/Linux gameplay. Detailed
+source hashes, failures, gates and restoration audits are in the rendering report.
+Very short-lived-before-Lua capture, in-flight handover and heat continuity remain
+separate work. Flags stay off and projectile adapter stays unregistered.
 
 MOTION REVIEW CORRECTIONS (Claude10b5d7b review,24 October06:15)
 The buffer now purges expired/ended unsampled entries before testing capacity.

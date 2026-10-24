@@ -301,3 +301,20 @@ Native now emits an operation-scoped Rejected ACK; Lua waits50ms then retries
 only the still-live observation. Stale rejection cannot touch a newer slot or
 an acknowledged object; ended observations do not revive.17 adapter checks PASS,
 changed MD schema VALID. Next run deliberately crosses that queue boundary.
+
+Far03, source7564b9c, bounded PASS:24 actual physical moving Mk2 shots at249km,
+12 independent native trajectories within0.014766m; all12 synthetic remote
+observations render/remove, at least3 MD readbacks each, final0 objects, unchanged
+health. Dev fixture deliberately replaces first Create's wall stamp with1970;
+operation3 never creates an object, the same observation retries atoperation5.
+The synthetic early end is now0.6s into original0.7s TTL (previous0.45s retained
+in failed far02); all prior geometric, identity, count and cleanup gates remain.
+Raw SHA25604184cec176e20994911b4d968809e9ee404840ef549a123882109a791e11668.
+69 production files+loadout/two probes audited;37-file restore,actual7 save
+bytes/timestamps and owned slot verified. No two-native gameplay acceptance.
+
+Next package preparation now includes docking/projectile protocol/relay Python
+modules. An isolated packaged-server import/constructor check reproduced missing
+imports in BOTH artifacts before correction and passes after it. This executes
+both platform-neutral server trees on Linux, not the Windows executable runtime.
+Only disposable test archives were built; sealed7.3.1 was not touched.
