@@ -176,3 +176,12 @@ db41cf6af89f03b777d7fcf99a5bf0f59c13f2e2db55bef7108280e054803b97.
 Both runs retain cleanup inventories and their failures; neither qualifies aim
 replay. The engine-contact draft now asks specifically for primary-gun aim and
 projectile physical-velocity interfaces. It has not been sent.
+
+GENERIC BULLET CREATION
+projectile-create-01 tries create_object with each of6 actual observed native
+bullet_ter_s_plasma_01_mk1_macro projectiles' macro, an isolated position offset
+and15deg rotation. All6 return no component; no copied projectile exists at the
+later readback. FAIL, without a specific creation error. This is not a supported
+projectile-construction hook. Raw SHA256
+781aaed1552e393754235eb6ce78b29be35d2c2b00b7ce704e1156a2f930e160.
+Owned cleanup verified. No production weapons change.

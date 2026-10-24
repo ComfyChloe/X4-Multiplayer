@@ -217,3 +217,35 @@ source; both changed MD schemas VALID. The expression interpreter is a source
 regression check, not native engine evidence. The optional probe now samples20Hz
 and logs immediate native post-write readbacks. Native guest validation pending;
 the previous host capture remains PARTIAL and is not relabelled by these changes.
+
+PERMANENT FAILURE CLOSURE AND NATIVE GUEST FOLLOW-UP,24 OCTOBER2026
+Review of66169d2 closes the guest01 failure-rearm finding. h.fail closes used
+native generations and permanently refuses further health baselines, ownership,
+reports and writes for this load, while ordinary WORLD processing continues.
+34 affected health/probe tests independently pass on both reviewed/integrated
+adfcff5. The e5a41b8 observer now derives send observations from health state;
+it does not mutate the native transport userdata. Relay forwarding is delivery
+truth, not that observer's send label.
+
+.local/evidence-050-withheld: one native Linux p2, real relay, synthetic p1; native
+Base/Based/own/HACK order confirmed,125 send observations all forwarded. Scripted
+local50% hull reported about0.02s later. WORLD40 does not overwrite the own ship;
+rebase adopts55/20; keepalive watchdog closes generation3, its deliberately late
+own=true request is refused, generation4 starts from the canonical baseline.
+Old generation2 HBASE cannot reapply. Deliberate phase7 callback failure at age32
+revokes gen4;72 subsequent samples have own=false/auth0. WORLD35/15 appears at
+age33.08 and stays, while fresh HBASE gen5 repeats without rearming or any new
+HACK/HEALTH/Base. Raw SHA256
+c95330fd402dcbce16a68303aefe076b7eaa43b857c234c525ec35a25efe01be.
+Overall contract remains PARTIAL: the phase2 controller used4s, whereas the
+written contract says5s (74 samples span3.96s). Keep this explicit; the failure
+closure and other bounded observations pass. No paired or real-combat claim.
+
+.local/evidence-051-withheld repeats ONLY the previously unresolved host timing
+phase with the finer native observer. Three labelled1.5% setters clamp at2%;
+actual immediate Apply readbacks restore90% after0.1052/0.0987/0.0989s (log-time
+precision about0.01s), within the unchanged0.2s gate. This bounded follow-up
+PASSES. Original health-function-01 remains historically PARTIAL. Not real shots.
+Raw SHA256d4c7d5bb43ce3f725c4a595c3ee5bf74fd82872f746bd29d2f220e84c8763143.
+Both new captures retain source inventories, original37-file restoration,
+preferences/owned slot and7actual normal-save hashes/timestamps.

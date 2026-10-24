@@ -20,19 +20,19 @@ oscillation after guest piloted/landed/exited host ship. “Overload” meant cr
 not FPS. Detailed triage in ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP
-Claude PR36 owns health relay/Lua/MD + bubble/life guards. Integrated9516cf5 at
-6e49f87, pilot_health still disabled.32 focused health tests PASS on reviewed/
-integrated source; schemas VALID. Previous424 whole suite at4324cd0 is historical.
-Native host health-function-01 PARTIAL: floor/authority/expiry/death work;
-<=0.2s recovery not proven by5Hz samples. Guest health-guest-01 FAILED: observer
-mutates native transport userdata, HEALTH STOPPED. It exposed a production bug:
-h.failed stops frames but receive/base/based keep granting new own generations.
-Claude notified01:44, assigned permanent health-failure closure + regression,
-and dev observer userdata-safe send logging. Need native failure phase7 after fix.
-Dev-only observer e5a41b8 independently2 PASS; review worktree at e5a41b8. Native Windows remains blocked by
+Claude PR36 owns health relay/Lua/MD + bubble/life guards. Integrated66169d2 at
+adfcff5, pilot_health still disabled.34 affected health tests independently PASS.
+Permanent failure closure now prevents the guest01 rearm bug. guest02 native:
+125 reports forwarded, local damage~.02s, watchdog/old-generation refusal and
+phase7 terminal failure/WORLD fallback pass bounded checks. Contract PARTIAL:
+phase2 ran4s instead of specified5s; do not hide this mismatch. Host recovery02
+repeats ONLY unresolved timing:3 native floor drops recover~.10s, unchanged.2s gate
+PASS. Earlier full host/failed guest captures retain their original statuses.
+Details/raw hashes in reports/VICTIM-PILOT-HEALTH-DESIGN.txt. No real combat claim.
+Review worktree ../x4-health-review at66169d2. Native Windows remains blocked by
 Workshop restrictions. Primary owns aim/docking/story/controller/native/integration.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last01:45 checkpoint1792799144.276449; production finding1792799049.961589.
-Quarter-hour coordination; next02:00. No new timer/chat.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last02:00 checkpoint1792799975.744119, health/findings1792800505.535089.
+Quarter-hour coordination; next02:15. No new timer/chat.
 
 IMPLEMENTATION / EVIDENCE
 Story native preset: hidden x4lan_internal start,14 completed plot choices and28
@@ -77,13 +77,12 @@ forward15deg but NOT flight; SetObjectSectorPos rejects bullets. Prior gun sette
 and direct gun-object shooting also fail. No production aim change.
 
 LIVE JOBS / TOOLS
-No active game/controller; all completed runs verified cleaned.
-Additive velocity01 FAIL: all6 bullets reject non-destructible velocity write.
-aim-latch01 PARTIAL fixture:12 forward shots after release; AI md lookup error.
-Raw evidence/cleanup retained; these add no successful aim primitive.
-Health guest next: clone .local/evidence-049-withheld controller after Claude fixes.
-It loads seed-market-dock-02 snapshot, synthetic p1 + real Linux p2,6 phases.
-Add deliberate callback-failure phase7 and gate ordinary HEALTH STOPPED early.
+ACTIVE native exec65959: .local/evidence-105-withheld One native target and
+2 interleaved/overlapping pulse shooters compare object.lastattacker/lastattacktime
+against canonical event_player_ship_hit, plus per-hit damage records. Unproven
+whether these getters escape attacked-event throttling; Claude told not to duplicate.
+All other runs cleaned. Generic create_object bullet experiment FAIL (6 nulls),
+additive velocity FAIL(6class rejections). Detailed raw/failure reports retained.
 CRITICAL: preserve original shaderquality2. Old temporaryquality1 caused native
 fatal1119 p1_glass compile (cursor03 screenshot/stacks). No graphics downgrade.
 No concurrent native/install mutation; normal saves never loaded.
