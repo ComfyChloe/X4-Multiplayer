@@ -230,6 +230,14 @@ class ShotAdapterTests(unittest.TestCase):
          return native,remote,S.totals['1|3|2|4']""")
         self.assertEqual(tuple(out),(False,True,1))
 
+    def test_locally_closed_health_generation_drops_claims_before_next_hgen(self):
+        out=self.make('p1').execute("""
+         local S,H=X4LAN_BUBBLE_API.shot,X4LAN_BUBBLE_API.health
+         loadout(2,'0x11,'..P..';');shot(1,3);H.close(2,4);tick(10.15)
+         shot(2,9);tick(10.2)
+         return #applies(),next(S.pending)==nil,H.valid[2],H.closed[2]""")
+        self.assertEqual(tuple(out),(0,True,4,4))
+
 
 def shot_cue(name):
     found = [c for c in E.parse(MD).iter('cue') if c.get('name') == name]

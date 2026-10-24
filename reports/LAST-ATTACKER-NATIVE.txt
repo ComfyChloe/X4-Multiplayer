@@ -148,3 +148,26 @@ inert capture/undo is now authorized for the bounded uniform unmodified stock
 ordinary-bullet path, with explicit unsupported-loadout refusal. Claude owns it;
 transport/application integration and health-floor/death fences still pending.
 No production flag/package activation or two-native acceptance.
+
+RECHARGE SIDE EFFECT — UNDO IS NOT A COMPLETE REPLAY SOLUTION
+damage-recharge-07 FAILS before world startup with SIGSEGV. Its original dev zero
+weapon and dependent bullet shared one indexed macro file; split files in08 remove
+this observed crash. Recursive dependency is a hypothesis, not a proven engine
+root cause. Failure retained; raw SHA256
+328e6e33d88807ef18f39555e6de1a15d39d361454c9f8e76d5263d5155a8a2d.
+
+damage-recharge-08 is an OBSERVATION, not projectile/visual acceptance. A labelled
+one-point prime damage starts a recharge delay, then baseline is set to10 shield.
+Control first recharge is9.0214s after baseline.17 real stock pulse hits whose HP
+losses are synchronously undone delay recharge to14.7183s. Thus HP restoration
+alone still lets false local replay hits suppress canonical shield regeneration.
+An original dev zero-damage pulse produces36 births, no canonical hit/damage
+callbacks, and recharge at9.0386s. However physical intersections are unproven:
+150ms trajectory samples do not establish actual impacts, and zero damage removes
+the canonical hit callback. Its continuous6Hz cadence is deliberately a primitive,
+not stock weapon fidelity. Separate weapon/bullet macro files are retained locally.
+No production substitution, damage capture or replay activation follows this run.
+Raw SHA256da3cbaf0f9ec9ce656065ff6866fba431abc5519ba248156c31cf6581a9213ac.
+Retained after-cleanup inventories independently match all37 original mod files;
+actual normal saves and owned test save retain bytes/timestamps; steam_autocloud
+bytes unchanged. Owned game/helpers closed and settings restored by controller.

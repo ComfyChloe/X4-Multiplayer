@@ -18,24 +18,22 @@ lands/exits host ship. "Overload" meant crashes, not FPS. Detailed triage:
 ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP / COORDINATION
-Claude PR36 owns health relay/Lua/MD and related guards. Integrated66169d2 at
-adfcff5, pilot_health OFF.34 affected tests PASS. Health terminal-failure closure
-and native recovery verified; reports/VICTIM-PILOT-HEALTH-DESIGN.txt retains limits.
-Guest02:125 reports, watchdog/old-generation/terminal failure positive; PARTIAL
-because phase2 ran4s vs required5s. Host recovery02 only unresolved timing repeated:
-three restores~.10s within unchanged.2s gate. No real combat acceptance.
-Primary owns aim/docking/story/native/controller/integration. No concurrent native
-or installation writes. Claude Windows native blocked by Workshop restrictions.
-Slack PRIVATECOORDINATIONID, threadPRIVATE-THREAD-ID, quarter-hour; next03:00 (02:45 checkpoint1792802722.629579). No new timer/chat.
-02:39 message1792802372.785509 authorizes Claude SOURCE-ONLY inert shot_claims=false
-uniform unmodified ordinary-bullet SHOT cumulative transport/application fences.
-02:48 message1792802908.525969 extends SOURCE-ONLY inert capture/undo; still OFF.
-Design06f54b7 has superseded errors; see current
-native report/corrections, not invented lastattackercomponent/weapon getter.
+Claude stopped at usage limit02:54 (1792803297.836829), draftPR38 cf58725.
+Primary ACK03:00 takes further review/integration/capture ownership; no duplicate
+worker. PR36 health66169d2 integrated, pilot_health OFF. Retained native health
+limits in reports/VICTIM-PILOT-HEALTH-DESIGN.txt. Primary owns native/docking/story.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next03:30,
+last03:15 checkpoint1792804559.587959. No new timer/chat or repeated reset query.
+SHOT hardened branch5a0f75d merged4ae1065: exact pending energy, duplicate ACK,
+native generation/authority/window fence, permanent Stop, stock uniform unmodified
+loadout gate. Local-closed generations now dropped before next HGEN too.
+56 affected SHOT/HEALTH checks PASS;51 adjacent relay/FIRE2/universe checks PASS
+before last Lua-only closure change. MD schema VALID. Flags OFF; capture absent.
+reports/SHOOTER-CONFIRMED-HITS-DESIGN.txt tracks boundaries and PR38 review fixes.
+Next isolated .local/evidence-247-withheld is prepared: real host/synthetic shooter,
+manual hit counts, lost ACK and queued closed-gen refusal. No physical hit claim.
 
-CURRENT NATIVE / WEAPONS
-No active native game. All runs through damage-dedup-06 cleaned. NEVER read
-restored live profile log as evidence; use retained native.log.
+WEAPON NATIVE EVIDENCE
 reports/LAST-ATTACKER-NATIVE.txt: per-callback object.lastattacker identities correct
 for player/NPC, including same-frame different shooters; timestamp STALE, not a
 freshness gate. Floor clips/suppresses callbacks; raw HP delta is not projectile
@@ -51,7 +49,9 @@ keeps two286-point ram damages native, no claim. Simultaneous shot+collision rem
 ambiguous; production needs all collision pairs, not single last collider.
 Health min2 proxy loses
 callbacks below2%; needs coherent canonical-death/floor handling, Claude informed.
-Reports contain raw hashes, limits, cleanup. No production SHOT/aim activation.
+Reports contain raw hashes, limits, cleanup. No production SHOT/aim activation. Recharge08 shows HP undo delays shield recharge
+(14.7183s vs control9.0214s). Dev zero bullet9.0386s but impacts/visual fidelity
+unqualified;07 startup crash retained. Need a complete replay solution.
 reports/WEAPON-AIM-PRIMITIVES.txt: native bullet orientation getters track flight,
 but setters only rotate visuals, MD/FFI primary steering rejected. PlayerTargetOffset
 zero off-axis. No selected-victim auto-lock. Egosoft questions drafted, NOT sent.

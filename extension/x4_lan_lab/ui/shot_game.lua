@@ -32,7 +32,8 @@ local function hex(v) return type(v)=='string' and #v==32 and v:match('^[a-f0-9]
 local function send(v) if s.client and s.client.lease then s.transport:send(v) end end
 local function paused() return A.paused and A.paused() end
 local function key(e,gen,v,vg) return e..'|'..gen..'|'..v..'|'..vg end
-local function victimGen(v) if v<=2 then return h.valid[v] end return 0 end
+local function validGen(e) local g=h.valid[e];return g and g>(h.closed[e] or 0) and g or nil end
+local function victimGen(v) if v<=2 then return validGen(v) end return 0 end
 -- Only from a fresh MD readback of health_game.lua, never while paused (HEALTH's window).
 local function writable() return h.mdStamp and (h.now or 0)-h.mdAt<=READING and not paused() end
 
@@ -78,8 +79,8 @@ end
 
 -- Shooter: my piloted co-op ship with its valid generation.
 local function shooter()
- for e=1,2 do if not h.failed and c.owners[e]==cfg.slot and c.pilots[e]==cfg.slot and h.valid[e] and
-   (cfg.slot=='p1' or h.live and h.live.entity==e and h.live.gen==h.valid[e]) then return e,h.valid[e] end end
+ for e=1,2 do if not h.failed and c.owners[e]==cfg.slot and c.pilots[e]==cfg.slot and validGen(e) and
+   (cfg.slot=='p1' or h.live and h.live.entity==e and h.live.gen==validGen(e)) then return e,validGen(e) end end
 end
 -- Capture entry (unarmed): n native hits of my own ship on victim v.
 function d.hit(v,n)
@@ -98,7 +99,7 @@ function d.receive(f)
  local e,gen,v,vg=integer(f[5],2),integer(f[6],2147483647),integer(f[7],4),integer(f[8],2147483647)
  local seq,hits=integer(f[9],2147483647),integer(f[10],1000000)
  if not e or e<1 or not v or v<1 or v==e or not gen or not vg or not seq or not hits then return true end
- if c.owners[e]==cfg.slot or c.pilots[e]~=c.owners[e] or h.valid[e]~=gen or victimGen(v)~=vg or not authority(v,vg) then return true end
+ if c.owners[e]==cfg.slot or c.pilots[e]~=c.owners[e] or validGen(e)~=gen or victimGen(v)~=vg or not authority(v,vg) then return true end
  local sup=d.support[e]
  if not sup or f[11]~=sup.digest then return true end            -- unsupported or different loadout
  local k=key(e,gen,v,vg);local p=d.pending[k]
@@ -114,7 +115,7 @@ function d.applied(payload)
  if d.failed or not slot or slot<1 or slot>8 or state~=d.stateRevision then return end
  local e,v=math.floor((slot-1)/4)+1,(slot-1)%4+1
  local k=key(e,gen,v,vg);local p=d.pending[k]
- if not p or count>p.hits or h.valid[e]~=gen or victimGen(v)~=vg or not authority(v,vg) then return end
+ if not p or count>p.hits or validGen(e)~=gen or victimGen(v)~=vg or not authority(v,vg) then return end
  if count>(d.confirmed[k] or 0) then d.confirmed[k]=count end
  local fl=d.inflight[k];if fl and fl.count<=count then d.inflight[k]=nil end
 end
@@ -122,7 +123,7 @@ end
 -- A changed native permission state revokes queued writes before the next state is admitted.
 -- The MD ledger checks this revision AND HEALTH closure/authority at execution.
 local function state(now)
- local g1,g2=h.valid[1] or 0,h.valid[2] or 0
+ local g1,g2=validGen(1) or 0,validGen(2) or 0
  local a1,a2=authority(1,g1),authority(2,g2)
  local sig=table.concat({g1,g2,tostring(a1),tostring(a2)},'|')
  if sig~=d.stateKey then
@@ -156,7 +157,7 @@ function d.frame(now)
  d.dirty=false
  -- Authority: issue the next increase (at most BATCH hits), retried until MD confirms it.
  for k,p in pairs(d.pending) do
-  if h.valid[p.shooter]~=p.sgen or victimGen(p.victim)~=p.vgen or not authority(p.victim,p.vgen) then
+  if validGen(p.shooter)~=p.sgen or victimGen(p.victim)~=p.vgen or not authority(p.victim,p.vgen) then
    d.pending[k],d.confirmed[k],d.inflight[k]=nil,nil,nil
   else
    local base=d.confirmed[k] or 0;local fl=d.inflight[k];local sup=d.support[p.shooter]
