@@ -18,21 +18,22 @@ lands/exits host ship. "Overload" meant crashes, not FPS. Detailed triage:
 ../x4-release-7-3-1/.local/evidence-054-withheld
 
 OWNERSHIP / COORDINATION
-Claude active, branch contrib/claude-shot-capture draftPR39 d8b4620. Primary
-review worktree ../x4-capture-review:74 focusedPASS; review posted04:04 (Slack
-1792807448.984469), NOT accepted: lost proxy kills canonical50 afterwatchdog;
-delayed source2/gen4 count becomes source1/gen4; quarantine starts atfirsthit;
-native closed-gen/current-authority fences missing beforeHPrestore. Claude owns
-corrections + health/life/capture, no native/flags/package. Primary owns native,
-visual/FIRE2, docking/integration. faeb16d gate fix merged by Claude.
-Visual contract proposed1792806995.897099 awaitingACK: native shotVisualMode
-(0unknown/1original/2zero), Gen/At; capture needs fresh own original proof.
-Primary next implements NEW inert shot_visual.lua/x4lan_shot_visual.xml with
-native Stop/ACK before setter and both Lua/native FIRE2 proof fences. See
-reports/SHOT-VISUAL-PRIMITIVE.txt. No shadow weapon replacement needed.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next04:15,
-04:00 checkpoint1792807231.882289. No new timer/chat. NO active native game.
-All throughzero-switch03 cleaned; schema worker48913 remains active.
+Claude active, contrib/claude-shot-capture draftPR39 latest9adf2eb. Primary review
+../x4-capture-review:78 affectedPASS, original shooter-ID/quarantine/proxy-loss
+findings fixed. Remaining symmetric native closure gaps reproduced (guest victim
+closed/host shooter closed still restore+count), plus actual pilot witness:
+Claude notified1792808431.267749/1792808475.071049; owns source/tests fixes.
+Primary owns native, visual/FIRE2, docking/integration. New983f5a4 visual module
+pushed, flagsOFF: native stopACK before setter, per-gun proof after, both Lua/MD
+FIRE2 fences. Interface agreed: arena.shotVisualMode/Gen/At lists1..2, mode0/1/2.
+Native shot-visual01 boundedPASS: remote/local/remote gens2/4/6, same6gunIDs,
+6zero bullets before+6after, local stage old/current queuedFIRE2 bothrefused.
+37restore/7normal saves verified. Followup passenger guard uses player.controlled
+(source/testonly so far). reports/SHOT-VISUAL-PRIMITIVE.txt retains qualification.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour; next04:30,04:15
+checkpoint1792808016.264479. No new timer/chat. NO active native game.
+Schema worker48913 remains active. Next: finalPR39 review then integrated physical
+capture/harmless-replay native test, including passenger case.
 SHOT hardened branch5a0f75d merged4ae1065: exact pending energy, duplicate ACK,
 native generation/authority/window fence, permanent Stop, stock uniform unmodified
 loadout gate. Local-closed generations now dropped before next HGEN too.

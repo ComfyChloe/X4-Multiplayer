@@ -110,7 +110,7 @@ class NativeReplayGateTests(unittest.TestCase):
             '$v.$visualGen':'gen', '$arena.$shotVisualGen.{$v.$ship}':'proofgen',
             '$arena.$shotCurrentGen.{$v.$ship}':'currentgen', '$arena.$healthClosed.{$v.$ship}':'closed',
             'player.age - $arena.$shotVisualAt.{$v.$ship}':'proofage',
-            'player.age - $arena.$shotStateAt':'stateage', 'player.occupiedship != $ship':'not piloted',
+            'player.age - $arena.$shotStateAt':'stateage', 'player.controlled != $ship':'not piloted',
             ' gt ':' > ', ' le ':' <= ', '0.3s':'.3'}
         for a,b in sorted(replacements.items(), key=lambda item: -len(item[0])): expression=expression.replace(a,b)
         self.assertNotIn('$',expression)

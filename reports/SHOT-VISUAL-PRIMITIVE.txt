@@ -57,3 +57,32 @@ old firing requests must never fire a newly restored original weapon. Capture
 requires fresh matching original-mode proof. All flags remain off pending review
 and focused native integration. In-flight damage across authority handovers is
 an additional qualification, not solved merely by changing future bullets.
+
+OPT-IN ADAPTER AND OWNERSHIP HANDOVER (983f5a4)
+
+New shot_visual=false module retains original gun components and switches only
+their launched macro. A native stop/budget-clear ACK precedes the setter; every
+installed gun is read back before a fresh native proof. FIRE2 checks this proof
+both before enqueueing and again in native execution. Unknown/expired proof,
+closed generations and local piloting refuse positive replay and clear budgets.
+The three new harmless definitions reference stock resources without shipping
+game asset files. Capture separately requires fresh original-projectile proof.
+
+.local/evidence-249-withheld: actual remote/local/remote ownership changes (health
+generations2/4/6), all six gun IDs at slots1/2/3/5/6/7 retained. Exactly six harmless
+bullets before takeover and six after return. While locally piloted, two injected
+positive FIRE2 requests (old AND current generation) produce no bullets; twelve
+readbacks stay original mode/gen4. All18 gun readbacks match zero/original/zero.
+Bounded native adapter PASS; this is one Linux engine with a synthetic peer, not
+a matched Windows/Linux game or free-aim acceptance. Raw SHA256
+c50680de55a1b2ebcc9e495059105a1e52ba28780a96a0f9a36b5d65ecdf6788.
+37 restored files and seven actual normal-save bytes/timestamps verified; owned
+game/helpers closed. Native zero-damage-macro warning remains in engine-errors.txt.
+No parser/API failure. Source schema valid;58 focused SHOT/FIRE2/visual checks
+passed after correcting one test-only token-substitution ordering bug;25 adjacent
+co-op adapter checks also passed. No default flag or package activation.
+
+Following source delta changes the NEW FIRE2 pilot exclusion from occupiedship to
+player.controlled: a passenger must not suppress harmless remote fire. This
+property is used by stock inituniverse.xml/setup.xml. Two affected gate checks
+pass; the passenger/native variant remains pending for the integrated run.
