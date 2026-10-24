@@ -2,7 +2,7 @@ X4 MULTIPLAYER — HUMAN DAMAGE TEST PROCEDURE
 Revision 2 — 24 October 2026 — INTERNAL
 
 STATUS / WHEN TO USE
-For the matched 7.4.0 INTERNAL Windows/Linux candidate and its server. Enabled
+For the matched {{VERSION}} INTERNAL Windows/Linux candidate and its server. Enabled
 cases and progression are assigned in NEXT-TEST.txt. Earlier 7.3.1 packages have
 no damage correction and must not join this session. This document launches
 nothing; the two humans operate their own games and collect results.

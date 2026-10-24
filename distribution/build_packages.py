@@ -20,6 +20,10 @@ def write(path, text):
 def document(source, destination, release):
     write(destination, source.read_text().replace('{{VERSION}}', release))
 
+def linux_starter(action, bundled):
+    command = '"./runtime/bin/python3"' if bundled else 'python3'
+    return (DIST / 'linux_action.sh').read_text().replace('{{PYTHON}}', command).replace('{{ACTION}}', action)
+
 def copy_server_runtime(root):
     """Copy the same platform-neutral server implementation into either package."""
     (root / 'x4lan').mkdir()
@@ -69,7 +73,7 @@ def build(destination: Path, runtime_cache: Path | None = None):
         shutil.copy2(SOURCE / 'VERSIONING.txt', root / 'VERSIONING.txt')
         shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', root / 'WORLD-SYNC-TEST.txt')
         for name in ('HUMAN-DAMAGE-TEST.txt','HUMAN-DOCK-TEST.txt','HUMAN-TEST-RESULT.txt'):
-            shutil.copy2(DIST / name, root / name)
+            document(DIST / name, root / name, release)
         (root / 'reports').mkdir()
         shutil.copy2(reports[1], root / 'reports/RELEASE-CHECKS.txt')
         shutil.copy2(reports[0], root / 'reports/AUTOMATED-TESTS.txt')
@@ -101,11 +105,8 @@ def build(destination: Path, runtime_cache: Path | None = None):
                    '09-REMOVE-MOD': 'remove', '10-COLLECT-TEST-CONTAINER': 'collect'}
         for title, action in actions.items():
             if platform == 'Linux':
-                command = '"./runtime/bin/python3"' if runtime_cache else 'python3'
                 path = root / (title + '.sh')
-                write(path, '#!/usr/bin/env bash\nset -u\ncd -- "$(dirname -- "${BASH_SOURCE[0]}")" || exit 1\n'
-                      + command + ' -I -B launcher.py ' + action + ' "$@"\nresult=$?\n'
-                      'if [ -t 0 ]; then read -r -p "Press Enter to close... " answer; fi\nexit "$result"\n')
+                write(path, linux_starter(action, bool(runtime_cache)))
                 path.chmod(0o755)
             else:
                 command = '"%~dp0runtime\\python.exe"' if runtime_cache else 'python'

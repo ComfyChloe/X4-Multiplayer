@@ -7,6 +7,8 @@ or download is needed. Open 00-START-HERE.html for detailed instructions.
 Extract Linux's .tar.xz or Windows' .zip completely before running any action.
 
 WHAT CHANGED
+7.4.1 corrects Linux desktop startup: all numbered starters open a terminal for
+questions and errors. Gameplay is unchanged from the 7.4.0 candidate below.
 This candidate transmits damage from actual stock-weapon impacts and renders the
 other pilot's observed projectiles, preserving native aim, spread and misses.
 It reserves the same saved station pad in both games and fences stale movement
@@ -52,8 +54,9 @@ GUEST
    the shared world, then X4 loads it automatically. Do not choose another save.
 
 The numbers identify actions; guests skip HOST-only actions 02 and 03.
-Windows: double-click the numbered .cmd files. Linux: run the matching .sh files
-from a terminal, for example bash 01-INSTALL.sh. Allow UDP 45841 and TCP 45844 to the
+Windows: double-click the numbered .cmd files. Linux: execute the matching .sh
+files; they open a terminal automatically. If your file manager opens an editor
+instead, use its Run/Execute option or run bash 01-INSTALL.sh in a terminal. Allow UDP 45841 and TCP 45844 to the
 host on your test network. A successful UDP check alone does not test the save
 transfer. No router forwarding is needed with a working ZeroTier connection.
 

@@ -1,3 +1,10 @@
+Version 7.4.1 — 24 October 2026 — INTERNAL launcher correction
+- All ten Linux starters open a visible terminal when launched without one.
+- Installer questions and errors remain visible; missing input no longer raises
+  an unhandled EOF traceback. Paths and invitation arguments retain their quoting.
+- Gameplay is unchanged from 7.4.0. Use the matched 7.4.1 pair/server and a new
+  private invitation. Previous sealed archives remain unchanged.
+
 Version 7.4.0 — 24 October 2026 — INTERNAL candidate, human acceptance pending
 
 - Capture actual stock-gun hits; transmit cumulative counts to the victim's

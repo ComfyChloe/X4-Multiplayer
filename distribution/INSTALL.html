@@ -2,7 +2,7 @@
 <html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>X4 Multiplayer {{VERSION}} — Internal Test</title>
 <style>body{font:17px/1.55 system-ui,sans-serif;max-width:860px;margin:40px auto;padding:0 22px;background:#121b26;color:#e4edf7}a{color:#84c9ff}code{background:#253447;padding:2px 5px}h1,h2{line-height:1.2}li{margin:.6em 0}.note{border-left:4px solid #84c9ff;padding:8px 18px;background:#192a3b}</style>
-<h1>X4 Multiplayer {{VERSION}}</h1><p>Internal test · 23 October 2026 · Windows/Linux · Two players</p>
+<h1>X4 Multiplayer {{VERSION}}</h1><p>Internal test · 24 October 2026 · Windows/Linux · Two players</p>
 <p class="note">Both players now load one host-created starting save. This aligns the initial world; a persistent campaign and continuous shared station economy are still unfinished.</p>
 <h2>Before starting</h2>
 <p>Use X4 9.00, Steam build23660954, and matching enabled official DLC including Timelines. Both packages include the server and Python runtime. Close X4 and the previous server, remove the old mod using its original REMOVE-MOD action (<strong>09</strong> in7.3.1; <strong>5</strong> in7.3.0), then extract the complete new archive into a new folder.</p>
@@ -17,7 +17,7 @@
 <ol><li>Keep the received <code>JOIN-SESSION.json</code> in your extracted package folder. Run <strong>01-INSTALL</strong>, choose <strong>G</strong> and select the invitation in the file dialog if it is not already in this folder.</li>
 <li>Run <strong>04-TEST-CONNECTION</strong>, then <strong>05-START-X4</strong>.</li>
 <li>The launcher downloads and checks the host world before opening X4. Wait through automatic loading; do not select another save. Stay in the pilot seat until Shuttle setup completes.</li></ol>
-<p>Windows: use the numbered <code>.cmd</code> files. Linux: run the corresponding <code>.sh</code> files from a terminal, such as <code>bash 01-INSTALL.sh</code>; use another terminal while the server is running.</p>
+<p>Windows: use the numbered <code>.cmd</code> files. Linux: execute the corresponding <code>.sh</code> files; they open a terminal automatically. If your file manager opens an editor, choose Run/Execute or run <code>bash 01-INSTALL.sh</code> in a terminal. Keep the server terminal open.</p>
 <p>Numbers identify actions: guests skip HOST-only actions 02 and 03. Optional checks/removal are 06–10. Detailed evidence is grouped under <code>reports/</code>.</p>
 <h2>Background operation and teleportation</h2>
 <p>Alt+Tab to another application while X4 stays open in borderless mode. Keep the server running. Explicit pause or minimizing to the desktop can still suspend native updates. All four personal teleportation research levels are unlocked after Shuttle setup; use normal map/context-menu destinations. HQ relocation is separate.</p>
@@ -30,6 +30,6 @@
 <p>Close X4 and the relay, then run <strong>09-REMOVE-MOD</strong> from its owning package. Only the recorded, byte-matching <code>save_010</code> copy in profile45841 is removed; the package retains its immutable world bundle and archives its mod. Other or changed saves are preserved. Never load or save normal campaigns in this test profile.</p>
 <h2>Content differences and limits</h2>
 <p>Different DLC/mod sets stop shared-world loading. No Workshop selections are rewritten and the withdrawn7.2 isolation helper is not included. A separate profile alone does not isolate the Steam account. Compare content manually if the launcher reports a difference.</p>
-<p>Ordinary station landing-pad occupancy and barriers are not yet shared: boarding a peer ship may fail and NPC traffic may overlap it.</p>
+<p>Saved station-pad reservation and native attachment now have local engine evidence. Normal peer-ship boarding and the two-native occupied-pad crash regression still need human acceptance. Stop if both games grant the same occupied bay.</p>
 <p>Station construction/destruction and economy are not continuously synchronized. General NPC commands/combat, persistent campaign resume, normal shared missions and ingame text chat remain unfinished. Check <a href="reports/RELEASE-CHECKS.txt">RELEASE-CHECKS.txt</a> for measured evidence and pending native Windows/two-player tests.</p>
 </html>

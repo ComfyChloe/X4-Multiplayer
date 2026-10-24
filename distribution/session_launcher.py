@@ -387,6 +387,10 @@ def main():
         return 0
     except KeyboardInterrupt:
         print('\nStopped.'); return 130
+    except EOFError:
+        print('ERROR: Interactive input is unavailable. Open a terminal in this package folder and run '
+              'bash 01-INSTALL.sh (Linux) or 01-INSTALL.cmd (Windows).', file=sys.stderr)
+        return 1
     except (OSError, ValueError, RuntimeError, KeyError, subprocess.SubprocessError) as exc:
         print('ERROR: ' + str(exc), file=sys.stderr); return 1
 
