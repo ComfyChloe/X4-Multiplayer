@@ -106,11 +106,11 @@ class PythonCodecTests(unittest.TestCase):
         with self.assertRaises(pp.ProtocolError):
             pp.serialize('BOLT')
 
-    def test_codec_is_unused_by_production(self):
+    def test_codec_is_unused_by_the_game_and_only_the_relay_helper_imports_it(self):
         ui = (ROOT / 'extension/x4_lan_lab/ui.xml').read_text()
         self.assertNotIn('projectile_protocol', ui)
         for path in list((ROOT / 'x4lan').glob('*.py')) + list((ROOT / 'extension').rglob('*.lua')) + list((ROOT / 'extension').rglob('*.xml')):
-            if path.name not in ('projectile_protocol.py', 'projectile_protocol.lua'):
+            if path.name not in ('projectile_protocol.py', 'projectile_protocol.lua', 'projectile_relay.py'):
                 self.assertNotIn('projectile_protocol', path.read_text(errors='replace'), path)
                 self.assertNotIn('PROJECTILE_PROTOCOL', path.read_text(errors='replace'), path)
 

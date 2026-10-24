@@ -7,6 +7,7 @@ import math
 import re
 from .economy import EconomySession, integer, parse_lines
 from .host import ATOM, HEX, sequence
+from .projectile_relay import ProjectileRelay
 from .quests import QuestState
 
 POSITION_LIMIT = 50_000_000
@@ -38,6 +39,8 @@ class CoopSession(EconomySession):
         self.health_seen = {1: 0.0, 2: 0.0}      # last HACK or accepted HEALTH of the live generation
         # SHOT (shot_game.lua): cumulative hit counts per (shooter, shooter gen, victim, victim gen).
         self.shots = {}
+        # BOLT/BEND (projectile_relay.py): visual-only observed projectile births/ends.
+        self.projectiles = ProjectileRelay()
         self.body_sectors = {}
         self.game_metrics = {}
         self.authority_revision = 1
@@ -109,7 +112,7 @@ class CoopSession(EconomySession):
         except UnicodeError: return []
         if len(f) < 3 or f[1] != '1': return []
         kind = f[0]
-        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'HEALTH', 'HACK', 'HSTALE', 'SHOT', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
+        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'HEALTH', 'HACK', 'HSTALE', 'SHOT', 'BODY2', 'PERF', 'COOPORDER', 'QUEST', 'BOLT', 'BEND'):
             # Legacy movement/fire/dock frames must never override cooperative authority.
             if kind in ('STATE', 'FIRE', 'DOCKSTATE', 'BODY', 'ORDER'): return []
             old_leases = {s: p.lease for s, p in self.peers.items()}
@@ -217,6 +220,8 @@ class CoopSession(EconomySession):
                 old = self.shots.get(key)
                 if old and (old['lease'] != peer.lease or seq <= old['seq'] or hits < old['hits'] or f[9] != old['fields'][-1]): return []
                 self.shots[key] = dict(lease=peer.lease, seq=seq, hits=hits, at=now, fields=f[3:])
+            elif kind in ('BOLT', 'BEND'):
+                self.projectiles.receive(self, slot, peer, raw, now)
             elif kind == 'HACK' and len(f) == 5:
                 entity, gen = integer(f[3], 2), sequence(f[4])
                 if (entity in (1, 2) and self.owners[entity] == slot and self.pilot(entity) == slot and
@@ -312,5 +317,6 @@ class CoopSession(EconomySession):
                 b = self.bodies[other.lease]
                 fields = [other.lease, *map(str, b[:4]), self.body_sectors[other.lease], *b[4:]]
                 result.append((peer.address, ('BODY2|1|' + peer.lease + '|' + '|'.join(fields)).encode()))
+        result.extend(self.projectiles.packets(self, now))
         result.extend(self.quest.snapshots(self.peers, now))
         return result
