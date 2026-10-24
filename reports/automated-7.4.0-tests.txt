@@ -1,12 +1,13 @@
-INTERNAL7.4.0 SOURCE CHECKS — 24 OCTOBER 2026
+INTERNAL 7.4.0 SOURCE CHECKS — 24 OCTOBER 2026
 
-Source: c7e0b6f5f6118cc134cce271180fa86a7d28a352
+Integrated implementation: a3341e4d9ef53f3e05ddf07fa162794d7a5a71eb
 Command: ../x4-playtest7/.venv/bin/python dev/check.py
-Result:567 tests PASS, no skips; Linux with LuaJIT.
-Elapsed:2.270 seconds. Native Windows execution is not included.
-Retained local output SHA256:fd68f563278bab7e8774a4905e6ba0569c261295cff762421411194df66e3474
+Result: 572 tests PASS, no skips; Linux with LuaJIT.
+Elapsed: 2.398 seconds. Native Windows execution is not included.
+Retained local output SHA256: 8beee208389063d94efd98b823dde7924336ceae730f6d575b23209cca5123bd
 
-The initial565-check run retained two stale activation/fixture failures; both
-were corrected before its565-pass rerun. Later expiry and loadout-diagnostic
-regressions bring this run to567. No gameplay acceptance follows from unit tests.
-See INTERNAL-7-4-INTEGRATION.txt for separately bounded Linux engine evidence.
+This includes the compact archive builder and reviewed relay combat diagnostics.
+The initial 565-check run retained two stale activation/fixture failures; both
+were corrected before its 565-pass rerun. Expiry/loadout diagnostic regressions
+and monitor coverage bring this run to 572. No gameplay acceptance follows from
+unit tests. See INTERNAL-7-4-INTEGRATION.txt for bounded Linux engine evidence.

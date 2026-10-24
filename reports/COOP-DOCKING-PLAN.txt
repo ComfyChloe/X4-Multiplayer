@@ -218,3 +218,19 @@ c43cf90e53372f85c49808dab1060112e091f6e3df38d9c67760066d709a3041.
 70 production files+4 probes, exact UI registration,37 restored files and7 actual
 normal-save bytes/timestamps verified. No further repeated UI walking is planned
 without a concrete entrance/interaction finding; human B02 remains required.
+
+STATION TRANSPORTER MENU — 24 OCTOBER 2026, INCONCLUSIVE
+.local/evidence-024-withheld uses production a7deb49 and four owned dev
+probes. After remote native attachment and leaving the seat, fixture-only native
+transport places the player on the station platform (onplatform1, aboard0).
+Opening the unmodified TransporterMenu at that actual platform slot lists the
+docked LAN Player1 as the current docking location. Physical pointer attempts
+do not produce a confirmed cockpit selection/entry before the bounded deadline.
+No forced transport into the ship is used; this is NOT boarding acceptance and
+does not identify a production defect. Retain human B02. No further repeated
+GUI attempts without a concrete input/entrance finding.
+Raw load.log SHA256:
+a9d897fe6b983cac3df4d4a25994c8313331a5c67b47793d7f7c61555e3e2e35
+Audit verifies70 production files,4 probes/UI registration,3,320 stable exact-bay
+readbacks,37 restored files and seven actual normal-save bytes/timestamps. Owned
+game, relay and controller closed; screenshots and inputs retained.

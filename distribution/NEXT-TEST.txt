@@ -11,7 +11,9 @@ Use HUMAN-TEST-RESULT.txt to record run ID, roles, exact version and case times.
 1. Run HUMAN-DAMAGE-TEST.txt D01 and D02 first: stationary host->guest and
    guest->host, supplied original Shuttle guns. If either disagrees, collect both
    logs and stop. Expected convergence: within 2 seconds of the final hit, accounting for
-   recharge and observation time. This is the human acceptance threshold.
+   recharge and observation time. Allow one displayed percentage point for HUD
+   rounding. Compare recharge readings at matching times; sustained divergence
+   is a failure. These are the human acceptance thresholds.
 2. After both pass, run D03-D06: modest hull damage, slow moving target,
    deliberate misses/free aim, then stop/recharge. Retain native spread and gun
    tracking; an ordinary miss is not a synchronization error.

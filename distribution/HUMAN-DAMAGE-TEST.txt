@@ -114,3 +114,5 @@ wanted. No unattended monitor is currently installed by this procedure. Remote
 guest logs still need to be supplied unless a separate read access is arranged.
 The diagnostics are not a complete per-projectile trace. HUD comparisons and
 case times still matter; a visible projectile alone cannot prove a native hit.
+The host status/log now includes sanitized combat state and accepted cumulative
+hit claims. A relay acceptance is not proof that the victim applied the damage.
