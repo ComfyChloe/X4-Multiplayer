@@ -1,0 +1,54 @@
+X4 MULTIPLAYER — HUMAN STATION DOCKING TEST
+24 October 2026 — INTERNAL / NEXT REVIEWED CANDIDATE ONLY
+
+The developer assigns the exact package pair and enabled cases. This document
+does not enable docking support in 7.3.1 or start any game/server. Use the same
+shared starting world, the supplied Shuttles, and the named LAN Trading Station
+Beta. Keep combat and NPC-order experiments out of this run.
+
+Record case ID/time and both ship names/codes. For each enabled case, report
+PASS / FAIL / INCONCLUSIVE / NOT RUN and a short description of both views.
+Screenshots or short clips help with platform barriers and rapidly jumping ships.
+Use the diagnostics collection procedure in HUMAN-DAMAGE-TEST.txt on both PCs
+before restarting; include the host server log. Keep session invitations private.
+Do not rerun passed cargo, radar, missions or Alt+Tab cases without a new symptom.
+
+B01 — REMOTE ATTACHMENT
+Guest requests docking normally and lands at Beta. Host observes the same bay
+from the station. Expected: the same ship occupies the same pad in both games;
+landing animation ends and the ship remains stationary. Guest leaves the seat.
+Wait ten seconds; record any shaking, position jumps or disappearing ship.
+
+B02 — PLATFORM ACCESS AND BOARDING
+With B01 settled, host walks through the normal platform entrance to the guest's
+ship and enters it using the ordinary entrance/transporter. Record whether a
+barrier remains raised, where passage stops, and whether the cockpit is reached.
+Do not use teleport research to bypass the entrance in this case. Guest stays on
+the station; neither player takes control yet. Repeat with reversed roles only
+when assigned. A visible ship alone is not boarding success.
+
+B03 — OCCUPIED PAD
+Keep the first ship docked. The other pilot requests docking normally at the same
+station. Expected: the occupied pad is unavailable and a different free pad is
+assigned (or the request is refused). Record each game's assigned pad/landing
+position. If both games grant the occupied pad, record the discrepancy and stop
+before intentionally reproducing the previously reported collision crash.
+An NPC landing through the occupied ship is a failure too; record its code/time.
+
+B04 — GUEST FLIES THE HOST'S SHIP, LANDS AND EXITS
+Start with the host's ship docked and empty. Guest boards and takes its pilot
+seat; host remains on the station. Guest undocks, flies a short distance, requests
+a normal landing, lands, and leaves the seat. Host watches throughout and for
+ten seconds afterward. Expected: both views agree on flight/landing, followed by
+one stationary ship in the same bay. No alternation between old free-space poses.
+
+B05 — HOST RECLAIMS THE SHIP
+After B04 settles, host boards the same ship, takes control, then leaves the seat
+without launching. Guest stays on the station. Watch another ten seconds.
+Expected: the ownership change does not displace the docked ship or reserve a
+second bay. Subsequent launch is a separate assigned step.
+
+Report the first failing step and preserve both logs. Do not chain combat, death,
+respawn and ship takeover into this run: each transition needs a clear timestamp.
+Two real-game success is still required; prior isolated native tests establish
+individual mechanisms, not completion of this procedure.

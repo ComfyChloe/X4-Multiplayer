@@ -1,0 +1,46 @@
+OBSERVED-PROJECTILE RENDERING — 24 OCTOBER 2026 — DEV ONLY
+
+Motivation: stock primary-gun replay still does not reproduce a player's actual
+free-aim trajectory. SHOT capture/application already measures real local hits;
+a separate visual must preserve those native hits, misses, spread and cadence.
+The following is an unshipped rendering experiment, not a new damage/transport
+protocol. No default flag or sealed package changes.
+
+An original dev component references installed Timelines projectile geometry
+bullet_ter_s_plasma_01_mk1_data / part_bullet and its stock material. It contains
+no copied mesh/binary asset. Its initial class was navbeacon, created directly
+as a temporary object; no deployable launch or player inventory consumption.
+
+projectile-visual-01 FAIL: screenshot ran before delayed parent creation; three
+rotation values omitted angle units; queued movement/removal were read too early.
+The controller completed, but that does not qualify the primitive. Raw
+3e3383726b145f9f2aaf9e875d4c144205c448d80bc4df5e5eb92e4ab50c93e6
+
+projectile-visual-02, source e892377: bounded creation/rendering/move/removal PASS.
+Native creation exists1/classnavbeacon precedes screenshot; the cockpit image
+shows the bright projectile graphic. A later native readback is exactly
+1030/10000/160 after the requested move. After removal exists0. This is neither
+collision transparency nor original animation equivalence/performance/network
+acceptance. Raw c304148edb7a0dc846d53238c70b5628ab7049672c252d576a9b31efcb6ec301.
+Screenshot7518deea35454b032e5bfd7e22308d32c6329807806ce4725a7b0285fbf64ca5.
+55 unchanged production files+6 dev overrides and UI registration independently
+matched;37-file restoration and actual-save bytes/timestamps verified.
+
+projectile-collision-01 INCOMPLETE/FAIL: its child completion-event listeners
+missed instantaneous parent completion; the firing phases never executed. Raw
+b45ba2c57b9bd7446d72e6ffe99c1c78b5981e0454d939994c791dd50832b234.
+
+projectile-collision-02 uses persistent parent-complete conditions. It executes
+the phases and conclusively REJECTS the navbeacon visual: real stock pulse rounds
+hit it for36,36,28 HP and destroy its100HP hull. Lack of an explicit collision
+connection does not make this object transparent. The intended Shuttle control
+victim registers no hits in either phase, so no control-target hit ratio is
+qualified. The positive anchor-damage evidence is sufficient to reject this
+variant. Raw3705d0136b0c7b143d800eaa0c6c9b0573a56585d6474ff9f297c864514109a5.
+Both collision runs:54 unchanged production files+7 dev overrides/UI registration,
+37 restored files and actual-save bytes/timestamps verified. Raw failures remain.
+
+Next bounded investigation: the stock effectobject class (effect_dummy pattern),
+with original geometry-reference metadata, followed by explicit collision and
+continuous-position checks if creation succeeds. No implementation acceptance
+is inferred from a class name or from a setter returning without an exception.

@@ -1,5 +1,5 @@
 X4 MULTIPLAYER — HUMAN DAMAGE TEST PROCEDURE
-Revision 1 — 23 October 2026 — INTERNAL
+Revision 2 — 24 October 2026 — INTERNAL
 
 STATUS / WHEN TO USE
 Prepared for the next reviewed damage candidate. The developer must name the
@@ -63,10 +63,32 @@ The assigned victim flies straight at a low steady speed. The attacker uses the
 same weapon/group and fires short bursts. Record both health views. Note visible
 hits/misses separately: visual shot alignment and shared health are different checks.
 
+D05 — DELIBERATE MISS / FREE AIM
+Keep the victim selected, aim clearly beside it and fire a short burst into empty
+space. Do not aim through other objects. Record both views. Expected: selection
+alone causes no damage; the remote visual follows the shooter's actual direction.
+Native spread and gun tracking can cause occasional misses even when aimed at a
+ship. Those are not automatically synchronization failures. Never compare the
+number of visible tracers with damage without accounting for actual impacts.
+
+D06 — STOP FIRING / RECHARGE
+After a small shield loss, stop firing completely and observe both screens until
+recharge begins. Record the last hit and recharge times. Check for additional
+remote shots, repeated damage, or replay effects delaying recharge. Recharge
+parameters belong to the supplied shield; no universal delay is assumed here.
+
+D07 — LETHAL DAMAGE / SURVIVING PLAYER (ONLY IF EXPLICITLY ENABLED)
+Use the assigned target direction and disposable test ships. Continue short
+bursts until destruction. Expected: the victim ejects before ship destruction,
+the survivor remains controllable, and a later burst into empty space still
+works. Record the ejection/destruction order on both screens. Do not shoot the
+spacesuit or attempt a respawn/boarding chain in this case.
+
 LATER CASES — NOT ENABLED BY THIS DOCUMENT
-Lethal damage, pilot handoff during combat, reconnect, simultaneous attackers and
-NPC/station damage require their own candidate-specific instructions. In particular,
-do not depend on currently broken ordinary-station boarding for a pilot-transfer test.
+Pilot handoff during combat, reconnect, simultaneous attackers and NPC/station
+damage need separate candidate-specific instructions. Use HUMAN-DOCK-TEST.txt
+for the independent station occupancy/boarding/handoff checks. Local engine
+checks with a synthetic peer do not count as completing these two-player cases.
 
 COLLECT EVIDENCE ON BOTH PCS BEFORE RESTARTING
 1. Run 06-DIAGNOSTICS.cmd (Windows) or 06-DIAGNOSTICS.sh (Linux) from the package.

@@ -52,11 +52,14 @@ Controller and owned focus bus closed;37 restore/source/save hashes audited.
 board02 bbd0013: schema-defined player transporter moves actual player to exact
 remote bay; walking and visible ship observed, entrance not reached before
 bounded finish. Cleaned/audited37 files/7 actual normal saves; no boarding claim.
-ACTIVE projectile-visual-01 exec47020: dev-only original navbeacon references
-stock projectile geometry, tests rendering/position/removal. No transport code.
-Claude source-only assesses effect/geometry/lifecycle options; assignment05:15.
+Render02 e892377: original navbeacon component references stock bolt geometry;
+creation/visible graphic/move/removal PASS. Collision02 REJECTS this variant:
+pulse36/36/28 destroys anchor. Earlier visual01/collision01 fixtureFAIL retained.
+reports/PROJECTILE-RENDER-PRIMITIVE.txt. ACTIVE projectile-effect-01 exec75921:
+effectobject-class creation/rendering/move/removal only. Claude assesses exact
+stock effectobject/dummy patterns; source-only, no Windows launch. No new protocol.
 Schema worker48913 active. Do not overlap native controllers.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour next05:30;05:15 checkpoint1792811692.538919. No new timer/chat.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour next05:45;05:30 checkpoint1792812604.849829. No new timer/chat.
 SHOT hardened5a0f75d merged4ae1065: immutable energy/digest, duplicateACK0damage,
 native gen/authority/time fences, permanentStop, stock uniform unmodified gate.
 shot-function02 manual3*40 then2*40 application/retry/closure tests remain observed
