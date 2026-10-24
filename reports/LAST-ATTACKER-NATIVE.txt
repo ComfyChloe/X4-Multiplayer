@@ -1,0 +1,43 @@
+LAST-ATTACKER NATIVE OBSERVATIONS — 24 OCTOBER 2026
+
+The installed game's libraries/scriptproperties.xml documents object.lastattacker
+and lastattacktime, separate from the throttled attack events used by withdrawn
+HIT2. This investigation has not enabled damage claims or qualified multiplayer.
+
+last-attacker-01: one real Linux player victim, two native NPC stock pulse Mk1
+shooters, starts offset80ms.22 real hits (11 per shooter), each shield callback's
+lastattacker/time matches the canonical player_ship_hit attacker/time. Shortest
+observed attacker switch65.6ms. Raw SHA256
+9c0240823e9504519d55c3a26c59d63b91c8ec6b9dd8eed95a2e94477d03f4fb.
+
+last-attacker-02: both shooters start in one action block.34 real hits all have
+correct getter identity, including8 pairs of DIFFERENT attackers at identical
+game age.12 full-shield callbacks match corresponding canonical hits. This
+supports reading identity inside each callback, not once per frame.
+BUT8 hit callbacks retain an OLDER lastattacktime, despite correct identity:
+e.g age20.0919,lasttime19.9282; age24.924,lasttime24.2334. Repeated same-source hits
+can retain the registration timestamp. Its exact update rule is unproven.
+lastattacktime==player.age is therefore NOT a valid universal freshness gate;
+relaxing it risks attributing environmental/collision damage to a stale shooter.
+The first alternating experiment did not expose this. This audit correction was
+sent to Claude before implementation. Do not report per-hit timestamp acceptance.
+
+The same run disproves full damage at the protected hull floor. At2.01% of4580
+HP,min hull2%, the next stock36-damage pulse yields one hull event: amount0.458,
+new91.6 HP.22 real hits occur in the floor phase but only that one hull event;
+later hits still emit player_ship_hit, with no further hull-damaged callback.
+Observed HP loss is clipped, not raw projectile damage. Do not revive HIT2
+unchanged or infer full damage from these getters. Overall02 remains PARTIAL,
+with timestamp freshness and full-damage assumptions explicitly FAILED.
+Raw SHA256eee141aea3618df6a5ccabda596e535c14dccfef95e487c70055523ff67bbe2d.
+
+Both runs retain complete raw logs, probe/source inventories, save manifests and
+restored37-file installation inventories under their .local paths. Owned game/
+helpers closed; preferences/actual normal saves restored. Baseline engine warnings
+remain; no error-free engine claim.
+
+Still unqualified: non-player victims, collisions/environment/repair/area damage,
+missiles, destroyed attackers, same-frame native/scripted damage, shield state
+disagreement, floor/death semantics, and end-to-end no-double-counting.
+Last-attacker-npc-03 compares stock pulse Mk1/Mk2 (native36/46) on a non-player
+victim's full shield/hull. No custom weapon stats or spread.

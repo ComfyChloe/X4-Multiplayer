@@ -31,8 +31,8 @@ PASS. Earlier full host/failed guest captures retain their original statuses.
 Details/raw hashes in reports/VICTIM-PILOT-HEALTH-DESIGN.txt. No real combat claim.
 Review worktree ../x4-health-review at66169d2. Native Windows remains blocked by
 Workshop restrictions. Primary owns aim/docking/story/controller/native/integration.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last02:00 checkpoint1792799975.744119, health/findings1792800505.535089.
-Quarter-hour coordination; next02:15. No new timer/chat.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID. Last02:15 checkpoint1792800924.910189; design corrections1792801043.488749.
+Quarter-hour coordination; next02:30. No new timer/chat.
 
 IMPLEMENTATION / EVIDENCE
 Story native preset: hidden x4lan_internal start,14 completed plot choices and28
@@ -77,12 +77,19 @@ forward15deg but NOT flight; SetObjectSectorPos rejects bullets. Prior gun sette
 and direct gun-object shooting also fail. No production aim change.
 
 LIVE JOBS / TOOLS
-ACTIVE native exec65959: .local/evidence-105-withheld One native target and
-2 interleaved/overlapping pulse shooters compare object.lastattacker/lastattacktime
-against canonical event_player_ship_hit, plus per-hit damage records. Unproven
-whether these getters escape attacked-event throttling; Claude told not to duplicate.
-All other runs cleaned. Generic create_object bullet experiment FAIL (6 nulls),
-additive velocity FAIL(6class rejections). Detailed raw/failure reports retained.
+ACTIVE native exec14956: .local/evidence-106-withheld Tests non-player
+victim with stock pulse Mk1/Mk2(36/46), source independently labelled by damage.
+last-attacker01:22 interleaved hits all getters correct.02:34 hits,8 simultaneous
+DIFFERENT-attacker pairs all identities correct;12 shield callbacks match. BUT8
+hits retain OLD lastattacktime: timestamp equality is NOT a reliable freshness
+gate, relaxing risks stale attribution. Audit correction sent to Claude.
+BUT floor clips:22 hits at2% floor produce only1 hull event,amount0.458 not36.
+reports/LAST-ATTACKER-NATIVE.txt records limits/raw. Claude now owns source-only
+shooter-confirmed design (429aa6f not merged), NO implementation approval. Asked
+him to address stale shield/hull states and floor clipping; no time-bucket discard
+is justified by current per-callback evidence. Primary owns native work.
+All earlier runs cleaned; create_object bullet FAIL(6nulls), velocity FAIL(6class
+rejections). No production aim/hit change yet.
 CRITICAL: preserve original shaderquality2. Old temporaryquality1 caused native
 fatal1119 p1_glass compile (cursor03 screenshot/stacks). No graphics downgrade.
 No concurrent native/install mutation; normal saves never loaded.
