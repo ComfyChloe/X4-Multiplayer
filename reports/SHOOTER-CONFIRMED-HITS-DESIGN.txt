@@ -82,3 +82,42 @@ NATIVE QUALIFICATION NEEDED (A:primary, before any activation)
 FILES (if approved, later): new ui/shot_game.lua, md/x4lan_shot.xml, an x4lan/coop.py SHOT branch,
 flag shot_claims (default false), tests incl. MD-interpreter fence tests. No changes to
 coop_game.lua, bubble or HEALTH semantics beyond reading their generations.
+
+REVISION 1 (A:primary review 02:15-02:19; supersedes the ambiguity rule, the timestamp idea and
+the shield/hull application above). Still design only; no approval, no code.
+1 Attribution: per callback, lastattacker inside that callback only (last-attacker-02: 34/34
+  correct, including 8 different-attacker pairs at the same player.age). No time-bucket
+  correlator, no same-frame rejection. lastattacktime is NOT used: it is not refreshed on every
+  hit.
+2 Stale identity (collision, environment or repair after a real hit keeps the old
+  lastattacker): per-callback amount filter instead of a timestamp. A callback counts only when
+  its damage matches a nominal per-hit damage of the claimed attacker's equipped bullets
+  (macro <damage value> from the game's own bullet macros, e.g. plasma Mk1 720, read from the
+  installed game on BOTH machines and compared at session start; a mismatch disables claims).
+  The tolerance is a small epsilon, or "<= nominal" only when the callback is the floor-clipped
+  one (new hull == floor). Collisions and region damage practically never equal a bullet value.
+  The residual is measurable.
+3 Shield/hull semantic: no ratios and no observed-split replay. The authority applies the
+  claimed hit through the game's own damage primitive, apply_attackstrength (stock
+  fight.attack.object.*.xml use it OOS), with attacker = its copy of the shooter. The channel
+  comes from the bullet class: hullshield for normal bullets (shields first, overflow to hull
+  at the authority's REAL shield state); hullonly / shieldonly / hullnoshield only where the
+  bullet macro defines them. The claim carries (bullet macro id, hit count), not HP numbers. So
+  differing shield states between the views are resolved natively at the authority, with the
+  engine's kill credit and its own floor handling. Open: does apply_attackstrength in the
+  attention (in-sector) zone apply the same per-bullet values as a real projectile? It must be
+  qualified natively before anything else.
+4 Floor clipping (proven blocker for observed-delta claims): with (2)+(3) the clipped amount is
+  only a hit signal, not the damage applied. The remaining gap is "no hull callback at the
+  floor": on the shooter side, the proxy of a remote player keeps a lower local min hull
+  (0.1%) than the authority's death threshold (1.01%). WORLD keeps resetting it to the
+  authority value, so the shooter's hits keep producing callbacks until the authority has
+  declared death. The authority's own floor and life tick stay unchanged. Must be qualified
+  natively: a fractional set_object_min_hull, and no local destruction at 0.1%.
+5 Undo side (replayed remote shots on the victim): the same per-callback identity + amount
+  filter. The undo restores exactly that callback's shield/hull inside the callback. At the
+  victim's own floor the replay produces no callback, so there is nothing to undo.
+NEW BLOCKERS before approval: (a) qualify apply_attackstrength in-sector (amount, channels,
+attacker credit, floor, death); (b) qualify fractional local min hull on a remote proxy;
+(c) equal bullet tables on both machines (mods); (d) mixed weapon groups where two equipped
+bullets share a nominal value are ambiguous: those hits are dropped.
