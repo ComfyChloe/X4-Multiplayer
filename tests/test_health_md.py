@@ -21,6 +21,10 @@ TOKENS = [
     (r'@?\$arena\.\$shot(\w+)\.\{\$k\}', lambda m: "S['shot%s'][k]" % m[1]),
     (r'@?\$arena\.\$shot(\w+)\.\{\$a\.\$(\w+)\}', lambda m: "S['shot%s'][A.get('%s', 0)]" % (m[1], m[2])),
     (r'@?\$arena\.\$dead\.\{\$a\.\$(\w+)\}', lambda m: "S['dead'][A.get('%s', 0)]" % m[1]),
+    (r'@?\$arena\.\$health(\w+)\.\{\$a\.\$(\w+)\}', lambda m: "S['%s'][A.get('%s', 0)]" % (m[1], m[2])),
+    (r'@?\$arena\.\$shot(\w+)\.\{(\d+)\}', lambda m: "S['shot%s'][%s]" % (m[1], m[2])),
+    (r'\$arena\.\$shot(\w+)(?![\w.{])', lambda m: "S['shot%s']" % m[1]),
+    (r'\$arena\.\$host', "P.get('host', True)"),
     (r'@\$(victim|attacker)\.isoperational', "P['operational']"),
     (r'(?<![.\w])\$(k|dead)\b', r'\1'),                 # MD locals of the shot Apply cue (not $arena.$dead)
     (r'@?\$arena\.\$health(\w+)\.\{(\$\w+|\d+)\}', lambda m: "S['%s'][%s]" % (m[1], m[2].lstrip('$') if m[2].startswith('$') else m[2])),
@@ -70,9 +74,11 @@ def run(actions, S, A, P, e):
                 name = node.get('name')
                 if name in ('$k', '$dead'): env[name[1:]] = eval(py(node.get('exact')), env); continue
                 if name in ('$a', '$e', '$ship', '$s', '$d', '$o', '$attacker', '$victim'): continue      # local aliases
-                target = re.fullmatch(r'\$arena\.\$(health|shot)(\w+)\.\{\$(\w+)\}', name)
+                scalar = re.fullmatch(r'\$arena\.\$(shot\w+)', name)
+                if scalar: S[scalar[1]] = eval(py(node.get('exact')), env); continue
+                target = re.fullmatch(r'\$arena\.\$(health|shot)(\w+)\.\{(\$\w+|\d+)\}', name)
                 if not target: raise AssertionError('unsupported set_value ' + name)
-                S[target[2] if target[1] == 'health' else 'shot' + target[2]][env[target[3]]] = eval(py(node.get('exact')), env)
+                S[target[2] if target[1] == 'health' else 'shot' + target[2]][env[target[3][1:]] if target[3].startswith('$') else int(target[3])] = eval(py(node.get('exact')), env)
             elif tag in ('set_object_hull', 'set_object_shield', 'set_object_min_hull', 'debug_text', 'raise_lua_event', 'apply_attackstrength'):
                 effects.append((tag, node.get('exact')))
             else:

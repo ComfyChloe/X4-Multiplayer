@@ -21,6 +21,7 @@ pcall(ffi.cdef,[[typedef struct {
 bool GetInstalledWeaponMod(UniverseID weaponid, UIWeaponMod* weaponmod);]])
 local c,s,h=A.coop,A.state,A.health
 local d={seq=0,totals={},sentAt={},support={},confirmed={},pending={},inflight={}};A.shot=d
+local STOCK={weapon_ter_s_plasma_01_mk1_macro=40,weapon_gen_s_laser_01_mk1_macro=36,weapon_gen_s_laser_01_mk2_macro=46}
 local OTHER={'shieldonlydpshot','hullonlydpshot','hullnoshielddpshot','hullshieldareadpshot',
  'shieldonlyareadpshot','hullonlyareadpshot','hullnoshieldareadpshot'}
 local RESEND,RETRY,BATCH,READING=.25,.5,20,.5
@@ -49,33 +50,21 @@ function d.loadout(payload)
   if not done or mod then ok=false end
  end
  local strength
- if ok and n>0 then
+ if ok and n>0 and STOCK[macro] then
   local done,entry=pcall(function() return GetLibraryEntry(GetMacroData(macro,'infolibrary'),macro) end)
   ok=done and type(entry)=='table'
-  strength=ok and tonumber(entry.hullshielddpshot)
-  if not strength or strength<=0 or strength>1e6 then ok=false end
-  for _,k in ipairs(OTHER) do if ok and (tonumber(entry[k]) or 0)~=0 then ok=false end end
+  strength=ok and number(entry.hullshielddpshot,1e6)
+  if not strength or strength~=STOCK[macro] or entry.isbeamweapon~=false then ok=false end
+  for _,k in ipairs(OTHER) do if ok and tonumber(entry[k])~=0 then ok=false end end
  else ok=false end
  local v=ok and {macro=macro,strength=strength,digest=string.format('%s:%.3f',macro,strength)} or false
  local old=d.support[e]
+ if old and (not v or old.digest~=v.digest) then d.fail('admitted loadout changed; reconnect required');return end
  if old==nil or (old and old.digest)~=(v and v.digest) then
   d.support[e]=v
   AddUITriggeredEvent('X4LAN_Shot','Support',{entity=e,strength=v and v.strength or 0})
   log(string.format('SHOT_SUPPORT entity=%d %s',e,v and v.digest or 'refused'))
  end
-end
-
--- Shooter: my piloted co-op ship with its valid generation.
-local function shooter()
- for e=1,2 do if c.owners[e]==cfg.slot and c.pilots[e]==cfg.slot and h.valid[e] then return e,h.valid[e] end end
-end
--- Capture entry (unarmed): n native hits of my own ship on victim v.
-function d.hit(v,n)
- local e,gen=shooter();local vg=v and v>=1 and v<=4 and victimGen(v)
- if d.failed or not e or not d.support[e] or v==e or not vg then return false end
- local k=key(e,gen,v,vg)
- d.totals[k]=math.min(1000000,(d.totals[k] or 0)+(n or 1));d.dirty=true
- return true
 end
 
 -- Authority: am I the machine whose world decides victim v of generation vg?
@@ -85,6 +74,21 @@ local function authority(v,vg)
  -- The host decides a co-op ship unless its remote pilot holds a live health generation (as the relay).
  if cfg.slot=='p1' then return not (h.remote[v] and h.remote[v].gen==vg) end
  return live~=nil and live.entity==v and live.gen==vg
+end
+
+-- Shooter: my piloted co-op ship with its valid generation.
+local function shooter()
+ for e=1,2 do if not h.failed and c.owners[e]==cfg.slot and c.pilots[e]==cfg.slot and h.valid[e] and
+   (cfg.slot=='p1' or h.live and h.live.entity==e and h.live.gen==h.valid[e]) then return e,h.valid[e] end end
+end
+-- Capture entry (unarmed): n native hits of my own ship on victim v.
+function d.hit(v,n)
+ local e,gen=shooter();local vg=v and v>=1 and v<=4 and victimGen(v)
+ n=integer(n or 1,1000000)
+ if d.failed or not e or not d.support[e] or v==e or not vg or not n or n<1 or authority(v,vg) then return false end
+ local k=key(e,gen,v,vg)
+ d.totals[k]=math.min(1000000,(d.totals[k] or 0)+n);d.dirty=true
+ return true
 end
 
 -- SHOT|1|myLease|sourceLease|shooter|sgen|victim|vgen|seq|hits|digest
@@ -99,27 +103,51 @@ function d.receive(f)
  if not sup or f[11]~=sup.digest then return true end            -- unsupported or different loadout
  local k=key(e,gen,v,vg);local p=d.pending[k]
  if p and (seq<=p.seq or hits<p.hits) then return true end
- d.pending[k]={seq=seq,hits=hits,shooter=e,sgen=gen,victim=v,vgen=vg}
+ d.pending[k]={seq=seq,hits=hits,shooter=e,sgen=gen,victim=v,vgen=vg,digest=sup.digest,strength=sup.strength}
  return true
 end
 
--- MD 'slot|sgen|vgen|count' after a compare-and-set apply: only now does the accepted count move.
+-- MD 'slot|sgen|vgen|count|state' after a compare-and-set apply: only now does the accepted count move.
 function d.applied(payload)
- local slot,gen,vg,count=tostring(payload):match('^(%d)|(%d+)|(%d+)|(%d+)$')
- slot,count=tonumber(slot),tonumber(count)
- if d.failed or not slot then return end
- local k=key(math.floor((slot-1)/4)+1,gen,(slot-1)%4+1,vg)
+ local slot,gen,vg,count,state=tostring(payload):match('^(%d)|(%d+)|(%d+)|(%d+)|(%d+)$')
+ slot,gen,vg,count,state=tonumber(slot),tonumber(gen),tonumber(vg),tonumber(count),tonumber(state)
+ if d.failed or not slot or slot<1 or slot>8 or state~=d.stateRevision then return end
+ local e,v=math.floor((slot-1)/4)+1,(slot-1)%4+1
+ local k=key(e,gen,v,vg);local p=d.pending[k]
+ if not p or count>p.hits or h.valid[e]~=gen or victimGen(v)~=vg or not authority(v,vg) then return end
  if count>(d.confirmed[k] or 0) then d.confirmed[k]=count end
  local fl=d.inflight[k];if fl and fl.count<=count then d.inflight[k]=nil end
 end
 
+-- A changed native permission state revokes queued writes before the next state is admitted.
+-- The MD ledger checks this revision AND HEALTH closure/authority at execution.
+local function state(now)
+ local g1,g2=h.valid[1] or 0,h.valid[2] or 0
+ local a1,a2=authority(1,g1),authority(2,g2)
+ local sig=table.concat({g1,g2,tostring(a1),tostring(a2)},'|')
+ if sig~=d.stateKey then
+  d.stateKey,d.stateRevision,d.stateAck=sig,(d.stateRevision or 0)+1,nil
+ end
+ if writable() and (not d.nextState or now>=d.nextState) then
+  d.nextState=now+.1
+  AddUITriggeredEvent('X4LAN_Shot','State',{revision=d.stateRevision,g1=g1,g2=g2,a1=a1,a2=a2,
+   stamp=h.mdStamp,from=h.mdAge,deadline=h.mdAge+1})
+ end
+end
+function d.stateReady(payload)
+ local revision=integer(tostring(payload),2147483647)
+ if not d.failed and revision==d.stateRevision then d.stateAck=revision end
+end
+
 function d.frame(now)
+ if h.failed then d.fail('health authority stopped');return end
+ state(now)
  -- Shooter: cumulative counts of current generations only, at once on change, else every RESEND.
  local cur,curGen=shooter()
  local lease=s.client and s.client.lease
  for k,total in pairs(d.totals) do
   local e,gen,v,vg=k:match('^(%d)|(%d+)|(%d)|(%d+)$');e,gen,v,vg=tonumber(e),tonumber(gen),tonumber(v),tonumber(vg)
-  if cur~=e or curGen~=gen or victimGen(v)~=vg or not d.support[e] then d.totals[k],d.sentAt[k]=nil,nil
+  if cur~=e or curGen~=gen or victimGen(v)~=vg or not d.support[e] or authority(v,vg) then d.totals[k],d.sentAt[k]=nil,nil
   elseif lease and (d.dirty or now>=(d.sentAt[k] or 0)) then
    d.seq,d.sentAt[k]=d.seq+1,now+RESEND
    send(string.format('SHOT|1|%s|%d|%d|%d|%d|%d|%d|%s',lease,e,gen,v,vg,d.seq,total,d.support[e].digest))
@@ -132,11 +160,11 @@ function d.frame(now)
    d.pending[k],d.confirmed[k],d.inflight[k]=nil,nil,nil
   else
    local base=d.confirmed[k] or 0;local fl=d.inflight[k];local sup=d.support[p.shooter]
-   if p.hits>base and sup and (not fl or now-fl.at>=RETRY) and writable() then
+   if p.hits>base and sup and sup.digest==p.digest and sup.strength==p.strength and (not fl or now-fl.at>=RETRY) and writable() and d.stateAck==d.stateRevision then
     local count=math.min(p.hits,base+BATCH)
     d.inflight[k]={at=now,count=count}
     AddUITriggeredEvent('X4LAN_Shot','Apply',{shooter=p.shooter,sgen=p.sgen,victim=p.victim,vgen=p.vgen,base=base,
-     count=count,strength=sup.strength,stamp=h.mdStamp,from=h.mdAge,deadline=h.mdAge+1})
+     count=count,strength=p.strength,state=d.stateAck,stamp=h.mdStamp,from=h.mdAge,deadline=h.mdAge+1})
    end
   end
  end
@@ -148,6 +176,7 @@ function d.fail(err)
  if d.failed then return end
  d.failed=true;log('SHOT STOPPED '..tostring(err))
  d.totals,d.pending,d.inflight={},{},{}
+ pcall(AddUITriggeredEvent,'X4LAN_Shot','Stop')
  for e=1,2 do pcall(AddUITriggeredEvent,'X4LAN_Shot','Support',{entity=e,strength=0}) end
 end
 
@@ -168,4 +197,5 @@ function c.frame(now)
 end
 RegisterEvent('X4LAN_Shot.Ready',function() d.ready=true;log('SHOT_READY slot='..cfg.slot) end)
 RegisterEvent('X4LAN_Shot.Loadout',function(_,payload) if d.ready and not d.failed then d.loadout(payload) end end)
+RegisterEvent('X4LAN_Shot.StateReady',function(_,payload) d.stateReady(payload) end)
 RegisterEvent('X4LAN_Shot.Applied',function(_,payload) if d.ready then d.applied(payload) end end)

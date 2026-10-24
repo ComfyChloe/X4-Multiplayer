@@ -211,10 +211,11 @@ class CoopSession(EconomySession):
                 seq, hits = sequence(f[7]), integer(f[8], 1000000)
                 if (shooter not in (1, 2) or self.owners[shooter] != slot or self.pilot(shooter) != slot or
                         sgen != self.health_generation(shooter) or not victim or victim == shooter or
-                        vgen != self.victim_generation(victim) or not SHOT_DIGEST.fullmatch(f[9])): return []
+                        vgen != self.victim_generation(victim) or self.victim_authority(victim) == slot or
+                        (slot != 'p1' and self.health_live[shooter] != sgen) or not SHOT_DIGEST.fullmatch(f[9])): return []
                 key = (shooter, sgen, victim, vgen)
                 old = self.shots.get(key)
-                if old and (old['lease'] != peer.lease or seq <= old['seq'] or hits < old['hits']): return []
+                if old and (old['lease'] != peer.lease or seq <= old['seq'] or hits < old['hits'] or f[9] != old['fields'][-1]): return []
                 self.shots[key] = dict(lease=peer.lease, seq=seq, hits=hits, at=now, fields=f[3:])
             elif kind == 'HACK' and len(f) == 5:
                 entity, gen = integer(f[3], 2), sequence(f[4])

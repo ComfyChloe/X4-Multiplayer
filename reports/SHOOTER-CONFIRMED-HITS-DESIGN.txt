@@ -56,3 +56,37 @@ B4 Equal game data on both machines beyond the library digest (installed equipme
 
 IMPLEMENTED FILES (inert): x4lan/coop.py SHOT branch; ui/shot_game.lua; md/x4lan_shot.xml;
 ui.xml; config.lua shot_claims=false; tests/test_shot.py (relay, LuaJIT, MD interpreter fences).
+
+PRIMARY HARDENING AFTER cf58725 REVIEW (24 Oct, implementation still inert)
+Review issuecomment-6377919689 reproduced four adapter/MD failures and a relay
+authority-boundary error. Corrections on contrib/astra-shot-hardening:
+- Native State admission/ACK binds Apply to current generations and victim
+  authority; execution also checks HEALTH closed generations/live/own/auth and
+  the State age. A permanent native Stop cannot be rearmed by delayed messages.
+- Applied prefixes re-acknowledge without damage, recovering a lost Lua callback.
+- Each pending count retains its admitted digest/strength. A changed admitted
+  loadout stops SHOT for this load; it never reinterprets earlier counts.
+- Only the three natively checked stock macros (XShuttle plasma40, pulse36/46)
+  are admitted, with explicit non-beam and complete zero-other-channel data and
+  no equipment mods. This is a bounded internal gate, not general weapon support.
+- A shooter that is already victim authority never stores/sends claimed hits.
+  The relay also refuses those records and requires a guest's acknowledged
+  health baseline; native hits cannot later reappear as HACK-era claims.
+- Native claimed damage is marked shotApplying for a future capture exclusion;
+  dead/destroyed victims are not repeatedly attacked inside a batch.
+55 affected SHOT/HEALTH and51 co-op/FIRE2/universe checks pass without skips;
+final changed MD schema VALID (8a37e78e2278d4d72e2cf3bd3595c73caab79ef682babd8cc8fb63dbcc7fb250).
+No native SHOT transport/application acceptance; capture/undo still absent.
+
+NEW NATIVE EVIDENCE AND LIMITS
+Primary damage-dedup-06 proves273 actual stock hits counted once across three
+shield states and excludes a real own-source collision (see primary report
+LAST-ATTACKER-NATIVE.txt). Same-pair collision+projectile in one frame remains
+ambiguous. Use all collision pairs for that frame, never only the last collider.
+HP undo alone is insufficient: recharge08 control starts recharging after9.0214s,
+whereas17 undone real hits delay it to14.7183s. An original zero-damage dev bullet
+leaves recharge at9.0386s, but physical impact/visual fidelity and safe weapon
+substitution remain unqualified. Do not enable replay damage undo as a complete
+solution. In-flight shots across handovers, native loadout queries, floor/life
+coordination and whole capture-to-application protocol still need qualification.
+Claude reported a usage-limit stop; primary owns further review/integration work.
