@@ -1,0 +1,38 @@
+7.4.1 ALTERNATIVE LINUX ARCHIVE — 24 OCTOBER 2026
+
+User request: fit the existing Linux download below20MB for distribution.
+Result: X4-LAN-7.4.1-Linux-Small.7z, 19929193 bytes, SHA256 f6f821719201a0908ac5c0f748660b1c5062e8d026d16d0c4fb803a9071e88d6
+Delivery: Desktop/X4 Online/Internal Tests/7.4.1-2026-10-24
+
+This is an alternative encoding of the sealed7.4.1 payload, not a new code release.
+Source: original Linux tar.xz SHA256 dc7a01f5ea74be3a2807470f65f22177893e272ec30f07fd1e8f8271ab1b9f0c.
+Never repack the configured/live installation; it contains private session data.
+No source/runtime module, game file, launcher, manifest or license text changed.
+Server, Python and documentation retained. Existing7.4.1 invitations/Windows pair
+remain compatible; no current-session update needed.
+
+Stronger XZ and x86-filtered XZ remained above20MB. Direct7z with all symlinks
+reached19,928,727 bytes but default extraction rejected300 parent-relative links
+in Python's terminfo database. Following every link exceeded20MB. Final packaging
+materializes only those300 internal terminfo aliases, keeping their target bytes
+and effective modes;748 other links remain. No extraction safety override used.
+7z command on a private, clean staged copy:
+7z a -t7z -mx=9 -mmt=2 -md=128m -snl OUTPUT.7z X4-LAN-7.4.1-Linux
+
+Default7z extraction PASS. All4,932 entries present,4,699 file contents and effective
+permissions identical; remaining748 link targets match. Original SHA256SUMS.txt
+unchanged and all4,698 package checksums PASS. Bundled Python3.14.8 runs; packaged
+launcher/world/server imports PASS. No gameplay rerun: gameplay bytes unchanged.
+Evidence .local/evidence-015-withheld, verify_safe.py, materialized-links.json,
+7z-safe-create.txt and7z-safe-extract.txt. Failed trial logs retained locally.
+
+HUMAN PLAYTEST UPDATE (separate from packaging)
+User confirmed guest-to-host shield damage on both screens and said firing seems
+to work. Host native SHOT_APPLIED confirms it; relay records both directions.
+Full hull/death and dock acceptance are not inferred. New failure: guest cannot
+select host ship while its motion remains correct. User confirms no landing,
+pilot changes or teleport beforehand. Both peers fresh at14:07CEST, no ownership
+change, scene revision30 committed. Host evidence cannot establish guest HUD/
+sensor state; guest diagnostics remain needed. User postponed further human tests.
+Retained local evidence .local/evidence-056-withheld,
+desync-140718 and retained-165452. No live session code/state changes were made.
