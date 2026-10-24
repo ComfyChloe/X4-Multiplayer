@@ -1,162 +1,58 @@
-SHOOTER-CONFIRMED PER-HIT DAMAGE (design only; no code, no activation, no native run)
-24 Oct 2026, Claude, at A:primary's request after last-attacker-01: inside every native damage
-callback, target.lastattacker/lastattacktime matched the canonical per-projectile
-player_ship_hit attacker/time, switching within ~0.07 s. Unlike the throttled attack
-notifications (PR #34, withdrawn), this is a per-hit source primitive, still to be qualified
-for same-frame overlap.
+SHOOTER-CONFIRMED HITS (SHOT): CURRENT DECISIONS AND BLOCKERS
+Consolidated 24 Oct 2026 (Claude, after A:primary's native findings and reviews 02:11-02:39).
+This replaces the earlier layered revisions. Status: transport and authority application are
+implemented INERT (shot_claims=false, needs pilot_health). Capture and undo are NOT armed.
 
-POLICY (one rule everywhere, so nothing is counted twice)
-Player-vs-player and player-vs-shared-target hits count as the SHOOTER saw them, in the
-shooter's world. Everything else (NPCs, collisions, environment) counts where the victim's
-authority lives today. Concretely, for every victim V and every machine M:
- U  Undo: on V's authority machine, a native hit on V whose lastattacker is the REPLAYED remote
-    player ship (the FIRE2 proxy) is given back immediately, inside the same MD damage
-    callback (set_object_shield/hull += damage). That is the replay's copy of a shot whose
-    real outcome the shooter reports.
- C  Claim: on the shooter's machine, a native hit by its OWN piloted co-op ship on a remote
-    player's ship or a shared host-authoritative target is reported as cumulative damage.
- A  Apply: V's authority machine applies the increase of those totals natively.
-Victim authority machine: ship 1 (host-piloted) -> host; ship 2 (guest-piloted, HEALTH live)
--> guest, whose HEALTH reports then carry the result to the host proxy; LAN targets / shared
-NPC objects -> host.
+GOAL AND POLICY
+Player-vs-player and player-vs-shared-target hits count as the shooter saw them. The FIRE2
+replay keeps the native visuals and misses; intentional misses stay misses; no aim assistance.
+NPC, collision and environment damage keep today's authority.
 
-NO DOUBLE COUNTING
-- Every player-vs-player hit exists twice: native in the shooter's world (claimed, C) and as a
-  FIRE2 replay in the victim's world (undone, U). Exactly one survives (the claim). A replay
-  shot that misses in the victim's world has no copy to undo; a shooter's miss produces no
-  claim. Intentional misses stay misses. There is no aim assistance.
-- The host's OWN hits on the guest proxy in the host world are native, but HEALTH overwrites that
-  proxy with the pilot's value, so they vanish; the host's claim (C) to the guest pilot is the
-  one copy. On the guest, the host's replayed shots on the guest's own ship are undone (U).
-  Symmetric.
-- Attribution per callback: lastattacker at callback time. Ambiguity rule (bounded,
-  conservative): if one game time sees damage callbacks on V with more than one distinct
-  lastattacker, or a lastattacker that is null or destroyed, those callbacks are neither undone
-  nor claimed. The native result stands. That is the residual error to measure.
-- Child components: hull events only where damaged component == V (as PR #34). Shield events on
-  V itself.
+DECIDED (native evidence: A:primary last-attacker-01/02, NPC-03, damage-undo-02, channel-03)
+D1 Identity: object.lastattacker inside each damage callback is the firing SHIP (34/34, also for
+   8 different-attacker pairs at the same player.age). There is no verified weapon getter.
+   lastattacktime is not refreshed on every hit and is not used.
+D2 Application: the authority applies claimed hits with apply_attackstrength(object=victim,
+   attacker=its copy of the shooter, hullshield=per-shot strength, hullonly=shieldonly=
+   hullnoshield=0); all four channels must be given. Qualified in visible attention on the
+   X Shuttle: exact ordinary shield-only, overflow and hull results; a final hit at the 1% floor
+   leads to the existing LifeTick SHIP_LETHAL.
+D3 Scope: only a uniform, unmodified loadout of ordinary hullshield-only stock bullets without
+   turrets. The library entry (GetMacroData(macro,'infolibrary') + GetLibraryEntry) must give
+   hullshielddpshot > 0 and every other per-shot/area channel 0, and GetInstalledWeaponMod must
+   report no mod. The per-shot strength comes from that entry (X Shuttle plasma 40, pulse Mk1 36,
+   Mk2 46). Shooter and authority must have equal digests (macro:strength). Anything else
+   refuses claims.
+D4 Transport: SHOT|1|lease|shooter|shooterGen|victim|victimGen|seq|hits|digest, cumulative
+   hit counts. Generations are the relay's health generations; LAN targets use 0. The relay
+   accepts it only from the owner+pilot of the shooter at its current generation, keeps seq and
+   hits monotonic, and forwards it to the victim's authority (ship 2 -> its pilot while HEALTH
+   is live, otherwise the host), never back to the shooter's own slot (there its hits are
+   native). Ended generations are dropped.
+D5 Atomicity: Lua issues Apply{base, count} (at most 20 hits) with the HEALTH readback window. MD
+   compare-and-sets its accepted count, so the count and the native hits change together.
+   Generations only move forward and a newer pair restarts from 0. Lua advances only on Applied
+   and retries after 0.5 s. A failure stops the module permanently and zeroes MD strengths.
+D6 Restore: synchronous restoration inside the callback works (68/68, original values visible to
+   the canonical hit event, no recursion or death) and keeps callbacks alive at min 1/2.
 
-HP FLOOR AND DEATH
-- U runs inside the damage callback, so it lands before any life tick (event cues run at
-  callback time; LifeTick is a 0.05 s checkinterval cue). Player ships keep min hull 1%, so a
-  replay hit can never destroy a ship before its undo.
-- Death stays with the victim authority: a claim that brings V to <= 1.01% leads to the existing
-  LifeTick (ships) or the LAN-target floor kill (targets keep the 1% floor while claims are
-  active; a claim reaching the floor destroys, as in PR #34).
-- Shields: an undo restores at most the damage of that callback, capped at maxshield. A claim
-  applies shield then hull as reported (the shooter's callbacks already split them).
+REJECTED: time-bucket or same-frame correlators; lastattacktime freshness; zero-strength identity
+reset (native: lastattacker stays); nominal-amount filtering as freshness; lower local floors;
+observed shield/hull split replay; weapon attribution for mixed loadouts.
 
-EPOCH, AUTHORITY AND TRANSPORT (reuses the HEALTH fences)
-- SHOT|1|lease|shooterEntity|shooterGen|victim|victimGen|seq|shieldTotal|hullTotal: cumulative
-  totals per (shooter lease, shooter entity, shooter generation, victim, victim generation).
-  The relay accepts it only from the slot that owns AND pilots the shooter entity, in its
-  current HEALTH-style generation. It forwards it only to the victim's current authority machine
-  (ship 1 / targets -> host; ship 2 -> its pilot while its HEALTH generation is live; otherwise
-  host). A victim generation change starts new totals, so nothing is applied twice across
-  handovers.
-- The victim applies only increases, in seq order, as Lua -> MD writes with generation fences
-  and the same wall-second/game-age window as HEALTH. Refused writes are re-issued from the
-  totals, which stay monotonic.
-- Any AUTH transition of the shooter or victim ends the affected totals (as HEALTH generations).
-- Pause, stall and failure: the same rules as HEALTH. No claim is applied without a fresh
-  readback window. A failure closes the module permanently.
+BLOCKERS BEFORE CAPTURE/UNDO MAY BE ARMED (A:primary native ownership)
+B1 Stale identity: a collision, region or repair callback after a real hit may still read the
+   old lastattacker. Collision freshness is unqualified; without it no callback may be claimed.
+B2 Callback dedup: one hit gives a shield callback and, on overflow, a hull callback. Candidate
+   to qualify (A:primary): count the shield callback; count a hull callback only when the
+   restored current shield is zero (the shield undo runs synchronously before the matching hull
+   callback, 34/34). Shield-piercing, area and beam weapons are out of scope.
+B3 HEALTH proxy floor: the 2% proxy floor loses shooter callbacks once the canonical hull is
+   <= 2% (the ship is alive until 1.01%). If SHOT uses a 1% floor, the host LifeTick must read
+   the live remote authority's canonical health instead of the transient proxy hull, and
+   release/watchdog must restore the right floor and value.
+B4 Equal game data on both machines beyond the library digest (installed equipment mods are
+   checked; macro library values are not proof against altered game files).
 
-INTERACTION WITH HEALTH
-- Required: the ship 2 victim path needs HEALTH live (the pilot applies claims, then reports).
-  Without HEALTH, ship 2 stays host-authoritative and receives claims on the host proxy, with
-  the guest's undo (U) off.
-- HEALTH's 2% proxy floor and generation fences are unchanged. Claims are just another local
-  damage source in the pilot's world.
-
-NATIVE QUALIFICATION NEEDED (A:primary, before any activation)
-1. Two attackers hitting V in the same game frame: does each callback see its own
-   lastattacker, or the last one? This decides whether the ambiguity rule fires rarely or often.
-2. Order within one hit: is lastattacker updated before BOTH shield_damaged and hull_damaged?
-3. Are lastattacker/lastattacktime stale for callbacks with no attacker (collision, area,
-   hull repair)? Does lastattacktime == player.age identify a fresh value?
-4. Missiles and bombs: is lastattacker the launching ship?
-5. set_object_hull/shield inside a damage callback: no recursion or extra events (your earlier
-   capture says setters emit none).
-6. Undo at the 1% floor: is the reported damage the applied amount when clamped at min hull?
-
-FILES (if approved, later): new ui/shot_game.lua, md/x4lan_shot.xml, an x4lan/coop.py SHOT branch,
-flag shot_claims (default false), tests incl. MD-interpreter fence tests. No changes to
-coop_game.lua, bubble or HEALTH semantics beyond reading their generations.
-
-REVISION 1 (A:primary review 02:15-02:19; supersedes the ambiguity rule, the timestamp idea and
-the shield/hull application above). Still design only; no approval, no code.
-1 Attribution: per callback, lastattacker inside that callback only (last-attacker-02: 34/34
-  correct, including 8 different-attacker pairs at the same player.age). No time-bucket
-  correlator, no same-frame rejection. lastattacktime is NOT used: it is not refreshed on every
-  hit.
-2 Stale identity (collision, environment or repair after a real hit keeps the old
-  lastattacker): per-callback amount filter instead of a timestamp. A callback counts only when
-  its damage matches a nominal per-hit damage of the claimed attacker's equipped bullets
-  (macro <damage value> from the game's own bullet macros, e.g. plasma Mk1 720, read from the
-  installed game on BOTH machines and compared at session start; a mismatch disables claims).
-  The tolerance is a small epsilon, or "<= nominal" only when the callback is the floor-clipped
-  one (new hull == floor). Collisions and region damage practically never equal a bullet value.
-  The residual is measurable.
-3 Shield/hull semantic: no ratios and no observed-split replay. The authority applies the
-  claimed hit through the game's own damage primitive, apply_attackstrength (stock
-  fight.attack.object.*.xml use it OOS), with attacker = its copy of the shooter. The channel
-  comes from the bullet class: hullshield for normal bullets (shields first, overflow to hull
-  at the authority's REAL shield state); hullonly / shieldonly / hullnoshield only where the
-  bullet macro defines them. The claim carries (bullet macro id, hit count), not HP numbers. So
-  differing shield states between the views are resolved natively at the authority, with the
-  engine's kill credit and its own floor handling. Open: does apply_attackstrength in the
-  attention (in-sector) zone apply the same per-bullet values as a real projectile? It must be
-  qualified natively before anything else.
-4 Floor clipping (proven blocker for observed-delta claims): with (2)+(3) the clipped amount is
-  only a hit signal, not the damage applied. The remaining gap is "no hull callback at the
-  floor": on the shooter side, the proxy of a remote player keeps a lower local min hull
-  (0.1%) than the authority's death threshold (1.01%). WORLD keeps resetting it to the
-  authority value, so the shooter's hits keep producing callbacks until the authority has
-  declared death. The authority's own floor and life tick stay unchanged. Must be qualified
-  natively: a fractional set_object_min_hull, and no local destruction at 0.1%.
-5 Undo side (replayed remote shots on the victim): the same per-callback identity + amount
-  filter. The undo restores exactly that callback's shield/hull inside the callback. At the
-  victim's own floor the replay produces no callback, so there is nothing to undo.
-NEW BLOCKERS before approval: (a) qualify apply_attackstrength in-sector (amount, channels,
-attacker credit, floor, death); (b) qualify fractional local min hull on a remote proxy;
-(c) equal bullet tables on both machines (mods); (d) mixed weapon groups where two equipped
-bullets share a nominal value are ambiguous: those hits are dropped.
-
-REVISION 2 (A:primary 02:33; supersedes rev 1 points 2-4). Design only, built only on native
-per-hit identity and qualified raw channels; every item below is a native qualification target.
-1 Identity: inside each damage callback, the victim's lastattacker plus lastattackercomponent
-  (expected: the firing weapon). No timestamps, no amount matching.
-2 Freshness by consumption, not inference: in the same callback, after reading the identity,
-  clear it natively. A:primary observed that an attacker-less nested apply_attackstrength
-  resets lastattackercomponent to null. A zero-strength attacker-less application (no damage,
-  no events) would then make every later callback without a new hit read null: collisions,
-  region damage and repairs are never claimed or undone. To qualify: zero strength clears both
-  lastattacker and lastattackercomponent, deals nothing and raises no callback.
-3 Raw channels from the running game, not tables: the firing weapon's library entry
-  (GetMacroData(weaponmacro,'infolibrary') + GetLibraryEntry per-shot damage fields, as the
-  stock UI does) gives its per-hit channels on each machine, so mods are read as installed. At
-  session start both machines exchange a digest of the library entries of every co-op ship's
-  equipped weapons; any difference disables claims. A claim is (weapon macro, hits); the
-  authority applies it through apply_attackstrength with that weapon's channels (hullshield /
-  hullonly / shieldonly / hullnoshield / shielddisruption) and attacker = its copy of the
-  shooter. The engine splits shields and hull at the authority's REAL state, gives kill credit
-  and handles floor and death. Observed amounts (clipped or not) are never applied.
-4 No disappearing callbacks (replaces the 0.1% floor): consume-and-restore for every object
-  whose authority is remote. In my world such an object's HP is only a view (WORLD / HEALTH).
-  So each callback on it is recorded (claimed if my own ship was the attacker, otherwise
-  ignored) and its shield/hull are restored inside the same callback. The view never sits at
-  a floor locally, so hits keep producing callbacks until the authority's value itself is at
-  its floor or dead. The authority's own floor and life tick are unchanged.
-5 Victim side (my own ship or my authoritative objects): a callback whose identity is the
-  replayed remote player ship is restored in the callback (that shot's real outcome is the
-  shooter's claim). All other callbacks are native. Then the identity is consumed (2).
-6 Transport and fences as before (SHOT totals per shooter gen and victim gen, relay
-  owner+pilot checks, increases applied in order with generation fences and the HEALTH
-  freshness window; failure closes permanently).
-QUALIFICATION LIST (A:primary native): (a) apply_attackstrength in high attention: per-hit
-amount and channels vs a real projectile of the same weapon, attacker/kill credit, behaviour at
-the floor and at death; (b) zero-strength attacker-less apply: clears identity, no damage, no
-callback; (c) lastattackercomponent == firing weapon (including turrets and missiles); (d)
-GetLibraryEntry per-shot channel fields for the X Shuttle loadout and for modded weapons;
-(e) synchronous restore inside the callback (your damage-undo-01): HP restored before any other
-cue observes it, no recursion.
+IMPLEMENTED FILES (inert): x4lan/coop.py SHOT branch; ui/shot_game.lua; md/x4lan_shot.xml;
+ui.xml; config.lua shot_claims=false; tests/test_shot.py (relay, LuaJIT, MD interpreter fences).
