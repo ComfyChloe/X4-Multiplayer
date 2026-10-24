@@ -168,3 +168,23 @@ Raw SHA256dd6ecd20de39d96950eddbf5bcbcb7de38219ce75b1e1e6c045e9e7b3a53fba2.
 production unlock/teleport workaround follows this diagnostic. Compare the query
 with an ordinary local docking control and valid chair-approach slots before
 interpreting the negative NPC path as a synchronization defect.
+
+PLAYER PLATFORM OBSERVATION — 24 OCTOBER 2026
+board-01 (e174521) remains PARTIAL: add_actor_to_room rejects the normal player
+entity because it is not an NPC. Screenshot is the original station transporter,
+not successful placement. Raw SHA256
+4c0f47da6499017f4b76c2f4d4f963b41db7cb88693e6d362415ddc976e40c9b.
+board-02 (bbd0013) uses the documented find_player_transporter_slot and
+activate_transporter instead. Exactly one player is scheduled; subsequent native
+readback confirms player.room equals the actual remotely occupied bay. Bounded
+focused XTest walking exits the transporter and approaches the visible X Shuttle.
+Screenshots and native positions retained. This establishes platform access and
+visible actual attachment, not completed boarding: the walk reached a railing,
+and the bounded peer finished before a route to the entrance was completed. No
+production barrier override/actor teleport is introduced. Input after owned game
+exit was refused before any key action. Raw SHA256
+72a7dda832fef165f697d16ba1f8261777107a60b4f0b0e6f649704272270515.
+Both runs:56 installed production files and2 probes independently matched;
+original37 files and actual-save bytes/timestamps restored, owned game/helpers
+closed. Native gameplay warnings retained. Two-native same-pad crash acceptance
+and a complete walk through the remote ship entrance remain open.

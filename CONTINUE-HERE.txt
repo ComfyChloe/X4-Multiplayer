@@ -21,10 +21,9 @@ OWNERSHIP / COORDINATION
 Claude active: PR39 exact75e61e2 reviewed/merged atae2603e. Source-ID, quarantine,
 proxy-loss, native closure/pilot findings closed; independent78 prior +22 changed
 checksPASS,3MDschemasVALID; integrated57 SHOT/capture/visual checksPASS. FlagsOFF.
-Primary owns Linux native/docking/integration. Claude now assesses bounded Windows
-Get/SetWeaponLaunchedMacro readiness using his existing authorized isolated harness
-(stock/zero/stock same gun; no personal profile/Workshop writes); first readiness,
-not joint gameplay/package. Assignment1792808996.450949.
+Primary owns Linux native/docking/integration. Windows stays unlaunched: only
+profile45841 exists and remains restricted after Workshop incident. PR40 is
+source readiness only; no matched-native acceptance.
 New visual module uses native stopACK before setter and per-gun fresh proof;
 Lua/native FIRE2 gate. Mode/Gen/At lists1..2 agreed, modes0unknown/1original/2zero.
 reports/SHOT-VISUAL-PRIMITIVE.txt: native shot-visual01 boundedPASS, ownership
@@ -47,15 +46,17 @@ suitalive, remoteproofREADY. Raw/source/saves/37restore audited, exec58728 close
 PR40 f6bb18e reviewed9tests+MDVALID, merged e174521; all3 findings closed. Windows
 profile remains unlaunched. Claude now source-reviews dead-ship fix and stock
 WeaponDetails4/GetWeaponDetails3 heat/burst/identity mapping (no guessedABI).
-ACTIVE native coop-dock-board-01 exec31097, sourcee174521: saved Beta remote
-attachment then player actor placed on station airmarshal slot (never aboardship).
-Screenshot platform.png once ready; peer holds50s thenFINISH/cleanup. Additional
-owned focus-bus wrapper exec74893 (PID inboard-bus.json) stops oncleanup or500s.
-Do not start another native controller. Inspect screenshot promptly for actual
-platform access; movement/input must remain owned focused game only.
-shot-capture-01 exec18332 completed/cleaned. Next inspect guest raw/strict gate and
-cleanup, then continue remaining combat/boarding work. Schema worker48913 active.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour next05:15;05:00 checkpoint1792810815.180009. No new timer/chat.
+coop-dock-board-01 e174521 PARTIAL: player actor placement refused (not NPC);
+station-transporter screenshot only, NO platform placement/boarding proof.
+Controller and owned focus bus closed;37 restore/source/save hashes audited.
+board02 bbd0013: schema-defined player transporter moves actual player to exact
+remote bay; walking and visible ship observed, entrance not reached before
+bounded finish. Cleaned/audited37 files/7 actual normal saves; no boarding claim.
+ACTIVE projectile-visual-01 exec47020: dev-only original navbeacon references
+stock projectile geometry, tests rendering/position/removal. No transport code.
+Claude source-only assesses effect/geometry/lifecycle options; assignment05:15.
+Schema worker48913 active. Do not overlap native controllers.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID quarter-hour next05:30;05:15 checkpoint1792811692.538919. No new timer/chat.
 SHOT hardened5a0f75d merged4ae1065: immutable energy/digest, duplicateACK0damage,
 native gen/authority/time fences, permanentStop, stock uniform unmodified gate.
 shot-function02 manual3*40 then2*40 application/retry/closure tests remain observed
