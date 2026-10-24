@@ -11,7 +11,8 @@ the relay time elapsed since that NAV2; they are never compared with the relay c
 A record is immutable under (sourceLease, entity, epoch, gen, id). A duplicate never respawns or
 extends it and a changed duplicate is refused. An end before its birth leaves a tombstone that
 refuses the late birth. Each record is forwarded at most REPEATS times, GAP apart, and retires at
-its original birth time + ttl, on any authority transition, or when the NAV2 stream goes stale.
+its original birth time + ttl, on any authority transition, on a NAV2 sector change, or when
+the NAV2 stream goes stale.
 """
 from collections import deque
 from dataclasses import replace
@@ -22,8 +23,9 @@ NAV_FRESH = .75     # NAV2 age after which the pilot's stream is stale (as for N
 LATE = 1.0          # a birth/end may lag the pilot's estimated source time by at most this
 AHEAD = .1          # ...and lead it by at most this (capture vs NAV2 jitter)
 WINDOW = 512        # projectile ids per key: older ones are refused, and so are jumps beyond
-LIVE = 96           # live records per entity (about 2.7x the admitted 36 shots/s for ttl 1 s)
-RATE = 48           # accepted births per entity per relay second
+LIVE = 192          # live records per entity: the six-gun X Shuttle plasma (stock reload rate 9,
+                    # 54 shots/s) at the 3 s ttl maximum needs 162
+RATE = 96           # accepted births per entity per relay second (54/s admitted maximum, ~1.8x)
 REPEATS = 3         # forwards of each accepted birth and of each accepted end
 GAP = .04           # minimum relay seconds between two forwards of the same packet
 PER_TICK = 32       # BOLT/BEND forwards per entity per recipient per snapshot
@@ -75,7 +77,7 @@ class ProjectileRelay:
         stream = self.streams.get(message.entity)
         if not stream or stream.key != key: stream = self.streams[message.entity] = Stream(key)
         source = auth[3]
-        self.retire(stream, source)
+        self.retire(stream, source, auth[2])
         if not source - LATE <= message.time <= source + AHEAD or not stream.admit(message.id): return
         old = stream.seen.get(message.id)
         if isinstance(message, pp.Bolt):
@@ -91,10 +93,12 @@ class ProjectileRelay:
             old['end'] = message                                  # first end wins; never extended
 
     @staticmethod
-    def retire(stream, source):
+    def retire(stream, source, sector):
+        # A record also retires when the pilot's current NAV2 sector is no longer its birth sector.
         for record in stream.live():
             bolt = record['bolt']
-            if source >= bolt.time + bolt.ttl or (record['end'] and record['end_sent'] >= REPEATS):
+            if (source >= bolt.time + bolt.ttl or bolt.sector != sector or
+                    (record['end'] and record['end_sent'] >= REPEATS)):
                 record['live'] = False
 
     def packets(self, session, now):
@@ -108,7 +112,7 @@ class ProjectileRelay:
                 # repeat under this key can never resurrect a record (a new key replaces the stream).
                 for record in stream.live(): record['live'] = False
                 continue
-            self.retire(stream, auth[3])
+            self.retire(stream, auth[3], auth[2])
             for other, peer in session.peers.items():
                 if other == slot: continue
                 budget = PER_TICK

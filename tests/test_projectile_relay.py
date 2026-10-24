@@ -130,17 +130,47 @@ class ProjectileRelayTests(unittest.TestCase):
         self.bolt(entity=1, id=1, ttl=3.0, now=1.11); self.bolt(entity=1, id=2, time=1000.3, now=1.12)
         self.assertEqual([m.id for m in self.out(1.2, to=P2)], [2])
 
+    def keep(self, now):
+        """A fresh host NAV2 whose source clock runs with relay time (the host needs no HEALTH frames)."""
+        self.nav(entity=1, time=1000 + now - .2, now=now)
+
     def test_birth_rate_live_records_and_per_tick_forwards_are_capped(self):
-        self.nav(entity=1, now=.2)
-        for i in range(pr.RATE + 1): self.bolt(entity=1, id=i + 1, ttl=3.0, now=.21 + i * .001)
-        counts = [len(self.out(t, to=P2)) for t in (.3, .35, .4, .45, .5, .55)]
+        self.keep(.2)
+        for i in range(pr.RATE + 1): self.bolt(entity=1, id=i + 1, ttl=3.0, now=.21 + i * .0005)
+        counts = []
+        for k in range(12):
+            if k % 4 == 0: self.keep(.299 + k * .05)
+            counts.append(len(self.out(.3 + k * .05, to=P2)))
         self.assertEqual((counts[0], sum(counts)), (pr.PER_TICK, pr.RATE * pr.REPEATS))
-        for t in (.7, 1.2): self.nav(entity=1, time=1000 + t - .2, now=t)
-        for i in range(pr.RATE + 1): self.bolt(entity=1, id=100 + i, ttl=3.0, time=1001.0, now=1.21 + i * .001)
-        for t in (1.7, 2.2): self.nav(entity=1, time=1000 + t - .2, now=t)
-        self.bolt(entity=1, id=300, ttl=3.0, time=1002.0, now=2.21)           # 96 live: the cap refuses it
-        self.assertEqual(sum(len(self.out(t, to=P2)) for t in (2.25, 2.3, 2.35, 2.4, 2.45, 2.5)),
-                         (pr.LIVE - pr.RATE) * pr.REPEATS)
+        for now in (1.0, 1.29): self.keep(now)
+        for i in range(pr.RATE): self.bolt(entity=1, id=200 + i, ttl=3.0, time=1001.1, now=1.3 + i * .0005)
+        for now in (1.8, 2.3, 2.39): self.keep(now)
+        self.bolt(entity=1, id=500, ttl=3.0, time=1002.2, now=2.4)            # LIVE records alive: refused
+        sent = []
+        for k in range(12):
+            if k % 4 == 0: self.keep(2.449 + k * .05)
+            sent += self.out(2.45 + k * .05, to=P2)
+        self.assertEqual((len(sent), 500 in {m.id for m in sent}), (pr.RATE * pr.REPEATS, False))
+        self.assertEqual(pr.LIVE, 2 * pr.RATE)
+
+    def test_six_gun_plasma_at_stock_reload_rate_9_is_never_clipped(self):
+        # A:primary: installed stock weapon_ter_s_plasma_01_mk1 reload rate 9, six guns = 54 shots/s,
+        # here at the 3 s ttl maximum so every birth of the run is live at once at the end.
+        ids, sent = 0, set()
+        for step in range(27):
+            now = .21 + step / 9
+            self.keep(now - .001)
+            for gun in range(6):
+                ids += 1; self.bolt(entity=1, id=ids, ttl=3.0, time=1000 + now - .2, now=now + gun * 1e-4)
+            for k in (1, 2): sent |= {m.id for m in self.out(now + k * .05, to=P2)}
+        self.assertEqual((ids, len(sent)), (162, 162))
+
+    def test_a_sector_change_retires_old_sector_records_before_any_forward(self):
+        self.bolt(id=1)
+        self.nav(time=1000.04, now=.215, sector='cluster_01_sector001_macro')
+        self.assertEqual(self.out(.25), [])
+        self.bolt(id=2, time=1000.08, now=.26, sector='cluster_01_sector001_macro')
+        self.assertEqual([m.id for m in self.out(.3)], [2])
 
     def test_original_ttl_retires_records_that_still_had_repeats(self):
         self.bolt(id=1, ttl=.1); self.out(.25)
