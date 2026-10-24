@@ -25,29 +25,34 @@ and merged: sanitized monitor combat diagnostics, no authority/wire/native chang
 No further Claude assignment pending. Primary owns implementation/native.
 
 CURRENT STATE / DELIVERY
-No active native game/controller/relay; schema worker48913 stopped. The final
-37-file installation and7actual normal-save bytes/timestamps match retained
-cleanup. Pristine diagnostic01..04 all admit both; first historical refusal still
-unexplained. Batch02..04 uses e7bbe76,24 reports/144 operational unmodified reads.
-Transporter01 shows docked ship in the ordinary menu but no aboard confirmation;
-human B02 required. Do not repeat GUI walking without a concrete new finding.
+Latest user blocker:7.4.0 Linux01-INSTALL opened no window; reproduced no-TTY
+EOFError, so session was never created. FIXED in matched INTERNAL7.4.1:
+/home/developer/Desktop/X4 Online/Internal Tests/7.4.1-2026-10-24
+Implementation1987b75; package source235f9ba;577PASS/no skips. All10 Linux starters
+open a terminal, preserve args, hold errors and prevent recursion. Actual packaged
+starter successfully opened Konsole with a real TTY. English docs and version map
+updated. Both archives/runtime/server verified; Windows source checked on Linux,
+NOT native Windows. reports/INTERNAL-7-4-1-DELIVERY.txt records hashes/evidence.
 
-Matched INTERNAL7.4.0 archives are sealed/verified at:
-/home/developer/Desktop/X4 Online/Internal Tests/7.4.0-2026-10-24
-Linux tar.xz21,378,864 bytes; Windows ZIP12,934,196 bytes. Both have server/runtime,
-English procedures, unique actions01-10, licenses, full checksums. Actual extracted
-inventories/imports/realUDP/monitor pass. Windows Python logic checked on Linux,
-NOT native Windows. reports/INTERNAL-7-4-DELIVERY.txt records source/hash/scope.
-Package source e7bbe76; implementation a3341e4;572PASS/no skips. Later commits are
-delivery/evidence docs only. Do not overwrite this sealed pair or7.3.1.
+Local7.4.1 is INSTALLED/CONFIGURED AS HOST, usual ZeroTier address. Original7.3.1
+remover archived its37 files byte-exact and removed only its owned reserved slot;
+old immutable seed retained. All13 recorded normal-profile files including seven
+actual saves retain bytes/timestamps. Local settings imported read-only. Current
+installed inventory/package verification PASS. No game/server started; new world
+NOT prepared. User next:02-PREPARE-WORLD-HOST then03 server then05 game. Windows
+tester needs7.4.1 and fresh invitation. Visible setup-completion window awaits Enter
+(Konsole294123/bash294289 at verification; recheck PIDs before any action).
+Sealed7.3.1,7.4.0 and7.4.1 archives preserved. Do not run old7.4.0 starters.
 
-Human readiness question pending: start with NEXT-TEST D01/D02, then remaining
-combat/dock cases as specified. Cannot claim guest-host/boarding/crash acceptance
-without those results. Keep PR37 draft; latest body describes delivered pair.
-Source config inert; launcher enables pilot_health/shot_claims/shot_visual/
-shot_capture/projectile_visuals/coop_docks; shot_undo=false. VERSION7.4.0,extension11.
-Two players; pristine shared starting snapshot, no played-campaign persistence or
-complete shared economy. No public package authorized.
+Gameplay unchanged from7.4.0. Native/cleanup evidence below is HISTORICAL; the
+previous37-file restored installation has now been replaced by owned7.4.1.
+Keep PR37 draft. Human test likely this evening; user will announce readiness.
+NEXT-TEST D01/D02 first, then remaining combat/dock cases. No two-native acceptance
+without results. Source config inert; launcher enables pilot_health/shot_claims/
+shot_visual/shot_capture/projectile_visuals/coop_docks; shot_undo=false. VERSION7.4.1,
+extension11. Two players; no played-campaign persistence/full shared economy.
+No public package authorized. No extra agents/chats/timers or gameplay retesting
+for this launcher-only fix. Prior7.4.0 delivery: INTERNAL-7-4-DELIVERY.txt.
 
 COMBAT / COMBINED NATIVE EVIDENCE
 reports/SHOT-CAPTURE-INTEGRATION.txt: separate native host/guest actual-hit capture

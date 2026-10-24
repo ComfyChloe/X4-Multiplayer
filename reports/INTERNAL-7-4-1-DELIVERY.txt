@@ -1,0 +1,53 @@
+X4 MULTIPLAYER 7.4.1 — INTERNAL LAUNCHER CORRECTION
+24 October 2026
+
+Package source: 235f9ba40effc4d53d4b7f791fc70a7a63c2d3a6
+Implementation: 1987b750ea9991b7a53f72d6b8e159f994cc5149
+577 Linux/LuaJIT checks PASS, no skips. Gameplay unchanged from 7.4.0.
+
+The delivered 7.4.0 Linux installer tried input() without a terminal when run
+from a desktop/file manager. EOFError left no session; the next server action
+then reported "Run 01-INSTALL first". All ten generated Linux starters now
+re-enter themselves in a supported terminal, retain argument boundaries and
+wait for Enter after success/failure. A sentinel prevents recursion. Direct
+Python automation remains available and EOF now produces an actionable error.
+
+Five new process-level regressions cover four terminal adapters, absent/broken
+terminals, actual role/error prompts in a pseudoterminal and direct EOF handling.
+After local installation, the actual packaged 01-INSTALL.sh was also started
+without stdin/stdout terminals: Konsole PID294123 created bash PID294289 with
+both streams on /dev/pts/1, showing the configured setup's completion window.
+That user-facing window awaits Enter; no X4 or relay was launched.
+
+Delivery: Desktop/X4 Online/Internal Tests/7.4.1-2026-10-24
+X4-LAN-7.4.1-Linux.tar.xz
+21,375,112 bytes; SHA256 dc7a01f5ea74be3a2807470f65f22177893e272ec30f07fd1e8f8271ab1b9f0c
+
+X4-LAN-7.4.1-Windows11.zip
+12,934,945 bytes; SHA256 a9942b46e9d2733e91703afe8d784bdaa7e9fe7a915a13488615c1627cec841a
+
+Both archives were independently extracted and every inventory/hash checked.
+Unique executable actions01-10, Bash syntax, local HTML links, runtime aliases,
+licenses and platform binaries pass. Bundled Linux runtime imports and real UDP
+readiness/monitor checks pass; Windows Python logic passes on Linux, not Windows.
+Sealed archives contain no session/invitation/installation state. They remain
+unchanged by the configured local copy. 7.3.1 and7.4.0 archive hashes still match.
+
+LOCAL INSTALLATION
+Previous owned7.3.1 mod archived by its original remove action: all37 hashes
+match. Only its recorded reserved save was removed; exact bytes remain in the
+old immutable world/bundle/seed.bin. All13 recorded normal-profile files,
+including seven actual saves and settings, retain their hashes/timestamps.
+7.4.1 is configured and installed as host; settings imported read-only from the
+normal profile. Installed inventory matches the configured package and the
+package's own verify action passes. New world is NOT prepared; next action is
+02-PREPARE-WORLD-HOST, then03-START-SERVER-HOST and05-START-X4. Guests need the
+matched7.4.1 Windows package and this host's new private JOIN-SESSION.json.
+
+Retained local evidence: .local/evidence-107-withheld, check_local741.py,
+launcher741-local-before.json, launcher741-local-after.json,
+launcher741-local-install.txt, launcher741-desktop-window.json,
+assembly741-checks.txt. Final extracted-archive evidence accompanies delivery
+as assembly-validation.json. Earlier native acceptance limits in
+INTERNAL-7-4-DELIVERY.txt and INTERNAL-7-4-INTEGRATION.txt remain unchanged.
+No new native gameplay test, public package or whole-universe acceptance.
