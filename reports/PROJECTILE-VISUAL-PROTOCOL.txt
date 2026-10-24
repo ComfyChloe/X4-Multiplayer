@@ -1,0 +1,53 @@
+OBSERVED PROJECTILE VISUALS — PROPOSED OPT-IN CONTRACT — 24 OCTOBER 2026
+
+INERT FOUNDATION. This channel may create only temporary harmless visuals.
+It never establishes a hit, grants damage, aims a real gun, or changes gun heat.
+Existing SHOT/capture/HEALTH authorities remain separate. A native source records
+actual locally piloted original projectiles, including native aim/spread/cadence.
+The receiver renders those observations against its existing source-clock motion
+buffer. No selected-target substitution. Only the three already admitted stock
+uniform unmodified weapon types are in initial scope.
+
+CLIENT -> RELAY
+BOLT|1|lease|entity|epoch|gen|id|time|sector|kind|x|y|z|vx|vy|vz|yaw|pitch|roll|ttl
+BEND|1|lease|entity|epoch|gen|id|time
+
+RELAY -> OTHER CLIENT
+Insert sourceLease immediately after recipient lease, as in FIRE2:
+BOLT|1|recipientLease|sourceLease|entity|epoch|gen|id|time|sector|kind|x|y|z|vx|vy|vz|yaw|pitch|roll|ttl
+BEND|1|recipientLease|sourceLease|entity|epoch|gen|id|time
+
+BOUNDARIES
+ASCII, maximum768 bytes; exact field count/direction; no embedded newline/pipe.
+Leases: existing32-character lowercase hexadecimal lease format.
+entity1..2. epoch,gen,id are integers1..2147483647. id is a per-generation projectile
+identifier, not a native X4 handle. time is sender's monotonic source-clock seconds,
+finite0..1e12, matching NAV2 time domain. sector uses the existing ATOM grammar.
+kind:1=stock X Shuttle plasma,2=generic pulseMk1,3=generic pulseMk2.
+Position bounds: absolute value<=50000000 metres. Velocity components<=100000m/s.
+Angles are radians, each absolute value<=2*pi. ttl is finite, greater than0 and
+at most3 seconds. All numeric fields must be finite. A floating lexical value is
+not accepted for an integer field. Do not infer health-generation validity from
+successful packet decoding.
+
+LIFECYCLE / LATER INTEGRATION REQUIREMENTS
+The relay must independently verify current lease/address, pilot ownership,
+authority epoch, live HEALTH generation, live ship and admitted sector. The
+receiver repeats its current authority/generation/sector/pause checks before
+any engine operation. Native handles come only from locally created owned objects.
+A birth record is immutable under(sourceLease,entity,epoch,gen,id); duplicate
+births must not respawn or extend life. End-before-birth needs a bounded tombstone.
+Expire on original source time+ttl, end, ownership/generation change, pause,
+disconnect or world change. A late repeat must not resurrect an expired visual.
+Retransmission, rate bounds, object caps and native proof gates require explicit
+implementation and tests before activation; codec acceptance alone is insufficient.
+Use finite attached effects and explicit cleanup of both effect and carrier.
+Current positive native primitive is a meshless class object carrying a separate
+class effectobject graphic; direct geometry-bearing objects absorb real bullets.
+
+CODE OWNERSHIP
+Claude: new unused pure Python/Lua codecs + focused tests only, no relay/UI/config
+registration or native activation. Primary: native capture/render/lifecycle and
+later integration. The initial codec API should parse client/forwarded forms
+explicitly, return named validated fields, and serialize the same explicit form.
+No native IDs, victim identity or damage amounts appear in this protocol.

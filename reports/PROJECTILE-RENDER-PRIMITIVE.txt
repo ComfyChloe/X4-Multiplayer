@@ -44,3 +44,59 @@ Next bounded investigation: the stock effectobject class (effect_dummy pattern),
 with original geometry-reference metadata, followed by explicit collision and
 continuous-position checks if creation succeeds. No implementation acceptance
 is inferred from a class name or from a setter returning without an exception.
+
+effect-01 FAIL: changing the original reference component/macro to effectobject
+and using create_object produces exists0/null. This is not a created moving
+visual. The dependent readback then emits missing-position errors, retained in
+raw eecbed0a37952b5cc8af7b346d2e12805819695d8969866c97bda9f58edde8f1.
+55 unchanged source files+6 overrides/UI registration,37 restored files and
+actual save bytes/timestamps audited. Engine-specific effect instantiation must
+not be equated with ordinary create_object support.
+
+The next probe uses class object, following stock FX dummy metadata. It adds a
+stronger independent passage witness: each real pulse projectile is read100ms
+after firing and must remain alive beyond the visual's plane. This does not rely
+on the earlier Shuttle victim's unqualified hit geometry. It also checks actual
+per-frame SetObjectSectorPos readback at about2332m/s if the object survives.
+
+object-01, source245dfc5, is also REJECTED as a transparent visual. Creation and
+visible geometry work;315 per-frame native setter/readbacks at2332.38m/s have a
+maximum position error of0.00216911m. But9 control bullets survive beyond the
+visual plane, while all9 bullets in the anchor phase disappear before the100ms
+sample. The generic object survives: it absorbs bullets without having hull.
+The renamed Shot namespace also exposed three unqualified fields in its birth
+DEBUG line; those diagnostics emit missing-variable errors. The separate trace
+uses correctly scoped saved bullet/phase/sector references. Overall FAIL remains;
+the raw is not filtered to PASS. SHA256
+3d0069ac78289cf0ba8e52718e776086d5b482eaa642bcb764dda02df0e7b140.
+54 unchanged production files+7 dev overrides/UI registration,37 restored files
+and actual-save bytes/timestamps verified. No production renderer follows this.
+
+object-02 corrects those diagnostic scopes and applies documented
+ disable_collision_response after the object has been visible for one second.
+Stock MD uses this action for temporary HQ-effect navbeacons. Its visible-attention
+restriction and actual effect on bullets still require the current native test.
+
+object-02 FAIL: fixed diagnostics, but all anchor-phase projectiles still vanish.
+The action reports attention=inzone, which does not satisfy its documented
+visible-attention precondition. Do not claim a test of that action under its
+required attention. Raw34b950c93cb43fc6aa1dcf0cf8f1fd06c67c5d28066db55cabab2abdf9c05b2d.
+54 source files+7 overrides/UI registration,37 restored files/actual saves audited.
+
+MESHLESS CARRIER + SEPARATE EFFECT — BOUNDED PASS
+effect-carrier-01 (245dfc5) removes the geometry from the class object carrier.
+An original class effectobject component references the installed projectile
+geometry; libraries/effects.xml attaches it via add_effect with finite duration.
+Real shots:9 control and9 with the effect, all18 still exist beyond the visual
+plane at the100ms observation. The carrier survives and is explicitly removed.
+No diagnostic/parser/API error is observed. The two viewed cockpit screenshots
+show the bright projectile graphic move from the centre toward the left after
+a100m lateral carrier move. This is actual graphic attachment, not merely a
+position value. After a2s stationary observation,285 moving frame readbacks at
+2332.38076m/s have maximum position error0.00223871m. remove_effect precedes carrier
+destruction; final native carrier exists0. Native source/control setup remains
+one pulse gun, one visible graphical effect, one Linux engine.
+Raw d8eb13a51326ec01b901e3d6683880a406d922fad5726e1ebb73a24cdb3da614.
+54 unchanged production files+10 dev overrides/UI registration,37 restored files
+and actual-save bytes/timestamps verified. No two-native, dense rendering, save
+lifecycle, original animation equivalence or network-projectile acceptance yet.
