@@ -110,6 +110,16 @@ class VisualAdapterTests(unittest.TestCase):
         ''')
 
 
+    def test_observed_projectiles_disable_native_fire2_even_with_trigger_evidence(self):
+        l=test_fire2.Fire2AdapterTests().make()
+        l.execute("""
+         X4LAN_CONFIG.projectile_visuals=true
+         nav2(1,50,0);fire2(1,50,1,1,0,0);now=10.05;fire2(2,50.05,1,1,1,0)
+         now=10.3;frames.onUpdate()
+         for _,f in ipairs(fires('Fire2')) do assert(not f.primary and not f.secondary) end
+        """)
+
+
 class NativeReplayGateTests(unittest.TestCase):
     def test_queued_positive_grant_is_refused_after_mode_gen_closure_or_expiry_change(self):
         tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_coop.xml')
@@ -117,7 +127,7 @@ class NativeReplayGateTests(unittest.TestCase):
         guard=cue.find('actions/do_if/do_if')
         expression=guard.get('value')
         replacements={
-            '@$arena.$shotVisualEnabled':'enabled', '@$v.$visual':'requested',
+            '@$arena.$projectileVisualEnabled':'observed', '@$arena.$shotVisualEnabled':'enabled', '@$v.$visual':'requested',
             '$v.$primary':'primary', '$v.$secondary':'secondary', '@$arena.$shotFailed':'failed',
             '@$arena.$shotVisualMode.{$v.$ship}':'mode', '@$v.$visualGen':'gen',
             '$v.$visualGen':'gen', '$arena.$shotVisualGen.{$v.$ship}':'proofgen',
@@ -127,21 +137,22 @@ class NativeReplayGateTests(unittest.TestCase):
             ' gt ':' > ', ' le ':' <= ', '0.3s':'.3'}
         for a,b in sorted(replacements.items(), key=lambda item: -len(item[0])): expression=expression.replace(a,b)
         self.assertNotIn('$',expression)
-        base=dict(enabled=True,requested=True,primary=True,secondary=False,failed=False,
+        base=dict(enabled=True,observed=False,requested=True,primary=True,secondary=False,failed=False,
                   mode=2,gen=4,proofgen=4,currentgen=4,closed=3,proofage=.1,stateage=.1,piloted=False)
         self.assertTrue(eval(expression,{},base))
-        for change in (dict(mode=0),dict(mode=1),dict(gen=3),dict(closed=4),dict(proofage=.31),
+        for change in (dict(observed=True),dict(mode=0),dict(mode=1),dict(gen=3),dict(closed=4),dict(proofage=.31),
                        dict(stateage=.31),dict(piloted=True),dict(failed=True),dict(gen=0,requested=False)):
             with self.subTest(change=change): self.assertFalse(eval(expression,{},base|change))
         self.assertTrue(eval(expression,{},base|dict(primary=False,mode=0))) # Stop always allowed.
         self.assertTrue(eval(expression,{},base|dict(enabled=False,requested=False,mode=0)))
+        self.assertFalse(eval(expression,{},base|dict(enabled=False,requested=False,observed=True)))
         refused=cue.find('actions/do_if/do_else')
         self.assertIsNotNone(refused.find('stop_shooting'))
         self.assertEqual([n.get('exact') for n in refused.findall('set_value')],['[0,0]','false'])
 
     def test_assets_are_separately_indexed_zero_damage_stock_references(self):
         root=ROOT/'extension/x4_lan_lab'
-        entries=E.parse(root/'index/macros.xml').findall('add/entry')
+        entries=[e for e in E.parse(root/'index/macros.xml').findall('add/entry') if e.get('name').startswith('x4lan_visual_')]
         self.assertEqual(len(entries),3)
         for entry in entries:
             path=root/entry.get('value').removeprefix('extensions/x4_lan_lab/')

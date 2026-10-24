@@ -1,0 +1,20 @@
+<?xml version='1.0' encoding='utf-8'?>
+<diff>
+  <add sel="/effects">
+    <effect name="x4lan_projectile_plasma" alignment="object" emitterspace="local">
+      <elements>
+        <element id="1" ref="x4lan_projectile_plasma_macro" duration="3" minscale="1" maxscale="1" />
+      </elements>
+    </effect>
+    <effect name="x4lan_projectile_pulse1" alignment="object" emitterspace="local">
+      <elements>
+        <element id="1" ref="x4lan_projectile_pulse1_macro" duration="3" minscale="1" maxscale="1" />
+      </elements>
+    </effect>
+    <effect name="x4lan_projectile_pulse2" alignment="object" emitterspace="local">
+      <elements>
+        <element id="1" ref="x4lan_projectile_pulse2_macro" duration="3" minscale="1" maxscale="1" />
+      </elements>
+    </effect>
+  </add>
+</diff>

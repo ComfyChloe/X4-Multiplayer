@@ -109,8 +109,10 @@ class PythonCodecTests(unittest.TestCase):
     def test_codec_is_unused_by_production(self):
         ui = (ROOT / 'extension/x4_lan_lab/ui.xml').read_text()
         self.assertNotIn('projectile_protocol', ui)
+        self.assertNotIn('projectile_game', ui)
+        self.assertIn('not cfg.projectile_visuals', (ROOT/'extension/x4_lan_lab/ui/projectile_game.lua').read_text())
         for path in list((ROOT / 'x4lan').glob('*.py')) + list((ROOT / 'extension').rglob('*.lua')) + list((ROOT / 'extension').rglob('*.xml')):
-            if path.name not in ('projectile_protocol.py', 'projectile_protocol.lua'):
+            if path.name not in ('projectile_protocol.py', 'projectile_protocol.lua', 'projectile_game.lua'):
                 self.assertNotIn('projectile_protocol', path.read_text(errors='replace'), path)
                 self.assertNotIn('PROJECTILE_PROTOCOL', path.read_text(errors='replace'), path)
 

@@ -46,8 +46,25 @@ Current positive native primitive is a meshless class object carrying a separate
 class effectobject graphic; direct geometry-bearing objects absorb real bullets.
 
 CODE OWNERSHIP
-Claude: new unused pure Python/Lua codecs + focused tests only, no relay/UI/config
-registration or native activation. Primary: native capture/render/lifecycle and
-later integration. The initial codec API should parse client/forwarded forms
-explicitly, return named validated fields, and serialize the same explicit form.
+PR41 codecs2ae2284 independently reviewed and merged. Nine focused tests,1,000
+randomized Python/Lua canonical roundtrips and3,000 malformed variants passed;
+oversized-int serializer correction separately verified. Codec/adapter remain
+unregistered in ui.xml. Claude now owns bounded relay hooks/helper/tests in a
+separate PR; primary owns native capture/render/lifecycle and later integration.
+Parsers take explicit client/forwarded direction and return validated named fields.
 No native IDs, victim identity or damage amounts appear in this protocol.
+
+CURRENT UNREGISTERED ADAPTER
+projectile_game.lua / x4lan_projectile.xml provide local native sample capture and
+owned finite-effect rendering behind projectile_visuals=false. Source samples use
+20..200ms actual position differences, original shot TTL1.7s plasma/.7s pulse,
+three birth/end transmissions at50ms spacing. The adapter repeats pilot, proof,
+health generation, current ship/sector and NAV2 source-lease gates; native State
+ACK and queued Create repeat identity, fresh readback and proof checks. Fixed256
+slots use monotonic operations; cancel-before-create and late-old-remove cannot
+revive/kill another slot use. Native watchdog/expiry and explicit effect removal
+bound cleanup if Lua stops. Positive FIRE2 replay is blocked in Lua and native MD
+when observed-projectile mode is active. No target substitution or damage writes.
+11 focused adapter/native-gate checks; prior32 FIRE2/visual checks plus new replay
+suppression regression pass. Both changed MD scripts validate. Native integration
+of this adapter, pulse graphics and real BOLT/BEND relay path still pending.
