@@ -41,7 +41,9 @@ local function wanted(e,now)
   lease,sourceNow=r.sourceLease,now-r.track.offset
  end
  local name=GetComponentData(A.id(sector),'macro')
- local key=table.concat({s.client.lease,lease,e,c.epochs[e],gen,A.id(ship),A.id(sector),mode,kind},'|')
+ -- A.id creates engine LuaID userdata for MD/API arguments. It is not a string
+ -- and may be a new wrapper on every call; key the stable native numeric IDs.
+ local key=table.concat({s.client.lease,lease,e,c.epochs[e],gen,tostring(ship),tostring(sector),mode,kind},'|')
  return {key=key,entity=e,gen=gen,epoch=c.epochs[e],kind=kind,mode=mode,ship=ship,sector=sector,
   sectorName=name,sourceLease=lease,sourceNow=sourceNow}
 end

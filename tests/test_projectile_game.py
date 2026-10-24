@@ -54,6 +54,15 @@ class ProjectileAdapterTests(unittest.TestCase):
         ''')
         return l
 
+    def test_engine_luaid_userdata_is_not_concatenated_or_used_as_context_identity(self):
+        self.make().execute('''
+         local before=X.contexts[2];local ticket=before.ticket
+         X4LAN_BUBBLE_API.id=function() return newproxy(true) end
+         clock(10.05);C.frame(now);clock(10.1);C.frame(now)
+         assert(not X.failed and X.contexts[2]==before and before.ticket==ticket)
+         receive(packet());assert(before.buffer.count==1)
+        ''')
+
     def test_native_creation_ack_precedes_any_move_and_matches_delayed_actual_path(self):
         self.make().execute('''
          assert(receive(packet()));X.renderFrame(now);assert(count('Create')==0)

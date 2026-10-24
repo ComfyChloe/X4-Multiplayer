@@ -166,3 +166,11 @@ controller's completed=true an accepted firing/rendering run. Source69 files,
 owned processes closed. Pulse graphics and moving-shooter acceptance remain open.
 Next real-relay adapter run keeps the previously qualified stationary plasma
 fixture to separate the transport/native integration from this setup problem.
+
+REAL RELAY ADAPTER FIRST RUN — projectile-adapter-01
+Source8832a15, rawc06600f849cf9e5adb634717a77ab7655b35d60d4b59fd69a100cc925b5ef429.
+FAIL before firing: context-key table.concat received engine LuaID userdata
+returned by A.id. Corrected to stable native ID strings; MD/API arguments retain
+the typed LuaID. New engine-userdata regression plus11 existing adapter tests PASS.
+70 source files/2 probes/UI registration,37-file restoration and actual save
+bytes/timestamps independently audited. All owned processes closed.
