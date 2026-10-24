@@ -96,7 +96,9 @@ class PythonCodecTests(unittest.TestCase):
         cases = [bolt(entity=3), bolt(entity=True), bolt(epoch=0), bolt(gen=2147483648), bolt(id=1.0), bolt(kind=4),
                  bolt(x=float('nan')), bolt(vy=float('inf')), bolt(pitch=7.0), bolt(ttl=0.0), bolt(ttl=3.01), bolt(time=-1.0),
                  bolt(sector='a|b'), bolt(sector='a' * 97), bolt(lease='A' * 32), bolt(source_lease=B), bolt('forwarded', source_lease=None),
-                 bolt(direction='relay'), bolt(yaw='0.5'), end(time=1e13), end(id=0), end(source_lease=B)]
+                 bolt(direction='relay'), bolt(yaw='0.5'), end(time=1e13), end(id=0), end(source_lease=B),
+                 bolt(x=10**400), bolt(vy=-10**400), bolt(roll=10**400), bolt(ttl=10**400), bolt(epoch=10**400),
+                 end(time=10**400), bolt(x=float('-inf'))]
         for message in cases:
             with self.subTest(message=message):
                 with self.assertRaises(pp.ProtocolError):

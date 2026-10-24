@@ -110,7 +110,8 @@ def _check(message):
         floats += list(BOLT_NUMBERS) + [('ttl', MAX_TTL)]
     for name, limit in floats:
         value = getattr(message, name)
-        if type(value) not in (int, float) or not math.isfinite(value) or abs(value) > limit: _fail(name + ' out of bounds')
+        # Range first: an oversized int (10**400) compares exactly but overflows math.isfinite.
+        if type(value) not in (int, float) or not -limit <= value <= limit: _fail(name + ' out of bounds')
     if message.time < 0: _fail('time out of bounds')
     if isinstance(message, Bolt) and not message.ttl > 0: _fail('ttl out of bounds')
 
