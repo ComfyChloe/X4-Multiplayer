@@ -13,6 +13,6 @@ changes, describe reference and diff checks instead of running the game.
 ## Integration and remaining limits
 
 List dependencies or overlapping PRs, required matched client/server updates and
-known limitations. State whether the pending 7.0 candidate is affected. Record
+known limitations. State whether the sealed internal test pair is affected. Record
 durable interface decisions in their owning documentation. Keep generated
 packages, session keys and personal installation data out of this PR.

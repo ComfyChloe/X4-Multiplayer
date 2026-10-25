@@ -3,6 +3,10 @@ X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 CURRENT TASK / CHECKOUT
 work/x4-weapons-7-4, contrib/astra-7-4-integration, draft PR37 based on
 contrib/astra-7-3-1-delivery. Read AGENTS.md, Git state and affected references only.
+New-agent onboarding is prepared in onboarding/00-START-HERE.txt, with a compact
+English prompt, pinned code7c6ec19, setup/source map, candidate scopes and handoff.
+Documentation-only ZIP: Desktop/X4 Online/Development/Onboarding/2026-10-25/.
+No agent has been started or assigned implementation ownership by this preparation.
 User supplied community Windows v6 and fleet-map9 ZIPs for review/integration.
 Review is complete; selected installer fixes are in source, NOT a new package.
 A second independent team reported the same tasklist UnicodeDecodeError and an

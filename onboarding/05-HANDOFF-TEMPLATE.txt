@@ -1,0 +1,34 @@
+BOUNDED TASK / CONTRIBUTION HANDOFF
+Keep this short; link exact source and evidence instead of pasting long logs.
+
+Task / owner:
+Starting commit / agreed branch and PR base:
+Files and shared interfaces in scope:
+Current commit / PR:
+
+Problem and resulting behavior:
+Concrete reproduction or trigger:
+Implementation / interface decision (if any):
+
+Evidence:
+  Command | tested commit | OS/architecture | result | scope/omissions
+  Automated / engine double / native with synthetic peer / human native pair:
+  Native game build, DLC, roles and source/probe hashes where applicable:
+  Raw capture / manifest location; sanitized transfer available:
+  Failures retained, not filtered away:
+
+Preservation / cleanup, if a native or installation check ran:
+  Exact owned installation/profile/slot and backup record:
+  Task-owned processes/ports stopped or deliberately handed over:
+  Normal saves/settings and restored owned files verified:
+  Unknown/preexisting files left intact; any unresolved cleanup stated:
+
+Remaining limits / pending checks:
+Conflicts or overlapping work to coordinate:
+One concrete next action:
+
+Do not put session keys, invitations, personal documents or raw private logs in
+this note. Distinguish a proposed test from one actually run. If evidence is local
+and inaccessible to the reviewer, say so and provide a narrowly sanitized bundle.
+For PRs also use .github/PULL_REQUEST_TEMPLATE.md. Do not mark incomplete native
+or whole-universe acceptance as passed because isolated checks succeed.

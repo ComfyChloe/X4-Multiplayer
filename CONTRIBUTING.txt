@@ -1,7 +1,13 @@
 X4 MULTIPLAYER - CONTRIBUTOR AND AGENT HANDOFF
-Updated 23 October 2026 | INTERNAL DEVELOPMENT
+Updated 25 October 2026 | INTERNAL DEVELOPMENT
 
 START HERE
+
+New contributors: use onboarding/00-START-HERE.txt for the pinned current code,
+starter prompt, source map and candidate scopes. Current7.4 development is on
+contrib/astra-7-4-integration, draft PR37, not necessarily main. Follow the onboarding
+baseline/PR-base instructions for this work; generic origin/main examples below
+apply only when main is the agreed task baseline.
 
 Humans using Claude Code, Codex or another coding agent can contribute through
 the same private Git repository. Git shares committed files and history, not
@@ -16,7 +22,7 @@ Use this entry path; load additional documents for the assigned task:
    gameplay/authority changes. Use distribution/NEXT-TEST.txt for the current test.
 5. INTERNET-HOSTING-ANALYSIS.txt when working on transport or dedicated hosting.
 
-7.3.0 shares one native starting save; current acceptance and pending work are
+The shared-start implementation transfers one native starting save; acceptance and pending work are
 in CONTINUE-HERE.txt. Shared ongoing universe authority and persistence remain
 unfinished. Earlier playtest reports are historical evidence, read when relevant.
 The user has chosen to keep primary native X4 testing on their current PC.

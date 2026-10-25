@@ -1,61 +1,60 @@
-# X4 Multiplayer — internal 7.3.1 candidate
+# X4 Multiplayer — internal development
 
-Experimental two-player co-op for X4 Foundations. This version prepares one native
-host starting save and transfers it to the guest so both start in the same world.
-Ongoing universe authority and campaign persistence remain unfinished.
+Experimental two-player co-op for X4 Foundations 9.00, Steam build 23660954.
+The host prepares a native starting save and transfers it to the guest. Selected
+live gameplay is synchronized; full ongoing universe authority and campaign
+persistence remain unfinished.
 
-Start development with [AGENTS.md](AGENTS.md) and the short
-[current handoff](CONTINUE-HERE.txt). Follow its task-specific references instead
-of reading all historical reports. [Claude instructions](CLAUDE.md) use the same
-shared rules. Read [setup instructions](DEVELOPMENT.txt) for a new machine and
-[contribution instructions](CONTRIBUTING.txt) for collaboration and PR delivery.
+New contributors and coding agents: start with the
+[onboarding packet](onboarding/00-START-HERE.txt), including its pinned code baseline,
+[starter prompt](onboarding/01-AGENT-START-PROMPT.txt) and
+[source map](onboarding/03-CODE-AND-STATUS.txt). Current development is on
+`contrib/astra-7-4-integration` ([draft PR37](https://github.com/Lith7ium/X4-Multiplayer/pull/37));
+do not assume `main` has these changes.
 
-## Internal playtest
+Read [AGENTS.md](AGENTS.md) and the short [current handoff](CONTINUE-HERE.txt).
+Use [development setup](DEVELOPMENT.txt) and [contribution rules](CONTRIBUTING.txt)
+for your own environment/worktree. [CLAUDE.md](CLAUDE.md) imports the same rules.
+Load only task-relevant evidence rather than the entire historical archive.
 
-Use the matched 7.3.1 Windows/Linux packages, both including the server and portable
-runtime. Follow [installation instructions](distribution/INSTALL.html), the
-[package guide](distribution/README.txt) and the
-[focused setup/background/teleportation test](distribution/NEXT-TEST.txt). The host runs both X4 and the
-relay. Host setup prepares the starting save once; guests import the private
-invitation and download the verified world at launch. UDP45841 and TCP45844 are
-required. Both roles use isolated test profile 45841 and matching game/DLC content.
+## Delivered packages and current source
 
-Normal display/audio/input preferences are imported read-only into the test
-profile; autosave is disabled and borderless mode supports Alt+Tab. Preserve normal saves and Steam subscriptions.
-The withdrawn Workshop selection helper must not be used. Never commit session
-credentials, generated packages or installed configuration.
+The sealed internal Windows/Linux pair is **7.4.1**, from source `235f9ba`.
+Both packages contain the server, private Python runtime and English procedures.
+Linux's alternative Small.7z is 19,929,193 bytes with the same payload. Follow
+[installation instructions](distribution/INSTALL.html), the
+[package guide](distribution/README.txt) and [human test procedures](distribution/NEXT-TEST.txt).
+The host runs X4 and the relay; UDP45841 and TCP45844 are required. Both players
+use profile45841 with matching game/DLC content and a private host invitation.
 
-Restart both games and the relay together. Restarting restores the original
-starting world: it does not retain multiplayer progress. Preserve sealed archives;
-new builds belong in a new directory. Public Test 01 is withheld; another public
-release requires an explicit request.
+The source additionally contains **unreleased** community installer fixes from
+`7c6ec19`: Windows process decoding, unavailable Steam drives, explicit game path
+selection, validated session recovery and preference reselection. They are not in
+those sealed archives. See the [review](reports/COMMUNITY-PATCH-REVIEW-20261025.txt)
+for accepted changes and reproduced failures in the excluded fleet/map experiment.
 
-## Evidence and remaining work
+## Acceptance and remaining work
 
-Separate native Linux roles matched 1,359 station identities after loading the
-same save. The clean packaged Linux host passed capture/transfer/startup with a
-synthetic guest. The subsequent 7.3 human playtest confirmed station and asteroid
-alignment. Ordinary station pad occupancy/barriers still fail; see the [native report](reports/SHARED-START-20261023.txt)
-and [package evidence](reports/package-7.3.0-checks.json).
+Human tests have confirmed ordinary cargo/magnet interaction, Cooperative Trial,
+radar, station/asteroid starting alignment, movement and Alt+Tab within their tested
+scope. On 24 October, guest-to-host shield damage was explicitly confirmed on both
+screens. This does not establish full hull/death or arbitrary weapon/NPC acceptance.
 
-Humans passed radar, ordinary cargo/magnet interaction and Cooperative Trial in
-7.2. These results do not establish general combat, every cargo case or arbitrary
-shared missions. Ongoing station economy, construction/destruction, complete
-NPC/docking authority, campaign save/resume, progressed-world join and ingame chat
-remain unfinished. See [world requirements](WORLD-SYNC-REQUIREMENTS.txt).
+Open reports include guest inability to select a correctly moving host ship,
+boarding/occupied-pad cases, captured-ship ownership, NPC combat and faction-fleet
+orders. Complete background economy, progressed-world save/resume and absent-client
+catchup remain unfinished. Restarting currently returns to the pristine starting
+world. See [world requirements](WORLD-SYNC-REQUIREMENTS.txt) and the current handoff
+for evidence limits and the relevant native reports.
 
-7.3.1 adds an invitation picker, unique launcher numbers, borderless test settings
-and all four personal teleportation research levels. Native Linux background and
-research checks pass. Weapon damage remains unchanged: the proposed correction
-failed native event-attribution checks and is excluded from this release.
+The source baseline `7c6ec19` has 590 passing Linux/Python/LuaJIT tests without skips;
+PowerShell installation/discovery fixtures also passed on Linux. Native Windows
+and human gameplay acceptance remain separate. A new contributor runs the suite
+once to establish their environment, then verifies affected behavior and required
+integration gates. Documentation changes need reference/diff checks, not gameplay.
 
-Source: `x4lan/` holds relay/session logic, `extension/x4_lan_lab/` the Lua/MD/AI
-adapters, and `distribution/` the launchers and packaging. Development checks
-require Linux x86_64, local UDP and the configured LuaJIT runtime; native game
-acceptance is separate. Tests should cover affected behavior and required
-integration gates, without replaying unchanged accepted work unnecessarily.
-
-The [previous README](reports/handoff-history/2026-10-23/README-before.md) and
-[previous handoff](reports/handoff-history/2026-10-23/CONTINUE-HERE.txt) are retained
-as historical references. Their old version, installation and coordination
-instructions are superseded by the current handoff and package guide.
+Preserve normal saves, settings, Steam subscriptions and sealed packages. Preference
+import is read-only at the source. The withdrawn Workshop-selection writer stays
+withdrawn. Never commit credentials, saves, configured packages or installed
+`config.lua`; source configuration stays inert. Work remains internal; public
+packages or source-mirror updates require an explicit owner request.
