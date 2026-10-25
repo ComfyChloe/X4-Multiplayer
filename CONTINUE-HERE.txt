@@ -2,7 +2,9 @@ X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 
 CURRENT TASK / CHECKOUT
 work/x4-weapons-7-4, contrib/astra-npc-combat from576e680. Integration base is
-contrib/astra-7-4-integration / draft PR37.25October user assigns NPC damage, primary
+contrib/astra-7-4-integration / draft PR37. NPC sourcea1c720b is pushed in draftPR44:
+https://github.com/Lith7ium/X4-Multiplayer/pull/44
+25October user assigns NPC damage, primary
 working alone. Explicit requirement: guest NPC combat throughout the universe,
 including another sector from the host. Historical Claude ownership is superseded
 for this scope. No new agent/chat/timer/Slack polling is authorized by this task.
