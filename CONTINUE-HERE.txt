@@ -4,6 +4,7 @@ CURRENT CHECKOUT / REQUEST
 work/x4-weapons-7-4, contrib/astra-7-5-delivery, stacked on019bff1 of
 contrib/astra-faction-missions / draftPR45 (NPC base3020f54 / draftPR44).
 User requested a matched human-test package pair containing implemented changes.
+Delivery draftPR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
 Delivered7.5.0 from4078f44; report: reports/INTERNAL-7-5-DELIVERY.txt.
 Primary works alone. No agent/chat/timer/Slack polling or new unattended schedule.
 
@@ -52,8 +53,7 @@ Restart currently returns to pristine starting save. User favors future dedicate
 Architecture/Story-Koop/leader-or-vote dialogue discussions were analysis only.
 Headless static findings: .local/evidence-044-withheld;
 internal disable_rendering string is NOT a proven GPU-free mode. Network uses UI
-Lua onUpdate. No native headless experiment, engine patch or purchase authorized
-by inference from this direction. See preparation/ATTENTION-ARCHITECTURE-NOTE.txt
+Lua onUpdate. No native headless experiment, engine patch or purchase was performed. See preparation/ATTENTION-ARCHITECTURE-NOTE.txt
 for unresolved simulation authority/attention boundaries.
 
 SAFETY / TOOLS
