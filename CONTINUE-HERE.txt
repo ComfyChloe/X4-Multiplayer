@@ -64,4 +64,10 @@ Python: absolute path to ../x4-playtest7/.venv/bin/python avoids prefix warnings
 GH: ../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh.
 Read AGENTS.md and task-relevant evidence; do not reload all history or replay
 unchanged accepted gameplay. Source config stays inert. Public packages/mirror
-updates need explicit owner request. Installed7.4.1 is not automatically upgraded.
+updates need explicit owner request. Local7.5.0 installation completed25Oct after
+the user's missing-installation.json report: old7.4.1 owned mod archived through
+its original launcher; owned pristine test slot removed, original bundle retained.
+New session/invitation preserved; normal profile/settings, Workshop selection and
+sealed archives unchanged (35-file hash/timestamp comparison). World-preparation
+preflight passes; no game launched. User next runs02-PREPARE-WORLD-HOST.
+Local recovery evidence: .local/evidence-057-withheld,result}.json.
