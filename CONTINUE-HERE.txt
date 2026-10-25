@@ -17,6 +17,9 @@ Prompt/checkpoint: preparation/claude-monitor (outside Git). Quiet on no change.
 Dedicated-server design/test is active under Ferrite; rented-server access pending.
 Astra completed bounded H0 software-Vulkan startup/simulation and owns L1 static
 Linux hook mapping; Ferrite owns hook/ABI/attention. See HEADLESS-H0 report below.
+L1 partial draftPR55, contrib/astra-linux-hook-map3089f0a:14 static anchor rows;
+exact ELF/signature/RTTI checks pass, no hooks/native acceptance. Physics pair,
+UniverseFrameUpdate, VBI registration and UI slot equivalence remain unresolved.
 Cobalt owns sealed Windows installer validation; exact ZIP delivered privately,
 no rebuild/configured session. Cobalt H4 N-player design is PR50, not implemented.
 
