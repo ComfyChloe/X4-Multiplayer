@@ -1,0 +1,103 @@
+LINUX LOGICAL THREAD ROLES — STATIC MAPPING
+26 October 2026 | Astra / A:primary with Astra/Sol-thread-roles
+
+RESULT / SCOPE
+Five simulation-related role bodies are associated with RTTI, vtable entries and
+actual current-thread naming calls. JobThread additionally has a traced pool-slot
+index assignment and SDL thread launch chain. These are useful anchors for the
+role-keyed RNG investigation in PR59; this change implements no seeding or hooks.
+Ferrite/Kimi requested this bounded Linux mapping in Slack1792968890.515849.
+Cobalt owns the separate PR59 Rust/comparator review. Ferrite retains integration.
+
+Exact binary: Linux X4 9.00 (611726), Steam build23660954, ELF64 ET_EXEC.
+SHA256 113f73d74570084f6ce18a659b365009eccf579fb66dbabb5dad2b1718045f20
+GNU Build ID 77cf7ac0ff32d88ffd3db7eb6ea2e025aecb711d
+All addresses below are ELF virtual addresses; image base0x400000. Vtable slots
+are zero-based from the primary address point, including destructor entries.
+Do not reuse these addresses on Windows or another build. No binary, disassembly
+or decompiled engine source is included in this contribution.
+
+ROLE ASSOCIATIONS
+Role literal             Body VA     Vtable VA   Slot  Naming call
+RegionManager            0x12ef310   0x3b560b8   4     0x12ef32b
+MassTrafficUpdateTask    0x11f94d0   0x3b4cc00   2     0x11f94f0
+Gravidar                 0x1106ee0   0x3b2cf08   2     0x1106efe
+Pathing Manager          0x13e35e0   0x3b1b010   2     0x13e35fb
+JobThread #%02u          0x1a54de0   0x3aad5b0   2     0x1a54e21
+
+Each body supplies its literal/formatted name to helper0x1a22cd0. The helper calls
+pthread_self then pthread_setname_np; on error34 it retries with the first15 bytes
+and a terminator. MassTrafficUpdateTask therefore has fallback name
+MassTrafficUpda. The shorter literal MassTraffic at0x2d8c3c4 has no established
+thread-naming association in this investigation. Do not confuse the two names.
+RTTI names, typeinfo, exact reference locations and 32-byte signature hashes are
+in engine-mapping/linux-thread-roles-9.00-23660954.json.
+
+These five body/name associations are strong static evidence. Only JobThread's
+creation chain is traced here. For the four manager roles, singleton RTTI is not
+proof of one running thread, stable lifetime, launch ordering or RNG ownership.
+The body addresses are candidates for future verified instrumentation, not a
+runtime hook installation contract. RegionManager's slot4 is not slot2.
+
+JOB WORKERS: POOL SLOT, CAPACITY AND CREATION
+In the observed manager-null startup path, global0x3daab88 is initialized with
+32 contiguous JobThread objects at manager+0x50, stride0x20. The vtable store is
+0x7300cc. The loop at0x730d60 writes indices0..31 to JobThread+0x1c; the naming
+body reads precisely that field at0x1a54e05. This gives pool-slot labels within
+this manager lifetime, independently of OS TID, pointer values or thread order.
+
+Capacity32 is not the active count. At0x730d9b, startup calls sysconf(0x54),
+identified as SC_NPROCESSORS_ONLN by this Linux host's sysconf definitions. The
+unsigned count calculation subtracts2 when the result is greater than1, then
+clamps to4..32 and stores manager+0x550. The two clamp constants were independently
+read from0x2e248d0 and0x2e37640. Different hardware can select different worker
+counts; matching names alone cannot establish equivalent job placement.
+
+The launch loop at0x730e0f passes each pool object to wrapper0x1a52c50. That
+wrapper passes the object and start thunk0x1a37230 to SDL_CreateThreadRuntime
+at0x1a52c97. The thunk calls object.vtable[2] at0x1a37273, resolving to the
+JobThread body above. The thunk also retains the wrapper pointer in FS:-0x2468;
+this is thread-wrapper context, not a demonstrated RNG location.
+
+Only this startup path was traced. Later object mutation, alternate construction,
+restart/reuse and teardown remain unverified. Stable slot numbers do not prove
+stable work assignment, draw ordering, identical results or cross-platform
+determinism. A possible label is JobThread/<pool-slot>, with pool configuration
+reported separately; adopting a seed/stream contract is still Ferrite's decision.
+
+LINUX CLOCK / TLS BOUNDARY
+Export GetCurrentGameTime at0xa41960 reads an eight-byte value at FS:-0x2728,
+with an optional weak _ZTHN4XLib7CurTimeE initialization call. Both return paths
+read the same location. This confirms a Linux thread-local CurTime anchor.
+It does not identify the Linux RNG state, readiness flag, session seed or the
+Windows TLS block layout used by PR59. Windows offsets+0x314/+0x318/+0x328 have
+not been ported. No RNG state was read from a running process or modified.
+
+EXCLUSIONS / VALIDATION
+Exported WorkerThread0x269ece0 is an SLNet::FileListTransfer specialization and
+is excluded from the engine JobThread role map. Direct pthread_create callsites
+in vendor code do not establish engine creation; the verified job path uses SDL.
+Nearest exported objdump labels inside stripped regions were not treated as
+function names. Body starts were checked against the binary EH-frame index.
+
+Astra independently re-read the pinned binary and verified all five RTTI/typeinfo/
+vtable/body/name-reference/call-target chains. Each first32-byte signature has one
+match in this file. The naming helper, JobThread field, initialization/launch
+chain, count constants and both CurTime loads were independently inspected;
+focused byte/pointer assertions passed. No gameplay or unchanged suite rerun was
+needed for this report-only contribution. No native execution, attachment, hooks,
+runtime seed changes, profile changes or package rebuild occurred.
+
+Private evidence: .local/evidence-260-withheld,primary}/.
+Sol supplied inventory.json and job-index-followup.json; primary retained bounded
+disassembly, independent validation script/output and hash inventory. Those raw
+artifacts remain local. JSON exposes original findings and signature hashes only.
+
+OPEN DECISIONS FOR FERRITE
+- Confirm canonical role names and whether pool count/configuration must match
+  before any deterministic-mode admission. A shared role seed alone is insufficient.
+- Trace Linux RNG/initialization independently before writing any thread state.
+- Validate manager multiplicity/lifetimes and job scheduling in a separately
+  coordinated native experiment if this static foundation is adopted.
+- Resolve existing Windows VBI7/12 ownership separately. This task claims neither
+  slot and introduces no physics-tick, transport or observation callback changes.
