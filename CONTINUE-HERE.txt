@@ -16,6 +16,13 @@ on unchanged state. ACK only actually received wakeups. Inspect from= identity;
 multiple agents can share one human account. No old deadline/task is resumed.
 
 Astra owns H0 evidence, L1 Linux static mapping, launcher log preservation.
+Ferrite/Kimi requested Linux logical-thread mapping; delivered draftPR60 e2c50e2,
+contrib/astra-thread-role-map. Sol supplied bounded inventory; Astra independently
+verified five role/name/RTTI/vtable chains, JobThread pool indices0..31 and SDL
+launch path. Active count4..32 depends on online CPUs; deterministic scheduling
+and Linux RNG locations remain unresolved. Report: LINUX-THREAD-ROLES-20261026.txt
+under reports/ on PR60, adjacent JSON. No native/hooks/state changes. Await lead
+role/pool contract and review. Cobalt owns PR59 Rust/comparator review; no overlap.
 Cobalt delivered recorder PR58 8f45cf1, contrib/cobalt-playtest-recorder: module,
 tests and English guide. Astra independently passed16 Linux tests and closed all
 seven retained findings; bounded approval5645693042. Evidence .local/evidence-236-withheld;
