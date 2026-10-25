@@ -185,18 +185,63 @@ class RecorderTests(unittest.TestCase):
         r.close()
         copied = (r.out / 'sources/engine.1.log').stat().st_size
         omitted = [e for e in self.events(r) if e['kind'] == 'omitted']
-        self.assertEqual(len(omitted), 1)
         self.assertLessEqual(copied, 1 << 20)
-        self.assertEqual((omitted[0]['start'], omitted[0]['end']), (copied, self.log.stat().st_size))
+        self.assertEqual(omitted[0]['reason'], 'storage_limit'); self.assertEqual(omitted[0]['start'], copied)
+        self.assertEqual(copied + sum(e['bytes'] for e in omitted), self.log.stat().st_size)
+        stop = self.events(r)[-1]
+        self.assertEqual((stop['kind'], stop['complete']), ('stop', False))
 
-    def test_unfinished_line_is_bounded_without_splitting_an_id(self):
-        old = rec.LINE_MAX; self.addCleanup(setattr, rec, 'LINE_MAX', old); rec.LINE_MAX = 1000
-        self.log.write_bytes(b'q' * 990 + LEASE.encode() + b'q' * 100)                # no newline at all
+    def test_oversized_line_is_omitted_whole_never_split(self):
+        old = rec.CHUNK, rec.LINE_MAX
+        self.addCleanup(lambda: (setattr(rec, 'CHUNK', old[0]), setattr(rec, 'LINE_MAX', old[1])))
+        rec.CHUNK, rec.LINE_MAX = 4096, 4096
+        # Astra's case: an all-hex oversized line with the session key across the old cut point.
+        self.log.write_bytes(b'f' * (2 * 4096 - 80) + TOKEN.encode() + b'0' * 48)
         r = self.recorder(); r.poll()
-        self.assertLessEqual(len(r.tails['engine'].sink.pending), 1000)
-        r.close()
+        self.assertLessEqual(len(r.tails['engine'].sink.pending), 4096)
+        with open(self.log, 'ab') as f: f.write(b'\nafter ' + LEASE.encode() + b'\n')
+        r.poll(); out = r.close()
         text = self.text(r, 'engine.1.log')
-        self.assertNotIn(LEASE, text); self.assertEqual(text.count('<id:'), 1)
+        self.assertTrue(text.startswith('after <id:')); self.assertNotIn(LEASE, text)
+        gap = [e for e in self.events(r) if e['kind'] == 'omitted']
+        self.assertEqual([(g['start'], g['end'], g['reason']) for g in gap], [(0, 2 * 4096 + 1, 'oversized_line')])
+        for path in out.rglob('*'):
+            if path.is_file(): self.assertNotIn(TOKEN.encode(), path.read_bytes().lower(), path)
+
+    def test_export_never_masks_part_of_a_line(self):
+        old = rec.LINE_MAX; self.addCleanup(setattr, rec, 'LINE_MAX', old)
+        r = self.recorder(); r.poll(); out = r.close()
+        rec.LINE_MAX = 1000
+        (out / 'sources/foreign.log').write_bytes(b'q' * 994 + b'192.0.2.109\n' + b'x' * 995 + b'C:\\Users\\Alice Smith\\x\n'
+                                                   + b'ok 10.0.0.1\n')
+        with zipfile.ZipFile(rec.export(out)) as z:
+            text = z.read(out.name + '/sources/foreign.log').decode()
+            info = json.loads(z.read(out.name + '/export-manifest.json'))
+        self.assertNotIn('192.0.2.109', text); self.assertNotIn('Smith', text); self.assertNotIn('ce Smith', text)
+        self.assertEqual(text.count('[export omitted an oversized line'), 2); self.assertIn('ok <ipv4>', text)
+        self.assertEqual([d['bytes'] for d in info['omitted_lines']], [1006, 1018])
+
+    def test_write_errors_are_explicit_omissions_and_mark_the_run_incomplete(self):
+        import builtins, errno
+        self.log.write_bytes(b'first\n')
+        r = self.recorder()
+        failed = []
+        def full_disk(path, mode='r', *a, **kw):
+            if mode == 'ab' and str(path).endswith('engine.1.log') and not failed:
+                failed.append(path); raise OSError(errno.ENOSPC, 'No space left on device')
+            return builtins.open(path, mode, *a, **kw)
+        rec.open = full_disk; self.addCleanup(delattr, rec, 'open')
+        r.poll()
+        with open(self.log, 'ab') as f: f.write(b'second\n')
+        r.poll(); r.close()
+        self.assertEqual(self.text(r, 'engine.1.log'), 'second\n')
+        events = self.events(r)
+        gap = [e for e in events if e['kind'] == 'omitted']
+        self.assertEqual([(g['start'], g['end'], g['reason']) for g in gap], [(0, 6, 'write_error')])
+        self.assertEqual([e['kind'] for e in events].count('write_error'), 1)
+        manifest = json.loads((r.out / 'manifest.json').read_text())
+        self.assertFalse(manifest['complete']); self.assertEqual(list(manifest['write_errors'].values()), [1])
+        self.assertEqual(r.used, len('second\n'))
 
     def test_recorder_stays_standalone_and_read_only(self):
         source = (ROOT / 'distribution/playtest_recorder.py').read_text()

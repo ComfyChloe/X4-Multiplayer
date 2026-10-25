@@ -39,7 +39,8 @@ What is in a run folder
   events.jsonl   one line per event with UTC time, monotonic time and sequence number:
                  start, present/missing, truncated/replaced (X4 restarted or the log was
                  rewritten or replaced), snapshot, server_status, heartbeat (every 10 s),
-                 storage_limit, omitted (source/segment byte range not copied), read_error, stop
+                 storage_limit, omitted (byte range not copied, with its reason), read_error,
+                 write_error, stop (complete=true only if nothing was omitted for space/errors)
   sources/       engine.<n>.log and relay-<start>.<n>.log; a new <n> after each truncation
   snapshots/     launcher capture copies, named by modification time
   manifest.json  package version/build/role, platform, start/stop and SHA-256 of every file.
@@ -56,6 +57,9 @@ Times and coverage
 
 Limits
   Only complete lines are copied; a final line without a newline is added at stop. A line longer
-  than 1 MiB is copied in pieces. Files are read 1 MiB at a time.
+  than 1 MiB is never split: it is not copied and is reported as omitted (oversized_line).
+  Files are read 1 MiB at a time. A write error (for example a full disk) is reported as
+  omitted (write_error); manifest.json then says complete=false. If events.jsonl itself
+  cannot be written, the recorder stops, prints RECORDING FAILED and exits with code 2.
   Text written and then deleted between two polls (0.5 s) cannot be seen.
   It records what files say; it is not a packet capture and does not prove gameplay results.

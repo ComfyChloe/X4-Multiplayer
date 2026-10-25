@@ -13,12 +13,12 @@ streams (logs/server-*.jsonl) and the launcher's capture copies into a run folde
     snapshots/...           copies of launcher capture files (world/capture, logs/before-*)
     manifest.json           written at the end: run info and SHA-256 of every output file
 
-Lines are copied whole (an unfinished line longer than LINE_MAX is copied in pieces). Files are
-read in CHUNK steps, so memory stays bounded. The session key (session.json token and bubble)
+Lines are copied whole; a line longer than LINE_MAX is never split but omitted. Files are read
+in CHUNK steps, so memory stays bounded. The session key (session.json token and bubble)
 never reaches disk. Other 32-hex values (leases, nonces) become stable pseudonyms keyed by the
 session key, so a host and a guest recording of the same session use the same pseudonyms. World
-seeds stay readable. At --max-mb copying stops for the rest of the run; each source records the
-exact byte range it omitted.
+seeds stay readable. At --max-mb copying stops for the rest of the run. Every byte that is not
+copied (storage limit, oversized line, write error) is reported as an 'omitted' byte range.
 
 'export' zips one run and masks IPv4 addresses and home-folder account names. Its
 export-manifest.json hashes the exported bytes; the run's own manifest is kept as provenance.
@@ -37,13 +37,12 @@ import zipfile
 
 VERSION = 2
 HEX32 = re.compile(rb'(?<![0-9A-Fa-f])(?<!seed=)[0-9A-Fa-f]{32}(?![0-9A-Fa-f])')
-HEXCHARS = frozenset(b'0123456789abcdefABCDEF')
 IPV4 = re.compile(r'(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])')
 # The whole account component, spaces included, also in JSON-escaped paths (C:\\Users\\A B\\x).
 HOME = re.compile(r'(?i)((?:[A-Z]:)?[\\/]+(?:Users|home)[\\/]+)[^\\/"\'\r\n]+')
 HEADER = 256            # bytes compared to detect a file rewritten without shrinking
 CHUNK = 1 << 20         # bytes read per step
-LINE_MAX = 1 << 20      # an unfinished line longer than this is copied in pieces
+LINE_MAX = 1 << 20      # a line longer than this is not copied (reported as omitted)
 HEARTBEAT = 10.0        # seconds between progress events
 STALE = 5.0             # server-status.json older than this while running is reported once
 
@@ -76,38 +75,68 @@ class Redactor:
 
 
 class Sink:
-    """Redacted, line-aligned, storage-bounded copy into one file; remembers what it omitted."""
-    def __init__(self, recorder, target):
-        self.r, self.target = recorder, Path(target)
-        self.pending, self.done, self.omitted = b'', 0, None   # done: input bytes handed on
+    """Redacted, line-aligned, storage-bounded copy into one file. Lines are never split: a line
+    longer than LINE_MAX is not copied at all. Every byte not copied is reported as an 'omitted'
+    range with its reason (oversized_line, storage_limit, write_error)."""
+    def __init__(self, recorder, target, **where):
+        self.r, self.target, self.where = recorder, Path(target), where
+        self.pending, self.done, self.skipping, self.gap = b'', 0, False, None  # done: input bytes handled
 
     def feed(self, chunk, final=False):
-        data = self.pending + chunk
+        data, self.pending = self.pending + chunk, b''
+        if self.skipping:                                  # inside an oversized line: drop to its end
+            end = data.find(b'\n') + 1
+            if not end: return self.omit(len(data), 'oversized_line')
+            self.omit(end, 'oversized_line'); self.skipping = False; data = data[end:]
         cut = len(data) if final else data.rfind(b'\n') + 1
-        if not cut and len(data) > LINE_MAX:
-            # Keep a short tail, and never cut inside a hex run, so no id is split in two.
-            cut = len(data) - 64
-            while cut > 0 and data[cut - 1] in HEXCHARS: cut -= 1
-            cut = cut or len(data) - 64
-        self.pending = data[cut:]
-        self.emit(data[:cut])
+        self.lines(data[:cut])
+        rest = data[cut:]
+        if len(rest) > LINE_MAX: self.skipping = True; self.omit(len(rest), 'oversized_line')
+        else: self.pending = rest
+
+    def lines(self, block):
+        if len(block) <= LINE_MAX + 1: return self.emit(block)
+        keep, start = [], 0
+        while start < len(block):
+            end = block.find(b'\n', start) + 1 or len(block)
+            if end - start > LINE_MAX + 1:
+                self.emit(b''.join(keep)); keep = []; self.omit(end - start, 'oversized_line')
+            else: keep.append(block[start:end])
+            start = end
+        self.emit(b''.join(keep))
 
     def emit(self, data):
         if not data: return
-        start = self.done
-        self.done += len(data)
-        if self.r.allow(len(data)):
+        if not self.r.allow(len(data)): return self.omit(len(data), 'storage_limit')
+        try:
             self.target.parent.mkdir(parents=True, exist_ok=True)
-            with open(self.target, 'ab') as f: f.write(self.r.redact(data))
-        elif self.omitted: self.omitted[1] = self.done
-        else: self.omitted = [start, self.done]
+            with open(self.target, 'ab') as f:
+                before = f.tell()
+                try: f.write(self.r.redact(data)); f.flush()
+                except OSError:
+                    try: f.truncate(before)                # no partial line stays behind
+                    except OSError: pass
+                    raise
+        except OSError as exc:
+            self.r.write_failed(exc, len(data))
+            return self.omit(len(data), 'write_error')
+        self.done += len(data)
 
-    def close(self, **where):
+    def omit(self, size, reason):
+        start = self.done
+        self.done += size
+        if self.gap and self.gap[2] == reason and self.gap[1] == start: self.gap[1] = self.done
+        else: self.report(); self.gap = [start, self.done, reason]
+
+    def report(self):
+        if self.gap:
+            start, end, reason = self.gap
+            self.r.event('omitted', start=start, end=end, bytes=end - start, reason=reason, **self.where)
+            self.gap = None
+
+    def close(self):
         self.feed(b'', final=True)
-        if self.omitted:
-            start, end = self.omitted
-            self.r.event('omitted', start=start, end=end, bytes=end - start, **where)
-            self.omitted = None
+        self.report()
 
 
 class Tail:
@@ -155,10 +184,11 @@ class Tail:
     def new_segment(self):
         self.close()
         self.segment, self.offset = self.segment + 1, 0
-        self.sink = Sink(self.r, self.r.out / 'sources' / f'{self.name}.{self.segment}.log')
+        self.sink = Sink(self.r, self.r.out / 'sources' / f'{self.name}.{self.segment}.log',
+                         source=self.name, segment=self.segment)
 
     def close(self):
-        if self.sink: self.sink.close(source=self.name, segment=self.segment)
+        if self.sink: self.sink.close()
 
 
 class Recorder:
@@ -175,7 +205,7 @@ class Recorder:
         self.out = root / f'{stamp}-{self.role}-{os.getpid()}'
         self.out.mkdir(parents=True)                      # a fresh folder; never reused
         (self.out / 'sources').mkdir()
-        self.limit, self.used, self.limited = max_mb << 20, 0, False
+        self.limit, self.used, self.limited, self.write_errors = max_mb << 20, 0, False, {}
         self.seq, self.tails, self.snaps, self.status = 0, {}, {}, None
         self.started, self.beat = utc_now(), self.clock()
         self.info = dict(recorder=VERSION, role=self.role, slot=meta.get('slot'), version=meta.get('version'),
@@ -199,6 +229,12 @@ class Recorder:
             return False
         self.used += size
         return True
+
+    def write_failed(self, exc, size):
+        self.used -= size                                 # nothing of it is on disk
+        name = type(exc).__name__ + (':' + str(exc.errno) if getattr(exc, 'errno', None) else '')
+        if name not in self.write_errors: self.event('write_error', error=name)
+        self.write_errors[name] = self.write_errors.get(name, 0) + 1
 
     def sources(self):
         found = {}
@@ -229,7 +265,8 @@ class Recorder:
         if self.snaps.get(path) == key: return
         self.snaps[path] = key
         rel = path.relative_to(self.package)
-        sink, digest, size = Sink(self, self.out / 'snapshots' / rel.parent / f'{st.st_mtime_ns}-{rel.name}'), hashlib.sha256(), 0
+        sink = Sink(self, self.out / 'snapshots' / rel.parent / f'{st.st_mtime_ns}-{rel.name}', snapshot=rel.as_posix())
+        digest, size = hashlib.sha256(), 0
         try:
             with open(path, 'rb') as f:
                 for chunk in iter(lambda: f.read(CHUNK), b''):
@@ -237,7 +274,7 @@ class Recorder:
         except OSError as exc:
             self.event('read_error', path=rel.as_posix(), error=type(exc).__name__)
         self.event('snapshot', path=rel.as_posix(), size=size, sha256=digest.hexdigest())
-        sink.close(snapshot=rel.as_posix())
+        sink.close()
 
     def poll_status(self):
         path = self.package / 'logs/server-status.json'
@@ -252,10 +289,12 @@ class Recorder:
 
     def close(self, reason='stopped'):
         for tail in self.tails.values(): tail.close()
-        self.event('stop', reason=reason, used_bytes=self.used)
+        complete = not (self.limited or self.write_errors)
+        self.event('stop', reason=reason, used_bytes=self.used, complete=complete, write_errors=self.write_errors)
         self.events.close()
         files = {p.relative_to(self.out).as_posix(): sha256_file(p) for p in sorted(self.out.rglob('*')) if p.is_file()}
-        manifest = dict(self.info, started=self.started, stopped=utc_now(), reason=reason, files=files)
+        manifest = dict(self.info, started=self.started, stopped=utc_now(), reason=reason, complete=complete,
+                        storage_limited=self.limited, write_errors=self.write_errors, files=files)
         (self.out / 'manifest.json').write_text(json.dumps(manifest, indent=1) + '\n', encoding='utf-8')
         return self.out
 
@@ -268,7 +307,7 @@ def export(run, out=None, keep_network=False):
     run = Path(run).resolve()
     if not (run / 'events.jsonl').is_file(): raise RuntimeError('Not a recorder run folder: ' + str(run))
     target = Path(out) if out else run.with_suffix('.zip')
-    exported, original = {}, {}
+    exported, original, dropped = {}, {}, []
     with zipfile.ZipFile(target, 'x', zipfile.ZIP_DEFLATED) as z:
         for path in sorted(run.rglob('*')):
             if not path.is_file(): continue
@@ -276,13 +315,24 @@ def export(run, out=None, keep_network=False):
             name = 'original-manifest.json' if rel == 'manifest.json' else rel
             source, result, size = hashlib.sha256(), hashlib.sha256(), 0
             with open(path, 'rb') as f, z.open(run.name + '/' + name, 'w') as w:
-                for line in iter(lambda: f.readline(LINE_MAX), b''):
+                for line in iter(lambda: f.readline(LINE_MAX + 2), b''):
                     source.update(line)
+                    if len(line) > LINE_MAX + 1:
+                        # Never mask part of a line: an oversized line (not written by the recorder)
+                        # is replaced by a marker, so no IP or account name can survive a split.
+                        length = len(line)
+                        while not line.endswith(b'\n'):
+                            line = f.readline(LINE_MAX + 2)
+                            if not line: break
+                            source.update(line); length += len(line)
+                        dropped.append(dict(file=name, bytes=length))
+                        line = b'[export omitted an oversized line of %d bytes]\n' % length
                     data = line if keep_network else mask(line.decode('utf-8', 'replace')).encode('utf-8')
                     result.update(data); w.write(data); size += len(data)
             original[rel] = source.hexdigest()
             exported[name] = dict(sha256=result.hexdigest(), size=size)
         info = dict(format=1, run=run.name, masked=not keep_network, files=exported, original_sha256=original,
+                    omitted_lines=dropped,
                     note='files: SHA-256 of the exported bytes in this zip. original_sha256 and '
                          'original-manifest.json describe the unmasked run files (provenance only).')
         z.writestr(run.name + '/export-manifest.json', json.dumps(info, indent=1) + '\n')
@@ -308,16 +358,23 @@ def main(argv=None):
     recorder = Recorder(args.package, args.profile, args.out, args.max_mb)
     print('Recording to', recorder.out, '- keep this window open; Ctrl+C stops the recording.', flush=True)
     end = None if args.duration is None else time.monotonic() + args.duration
-    reason = 'duration'
+    reason, status = 'duration', 0
     try:
         while end is None or time.monotonic() < end:
             recorder.poll()
             time.sleep(args.interval)
+        recorder.poll()
     except KeyboardInterrupt:
         reason = 'ctrl-c'
-    recorder.poll()
-    print('Recording saved:', recorder.close(reason))
-    return 0
+    except OSError as exc:                                # e.g. events.jsonl on a full disk
+        reason, status = 'failed: ' + type(exc).__name__, 2
+        print('RECORDING FAILED:', exc, file=sys.stderr)
+    try: out = recorder.close(reason)
+    except OSError as exc:
+        print('RECORDING FAILED: could not finish the manifest:', exc, file=sys.stderr); return 2
+    print(('Recording saved: ' if status == 0 else 'Partial recording kept: ') + str(out))
+    if recorder.limited or recorder.write_errors: print('WARNING: some data was not copied; see omitted events.')
+    return status
 
 
 if __name__ == '__main__':
