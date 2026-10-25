@@ -236,10 +236,11 @@ class CaptureRuleTests(unittest.TestCase):
 
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
 class CaptureAdapterTests(unittest.TestCase):
-    def make(self, slot='p2'):
+    def make(self, slot='p2', npc=False):
         l = LuaRuntime(unpack_returned_tuples=True); l.execute(MOCK + EXTRA)
         cfg = l.globals().X4LAN_CONFIG
         cfg.slot, cfg.coop, cfg.pilot_health, cfg.shot_claims, cfg.shot_capture = slot, True, True, True, True
+        cfg.npc_combat = npc
         l.execute('''
          sectors={};ConvertIDTo64Bit=function(v) return tonumber(v) end;ConvertStringTo64Bit=function(v) return v end
          GetComponentData=function() return 'cluster_14_sector001_macro' end
@@ -275,6 +276,14 @@ class CaptureAdapterTests(unittest.TestCase):
         me, r1, r2, life, stamp, deadline, undo = out
         self.assertEqual((me, r1, r2, stamp, deadline, undo), (2, 'true', 'false', '2026-10-24T03:50:00', 51, 'false'))
         self.assertAlmostEqual(life, 1.5 * 3910 / 2300)              # margin * native range / library speed
+
+    def test_npc_refresh_retries_inside_native_freshness_window(self):
+        for enabled in (False, True):
+            before,after=self.make(npc=enabled).execute('''
+             tick(10.2);local first=last('State').revision
+             tick(10.31);return first,last('State').revision
+            ''')
+            self.assertEqual(after-before,1 if enabled else 0)
 
     def test_no_native_range_or_speed_refuses_capture(self):
         for setup in ("events['X4LAN_ShotCapture.Range'](nil,'2|null')", 'entries[P].bulletspeed=nil'):

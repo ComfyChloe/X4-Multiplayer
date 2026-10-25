@@ -33,6 +33,11 @@ selection, validated session recovery and preference reselection. They are not i
 those sealed archives. See the [review](reports/COMMUNITY-PATCH-REVIEW-20261025.txt)
 for accepted changes and reproduced failures in the excluded fleet/map experiment.
 
+An additional opt-in [NPC combat development path](reports/NPC-COMBAT-20261025.txt)
+transfers host health and acknowledged guest hits across sectors. It is disabled
+in the delivered packages; current S/M stock-gun scope and retained native failures
+are documented separately from human multiplayer acceptance.
+
 ## Acceptance and remaining work
 
 Human tests have confirmed ordinary cargo/magnet interaction, Cooperative Trial,

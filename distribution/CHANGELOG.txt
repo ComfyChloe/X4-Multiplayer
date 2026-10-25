@@ -1,3 +1,12 @@
+Unreleased — 25 October 2026 — opt-in NPC combat development
+- Add host-native NPC health/death and acknowledged cumulative guest hits, including
+  NPCs in a different sector from the host player. Internal S/M stock-gun scope.
+- Fence native identity/authority transitions, duplicate hits and terminal death;
+  keep capture permissions fresh without extending the native validity window.
+- Include the new relay module in both Windows and Linux server builds.
+- Not enabled in the launcher or sealed7.4.1 packages; matched human testing and
+  broader combat scope remain pending. See reports/NPC-COMBAT-20261025.txt.
+
 Unreleased — 25 October 2026 — reviewed community installer fixes
 - Inspect Windows process output as bytes; localized tasklist output cannot cause
   a decoding crash or bypass the running-game check.

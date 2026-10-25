@@ -10,7 +10,10 @@ local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
 if not cfg or not cfg.coop or not cfg.shot_capture or not cfg.shot_claims or not cfg.pilot_health or not A or not A.shot or not A.health or not A.coop then return end
 local c,s,h,d=A.coop,A.state,A.health,A.shot
 local k={revision=0,range={}};A.shotCapture=k
-local INTERVAL,READING,MAXLIFE,MARGIN=.25,.5,30,1.5
+-- NPC capture needs room for a State rejected at a wall-second rollover. With
+-- .25s refresh a missed request leaves up to .5s between accepted states, beyond
+-- MD's .3s permission window. Keep that window strict and retry more frequently.
+local INTERVAL,READING,MAXLIFE,MARGIN=cfg.npc_combat and .1 or .25,.5,30,1.5
 local function log(v) DebugError('[X4LAN] '..v) end
 local function paused() return A.paused and A.paused() end
 local function writable() return h.mdStamp and (h.now or 0)-h.mdAt<=READING and not paused() end

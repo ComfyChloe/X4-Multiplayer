@@ -1,0 +1,119 @@
+NPC COMBAT — HOST AUTHORITY ACROSS SECTORS
+25 October 2026 | Unreleased opt-in source | Internal development
+
+REQUIREMENT AND STATUS
+Guest attacks must affect the host's actual NPC anywhere in the universe, even
+when the host player remains in another sector. No host-distance gate is used.
+The host continues running X4 and supplies authoritative NPC health and death.
+The new path uses the existing guest sector-interest/baseline transport; a sector
+is a delivery scope, not a requirement that both players occupy the same sector.
+This is a bounded implementation, not acceptance of all shared-universe systems.
+
+IMPLEMENTATION
+- x4lan/npc_combat.py: authenticated NHP state, cumulative NCLAIM hits and NACK
+  after native application. Claims bind host epoch, NPC ID/generation, guest lease,
+  piloted shooter generation and admitted weapon digest. Intermediate packet loss
+  cannot discard an earlier hit delta. Duplicate/reordered counters cannot raise
+  the accepted total or switch weapons. A closed pilot generation cannot restart.
+- ui/npc_combat_game.lua and md/x4lan_npc_combat.xml: host-native health readback,
+  guest-native hit capture/restoration, exact native attack-strength application,
+  acknowledged compare-and-set counters, explicit terminal replica destruction.
+  The host's own ordinary NPC attacks remain native and feed the same health path.
+- Binding checks run again when queued MD actions execute: native object code,
+  macro, owner, sector, local binding serial, player occupancy, dock/storage state,
+  shooter authority, unpaused clock window and current permission revision.
+  Docking/owner/sector events retire the old host combat identity; subsequent
+  capture creates another world ID. A local replica recreated on sector return
+  gets a new binding serial while preserving the same lifetime's hit ledger.
+- MD event instances have separate namespaces. Persistent state is explicitly
+  under Session; a synchronous damage callback cannot overwrite Apply's locals.
+- Health/death is independent of motion freshness. A death remains terminal when
+  the scene's position stream has expired, and later poses cannot respawn it.
+- NPC mode refreshes capture permission every0.1s. The native0.3s validity window
+  remains unchanged; the legacy path retains its0.25s cadence when NPC mode is off.
+- Both Linux and Windows server builders copy the new Python module. Source config
+  remains npc_combat=false; the existing launcher and sealed7.4.1 pair are unchanged.
+
+WIRE FORMAT (version1, ASCII, authenticated session endpoint/lease)
+NHP|1|lease|hostEpoch|id|generation|sequence|sector|code|macro|owner|hull%|shield%|alive
+NCLAIM|1|lease|hostEpoch|id|generation|shooter|shooterGeneration|sequence|totalHits|digest
+The relay inserts the originating guest lease after the recipient lease when
+forwarding NCLAIM to the host. NACK is emitted after native confirmation:
+NACK|1|lease|hostEpoch|guestLease|id|generation|shooter|shooterGeneration|acceptedHits
+The relay retries unconfirmed totals and repeats acknowledgements. Native batches
+are at most20 hits. A terminal host death supersedes remaining claims. Baseline
+absence alone does not mean death. Bounds refuse admission rather than evicting
+an active deduplication ledger and permitting replay.
+
+MEASURED NATIVE EVIDENCE
+All runs used fresh disposable worlds in owned profile45841, port45843 and the
+recorded owned7.4.1 installation. None used a normal save or a second human game.
+Raw captures, installed inventories, controllers and save/restore manifests remain
+under .local/evidence-215-withheld,host}-NN. Do not distribute session.json/raw leases.
+
+Host02: real Linux host plus synthetic guest. Host stayed in
+cluster_14_sector001_macro; actual Mercury NPC was in cluster_01_sector001_macro.
+Native logs record separate=1. Exactly three application batches were observed:
+0..3 at40 strength ->120 shield points (5750 ->5630),
+3..8 ->200 hull points (600 ->400 after the probe's explicit channel setup),
+8..10 -> native destruction, with terminal0/0/dead state reaching the peer.
+Repeated claims did not produce extra batches. No NPC production MD errors.
+This demonstrates native remote-sector damage; it does not establish every
+attention transition or an entire delegated combat simulation. Installed-source
+hash inventories were retained; this earlier run lacks a full source-directory copy.
+
+Guest05: real Linux guest shooting an NPC replica, synthetic host canonical values.
+41 positive native hull callbacks matched41 captured/transmitted hits. All freshness
+checks remained valid (largest capture-permission age0.193508s). The NPC was natively
+destroyed after its host death state despite an expired scene baseline; final native
+operational=false. Four negative audit variants reject missing destruction, a still
+operational object, missing positive callbacks and production MD errors.
+The intended miss phase of this stale-scene fixture was NOT a miss: its motion had
+correctly stopped after baseline expiry, leaving the target in front of the guns.
+18 genuine hits occurred in that phase. They are retained and counted as hits,
+not suppressed to manufacture a miss result. The idle period produced no claims.
+Exact installed source bytes were archived and match the installed inventory.
+
+The final shield-overflow/miss capture and614 passing automated tests are recorded
+in NPC-COMBAT-VALIDATION-20261025.txt.
+
+RETAINED FAILURES / CORRECTIONS
+Host01 FAIL: nested Shield/Classify callbacks overwrote the shared $r variable;
+Apply lost its ledger and could apply repeats. The controller was interrupted and
+restored its owned changes. Per-instance namespaces and an executable regression
+fixture now prevent this; the fixture reproduces the failure if scope is removed.
+Guest01/02 are partial observations only: their independent oracle did not arm.
+Guest02 also exposed death waiting on a stale scene. Dedicated fenced MD destruction
+and processing independently of scene-render freshness correct that failure.
+Guest03 FAIL:18 positive callbacks versus17 captures. The user's initial matching
+claim was explicitly corrected. Guest04 diagnostics reproduced49 versus41: all8
+omissions had capture permission older than0.3s (maximum0.460210s), while shot and
+visual proofs remained fresh. Faster refresh corrected this without widening gates.
+Initial full-suite packaging tests also failed for both server platforms because
+the explicit copy list omitted npc_combat.py. The corrected builder passes them.
+No failed capture was filtered or relabelled as full multiplayer acceptance.
+
+CURRENT LIMITS / NEXT ACCEPTANCE
+- Free-flying S/M NPC main hull/shields, with the existing admitted uniform,
+  unmodified stock Xperimental plasma or Pulse Mk1/Mk2 guns. No L/XL surface-element,
+  mixed/modded/beam/missile/turret damage acceptance. Unsupported targets are not
+  silently interpreted as supported claims.
+- NPC canonical percentages and native host damage are synchronized. Exact NPC
+  equipment/capacity replication is separate; generated replica loadouts may differ.
+- No new boarding/captured-player-fleet ownership/order support, NPC weapon/AI
+  replication, persistent campaign/economy authority, loot/reward or mission-credit
+  acceptance is claimed. Existing shared-player damage remains a separate path.
+- A matched Windows/Linux human pair is still required. No new delivery archive
+  was prepared, and the feature is not enabled in existing7.4.1 installations.
+
+NEXT MATCHED HUMAN TEST (ON A FUTURE MATCHED INTERNAL CANDIDATE)
+1. Choose one free-flying S/M NPC by shared code. Record host/guest shield and hull
+   percentages before and after host fire, then guest fire; distinguish real hits
+   from the Xperimental guns' normal misses. Keep the supported loadout unchanged.
+2. Leave the host in the starting sector. Guest travels to another sector, selects
+   an NPC there and fires. Compare the host map's actual NPC health to the guest.
+3. Destroy that NPC. Verify removal on both peers, no resurrection after later
+   baseline updates, and persistence of the host result when the guest returns.
+4. Report shared NPC code, sector, firing player and approximate times. Retain both
+   game logs and relay diagnostics. Do not infer this result from player-vs-player
+   tests or from matching positions alone.

@@ -14,6 +14,7 @@ from .docking import DockSession
 from .host import ATOM, HEX, MAX_PACKET, sequence
 from .cargo import CargoTransactions
 from .identity import Identities
+from .npc_combat import NpcCombat
 
 MAX_OBJECTS = 4096
 MAX_RECORD = 512
@@ -216,11 +217,14 @@ class UniverseSession(DockSession):
         self.position_cursor = 0
         self.cargo = CargoTransactions(self)
         self.identities = Identities(self)
+        self.npc_combat = NpcCombat(self)
 
     def busy(self, entity):
         return super().busy(entity) or self.cargo.busy(entity)
 
     def receive(self, raw, address, now):
+        if raw.startswith((b'NHP|', b'NCLAIM|', b'NACK|')):
+            return self.npc_combat.receive(raw, address, now)
         if raw.startswith(b'IDENT|'):
             return self.identities.receive(raw, address, now)
         if raw.startswith((b'CARGOREQ|', b'CARGODONE|', b'CINV|')):
@@ -292,6 +296,7 @@ class UniverseSession(DockSession):
                 return []
             self.universe_epoch = peer.lease
             if committed:
+                self.npc_combat.committed(committed)
                 self.sectors.pop(committed.sector, None)
                 self.sectors[committed.sector] = committed
                 while len(self.sectors) > 8:
@@ -307,6 +312,7 @@ class UniverseSession(DockSession):
         result = super().snapshots(now)
         result.extend(self.cargo.snapshots(now))
         result.extend(self.identities.snapshots(now))
+        result.extend(self.npc_combat.snapshots(now))
         host, guest = self.peers.get('p1'), self.peers.get('p2')
         if not host or not guest or not self.interest or self.interest[0] != guest.lease:
             return result
