@@ -19,7 +19,8 @@ Load only task-relevant evidence rather than the entire historical archive.
 
 ## Delivered packages and current source
 
-The current internal candidate is **7.5.0**. Both Windows/Linux packages include
+The delivered internal candidate is **7.5.0**; see the
+[delivery evidence](reports/INTERNAL-7-5-DELIVERY.txt). Both Windows/Linux packages include
 the server, private Python runtime and English procedures. Follow
 [installation instructions](distribution/INSTALL.html), the
 [package guide](distribution/README.txt) and [human test procedures](distribution/NEXT-TEST.txt).

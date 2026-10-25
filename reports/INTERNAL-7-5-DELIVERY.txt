@@ -1,0 +1,61 @@
+X4 MULTIPLAYER 7.5.0 — INTERNAL HUMAN TEST DELIVERY
+25 October 2026
+
+DELIVERY
+Desktop/X4 Online/Internal Tests/7.5.0-2026-10-25
+Package source4078f44ed271023762f718fc9535c2922bb7b918, stacked on missions019bff1.
+Enabled NPC combat and native faction kill contracts in private configurations.
+Reviewed Windows installer fixes included. Source/unconfigured configs stay inert.
+Both OS packages contain server, portable runtime and English numbered starters,
+installation guide, NPC/mission procedure, retained damage/dock procedures and
+result template. Internal only, two players; no dedicated/persistence activation.
+
+X4-LAN-7.5.0-Linux-Small.7z
+19,961,040 bytes; SHA256 8a9ffa5c627bb78edbcc1caf7da005358544659c62ce7cdc2073507790b2c651
+
+X4-LAN-7.5.0-Linux.tar.xz
+21,404,432 bytes; SHA256 2bd03916901824daa60282608fdb7c5ca34bfdab8f5400cb62e2cdda854415da
+
+X4-LAN-7.5.0-Windows11.zip
+12,981,837 bytes; SHA256 6881db4a9e2681f5c3a0142f2e333a835ce7349b9b9abbed15a1c5b5a97cf304
+
+VERIFICATION
+636 Linux/Python/LuaJIT tests PASS/no skips. All gameplay source unchanged from
+NPCa1c720b and missionscba4391; reuse their recorded native/schema evidence rather
+than rerun accepted behavior solely for packaging. Matched human/Windows native
+acceptance remains pending. New generated-config admission regression confirms
+both roles retain identity and activate the combined NPC/mission prerequisites.
+
+Both main archives independently extracted: all4,708 Linux/179 Windows inventory
+entries hash-match; unique executable actions01–10, Bash syntax, Windows CRLF/PE,
+local guide links, pinned runtime/license files and source-inert config checked.
+Both packaged server trees import and answer a real ephemeral loopback UDP ping
+on Linux; Windows-native execution is not implied. 74 common extension files and
+all16 server modules match across platforms; packaged gameplay/launchers match
+source. No invitations, session files, installed markers, worlds, probes or local
+native captures included. Final top-level guide copy correction tested separately:
+10 ship/package checks PASS. This changes parent delivery docs, not sealed payloads.
+
+The compact Linux archive is19,961,040 bytes (<20,000,000). Default7z extraction
+passes;4,709 file contents and effective modes match the original clean payload.
+Only300 internal parent-relative terminfo aliases are materialized for safe default
+extraction;748 other links preserved. Bundled Python3.14.8, full package verification
+and isolated server imports PASS. Nothing was removed from server/runtime/docs.
+
+No installed mod, game profile or normal save was changed. All three sealed7.4.1
+archives still match their recorded hashes. New packages remain unconfigured;
+user installs from fresh folders after original09-REMOVE-MOD and creates a NEW
+world/invitation. Restart still reloads the pristine starting world.
+
+EVIDENCE AND HUMAN PRIORITIES
+Delivery: assembly-validation.json, compact-linux-validation.json,
+source-validation.json, DELIVERY.json and PACKAGES-SHA256.txt.
+Retained tools/results: .local/evidence-232-withheld (including compact/create/verify logs).
+Earlier assembly01 is a private pre-final English-wording revision, not delivered.
+Final assembly02 was moved to the Desktop delivery directory after validation.
+Primary human cases: N01–N05 NPC damage/death across sectors and M01–M04 native
+kill-contract acceptance/progress/reward/abort. Short D01/D02 player-hit regression;
+previously passed radar/cargo/motion/Trial only if new symptoms. Guest HUD selection,
+occupied pads, captured-fleet orders, other weapons/mission families, full ongoing
+economy and played-campaign persistence remain explicitly open. Missing eligible
+native offers are INCONCLUSIVE, not a mission pass.

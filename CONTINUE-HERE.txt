@@ -1,74 +1,67 @@
 X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 
-CURRENT TASK / CHECKOUT
+CURRENT CHECKOUT / REQUEST
 work/x4-weapons-7-4, contrib/astra-7-5-delivery, stacked on019bff1 of
-contrib/astra-faction-missions / draftPR45. Missions sourcecba4391 is pushed in:
-https://github.com/Lith7ium/X4-Multiplayer/pull/45
-User requested matched Windows/Linux INTERNAL packages for all implemented work.
-7.5.0 candidate activates NPC/faction missions and includes installer fixes.
-636 Linux/LuaJIT PASS/no skips; archive assembly/verification is in progress.
-Primary works alone. No agent/chat/timer/Slack polling. Dedicated/headless,
-story-Koop and persistent-server discussions were analysis only, not implementation.
+contrib/astra-faction-missions / draftPR45 (NPC base3020f54 / draftPR44).
+User requested a matched human-test package pair containing implemented changes.
+Delivered7.5.0 from4078f44; report: reports/INTERNAL-7-5-DELIVERY.txt.
+Primary works alone. No agent/chat/timer/Slack polling or new unattended schedule.
 
-LATEST MILESTONE
-First ordinary-mission adapter: native GM_Destroy_RarelyOnSight matching-ship kill
-contracts. Host retains original native mission/criteria/reward/timers. Guest can
-accept a shared host offer, see progress and abort. Guest's admitted NPC kills in
-another sector produce the stock host player-faction kill event and count normally.
-Source faction_missions=false stays inert;7.5.0 launcher enables both new paths.
-Read reports/FACTION-MISSIONS-20261025.txt before extending. Files: x4lan/missions.py,
-ui/mission_{protocol,game}.lua, md/x4lan_missions.xml, two small stock GM/RML diffs.
-Existing quests.py/Cooperative Trial logic unchanged. English code/docs/interfaces.
+DELIVERY / NEXT HUMAN TEST
+Desktop/X4 Online/Internal Tests/7.5.0-2026-10-25
+Windows ZIP12,981,837 bytes, Linux tar.xz21,404,432; equivalent Small.7z19,961,040
+bytes (<20MB). Both include server/runtime/English docs. Two players per session.
+636 Linux/LuaJIT PASS/no skips;10 later top-level-guide/package tests PASS.
+Extracted inventory/runtime/real-UDP checks pass.74 common extension files and16
+server modules match across OSes/source; compact payload/modes match clean Linux.
+No native Windows or matched human gameplay acceptance. No game launched or local
+installation changed for packaging. Source/unconfigured configs remain disabled.
+01-INSTALL enables npc_combat and faction_missions with their existing prerequisites.
+Use fresh matched folders/new host world/invitation; original09-REMOVE-MOD first.
+Never distribute a configured folder. Old7.4.1 archives/hashes remain unchanged.
+NEXT-TEST.txt and HUMAN-NPC-MISSION-TEST.txt define N01–N05/M01–M04 plus short
+D01/D02 regression. Existing cargo/radar/motion/Trial only if a new symptom appears.
 
-CHECKED / LIMITS
-635 Linux/Python/LuaJIT PASS/no skips; three MD documents schema VALID.21 new tests.
-Native host04: synthetic guest acceptance, two real distinct NPCs in another sector,
-stock progress0/2->1/2->2/2, one25,000Cr payment; additional native abortX and timeoutF.
-Native guest02: actual mission offer/accept API/list/objective0/2->1/2/completion,
-zero local reward. Each test has ONE native game and synthetic counterpart.
-No matched two-game, Windows or human acceptance. Current scope: standalone visible
-kill contracts without item rewards, NPC-combat S/M/stock-gun restrictions. Other
-mission types/threads/personal actions, guest reputation presentation and continued
-campaign persistence remain open. Timer runs on host; guest countdown absent.
-Host's offer generation unchanged; no extra offers generated around remote guest.
-256 mission IDs per host lease, retained terminal facts, no ID reuse. Host-only
-state, revision/metadata checks, atomic checksum chunks, fresh native execution.
+IMPLEMENTATION / BOUNDED EVIDENCE
+NPC sourcea1c720b, draftPR44: actual host NPC health/death and cumulative guest
+hits across sectors. See reports/NPC-COMBAT-20261025.txt and
+NPC-COMBAT-VALIDATION-20261025.txt. Free-flying S/M main hull/shields; uniform
+unmodified stock Shuttle plasma or PulseMk1/Mk2. No L/XL surfaces, beams/missiles/
+turrets, captured-fleet orders, exact equipment or generalized NPC AI acceptance.
 
-NATIVE OWNERSHIP / EVIDENCE
-All six mission runs closed/restored; no task-owned game/peer. Source current in
-host04 installed-source + isolated runtime inventory. guest02 predates only the
-host publication-priority delta, automated + host04 checked. Evidence under
-.local/evidence-039-withheld,guest-01..02}; .local/evidence-040-withheld
-checks raw causal progress/payment/interface evidence and six rejected corruptions.
-Eight actual save files bytes/timestamps unchanged; Steam metadata bytes unchanged;
-69-file recorded installation restored, Workshop selection unchanged in each run.
-Retained failures: host01 bad abort reference/virtual actor existence assumption;
-host02 stalled loading/lost window (cause unknown); guest01 wrong HARNESS actor
-return index. host03 completion passed but ambiguous abort selector skipped, so no
-abort claim. Fixed exact selectors and virtual actor handling; host04 passes.
-Initial host03 attempt refused while previous cleanup ran, before any modification.
-Do not use booleans or later live source as historical native evidence.
+Missions sourcecba4391, draftPR45: original GM_Destroy_RarelyOnSight kill contracts;
+host retains native criteria/deadlines/rewards. Guest accepts/aborts [Shared] offer,
+faction kills count across sectors, credits paid once. Standalone visible offers
+without item rewards only; host generates offers; guest countdown/reputation not
+mirrored. Other mission types, plots and loaded running missions are unsupported.
+Read reports/FACTION-MISSIONS-20261025.txt. Existing Trial unchanged.
+Mission host04: one real game/synthetic guest, native cross-sector0/2->1/2->2/2,
+one25,000Cr reward plus separate abort/deadline. Guest02: native acceptance/list/
+objective/completion, no local payout. Not a matched two-game proof. New MD plus
+merged stock XMLs schema VALID. Gameplay not changed merely for packaging.
+Failures, raw logs/source/cleanup inventories remain under .local/evidence-038-withheld
+and .local/evidence-206-withheld No task-owned game/relay retained from these runs.
+Installer source7c6ec19: localized Windows process bytes, missing drives/manual
+path/profile reselection and owned recovery. Excluded fleet/mod-selection writers.
 
-PREVIOUS WORK / NEXT
-NPC sourcea1c720b in draftPR44: host health/death and cumulative guest actual hits
-across sectors. reports/NPC-COMBAT-20261025.txt and NPC-COMBAT-VALIDATION-20261025.txt.
-Source npc_combat=false; free-flying S/M main hull/shield, admitted stock guns only.
-Next matched INTERNAL integration needs BOTH NPC and faction-mission paths before
-human verification. Expand normal mission families via their native authoritative
-actions, not UI copies or independent local acceptance. Preserve accepted human
-cargo/radar/Cooperative Trial/station+asteroid/movement/Alt+Tab behavior.
-Also open: guest cannot select moving host ship, occupied pads/boarding, captured
-ships, fleet orders, complete economy and progressed-world save/absent-client catchup.
-Community installer fixes7c6ec19 and pinned onboarding576e680 remain prior milestones;
-see relevant reports and onboarding/00-START-HERE.txt only when needed.
+OPEN / ANALYSIS DIRECTION
+Guest cannot select moving host ship; occupied-pad/boarding cases; captured ships,
+fleet orders, full economy and progressed-world save/absent-client catchup remain.
+Restart currently returns to pristine starting save. User favors future dedicated
+4–6-player host, pause/save/transfer/load/resume joins and shutdown when empty.
+Architecture/Story-Koop/leader-or-vote dialogue discussions were analysis only.
+Headless static findings: .local/evidence-044-withheld;
+internal disable_rendering string is NOT a proven GPU-free mode. Network uses UI
+Lua onUpdate. No native headless experiment, engine patch or purchase authorized
+by inference from this direction. See preparation/ATTENTION-ARCHITECTURE-NOTE.txt
+for unresolved simulation authority/attention boundaries.
 
-SAFETY / DELIVERY
-Sealed7.4.1 from235f9ba untouched: Desktop/X4 Online/Internal Tests/7.4.1-2026-10-24.
-Linux Small.7z19,929,193bytes; both OSes include server/runtime. Never distribute
-configured folders/private invitations. No public release without explicit request.
+SAFETY / TOOLS
 No personal documents/mail/spending/normal-save or Workshop-selection writes.
-Native tests: X4 closed first, disposable45841 world, autosave off, recorded owned
-backups/PID/startticks/focus/cleanup; normal70000001 untouched. No old schedule revival.
-Python ../x4-playtest7/.venv/bin/python; PYTHONPATH=tests:. GH ../../build-cache/
-github-cli/gh_2.102.0_linux_amd64/bin/gh. Schemas ../../preparation/game-schemas.
-Read AGENTS.md; affected tests then required integration only. Do not reload history.
+Native tests: X4 closed first, disposable45841 world, autosave off, owned backups/
+PID/startticks/focus/cleanup; normal70000001 untouched. No historical schedule revival.
+Python: absolute path to ../x4-playtest7/.venv/bin/python avoids prefix warnings.
+GH: ../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh.
+Read AGENTS.md and task-relevant evidence; do not reload all history or replay
+unchanged accepted gameplay. Source config stays inert. Public packages/mirror
+updates need explicit owner request. Installed7.4.1 is not automatically upgraded.

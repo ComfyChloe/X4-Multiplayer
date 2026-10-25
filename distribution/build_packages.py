@@ -129,7 +129,8 @@ def build(destination: Path, runtime_cache: Path | None = None):
                     if path.is_file(): z.write(path, path.relative_to(destination))
         archives.append(archive)
     write(destination / 'PACKAGES-SHA256.txt', ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in sorted(archives)))
-    for name in ('INSTALL.html', 'README.txt', 'NEXT-TEST.txt'):
+    for name in ('INSTALL.html', 'README.txt', 'NEXT-TEST.txt', 'HUMAN-NPC-MISSION-TEST.txt',
+                 'HUMAN-DAMAGE-TEST.txt', 'HUMAN-DOCK-TEST.txt', 'HUMAN-TEST-RESULT.txt'):
         document(DIST / name, destination / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
     shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', destination / 'WORLD-SYNC-TEST.txt')
     shutil.copy2(SOURCE / 'VERSIONING.txt', destination / 'VERSIONING.txt')
