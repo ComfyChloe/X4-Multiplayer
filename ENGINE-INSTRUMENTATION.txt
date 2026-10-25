@@ -1,0 +1,51 @@
+X4 MULTIPLAYER - ENGINE INSTRUMENTATION POLICY
+25 October 2026 | INTERNAL DEVELOPMENT
+
+SCOPE
+
+Until now the project used only supported extension surfaces: Lua UI, Mission
+Director, AI scripts and a hook-free native UDP module. Engine instrumentation is
+now permitted as opt-in work, following discussion with the project owner. It
+covers runtime function hooks, game-memory offsets/signatures and patched engine
+behavior, for example seeding or replacing RNG state, fixing the simulation
+timestep or exposing engine state that the Lua/MD APIs do not provide.
+
+Motivating research: reducing simulation divergence between matched games so a
+hybrid of local simulation plus hash-checked resynchronization can replace full
+replication of distant NPCs. Instrumentation is a tool for that research, not an
+assumption that X4 can be made deterministic. Windows and Linux builds use
+different compilers; do not assume identical floating-point results across them.
+
+RULES
+
+1. Runtime only. Never modify, replace or redistribute X4 executables, Egosoft
+   archives or other game files. Instrumentation is applied in memory by a
+   separate native module shipped with the extension. Removing the mod restores
+   the unmodified game. Follow Egosoft's EULA and modding terms.
+2. Separate module. Keep hooks out of native/net.c and x4lan_net; the transport
+   stays hook-free so networking never depends on engine offsets. Put
+   instrumentation in its own native module and source directory.
+3. Build-pinned and fail closed. Each hook records its platform, Steam build ID,
+   game version and a byte signature of the target. Verify all of them before
+   writing to memory. On any mismatch, unknown build or failed verification,
+   install nothing, log the reason and continue with instrumentation disabled.
+   Never write to an address that was not verified in the running process.
+4. Off by default. Every hook needs an explicit config flag that is false in the
+   tracked source config.lua and in packages unless the integrator enables it
+   for a named test. A session must not mix instrumented and uninstrumented peers
+   where the difference affects authority or synchronization.
+5. Original work. Write hooks from your own analysis. Do not copy decompiled
+   Egosoft code, other projects' hook tables or Neresco sources/binaries.
+6. Documented and evidenced. For each hook record the target function and its
+   purpose, the signature and builds, the observable effect and how it was
+   verified, in a report under reports/. Measure divergence with and without the
+   hook before claiming a synchronization benefit. Distinguish same-OS from
+   Windows/Linux results.
+7. Existing test boundaries still apply: profile 45841, autosave disabled, no
+   normal saves, coordinated native tests on the primary PC.
+
+REVIEW
+
+Instrumentation changes are reviewed as their own PRs, separate from protocol or
+gameplay changes, and are not merged by their author. The reviewer checks rules
+1-4 in the diff, not only in the description.

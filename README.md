@@ -103,6 +103,7 @@ Do not blindly regenerate the base MD files. If generator work is needed, run
 `dev/build_bubble_md.py` then `dev/build_trade_md.py` in a disposable copy and
 compare the output against current profile guards and gameplay changes.
 Cooperative, life and quest MD scripts are saved directly. Native libraries are
-unchanged. No game-memory offsets or copied assets.
+unchanged. The current code uses no game-memory offsets or copied assets; engine
+instrumentation is opt-in under `ENGINE-INSTRUMENTATION.txt`.
 English documentation and interfaces are shipped; historical game logs retain the
 engine's own wording. Development harnesses must never enter distribution packages.
