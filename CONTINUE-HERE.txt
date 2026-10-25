@@ -14,11 +14,11 @@ untouched. NEW user authorization25Oct: check Ferrite/Cobalt every15 minutes,
 no fixed cutoff; quality first, tokens second, elapsed time third. Existing local
 x4-claude-monitor.timer reused for this Development chat at :00/:15/:30/:45.
 Prompt/checkpoint: preparation/claude-monitor (outside Git). Quiet on no change.
-Dedicated-server design/test is next under Ferrite; server/task prompt pending.
-Cobalt (formerly Claude/C) owns the sealed Windows installer test, awaiting ZIP
-transfer destination. Archive size/hash reverified; no rebuild or duplicate scope.
-Owner reports Ferrite is investigating X4 through decompilation/reverse engineering;
-no findings, source access or engine capability from that work verified here yet.
+Dedicated-server design/test is active under Ferrite; rented-server access pending.
+Astra completed bounded H0 software-Vulkan startup/simulation and owns L1 static
+Linux hook mapping; Ferrite owns hook/ABI/attention. See HEADLESS-H0 report below.
+Cobalt owns sealed Windows installer validation; exact ZIP delivered privately,
+no rebuild/configured session. Cobalt H4 N-player design is PR50, not implemented.
 
 DELIVERY / CURRENT HUMAN RESULTS
 Desktop/X4 Online/Internal Tests/7.5.0-2026-10-25
@@ -78,10 +78,13 @@ still missing. The authorized20s packet capture was symptom-free, not a reproduc
 Restart currently returns to pristine starting save. User favors future dedicated
 4–6-player host, pause/save/transfer/load/resume joins and shutdown when empty.
 Architecture/Story-Koop/leader-or-vote dialogue discussions were analysis only.
-Headless static findings: .local/evidence-044-withheld;
-internal disable_rendering string is NOT a proven GPU-free mode. Network uses UI
-Lua onUpdate. No native headless experiment, engine patch or purchase was performed. See preparation/ATTENTION-ARCHITECTURE-NOTE.txt
-for unresolved simulation authority/attention boundaries.
+Headless H0: reports/HEADLESS-H0-20261025.txt. Exact Linux9.00/Steam23660954 loaded
+a disposable world with Xvfb/lavapipe, game90.05s, UI2.208 callbacks/s, roughly
+11.86 logical CPUs and8.80GiB peak RSS. Software rendering remains active; no
+network/remote combat/renderless acceptance. All105 tracked original files match,
+owned native/display processes stopped. No engine patches or purchase. Internal
+disable_rendering string remains unproven. Network uses UI Lua onUpdate. See
+preparation/ATTENTION-ARCHITECTURE-NOTE.txt for unresolved authority/attention.
 
 SAFETY / TOOLS
 No personal documents/mail/spending/normal-save or Workshop-selection writes.

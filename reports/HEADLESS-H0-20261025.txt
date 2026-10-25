@@ -1,0 +1,80 @@
+H0: LINUX SOFTWARE-VULKAN FEASIBILITY
+25 October 2026 | Astra | INTERNAL DEVELOPMENT
+
+RESULT AND LIMIT
+The exact Linux X4 build below loaded a new world under Xvfb with Mesa lavapipe,
+advanced Mission Director and UI callbacks, and exited normally after game90.05s.
+This is a bounded software-rendered startup/simulation PASS. It is NOT renderless
+execution, a multiplayer session, remote-attention/combat proof, sustained-load
+qualification, or acceptance of a dedicated server. Production network Lua was
+not loaded. No engine hooks, binary edits, save transfer or server rental occurred.
+
+BUILD AND ENVIRONMENT
+X4 9.00(611726), Steam build23660954; Linux ELF64 x86-64 ET_EXEC, stripped,
+60,459,280 bytes. SHA256:
+113f73d74570084f6ce18a659b365009eccf579fb66dbabb5dad2b1718045f20
+GNU build ID: 77cf7ac0ff32d88ffd3db7eb6ea2e025aecb711d
+Source checkout f4fbba6e2fc2f8de01ab11ef738ed5dd5611e19b supplied the authored
+content.xml/gamestart. A minimal task-private Lua/MD observation probe replaced
+the installed mod only inside the mount namespace. Its exact hashes are retained.
+Bazzite44.20261023, Ryzen7 7800X3D (8 cores/16 logical CPUs).
+Xvfb21.1.25-2.fc44 extracted locally from signed Fedora RPMs; no system install.
+Game log confirms llvmpipe LLVM22.1.8, Mesa26.2.4, Vulkan1.4.354. Both Vulkan ICD
+environment variables selected lvp_icd.x86_64.json; /dev/dri was masked.
+Display640x360, private Xauthority, no X11 TCP listener. This still renders on CPU.
+
+MEASUREMENTS
+Final UI environment: first sample real0.033330/game0/frames1; final sample
+real89.243988/game89.210658/frames198, valid=true, paused=false throughout.
+197 callbacks /89.210658 engine-real seconds =2.20826 callbacks/s; roughly5s
+sample windows ranged1.54357–2.44749/s. Loading reset the UI environment once;
+only the final instance is used for this calculation. COMPLETE at game90.05.
+68 MD observations advanced monotonically from game1.51869 to89.6316.
+Engine real and game clocks agree in this interval. External wall timestamps
+were NOT collected per UI event, so this is not an independent wall-clock
+simulation-speed measurement. The whole sampled process lasted about154s,
+including startup; universe-generation wall timestamps are present in raw logs.
+76 process CPU/RSS samples use the external monotonic clock. The80.82–143.44s
+window used11.86427 CPU-seconds per wall-second, approximately1,186% in the
+usual per-logical-CPU percentage convention. Whole sampled mean11.18747;
+peak RSS8.80381GiB. This includes software rendering and is not simulation-only
+cost or a capacity estimate for4–6 remote players. Current UI-paced networking
+would inherit the low callback frequency; networking itself was not exercised.
+
+ISOLATION, CLEANUP AND WARNINGS
+Native X4 was closed before launch. Read-only root mount, private writable run
+directory, private /tmp, private profile root containing only disposable45841;
+no existing save loaded. Autosave disabled, private save directory stayed empty.
+Only private config copies changed display/audio preferences. content.xml copied
+byte-for-byte; no Workshop selection edits. -noworkshopsync used. This establishes
+local filesystem preservation, not an independent audit of Steam account state.
+105 tracked original files (installed extension and profile top-level/save files)
+match before/after SHA256, byte counts and mtime_ns, including9 save-directory
+files. No writes to normal saves/settings or the installed extension were needed.
+X4 returned0 after the probe called QuitGame. Owned X4/wrapper/Xvfb PIDs are gone.
+FSR3 context creation failed0x8000000d under software Vulkan; raw warning retained.
+Own unsigned mod, audio-device and read-only shader-cache warnings also retained.
+H0 messages use DebugError for visibility; that prefix alone is not test failure.
+
+RETAINED FAILURES AND VALIDATION
+run-20261025-203644: preparation lacked lxml in the project venv; no game.
+203700/203815: full Egosoft schema compilation exceeded short limits; no game.
+204044: full MD schema VALID with system lxml; LuaJIT compile PASS. First native
+attempt then displayed "Game is already running!" despite no existing X4. The
+read-only original /tmp prevented singleton-lock creation. Dialog and failure
+retained; only verified task-owned descendants were cleaned up. Never delete
+the real /tmp/EGOSOFT_X4.lock to bypass this. A private writable /tmp fixed startup.
+204827: successful native run. Exact unchanged MD XML reused the retained full
+schema result; unchanged schema files predate validation. Fresh LuaJIT compile
+PASS. No broad unchanged gameplay suite was repeated.
+
+EVIDENCE
+Private root: .local/evidence-045-withheld
+Successful run: run-20261025-204827; raw h0-debug.txt/game-console.txt, setup and
+probe-source hashes, Vulkan summary, CPU samples, before/after inventories,
+result.json and audit.json retained. Raw console includes local account/path
+details; sanitize before sharing. Evidence-hashes.json SHA256:
+806da0f44a747ddd9b1f394799f563e90df04c987ac01c9dc69039fd11b8aa15
+Owned one-off harness: run_h0.py. No Egosoft executable/source is redistributed.
+Next agreed task L1 is static Linux hook mapping. Ferrite retains hook/ABI and
+attention design ownership. Native remote combat and deployment remain untested.
