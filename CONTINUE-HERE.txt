@@ -2,7 +2,9 @@ X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 
 CURRENT TASK / CHECKOUT
 work/x4-weapons-7-4, contrib/astra-faction-missions, stacked on3020f54 of
-contrib/astra-npc-combat / draftPR44. Integration remains contrib/astra-7-4-integration
+contrib/astra-npc-combat / draftPR44. Missions sourcecba4391 is pushed in draftPR45:
+https://github.com/Lith7ium/X4-Multiplayer/pull/45
+Integration remains contrib/astra-7-4-integration
 / draftPR37. User's latest goal: ordinary missions shared across the player faction,
 not just Cooperative Trial. Primary works alone. No agent/chat/timer/Slack polling.
 

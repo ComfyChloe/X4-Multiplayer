@@ -1,6 +1,7 @@
 FACTION MISSIONS — FIRST NATIVE ORDINARY-MISSION ADAPTER — 25 OCTOBER 2026
 
 Status and scope
+Sourcecba4391, draftPR45: https://github.com/Lith7ium/X4-Multiplayer/pull/45
 Source-only INTERNAL work, stacked on NPC combat PR44. No new package, launcher
 activation or public release. Source faction_missions=false remains inert.
 The existing Cooperative Trial is unchanged. This is NOT universal mission sharing.
