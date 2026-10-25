@@ -1,0 +1,192 @@
+X4 MULTIPLAYER - PLAYER SCOPE: NPC BEHAVIOUR KEYED TO "THE PLAYER"
+25 October 2026 | INTERNAL DEVELOPMENT | Task D (Ferrite) | nothing below was run in X4
+
+PROBLEM
+
+Guests report that NPCs ignore them: targets at 0 m/s, no NPC fire, things
+improve once the host arrives (reports/PLAYTEST-7.5.0-20261025.txt). On the host
+the guest exists as an ordinary shared co-op ship: owner faction.player, created
+by md/x4lan_bubble.xml PrepareShips without a pilot, moved by coop_game.lua
+(NAV2 pose/velocity), named "LAN Player N". It is never player.occupiedship,
+player.controlled or player.container on the host. Guest-side NPCs are inert
+replicas (universe_game.lua, ActivateObject(false)); all NPC decisions are host
+decisions. This document lists every vanilla path found that singles out the one
+local player, classifies it, and records the first, inert-by-default slice.
+
+Categories
+ (a) works already for any faction.player ship (relation/ownership based)
+ (b) keyed to player.* in MD/AI scripts: fixable with an extension diff patch or
+     an additive MD cue (original code; stock files are never shipped)
+ (c) engine-side: needs reverse engineering / a hook, or a UI relay to the guest
+
+Evidence: vanilla md/ and aiscripts/ of 9.00 (base + ego_dlc_*), extracted
+read-only to ../x4-re/gamescripts (outside the repo, not redistributed), and static
+RE in ../x4-re/coord/reports/player.md. Line numbers refer to the base files.
+
+SUMMARY COUNTS: 39 behaviours: (a) 8, (b) 22, (c) 9.
+
+INVENTORY
+
+(a) Already works for the guest ship (when the NPC runs at all, see c1/c2)
+ a1 aiscripts/move.seekenemies, lib.target.selection: hostile acquisition by
+    gravidar contacts with maybeattackedby/relation; pilotless player-owned ships
+    are valid targets. Exception: purpose filter, see b1.
+ a2 interrupt.attacked, order.fight.attack.object*: response to any attacker
+    (event.param), not to player.* .
+ a3 masstraffic.police "checkscantargets" and order.move.recon police scan:
+    any ship in range; illegal cargo found on a player-owned ship -> relation
+    penalty and attack. Dialogue differs, see b2/b3.
+ a4 station/laser tower/protect/patrol orders: relation-based targeting.
+ a5 relation penalties (BoostRelations, relationchangereason.*): faction level,
+    so guest actions affect the shared faction.player reputation.
+ a6 docking permission and trade with player-owned ships (allowplayeronly).
+ a7 md/playerreputation.xml licences: faction.player relation, not the entity.
+ a8 engine gravidar: NPC sensors see the proxy like any registered object.
+
+(b) Keyed to player.* (script fix possible)
+ b1 move.seekenemies:277 and :404. Pirates (order.plunder passes targetpurposes
+    trade/mine) always accept player.occupiedship "since we don't know what the
+    player is doing"; the guest's fighter is filtered out. FIX IMPLEMENTED (diff).
+ b2 order.move.recon police halt (~1133-1210): occupiedship gets a comm line and
+    a 10 s scan; any other player-owned target makes the police hover 1-2 min
+    waiting for 'player halt response' from lib.respond.inspected, which a
+    pilotless proxy never sends. FIX IMPLEMENTED (MD responder answers 'comply').
+ b3 order.move.recon contraband (~1466-1545): occupiedship gets the interactive
+    "drop it or else" conversation; other player-owned ships go straight to
+    $trouble -> attack. Proposed: AI diff treating the marked guest ship like
+    occupiedship for the decision, with the conversation relayed to the guest UI.
+ b4 order.plunder accost (~783-930): occupiedship gets "drop your cargo" and a
+    comply loop; other player-owned targets wait 1-2 min, then attack if nothing
+    was dropped. FIX IMPLEMENTED (responder answers 'wait' 30 s, after which the
+    stock crate check runs). Demand text to the guest still needs the relay (R1).
+ b5 lib.respond.inspected / interrupt.inspected: run on the target's pilot; the
+    proxy has no pilot. Covered by the responder for halt; nothing else needed.
+ b6 aiscripts/player.interaction: every NPC comm line (police, pirates, wingmen)
+    plays on the host UI only. Needs R1.
+ b7 'npc_usecase' chatter signalled to player.entity (move.seekenemies:608,
+    move.flee:188, order.fight.escort, masstraffic.handler.attacked:37,
+    lib.respond.inspected:115/352): host-only voice/chatter. Needs R1, low value.
+ b8 interrupt.scanned:17, masstraffic.handler.attacked:16: notification only when
+    event.param == player.controlled. Low value.
+ b9 md/encounters.xml: ambient encounters (lone plunderer, resource scouts,
+    miners, Xenon/Kha'ak S groups) trigger on the player container changing
+    zone, warp ahead of player.ship in player.sector, and Xenon/Kha'ak/bandits
+    get primarytarget=player.ship and a relation boost against player.ship.
+    Proposed slice 2: diff Standard_WarpShips and the *_Warped cues to use an
+    anchor (guest ship when the signal came from the guest), keep the vanilla
+    "not near the host" warp check, and add a guest zone-change listener.
+ b10 md/we_distress_call.xml: spawns the distress ship and attackers near
+    player.ship/player.zone. Same anchor approach as b9.
+ b11 md/khaak_activity.xml:990: active Kha'ak spawned 400 m from player.ship.
+ b12 md/factionlogic_staticdefense.xml:1463-1570: static defence warped to the
+    player's ship/sector.
+ b13 md/factionlogic.xml:1689: no mines placed in player.sector (guest sector
+    not protected). Minor.
+ b14 md/placedobjects.xml, signal_leaks.xml, lockboxes: event_player_* only.
+ b15 md/cover.xml: cover (disguise) state lives on player.entity.
+ b16 md/boarding.xml: boarding launched by player.entity.controlled only.
+ b17 genericmissions/gmc_*/npc_missions: offers created around the player; the
+    shared kill contract path (md/x4lan_missions.xml) is the existing model.
+ b18 lib.target.selection:276: first-minute grace for player.occupiedship. Minor.
+ b19 interrupt.disengage:77: cover handling for player.occupiedship. Minor.
+ b20 order.fight.escort:221,1423 / order.fight.attack.object.player: wingman logic
+     keyed to player.occupiedship as commander. Only matters for guest fleets.
+ b21 masstraffic.police:296-354: cockpit warning lamp for player.ship. Cosmetic.
+ b22 MD listening to event_player_killed_object / event_player_attacked_object
+     (notifications, rml_*, skill_gain, war subscriptions): the engine raises them
+     only for the controlled ship (c4). Compensate per script as
+     md/rml_destroy_rarelyonsight.xml already does for kill contracts.
+
+(c) Engine-side
+ c1 Attention: Ship::ComputeAttention (vfunc703, rva 0x7d5110) gives ships in the
+    player entity's parent chain level 9; NPCs near only the guest stay low/OOS,
+    so <attention min="visible"> blocks (masstraffic.police, masstraffic.*
+    handlers) never run and OOS combat is abstract. OWNED BY TASK A.
+ c2 Mass traffic (including police mass traffic) is generated around the
+    player's ship (U::MT functions near 0x8c3a90/0x8c4550 call the occupied-ship
+    getter). No mass traffic near the guest unless engine-side.
+ c3 player.occupiedship/controlled/container are derived from the single Player
+    entity (*(Universe+0x230)); there is no list to add a second ship to. Script
+    substitution (b1/b2/b4) is the only route without a hook.
+ c4 Component::NotifyKiller (0x3e5490) also notifies the player entity only when
+    the killer is the player-controlled ship (event_player_killed_object).
+ c5 Gravidar registration (0x10b2820 -> GravidarUnit ctor 0x10ac0c0) flags the
+    player-occupied ship; Gravidar::Run (0x10ae0e0) posts fog-of-war/discovery
+    to the player entity; 0x10b1810 tracks the player's sector. Affects player
+    knowledge/map, not NPC sensing (medium confidence).
+ c6 Comm/hail/scan player actions (U::CommAction, U::BasicScanAction,
+    CanPlayerCommTarget) require the local player; the guest's hails happen in
+    the guest's own game against inert replicas. Needs request relay (R2).
+ c7 IsInLiveView (Object vfunc799, 0x6d5900) depends on the player's controlled
+    ship (radar live data); host-only knowledge.
+ c8 Region damage fields (0xee1a50) take an extra branch for the occupied ship
+    (likely feedback only; low confidence).
+ c9 Missile lock/incoming warnings (Missile::Shoot 0x606f20, MissileLauncher
+    vfunc988 0x609670) are player-ship specific. Cosmetic for the host.
+
+No engine special case for the player ship was found in NPC combat target
+selection or attack actions: none of the AI::/Scripts:: combat actions call the
+player-ship getters or touch the Player singleton inline (search of 1,041 inline
+users, medium confidence). Guest-visible "no NPC fire" is therefore attention
+(c1) plus the guest's inert replicas not showing host NPC weapons, not a vanilla
+refusal to target the guest.
+
+FIRST SLICE (implemented, inert by default)
+ Source config player_scope = false. Host only (slot p1), internal co-op only.
+ - ui/player_scope_game.lua: after coop is ready, sends X4LAN_PlayerScope Setup,
+   then the index of the shared ship that AUTH says p2 owns and pilots (0 = none)
+   on change and every second. Queues halt notices (max 32) for R1; no network
+   message is added.
+ - md/x4lan_player_scope.xml: Session requires player.module x4lan_internal and
+   Arena host+coop. Guest marks that ship with blackboard $x4lan_guestplayer
+   (never the host's occupied ship or container) and clears the old mark. Halt
+   answers 'halt' signals sent to the marked ship: police 'comply', pirates 'wait'
+   (30 s), via 'player halt response' with a 1 s delay so the inspector is
+   already waiting. Logs PLAYER_SCOPE_HALT and raises X4LAN_PlayerScope.Halt.
+   No cargo, owner, relation, order or reward actions.
+ - aiscripts/move.seekenemies.xml (diff): b1 at both sites, keyed only to the
+   blackboard flag; non-blocking. Without the flag the stock expressions are
+   unchanged in effect.
+ Behaviour effect if enabled: pirates can pick the guest as a plunder target;
+ police and pirates stop stalling 1-2 min at the guest; pirates grant 30 s and
+ then attack unless wanted cargo was dropped (stock check). The guest is not told
+ why (R1 pending). Combat engagement itself depends on c1 (Task A).
+ Checks: tests/test_player_scope.py (inert defaults, adapter contract with
+ engine doubles, MD/diff structure). dev/check_player_scope_diff.py applies the
+ diff to a locally extracted stock move.seekenemies.xml (each selector must match
+ once) and validates the merged script and the new MD against the game XSDs.
+
+NEXT SLICES (proposed)
+ S2 Encounters for the guest (b9-b11): anchor-based diffs, inert by default.
+ S3 Contraband parity (b3) and R1: a host->guest notice message (relay type,
+    Python + Lua, coordinate the protocol) showing police/pirate lines and the
+    halt/plunder demand on the guest UI; guest cargo drop already needs the
+    cargo authority path.
+ S4 Kill/attack attribution (b22/c4): one MD listener for kills by the guest
+    ship, feeding the scripts that matter (reputation feedback, missions).
+ S5 Engine (c1/c2): treat the guest ship as an attention source (Task A); mass
+    traffic around the guest is a separate RE question.
+ R2 Guest-initiated comm/hail/scan relayed as host requests.
+
+NATIVE TEST PLAN (not run; primary PC, profile 45841, disposable world)
+ 1. Package with player_scope=true on the host only; confirm PLAYER_SCOPE_READY,
+    PLAYER_SCOPE_GUEST ship=2, and after a ship exchange ship=1 / ship=0 on foot.
+    Confirm the debuglog shows no diff error for move.seekenemies.xml.
+ 2. Host flag off: no READY line, stock behaviour (regression of accepted
+    cargo/radar/Trial/mission checks unaffected).
+ 3. Guest in a police sector with the host 2 sectors away and with the host
+    near: police halt -> PLAYER_SCOPE_HALT mode=policehalt response=comply,
+    police scan ends within ~30 s instead of 1-2 min. Repeat with contraband:
+    expect attack (b3 not fixed) and record it.
+ 4. Guest with trade cargo in a pirate sector: expect a pirate to select the
+    guest (b1), PLAYER_SCOPE_HALT mode=piratehalt response=wait, attack after
+    ~30 s if nothing dropped. Compare host-near vs host-far (attention, c1).
+ 5. Host's own ship halted while host flies: vanilla dialogue, no responder log.
+ Record evidence under .local/, not in the repo.
+
+LIMITS
+ Nothing was run in X4. The responder protocol and selectors were read from
+ 9.00 scripts; engine timing of signal delivery is untested. The guest receives
+ no message yet. Pilotless proxies do not run interrupt handlers (flee/evade),
+ which is intended because a human flies them. Encounters, contraband dialogue,
+ kill attribution, attention and mass traffic remain open.

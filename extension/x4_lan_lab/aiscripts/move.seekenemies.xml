@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<diff>
+  <!-- X4LAN INTERNAL player scope (docs/PLAYER-SCOPE.txt). Pirates with target purposes
+       (order.plunder: trade/mine) always accept the host's player.occupiedship because the
+       player's purpose is unknown. Treat the remote co-op player's ship the same way. The
+       blackboard flag is only set by md/x4lan_player_scope.xml, so vanilla behaviour is
+       unchanged unless that internal adapter is active. Non-blocking additions only. -->
+  <add sel="//check_value[@value='@$detected.{$i} == player.occupiedship']" pos="after">
+    <check_value value="@$detected.{$i}.$x4lan_guestplayer"/>
+  </add>
+  <replace sel="//do_elseif[@value='$targetpurposes.count and not $targetpurposes.indexof.{$locobject.primarypurpose} and ($locobject != player.occupiedship)']/@value">$targetpurposes.count and not $targetpurposes.indexof.{$locobject.primarypurpose} and ($locobject != player.occupiedship) and not @$locobject.$x4lan_guestplayer</replace>
+</diff>

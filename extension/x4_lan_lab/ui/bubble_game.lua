@@ -179,6 +179,7 @@ local function frame()
  if X4LAN_BUBBLE_API.trade then X4LAN_BUBBLE_API.trade.frame(now) end
  if X4LAN_BUBBLE_API.missions then X4LAN_BUBBLE_API.missions.frame(now) end
  if X4LAN_BUBBLE_API.quest then X4LAN_BUBBLE_API.quest.frame(now) end
+ if X4LAN_BUBBLE_API.playerScope then X4LAN_BUBBLE_API.playerScope.frame(now) end
  if not cfg.coop and client.lease and now>=(s.nextFire or 0) then
   s.transport:send('FIRE|1|'..client.lease..'|'..tostring(s.fire));s.nextFire=now+.05
  end

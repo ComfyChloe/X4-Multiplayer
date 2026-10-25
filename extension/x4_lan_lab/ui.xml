@@ -31,6 +31,7 @@
     <file name="ui/mission_protocol.lua" />
     <file name="ui/mission_game.lua" />
     <file name="ui/quest_game.lua" />
+    <file name="ui/player_scope_game.lua" />
     <file name="ui/cargo_game.lua" />
     <file name="ui/identity_game.lua" />
   </environment>

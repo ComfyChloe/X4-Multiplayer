@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_PlayerScope" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <!-- INTERNAL host-only player scope (docs/PLAYER-SCOPE.txt). Inert unless the host Lua adapter
+      (config player_scope) sends Setup in an internal co-op session. It never changes cargo,
+      ownership, relations or rewards: it marks the shared ship the remote player pilots and
+      answers vanilla police/pirate halt signals on that player's behalf, because the remote
+      player's ship has no local pilot to run lib.respond.inspected. -->
+ <cues>
+  <cue name="Session" namespace="this">
+   <conditions>
+    <event_ui_triggered screen="'X4LAN_PlayerScope'" control="'Setup'"/>
+    <check_value value="player.module == 'x4lan_internal' and @md.X4LAN_Bubble.Arena.$host and @md.X4LAN_Bubble.Arena.$coop"/>
+   </conditions>
+   <actions>
+    <set_value name="$active" exact="true"/>
+    <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+    <set_value name="$guest" exact="null"/>
+    <!-- Police continue their ordinary scan at once; pirates grant a grace period before they
+         check for dropped cargo, as for an ordinary player-owned ship told to wait. -->
+    <set_value name="$policeResponse" exact="'comply'"/>
+    <set_value name="$pirateGrace" exact="30s"/>
+    <create_group groupname="$ships"/>
+    <do_all exact="2" counter="$i"><add_to_group groupname="$ships" object="$arena.$ships.{$i}"/></do_all>
+    <raise_lua_event name="'X4LAN_PlayerScope.Ready'"/>
+    <debug_text text="'[X4LAN] PLAYER_SCOPE_READY guest halt responder, guest plunder eligibility'"/>
+   </actions>
+   <cues>
+    <!-- Lua sends the shared ship index the remote player pilots (0 = none). The local
+         player's own ship or container is never marked, so vanilla player paths stay intact. -->
+    <cue name="Guest" instantiate="true" namespace="this">
+     <conditions><event_ui_triggered screen="'X4LAN_PlayerScope'" control="'Guest'"/></conditions>
+     <actions>
+      <set_value name="$index" exact="event.param3"/>
+      <set_value name="$next" exact="null"/>
+      <do_if value="$index == 1 or $index == 2">
+       <set_value name="$candidate" exact="Session.$arena.$ships.{$index}"/>
+       <do_if value="$candidate.isoperational and $candidate != player.occupiedship and $candidate != player.container">
+        <set_value name="$next" exact="$candidate"/>
+       </do_if>
+      </do_if>
+      <do_if value="Session.$guest != $next">
+       <do_if value="@Session.$guest.exists"><remove_value name="Session.$guest.$x4lan_guestplayer"/></do_if>
+       <set_value name="Session.$guest" exact="$next"/>
+       <do_if value="$next"><set_value name="$next.$x4lan_guestplayer" exact="true"/></do_if>
+       <debug_text text="'[X4LAN] PLAYER_SCOPE_GUEST ship=%s object=%s'.[$index,@$next.idcode]"/>
+      </do_if>
+     </actions>
+    </cue>
+    <!-- order.move.recon (police) and order.plunder (pirates) wait 1-2 minutes for
+         'player halt response' from a player-owned target that is not player.occupiedship.
+         The delayed signal arrives after the inspector has started that wait. -->
+    <cue name="Halt" instantiate="true" namespace="this">
+     <conditions>
+      <event_object_signalled group="Session.$ships" param="'halt'"/>
+      <check_value value="Session.$guest and event.object == Session.$guest and event.object != player.occupiedship and @event.param2.isoperational and (event.param3 == 'policehalt' or event.param3 == 'piratehalt')"/>
+     </conditions>
+     <actions>
+      <set_value name="$mode" exact="event.param3"/>
+      <set_value name="$inspector" exact="event.param2"/>
+      <do_if value="$mode == 'policehalt'">
+       <set_value name="$response" exact="Session.$policeResponse"/>
+       <signal_objects object="$inspector" param="'player halt response'" param2="$response" delay="1s"/>
+      </do_if>
+      <do_else>
+       <set_value name="$response" exact="'wait'"/>
+       <signal_objects object="$inspector" param="'player halt response'" param2="$response" param3="Session.$pirateGrace" delay="1s"/>
+      </do_else>
+      <debug_text text="'[X4LAN] PLAYER_SCOPE_HALT mode=%s response=%s inspector=%s owner=%s guest=%s'.[$mode,$response,$inspector.idcode,$inspector.owner.id,event.object.idcode]"/>
+      <raise_lua_event name="'X4LAN_PlayerScope.Halt'" param="'%s|%s|%s|%s|%s'.[$mode,$response,$inspector.idcode,$inspector.owner.id,Session.$pirateGrace / 1s]"/>
+     </actions>
+    </cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>
