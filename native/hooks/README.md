@@ -33,6 +33,19 @@ engine frame numbers. `handle:active()`, `handle:stop()` and `handle:frames()`
 inspect or end registration. `module.inspect(decimalComponentId)` returns read-only
 registry generation, attention, absolute hull, evaluated shield percentage and
 owner pointer while armed on the owning MoveWorker thread.
+`module.walltime()` returns QueryPerformanceCounter seconds and `module.hash(rows)`
+hashes an array of strings with FNV-1a, including one newline after every row.
+Neither utility accesses engine state; both run synchronously on their Lua caller.
+
+The recorder defaults to cadence 30 and an 8 ms QPC wall-time capture/hash budget.
+`engine_hash_cadence` (including 1), `engine_hash_budget_ms` and
+`engine_hash_max_ships` remain configurable. Every complete `STATEHASH` is a fresh,
+complete capture (`fresh=1 complete=1`). A capture exceeding the budget between
+engine calls, or during the measured phases, instead logs `fresh=0 complete=0`
+without hashes. `HASHCOST` reports per-attempt and cumulative QPC milliseconds and
+counts; its timings are wall time, unlike STATEHASH `gt`/`dt` game time. Individual
+engine calls cannot be preempted, so the budget is a cooperative guard, not a hard
+real-time deadline. See `reports/determinism-hash-performance.md`.
 
 `reports/determinism-stage-0.md` and `determinism-stage-1.md` record the native
 read-only launches and the limited seeded comparison. The initial RNG matches, but

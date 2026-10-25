@@ -11,7 +11,7 @@ def state_line(frame=1, complete=1, gt=None, changed=(), session="build", run="t
     gt = 100.0 + frame / 60 if gt is None else gt
     prefix = f"[X4LAN] STATEHASH run={run} session={session} frame={frame} "
     if complete == 0:
-        return prefix + f"complete=0 reason=ship%20limit seed={seed} gt={gt:.9f} dt=0.016666667\n"
+        return prefix + f"scanned=2 ships=0 fresh=0 complete=0 reason=ship%20limit seed={seed} gt={gt:.9f} dt=0.016666667\n"
     values = {key: f"{index + 1:016x}" for index, key in enumerate(compare.HASH_BUCKETS)}
     values["h"] = "f" * 16
     for key in changed:
@@ -19,7 +19,7 @@ def state_line(frame=1, complete=1, gt=None, changed=(), session="build", run="t
     if changed:
         values["h"] = "e" * 16
     buckets = " ".join(f"{key}={values[key]}" for key in compare.HASH_BUCKETS)
-    return prefix + f"h={values['h']} {buckets} seed={seed} ships=2 weak=0 complete=1 gt={gt:.9f} dt=0.016666667\n"
+    return prefix + f"h={values['h']} {buckets} seed={seed} ships=2 weak=0 fresh=1 complete=1 gt={gt:.9f} dt=0.016666667\n"
 
 
 class StateHashTests(unittest.TestCase):
@@ -69,6 +69,9 @@ class StateHashTests(unittest.TestCase):
     def test_parser_rejects_malformed_and_mixed_logs(self):
         malformed = [state_line(1).replace("identity=", "identity=xyz\nbroken="),
                      state_line(1).replace("complete=1", "complete=2"),
+                     state_line(1).replace("fresh=1", "fresh=0"),
+                     state_line(1, complete=0).replace("fresh=0", "fresh=1"),
+                     state_line(1, complete=0).replace("scanned=2", "scanned=many"),
                      state_line(1) + state_line(1)]
         for lines in malformed:
             with self.subTest(lines=lines), tempfile.TemporaryDirectory() as folder:

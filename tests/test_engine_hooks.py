@@ -14,6 +14,7 @@ MOCK = r'''
 logs, events = {}, {}
 savePath = "C:/Users/x/Documents/Egosoft/X4/45841/save"
 callback, cadence, nativeStarts = nil, nil, 0
+wallNow, wallDt = 0, 0.001
 ships = {
  [1001]={sector=22,macro='ship_arg_m_trans_01_a_macro',owner='argon',idcode='AAA-1',pos={x=1,y=2,z=3,yaw=0,pitch=0,roll=0}},
  [1002]={sector=22,macro='ship_arg_s_fighter_01_a_macro',owner='player',idcode='PLAY-1',pos={x=4,y=5,z=6,yaw=0,pitch=0,roll=0}},
@@ -32,6 +33,14 @@ native = {
  start=function(cb, rate) nativeStarts=nativeStarts+1;callback=cb;cadence=rate
   return {stop=function() end,active=function() return true end,frames=function() return 0 end} end,
  inspect=function(id) return {attention=9,hull=50,shield=75,owner_pointer='0000000000001234',generation=3,registry=true} end,
+ walltime=function() wallNow=wallNow+wallDt;return wallNow end,
+ hash=function(rows)
+  local value=14695981039346656037ULL;local b=require('bit')
+  for _,row in ipairs(rows) do for i=1,#row do value=(b.bxor(value,row:byte(i))*1099511628211ULL) end
+   value=(b.bxor(value,10)*1099511628211ULL)
+  end
+  return string.format('%08x%08x',tonumber(value/4294967296ULL),tonumber(value%4294967296ULL))
+ end,
 }
 local realRequire = require
 require = function(name)
@@ -83,8 +92,11 @@ class EngineHookTests(unittest.TestCase):
     def state_lines(self, lua):
         return [line for line in self.logs(lua) if "STATEHASH" in line]
 
-    def fields(self, line):
-        return dict(part.split("=", 1) for part in line.split("STATEHASH ", 1)[1].split())
+    def cost_lines(self, lua):
+        return [line for line in self.logs(lua) if "HASHCOST" in line]
+
+    def fields(self, line, kind="STATEHASH"):
+        return dict(part.split("=", 1) for part in line.split(kind + " ", 1)[1].split())
 
     def test_default_enabled_and_registered(self):
         config = (ROOT / "extension/x4_lan_lab/ui/config.lua").read_text()
@@ -95,11 +107,11 @@ class EngineHookTests(unittest.TestCase):
         lua = self.runtime()
         lua.eval("events['X4LAN.Loaded']")()
         self.assertEqual(lua.eval("nativeStarts"), 1)
-        self.assertEqual(lua.eval("cadence"), 1)
+        self.assertEqual(lua.eval("cadence"), 30)
         self.assertIn("HOOKS_READY", self.logs(lua)[-1])
         lua.eval("callback")(1, 100.0, 1 / 60, "0123456789abcdef", "0011223344556677")
         first = self.fields(self.state_lines(lua)[0])
-        self.assertEqual(first["complete"], "1")
+        self.assertEqual((first["complete"], first["fresh"]), ("1", "1"))
         self.assertEqual((first["ships"], first["weak"]), ("1", "0"))
         for name in ("h", "identity", "pose", "health", "rng", "time"):
             self.assertRegex(first[name], "^[0-9a-f]{16}$")
@@ -107,6 +119,45 @@ class EngineHookTests(unittest.TestCase):
         second = self.fields(self.state_lines(lua)[1])
         self.assertEqual(first["h"], second["h"])
         self.assertIn("HOOKS_OBSERVE", "\n".join(self.logs(lua)))
+
+    def test_cadence_override_and_wall_cost_accounting(self):
+        lua = self.runtime("X4LAN_CONFIG.engine_hash_cadence=1")
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertEqual(lua.eval("cadence"), 1)
+        for frame in (1, 2):
+            lua.eval("callback")(frame, 1000000.0 + frame, 500.0, "0123456789abcdef", "0011223344556677")
+        first, second = [self.fields(line, "HASHCOST") for line in self.cost_lines(lua)]
+        self.assertEqual((first["captures"], first["completed"], first["failed"]), ("1", "1", "0"))
+        self.assertEqual((second["captures"], second["completed"], second["failed"]), ("2", "2", "0"))
+        self.assertEqual((first["scanned"], first["ships"], first["cadence"]), ("2", "1", "1"))
+        for field in ("capture_ms", "hash_ms", "total_ms", "max_ms", "cumulative_ms"):
+            self.assertGreater(float(first[field]), 0)
+        self.assertGreater(float(second["cumulative_ms"]), float(first["cumulative_ms"]))
+        self.assertNotEqual(float(first["total_ms"]), 500.0)
+
+    def test_capture_budget_is_incomplete_then_recovers(self):
+        lua = self.runtime("X4LAN_CONFIG.engine_hash_budget_ms=1")
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.eval("callback")(30, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+        failed = self.fields(self.state_lines(lua)[0])
+        self.assertEqual((failed["complete"], failed["fresh"], failed["reason"]), ("0", "0", "capture%20budget%20exceeded"))
+        self.assertNotIn("h", failed)
+        cost = self.fields(self.cost_lines(lua)[0], "HASHCOST")
+        self.assertEqual((cost["complete"], cost["fresh"], cost["failed"]), ("0", "0", "1"))
+        lua.execute("wallDt=0.0001")
+        lua.eval("callback")(60, 100.1, 0.1, "0123456789abcdef", "0011223344556677")
+        recovered = self.fields(self.state_lines(lua)[1])
+        self.assertEqual((recovered["complete"], recovered["fresh"]), ("1", "1"))
+        self.assertIn("h", recovered)
+
+    def test_hash_budget_cannot_emit_a_complete_hash(self):
+        lua = self.runtime("X4LAN_CONFIG.engine_hash_budget_ms=2.5")
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.eval("callback")(30, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+        failed = self.fields(self.state_lines(lua)[0])
+        self.assertEqual((failed["complete"], failed["fresh"], failed["reason"]), ("0", "0", "hash%20budget%20exceeded"))
+        self.assertNotIn("h", failed)
+        self.assertGreater(float(self.fields(self.cost_lines(lua)[0], "HASHCOST")["hash_ms"]), 0)
 
     def test_pose_health_and_rng_changes_are_bucketed(self):
         lua = self.runtime()
@@ -138,7 +189,7 @@ class EngineHookTests(unittest.TestCase):
         lua.eval("events['X4LAN.Loaded']")()
         lua.eval("callback")(1, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
         row = self.fields(self.state_lines(lua)[0])
-        self.assertEqual(row["complete"], "0")
+        self.assertEqual((row["complete"], row["fresh"]), ("0", "0"))
         self.assertNotIn("h", row)
 
     def test_onupdate_requests_readiness_without_network_adapter(self):

@@ -52,6 +52,8 @@ extern "system" {
         length: usize,
     ) -> usize;
     fn GetCurrentThreadId() -> u32;
+    fn QueryPerformanceCounter(value: *mut i64) -> c_int;
+    fn QueryPerformanceFrequency(value: *mut i64) -> c_int;
     fn TryEnterCriticalSection(lock: *mut c_void) -> c_int;
     fn LeaveCriticalSection(lock: *mut c_void);
     fn GetModuleHandleExW(flags: u32, name: *const u16, module: *mut *mut c_void) -> c_int;
@@ -109,6 +111,7 @@ type LuaLChecktype = unsafe extern "C-unwind" fn(*mut LuaState, c_int, c_int);
 type LuaLRef = unsafe extern "C-unwind" fn(*mut LuaState, c_int) -> c_int;
 type LuaLUnref = unsafe extern "C-unwind" fn(*mut LuaState, c_int, c_int);
 type LuaRawgeti = unsafe extern "C-unwind" fn(*mut LuaState, c_int, c_int);
+type LuaObjlen = unsafe extern "C-unwind" fn(*mut LuaState, c_int) -> usize;
 type LuaPcall = unsafe extern "C-unwind" fn(*mut LuaState, c_int, c_int, c_int) -> c_int;
 
 #[derive(Default, Copy, Clone)]
@@ -134,6 +137,7 @@ struct LuaApi {
     reference: Option<LuaLRef>,
     unref: Option<LuaLUnref>,
     rawgeti: Option<LuaRawgeti>,
+    objlen: Option<LuaObjlen>,
     pcall: Option<LuaPcall>,
 }
 
@@ -159,6 +163,7 @@ static mut API: LuaApi = LuaApi {
     reference: None,
     unref: None,
     rawgeti: None,
+    objlen: None,
     pcall: None,
 };
 
@@ -479,6 +484,37 @@ fn hex64(value: u64) -> [u8; 16] {
     result
 }
 
+fn qpc_seconds() -> Option<f64> {
+    static mut FREQUENCY: i64 = 0;
+    unsafe {
+        if FREQUENCY == 0 && QueryPerformanceFrequency(addr_of_mut!(FREQUENCY)) == 0 {
+            return None;
+        }
+        if FREQUENCY <= 0 {
+            return None;
+        }
+        let mut counter = 0;
+        if QueryPerformanceCounter(&mut counter) == 0 {
+            return None;
+        }
+        Some(counter as f64 / FREQUENCY as f64)
+    }
+}
+
+struct Fnv(u64);
+
+impl Fnv {
+    fn new() -> Self {
+        Self(0xcbf29ce484222325)
+    }
+
+    fn update(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            self.0 = (self.0 ^ *byte as u64).wrapping_mul(0x100000001b3);
+        }
+    }
+}
+
 fn role_seed(session_seed: u64, role: &[u8]) -> u64 {
     let mut hash = 0xcbf29ce484222325u64;
     for byte in session_seed.to_le_bytes().iter().chain(role) {
@@ -720,6 +756,35 @@ unsafe fn field_number(lua: *mut LuaState, name: &[u8], value: f64) {
     (functions.setfield.unwrap())(lua, -2, name.as_ptr() as *const c_char);
 }
 
+unsafe extern "C-unwind" fn walltime(lua: *mut LuaState) -> c_int {
+    let Some(seconds) = qpc_seconds() else {
+        return failure(lua, "performance counter unavailable");
+    };
+    (api().pushnumber.unwrap())(lua, seconds);
+    1
+}
+
+unsafe extern "C-unwind" fn hash(lua: *mut LuaState) -> c_int {
+    let functions = api();
+    (functions.checktype.unwrap())(lua, 1, 5);
+    let length = (functions.objlen.unwrap())(lua, 1);
+    if length > c_int::MAX as usize {
+        return failure(lua, "too many hash rows");
+    }
+    let mut hash = Fnv::new();
+    for index in 1..=length as c_int {
+        (functions.rawgeti.unwrap())(lua, 1, index);
+        let mut text_length = 0usize;
+        let text = (functions.checklstring.unwrap())(lua, -1, &mut text_length);
+        hash.update(slice::from_raw_parts(text as *const u8, text_length));
+        hash.update(b"\n");
+        (functions.settop.unwrap())(lua, -2);
+    }
+    let digest = hex64(hash.0);
+    (functions.pushlstring.unwrap())(lua, digest.as_ptr() as *const c_char, digest.len());
+    1
+}
+
 unsafe extern "C-unwind" fn inspect(lua: *mut LuaState) -> c_int {
     let functions = api();
     let mut length = 0usize;
@@ -802,6 +867,7 @@ unsafe fn resolve_lua() -> bool {
     resolve!(reference, "luaL_ref");
     resolve!(unref, "luaL_unref");
     resolve!(rawgeti, "lua_rawgeti");
+    resolve!(objlen, "lua_objlen");
     resolve!(pcall, "lua_pcall");
     API = functions;
     true
@@ -833,9 +899,11 @@ pub unsafe extern "C-unwind" fn luaopen_x4lan_hooks(lua: *mut LuaState) -> c_int
     method(lua, b"active\0", Some(active));
     method(lua, b"frames\0", Some(frames));
     (functions.settop.unwrap())(lua, -2);
-    (functions.createtable.unwrap())(lua, 0, 2);
+    (functions.createtable.unwrap())(lua, 0, 4);
     method(lua, b"start\0", Some(start));
     method(lua, b"inspect\0", Some(inspect));
+    method(lua, b"walltime\0", Some(walltime));
+    method(lua, b"hash\0", Some(hash));
     1
 }
 
@@ -929,6 +997,13 @@ mod tests {
         assert_eq!(hex64(0x0123456789abcdef), *b"0123456789abcdef");
         assert!(digest_matches(&[0xab; 32], &"ab".repeat(32)));
         assert!(!digest_matches(&[0xab; 32], &"ac".repeat(32)));
+        let mut empty = Fnv::new();
+        assert_eq!(hex64(empty.0), *b"cbf29ce484222325");
+        empty.update(b"hello\n");
+        assert_eq!(hex64(empty.0), *b"a9bc80cca21f28b3");
+        let first = qpc_seconds().expect("QPC available");
+        let second = qpc_seconds().expect("QPC available");
+        assert!(first.is_finite() && second >= first);
         assert_eq!(role_seed(42, b"MoveWorker"), role_seed(42, b"MoveWorker"));
         assert_ne!(
             role_seed(42, b"MoveWorker"),

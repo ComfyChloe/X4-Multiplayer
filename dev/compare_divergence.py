@@ -432,6 +432,8 @@ def parse_statehash_line(line):
         if fields[key] is None:
             raise ProbeLogError('invalid STATEHASH time')
     fields['frame'] = int(fields['frame'])
+    if 'fresh' in fields and fields['fresh'] != fields['complete']:
+        raise ProbeLogError('STATEHASH freshness conflicts with completeness')
     if fields['complete'] == '1':
         if not {'h', 'ships', 'weak', *HASH_BUCKETS} <= fields.keys() or 'reason' in fields:
             raise ProbeLogError('incomplete STATEHASH payload')
@@ -444,6 +446,11 @@ def parse_statehash_line(line):
     elif fields['complete'] == '0':
         if not fields.get('reason') or {'h', *HASH_BUCKETS} & fields.keys():
             raise ProbeLogError('invalid incomplete STATEHASH record')
+        for key in ('scanned', 'ships'):
+            if key in fields:
+                if not fields[key].isdigit():
+                    raise ProbeLogError('invalid STATEHASH count')
+                fields[key] = int(fields[key])
     else:
         raise ProbeLogError('invalid STATEHASH completeness')
     return fields
