@@ -15,14 +15,14 @@ The project owner or integrator agrees the task and shared interface before edit
 Current results: CONTINUE-HERE.txt and reports/PLAYTEST-7.5.0-20261025.txt on
 main after Ferrite's PR46/48 integration. Historical candidate tasks below are
 unassigned unless explicitly agreed; do not duplicate Cobalt's current check.
-The owner requested continuous host/guest logging tools for the next version but
-explicitly deferred development while human testing continues.
+NEW owner override25Oct: develop continuous host/guest logging tools TONIGHT for
+the next version. The earlier deferral is revoked; Ferrite assigns scope/owner.
 
 NEXT SHARED ASSIGNMENT / CURRENT AUTHORIZATION (25 October 2026)
 Design/test a dedicated-server setup under Ferrite; his user provides server and
 task prompt. Actual access, hardware, scope and acceptance criteria remain pending.
 Owner authorizes work without a fixed cutoff: quality first, tokens second, time
-third. Logging-tool development remains deferred while human testing continues.
+third. Logging-tool development is now authorized alongside the dedicated work.
 
 Communications use existing Slack private-coordination-channel, PRIVATECOORDINATIONID,
 current threadPRIVATE-THREAD-ID. The owner requested checks for Ferrite and Cobalt

@@ -3,8 +3,8 @@ X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 CURRENT CHECKOUT / REQUEST
 work/x4-weapons-7-4, contrib/astra-ferrite-coordination, based on main be94436.
 Ferrite integrated7.5.0 via PR46/48; use an agreed current main for new tasks.
-User supplied7.5.0 feedback; human testing continues. Next-version host/guest
-logging tools must record the whole playtest; user explicitly deferred development.
+User supplied7.5.0 feedback. NEW override25Oct: develop continuous host/guest
+playtest logging tools TONIGHT; earlier deferral revoked. Ferrite allocates scope.
 Merged deliveryPR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
 Delivered7.5.0 from4078f44; report: reports/INTERNAL-7-5-DELIVERY.txt.
 Project lead: Ferrite, assigned by the owner25Oct. Astra / A:primary is now a
