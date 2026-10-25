@@ -1,0 +1,455 @@
+H4 PLAYER IDENTITY / AUTHORITY DESIGN (inventory + interface proposal)
+=====================================================================
+Author: Cobalt (C:cobalt). Assigned by Ferrite (lead) in the X4/6 onboarding thread, 25 Oct 2026.
+Base: origin/main be94436. Status: DESIGN ONLY. No production file is changed by this branch;
+it adds this report and the read-only generator dev/h4_inventory.py. evidence=static source
+review; nothing was run in X4.
+
+Goal (Ferrite's H4): remove the p1/p2 identities so that N players plus a dedicated, headless
+server authority can share one world (INTERNET-HOSTING-ANALYSIS options C+D: "Separate
+authority from human identity"). This report (1) inventories every two-player assumption and
+(2) proposes one identity/authority interface. Both are for review: nothing is implemented
+until the interface is agreed.
+
+
+1. INVENTORY
+------------
+Generator: python dev/h4_inventory.py (git-tracked *.py/*.lua/*.xml/*.c/*.h/*.ps1/*.sh, tests/
+excluded). It reports 541 matching lines in 103 files. Categories:
+  slot   'p1'/'p2' literals and p1/p2 identifiers          236
+  mdidx  MD/Lua fixed indices .{1}/.{2} and $name1/$name2   193
+  pair   entity pair (1, 2), for e=1,2, 3 - x, 1 if .. else 2  65
+  role   'host'/'guest' strings, is_host/is_guest          47
+
+By layer (hits / files):
+  relay (x4lan/*.py)        82 / 15    slot 58, pair 22, role 2
+  game adapter (ui/*.lua)  110 / 19    slot 84, pair 26
+  MD + aiscripts           165 / 18    mdidx 129, slot 34, pair 2
+  packaging/launcher        66 / 11    role 39, slot 20, pair 7
+  dev probes               118 / 40    (probes only; not migrated, listed for completeness)
+
+The patterns are leads. The classes below say what each match means; the appendix lists every
+line. Known FALSE POSITIVES (not player identity, no change needed): first-element reads such as
+$line.{1}, $newDrops.{1}, $drop.wares.list.{1}, Session.$collisions.{i}.{1}/.{2} (tuple
+fields); the two LAN markets/stations ($markets.{1}/{2}, $testStation2, $testDocks2, market
+'m'..i); $healthValue.{i}.{1} (hull field of a per-ship tuple); 'for attempt=1,2'; and
+'3-START-X4-TEST.cmd' text in update_windows_launcher.ps1.
+
+The classes:
+
+S1 Closed slot set {p1, p2} (validation)
+   host.py:91,122 (HELLO/RESUME accept only p1|p2); bubble.py:59; client.lua:30 (assert);
+   config.lua:22 (default p1); test_peer.py:17; trade_game.lua:126 and bubble_game.lua:79
+   (wire field f[5] must be p1|p2); package 'slot' checks in session_launcher.py:117,
+   isolate_test_mods.py:31, recover_workshop.py:50, windows_setup.ps1:223.
+
+S2 p1 = world authority (role and person are the same thing)
+   Relay: bubble.py:3,29-31,66 (only p1 publishes WORLD; NO_WORLD without p1);
+   economy.py:74-76,95 (ECON from p1); cargo.py:39,53; identity.py:24; coop.py:146 (QUEST),
+   coop.py:237 (canonical health), coop.py:100 (victim_authority falls back to p1);
+   missions.py:79 (MSTATE); universe.py:267; npc_combat.py:63 (NHP); quests.py:35.
+   Lua publishers: every cfg.slot=='p1' branch that sends world/NPC/mission/quest state:
+   health_game.lua:62,91; life_game.lua:33,72; mission_game.lua:19,29,41;
+   quest_game.lua:29,34,37; universe_game.lua:151,155; npc_combat_game.lua:18-19,36;
+   cargo_game.lua:69,112; shot_game.lua:90,93,100; bubble_game.lua:78; identity_game.lua:106.
+
+S3 p2 = the one and only guest
+   missions.py:76 (MREQ only from p2), universe.py:244,260 (UINTEREST/UACK only from p2: one
+   interest set for the whole session), npc_combat.py:47 (guest-owned entity means owner 'p2').
+   Lua consumers gated on cfg.slot=='p2' (or ~='p2'): bubble_game.lua:58,60;
+   cargo_game.lua:84,101; identity_game.lua:18,67; life_game.lua:37; mission_game.lua:15;
+   npc_combat_game.lua:81; quest_game.lua:21; trade_game.lua:106; universe_game.lua:159,175.
+
+S4 "The other peer" (exactly one counterpart)
+   host.py:176 (PEER pose of the other slot); coop.py:319 (BODY2 of the other slot);
+   identity.py:48, universe.py:316 (host, guest = peers p1, p2); missions.py:54,110;
+   npc_combat.py:60. NOT affected: the coop.py snapshot loops for NAV/FIRE2/HEALTH/SHOT already
+   forward "to every peer whose slot is not the owner", which works unchanged for N players.
+
+S5 Entity pair {1, 2} = the two player ships
+   coop.py:30-40 (owners, epochs, health_gen/key/live/seen built for 1 and 2) and every receive
+   branch 'entity not in (1, 2)' (coop.py:139,169,188,205,219,231,237,259; docking.py:41;
+   identity.py:28; cargo.py:63); projectile_protocol.py:105 and projectile_relay.py:62 (BOLT
+   entity must be 1|2); monitor.py:99,219.
+   Fixed-size layouts: WORLD indexes ship e at world[(e-1)*3] (coop.py dead()/HBASE); AUTH
+   carries exactly 2 x (owner, epoch, pilot) (coop.py:291); HGEN carries exactly two
+   generations (coop.py HGEN line); SHOT victims are 1-2 = ships and 3-4 = LAN targets
+   (shot_capture.xml:19, shot_game.lua:90, coop.py victim_generation 'victim in (1, 2)').
+   Lua loops 'for e=1,2': coop_dock_exec.lua:61,84; coop_game.lua:48,86,118; health_game.lua:80,148;
+   identity_game.lua:53; projectile_game.lua:80; shot_capture.lua:38; shot_game.lua:99;
+   shot_visual.lua:107; trade_game.lua:44,75 (markets: false positive).
+
+S6 Slot n is born owning entity n
+   coop.py:30 owners = {1: 'p1', 2: 'p2'}; coop_game.lua:134 'own = p1 and 1 or 2;
+   ships[3-own] = proxy' (one local ship + exactly one proxy); coop.py COMMAND rewrite
+   f[4] = 'p' + str(ship) builds a slot NAME from a ship NUMBER; game.lua:66 and
+   test_peer.py:61 place spawns by slot (-1000/+1000).
+
+S7 MD fixed two-ship arena
+   $arena.$ships.{1}/.{2} literal reads: shot_capture.xml:25, walk.xml:7, life.xml:75,
+   cargo.xml:18,39,57 ('if event.object == ships.{1} then 1 else 2'), quest.xml:68.
+   Per-ship groups and cues by name: bubble.xml:26-27 ($weapons1/$weapons2);
+   projectile.xml:17,41,66-67 ($guns1/$guns2, cues Born1/Born2); shot.xml:112-115
+   ($a.$g1/$g2/$a1/$a2 from a fixed-arity Lua event); shot_capture.xml:52 ($capRemote = [$r1,$r2]);
+   coop.xml:96 (docks {1},{2}); coop_attachment.xml:24 ($role == p1 when the arena is host).
+   PAIRWISE, NOT PER-PLAYER (keep binary): interactions.xml $p1/$p2 (the two parties of one
+   interaction: player.ship and event.param3) and aiscripts/x4lan.interaction.trade.xml params
+   p1/p2. They match the slot pattern by name only.
+
+S8 Packaging and launcher roles (host/guest)
+   prepare.py:22,45 (one package per slot); build_packages.py:57 roles=['host','guest'];
+   session_launcher.py:117-122 (p1 expects the relay at 127.0.0.1, p2 at the invitation's server);
+   world_launcher.py:276,345 (only p1 prepares the world); public/launcher.py (15 role hits);
+   action.py:19; windows_setup.ps1:223; check_public_packages.py.
+
+S9 Diagnostics
+   monitor.py:143 (for slot in p1, p2), monitor.py:221 (quest owner = p1's lease).
+
+
+2. WHAT THE CURRENT CODE CONFLATES
+---------------------------------
+'p1' means three different things at once:
+  (a) a human player (one ship, one lease, one X4 client);
+  (b) the world authority (publishes WORLD/ECON/NPC/mission/quest, and decides LAN targets and NPC hits);
+  (c) the machine that runs the relay (session_launcher: relay at 127.0.0.1).
+'p2' means "the guest", and the code assumes there is exactly one.
+Entity n is both "ship n" and "the ship slot n was born with". After a ship swap these come
+apart: owners/pilot already track that, but the WORLD/AUTH/HGEN layouts and the Lua 3-own
+still hard-code the pairing.
+
+A dedicated server needs (b) without (a). N players need (a) with no limit of two.
+
+
+3. PROPOSED INTERFACE
+---------------------
+One roster object is the only place that knows who exists. Every class in section 1 becomes a
+question to it. It is language-neutral, so the Python relay, a Rust relay
+(contrib/ferrite-rust-relay) and the Lua adapter implement the same contract.
+
+  Roster
+    players      ordered tuple of player ids        today ('p1', 'p2')
+    authority    the world-authority id             today 'p1'; dedicated mode 'a0'
+    ships        ordered tuple of player-ship ids   today (1, 2)
+    born_owner   {ship: player}                     today {1: 'p1', 2: 'p2'}
+    is_player(id), is_authority(id), is_ship(e), others(id) -> connected ids except id
+
+  Ids
+    player id   'p' + decimal 1..MAX_PLAYERS, wire pattern p[1-9][0-9]? (so p1/p2 bytes stay valid)
+    authority   'a0': a peer with a lease and address but no player ship. In listen mode
+                (today) the authority IS a player: authority == 'p1'.
+    ship id     integer 1..MAX_SHIPS, a separate namespace from player ids. The 'p'+ship rewrite
+                (coop.py COMMAND) goes away.
+    LAN targets currently borrow victim ids 3-4. They move to their own namespace (a victim kind
+                field, or a fixed offset such as 1001+) so that ship ids can grow.
+
+  Replacement rules (each inventory site maps to exactly one)
+    slot not in ('p1','p2')         -> not roster.is_player(slot)  [HELLO also accepts authority]
+    slot == 'p1'  (publisher)       -> roster.is_authority(slot)
+    slot == 'p2' / slot != 'p1'     -> not roster.is_authority(slot), with per-player state keyed
+                                       by slot (universe interest, MREQ, mission pending)
+    peers.get(other slot)           -> for other in roster.others(slot)
+    peers.get('p1') (host lookup)   -> peers.get(roster.authority)
+    peers.get('p2') (guest lookup)  -> iterate the non-authority players
+    entity in (1, 2) / for (1, 2)   -> roster.is_ship(e) / for e in roster.ships
+    world[(e-1)*3]                  -> a WORLD accessor keyed by ship id (layout carries count)
+    owners = {1:'p1',2:'p2'}        -> owners = dict(roster.born_owner)
+    Lua cfg.slot=='p1'/'p2'         -> X4LAN.roster:isAuthority(cfg.slot) / not ...
+    Lua for e=1,2; ships[3-own]     -> for _,e in ipairs(roster.ships); own = owner lookup, a proxy
+                                       for every other ship
+    MD $ships.{1}/{2} literal       -> iterate $arena.$ships; index via $arena.$ships.indexof.{obj}
+    MD $guns1/$guns2, Born1/Born2   -> one group per ship id built in a do_all, and one instantiated
+                                       cue that carries $e (NEEDS A PROBE: event_weapon_fired
+                                       must still resolve the right ship with N groups)
+
+  Wire changes (each needs a new message version, '|2|'; v1 stays byte-identical for 2 players)
+    HELLO/RESUME/WELCOME   slot field accepts p<n> and a0
+    AUTH                   revision, count, count x (ship, owner, epoch, pilot)
+    HGEN                   revision, count, count x (ship, gen)
+    WORLD                  ship count before the per-ship triples; LAN targets in their own section
+    SHOT                   victim kind + id instead of 1-2/3-4
+    BOLT/BEND              entity range 1..MAX_SHIPS (projectile_protocol.py:105)
+    TRADE/BUBBLE f[5]      any player id
+    UINTEREST/UACK         per player (one interest set per non-authority player)
+    COMMAND                ship id stays a number, the slot field stays a slot
+  The roster itself reaches the clients in a ROSTER message (players, authority, ships,
+  born_owner, revision) sent with AUTH. The invitation (JOIN-SESSION.json) names only the
+  recipient's own player id and the authority address.
+
+  Authority policy (listen vs dedicated)
+    listen (today): authority 'p1' is also a player. The current split rules stay as they are:
+      a remote pilot's world decides its ship's health while its generation is live (HBASE/HACK,
+      victim_authority). This is the regression baseline.
+    dedicated (Ferrite's decision: TRUE server authority): authority 'a0'; every human is a
+      non-authority player. The server decides all hits and health. Clients send intent
+      (NAV2/FIRE2/requests) and render. The guest-world-decides paths (health_live/HACK,
+      guest-owned SHOT victims) are then unused, not extended to N. This depends on H3 (the
+      server must simulate remote players' areas with attention 9).
+
+
+4. MIGRATION PLAN (every step parity-gated; no behaviour change before step 4)
+------------------------------------------------------------------------------
+  1  Relay: add Roster with two-player defaults; replace the S1-S6 literals in x4lan/ (82 hits,
+     15 files). Pure refactor: the existing test suite must pass unchanged.
+  2  Lua adapter: roster helpers from config; replace cfg.slot comparisons and 'for e=1,2'
+     (110 hits, 19 files). Pure refactor; LuaJIT tests unchanged.
+  3  MD: replace literal .{1}/.{2} ship reads with list iteration where the semantics are plain;
+     probe the per-ship weapon-group/cue question before touching projectile.xml/bubble.xml.
+  4  Wire v2 (AUTH/HGEN/WORLD/SHOT victim/BOLT entity/UINTEREST/ROSTER) behind a session
+     capability; synthetic three-player relay tests (fixtures with p1, p2, p3).
+  5  Distinct authority 'a0' + dedicated policy, after H3 shows the server can simulate remote
+     areas. Packaging roles become server/client (listen-host kept for regression).
+  Each step is a separate PR; dev/h4_inventory.py run before and after shows the hits
+  that are gone.
+
+
+5. DECISIONS NEEDED FROM THE LEAD
+---------------------------------
+  Q1 MAX_PLAYERS / MAX_SHIPS for the first N-player target (suggest 4 / 8 for tests; the wire
+     pattern allows 99).
+  Q2 Authority id 'a0' and whether listen mode (authority == p1) stays as the regression
+     baseline until dedicated mode passes H3. Recommended: keep it.
+  Q3 Is section 3 the shared contract for the Python and Rust relays? Recommended: yes, so the
+     parity harness can check both against one roster spec.
+  Q4 LAN-target victim namespace: kind field or numeric offset.
+  Q5 Should the Python steps (1-2) land before the Rust relay replaces host.py, or only
+     inside the Rust relay? If Rust comes first, step 1 is done there and Python stays two-player.
+
+
+APPENDIX: FULL INVENTORY (python dev/h4_inventory.py at be94436; line numbers per category)
+---------------------------------------------------------------------------------------------
+files 103, hits 541 (mdidx 193, pair 65, role 47, slot 236)
+  dev/angular_probe.lua
+    slot  5
+  dev/angular_probe.xml
+    mdidx 7
+  dev/build_bubble_md.py
+    slot  55
+    mdidx 36,37,51,52,55,59,60,63,64,73,74,75,76,134,164
+  dev/build_trade_md.py
+    mdidx 17,18,19,20,22,25,26,27,46,47,49,61,64,73,74,92,93,102,147,161
+  dev/cargo_capacity_probe.lua
+    slot  3
+  dev/cargo_capacity_probe.xml
+    mdidx 7,8,9,10,11,12,15
+  dev/cargo_guest_probe.lua
+    slot  3
+  dev/cargo_host_probe.lua
+    slot  3
+  dev/cargo_host_probe.xml
+    mdidx 5,7
+  dev/check_internal_packages.py
+    role  22,29
+  dev/check_public_packages.py
+    slot  63,82
+    role  43,46
+  dev/check_public_windows.ps1
+    slot  38,43
+  dev/coop_guards.py
+    pair  7
+  dev/equipment_probe.lua
+    pair  20
+  dev/fire_probe.lua
+    slot  3
+  dev/fire_probe.xml
+    mdidx 19,21,26
+  dev/health_function_probe.lua
+    slot  3,11
+  dev/health_guest_probe.lua
+    slot  3,10
+  dev/health_probe.xml
+    mdidx 9,12,14,15
+  dev/identity_probe.lua
+    slot  3
+    pair  16
+  dev/life_guards.py
+    pair  14,59,68
+    mdidx 57
+  dev/native_cargo_capacity_test.py
+    slot  3,44
+  dev/native_cargo_host_test.py
+    slot  24
+  dev/native_cargo_test.py
+    slot  3,36
+  dev/native_fire_test.py
+    slot  49
+  dev/native_health_replay_test.py
+    slot  3,66,73
+    pair  95
+  dev/native_projectile_test.py
+    slot  141
+  dev/native_velocity_frame_test.py
+    slot  119
+  dev/native_velocity_probe.lua
+    slot  3
+  dev/native_velocity_probe.xml
+    mdidx 6,14,22
+  dev/native_velocity_test.py
+    slot  102
+  dev/native_world_test.py
+    slot  126,132,178,185,195
+    role  185
+  dev/projectile_probe.lua
+    slot  10
+  dev/projectile_probe.xml
+    mdidx 8
+  dev/sensor_probe.xml
+    mdidx 10,14,17,24,28,54
+  dev/validate_native_sensors.py
+    pair  39
+  dev/validate_native_world.py
+    slot  26
+    role  26
+  dev/validate_shared_start.py
+    slot  7,23,26,28
+  dev/velocity_frame_probe.lua
+    slot  3
+  dev/velocity_frame_probe.xml
+    mdidx 7
+  distribution/action.py
+    role  19
+  distribution/build_packages.py
+    role  30,57
+  distribution/isolate_test_mods.py
+    slot  31
+  distribution/public/build.py
+    pair  76,83,99
+  distribution/public/launcher.py
+    slot  111,115,142,208,260
+    pair  260
+    role  114,116,129,133,142,144,153,154,156,176,194,250,251,255,266
+  distribution/recover_workshop.py
+    slot  50
+  distribution/session_launcher.py
+    slot  117,121,165,167,179,234,310,502
+    pair  406
+    role  120,122,161,163,164,166,178,221,225,234,236,239,240,242,262,280,471,472,476,508
+  distribution/update_windows_launcher.ps1
+    pair  10,74
+  distribution/windows_setup.ps1
+    slot  223
+  distribution/world_launcher.py
+    slot  276,345
+  extension/x4_lan_lab/aiscripts/x4lan.interaction.trade.xml
+    slot  3,6
+    mdidx 6
+  extension/x4_lan_lab/aiscripts/x4lan.market.trade.xml
+    mdidx 8
+  extension/x4_lan_lab/md/x4lan_bubble.xml
+    slot  45
+    mdidx 26,27,41,42,45,49,50,51,52,53,54,56,58,59,60,61,62,63,65,73,74,75,76,134,163
+  extension/x4_lan_lab/md/x4lan_cargo.xml
+    mdidx 18,39,51,57,75
+  extension/x4_lan_lab/md/x4lan_coop.xml
+    mdidx 78,96
+  extension/x4_lan_lab/md/x4lan_coop_attachment.xml
+    slot  24
+  extension/x4_lan_lab/md/x4lan_health.xml
+    mdidx 122,142
+  extension/x4_lan_lab/md/x4lan_interactions.xml
+    slot  9,10,11,19,20,26,30,38,39,40,44,72,80,88,97,108,112,118,119,140,141,143,144,149,150,152,153,156,157,163
+    mdidx 9,10,11,13,14,15,16,17,18,19,20,26,30,38,39,40,44,56,59,64,67,72,75,80,83,88,91,97,100,108,109,110,112,113,118,119,123,124,140,141,143,144,145,149,150,152,153,156,157,163
+  extension/x4_lan_lab/md/x4lan_life.xml
+    mdidx 39,41,45,75
+  extension/x4_lan_lab/md/x4lan_npc_combat.xml
+    mdidx 143
+  extension/x4_lan_lab/md/x4lan_projectile.xml
+    mdidx 17,41,66,67
+  extension/x4_lan_lab/md/x4lan_quest.xml
+    mdidx 63,68
+  extension/x4_lan_lab/md/x4lan_seed.xml
+    mdidx 24,25
+  extension/x4_lan_lab/md/x4lan_seed_docks.xml
+    mdidx 14,18,27
+  extension/x4_lan_lab/md/x4lan_shot.xml
+    mdidx 112,113,114,115
+  extension/x4_lan_lab/md/x4lan_shot_capture.xml
+    pair  19
+    mdidx 25,52,114
+  extension/x4_lan_lab/md/x4lan_trade.xml
+    pair  65
+    mdidx 11,12,13,14,16,19,20,21,40,41,43,55,58,67,68,86,87,96,141
+  extension/x4_lan_lab/md/x4lan_walk.xml
+    mdidx 7
+  extension/x4_lan_lab/ui/bubble_game.lua
+    slot  58,60,78,79,86,88,120,136,185,190,201,239
+  extension/x4_lan_lab/ui/cargo_game.lua
+    slot  69,84,101,112,142,196,202
+  extension/x4_lan_lab/ui/client.lua
+    slot  30
+  extension/x4_lan_lab/ui/config.lua
+    slot  22
+  extension/x4_lan_lab/ui/coop_dock_exec.lua
+    pair  61,84
+  extension/x4_lan_lab/ui/coop_game.lua
+    slot  134,149
+    pair  48,86,118,134,147,152,207,262,319,345,403
+  extension/x4_lan_lab/ui/game.lua
+    slot  66
+  extension/x4_lan_lab/ui/health_game.lua
+    slot  62,91,161,176,240
+    pair  80,148,183,213
+  extension/x4_lan_lab/ui/identity_game.lua
+    slot  18,67,106
+    pair  53
+  extension/x4_lan_lab/ui/life_game.lua
+    slot  33,37,72
+  extension/x4_lan_lab/ui/mission_game.lua
+    slot  15,19,29,41,45,56,63,70,85
+  extension/x4_lan_lab/ui/npc_combat_game.lua
+    slot  18,19,36,81,90,93,99,108,112,118,128,132,137,152,156,157,161,171,173,178,188,196
+  extension/x4_lan_lab/ui/projectile_game.lua
+    pair  80,218
+  extension/x4_lan_lab/ui/quest_game.lua
+    slot  21,29,34,37
+  extension/x4_lan_lab/ui/shot_capture.lua
+    pair  38
+  extension/x4_lan_lab/ui/shot_game.lua
+    slot  90,93,100
+    pair  99,211
+  extension/x4_lan_lab/ui/shot_visual.lua
+    pair  107
+  extension/x4_lan_lab/ui/trade_game.lua
+    slot  106,126,133,156,172,178
+    pair  44,75
+  extension/x4_lan_lab/ui/universe_game.lua
+    slot  151,155,159,175,214
+  prepare.py
+    slot  22,45
+    role  25
+  x4lan/bubble.py
+    slot  3,29,31,59,66,94,95,99,116,124,129
+  x4lan/cargo.py
+    slot  39,53,74,91,93
+    pair  63
+    role  56,107
+  x4lan/coop.py
+    slot  30,99,100,146,222,237,307,319
+    pair  66,91,96,127,139,169,188,205,219,231,237,259,291,303
+  x4lan/docking.py
+    pair  41
+  x4lan/economy.py
+    slot  32,74,76,95,108,113,122,132
+  x4lan/host.py
+    slot  91,122,176
+  x4lan/identity.py
+    slot  24,48
+    pair  28
+  x4lan/missions.py
+    slot  54,76,79,110
+  x4lan/monitor.py
+    slot  143,221,246
+    pair  99,219
+  x4lan/npc_combat.py
+    slot  47,60,63,81,96,110
+    pair  47
+  x4lan/projectile_protocol.py
+    pair  105
+  x4lan/projectile_relay.py
+    slot  65
+    pair  62
+  x4lan/quests.py
+    slot  35
+  x4lan/test_peer.py
+    slot  17,61
+  x4lan/universe.py
+    slot  244,260,267,316
