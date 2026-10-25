@@ -1,10 +1,13 @@
 """Shared-world launcher boundaries; engine completion is tested separately."""
 import importlib.util
+import hashlib
 import json
+import os
 from pathlib import Path
 import shutil
 import socket
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 from x4lan import seed
@@ -153,5 +156,110 @@ class WorldLauncher(unittest.TestCase):
             with patch.object(w.subprocess,'run') as run:w.launch({'steam':steam})
             argv=run.call_args.args[0];self.assertIn('-noworkshopsync',argv);self.assertIn('-nocputhrottle',argv);self.assertEqual(argv[-1],'-noworkshopsync')
             self.assertEqual(argv[0],steam[0] if isinstance(steam,list) else steam)
+
+    def test_play_start_preserves_each_prior_log_even_with_same_clock_value(self):
+        log = self.profile / 'x4lan-debug.txt'
+        first = b'previous guest session\xff\x00\nkey=' + self.session['token'].encode()
+        second = b'next host session\n'
+        log.write_bytes(first)
+        source_mtime = log.stat().st_mtime_ns
+        with patch.object(w.time, 'time_ns', return_value=123456789), patch.object(
+                w, 'launch', side_effect=lambda state: log.write_bytes(second)) as launch:
+            w.start(self.root, self.package, self.session, lambda: None)
+            w.start(self.root, self.package, self.session, lambda: None)
+        self.assertEqual(launch.call_count, 2)
+        records = list((self.root / 'backups/engine-logs').glob('*/manifest.json'))
+        self.assertEqual(len(records), 2)
+        self.assertFalse((self.root / 'logs').exists())
+        self.assertEqual({p.parent.joinpath('x4lan-debug.txt').read_bytes() for p in records}, {first, second})
+        for p in records:
+            record = json.loads(p.read_text()); data = (p.parent / 'x4lan-debug.txt').read_bytes()
+            self.assertEqual(record['sha256'], hashlib.sha256(data).hexdigest())
+            self.assertEqual(record['source_size'], len(data))
+            self.assertEqual(record['before_operation'], 'start')
+            self.assertTrue(record['complete']); self.assertTrue(record['raw_private'])
+            self.assertNotIn(self.session['token'], p.read_text())
+            if data == first: self.assertEqual(record['source_mtime_ns'], source_mtime)
+        self.assertEqual(log.read_bytes(), second)
+
+    def test_world_preparation_keeps_discoverable_and_capture_log_backups(self):
+        shutil.rmtree(self.world)
+        log = self.profile / 'x4lan-debug.txt'; original = b'previous human guest evidence\xff\n'
+        log.write_bytes(original)
+        def native_start(state):
+            log.write_bytes(b'new preparation log')
+            raise RuntimeError('simulated launch failure')
+        with patch.object(w, 'launch', side_effect=native_start), self.assertRaisesRegex(RuntimeError, 'simulated'):
+            w.prepare(self.root, self.package, self.session, lambda: None)
+        self.assertEqual((self.world / 'capture/previous.log').read_bytes(), original)
+        records = list((self.root / 'backups/engine-logs').glob('*/manifest.json'))
+        self.assertEqual(len(records), 1)
+        self.assertEqual((records[0].parent / 'x4lan-debug.txt').read_bytes(), original)
+        self.assertEqual(w.read(records[0])['before_operation'], 'prepare')
+
+    def test_log_archive_failure_refuses_before_staging_or_capture_configuration(self):
+        log = self.profile / 'x4lan-debug.txt'; log.write_bytes(b'unarchived evidence')
+        config = self.target / 'ui/config.lua'; before = config.read_bytes()
+        for action in (w.start, w.prepare):
+            if action is w.prepare: shutil.rmtree(self.world)
+            with self.subTest(action=action.__name__), patch.object(w.os, 'fsync', side_effect=OSError('disk full')), \
+                    patch.object(w, 'launch') as launch, self.assertRaisesRegex(RuntimeError, 'X4 was not launched'):
+                action(self.root, self.package, self.session, lambda: None)
+            launch.assert_not_called()
+            self.assertEqual(log.read_bytes(), b'unarchived evidence')
+            self.assertEqual(config.read_bytes(), before)
+            self.assertFalse((self.profile / 'save').exists())
+            self.assertFalse((self.world / 'capture/ownership.json').exists())
+        self.assertFalse(list((self.root / 'backups/engine-logs').glob('*/manifest.json')))
+        self.assertEqual(len(list((self.root / 'backups/engine-logs').glob('*/*.partial'))), 2)
+
+    def test_log_change_during_archive_is_not_certified_complete(self):
+        log = self.profile / 'x4lan-debug.txt'; log.write_bytes(b'old capture')
+        real_fstat = os.fstat; calls = 0
+        def changed(fd):
+            nonlocal calls
+            calls += 1
+            if calls == 2: log.write_bytes(b'new longer capture')
+            return real_fstat(fd)
+        with patch.object(w.os, 'fstat', side_effect=changed), self.assertRaisesRegex(RuntimeError, 'changed while'):
+            w.archive_engine_log(self.root, self.profile, 'start')
+        self.assertEqual(log.read_bytes(), b'new longer capture')
+        self.assertFalse(list((self.root / 'backups/engine-logs').glob('*/manifest.json')))
+
+    def test_missing_log_is_normal_for_first_launch_and_empty_log_can_be_archived(self):
+        with patch.object(w, 'launch') as launch:
+            w.start(self.root, self.package, self.session, lambda: None)
+        launch.assert_called_once()
+        self.assertFalse((self.root / 'backups/engine-logs').exists())
+        log = self.profile / 'x4lan-debug.txt'; log.write_bytes(b'')
+        archive = w.archive_engine_log(self.root, self.profile, 'start')
+        self.assertEqual(archive.read_bytes(), b'')
+        self.assertEqual(w.read(archive.parent / 'manifest.json')['source_size'], 0)
+
+    @unittest.skipIf(os.name == 'nt', 'Creating symlinks requires Windows developer privileges')
+    def test_log_archive_refuses_linked_input_and_destination(self):
+        unrelated = Path(self.temp.name) / 'unrelated'; unrelated.mkdir()
+        other = unrelated / 'log'; other.write_bytes(b'preserve')
+        log = self.profile / 'x4lan-debug.txt'; log.symlink_to(other)
+        with self.assertRaisesRegex(RuntimeError, 'regular unlinked'): w.archive_engine_log(self.root, self.profile, 'start')
+        log.unlink(); log.write_bytes(b'owned')
+        (self.root / 'backups').symlink_to(unrelated, target_is_directory=True)
+        with self.assertRaisesRegex(RuntimeError, 'directory is linked'): w.archive_engine_log(self.root, self.profile, 'start')
+        self.assertEqual(list(unrelated.iterdir()), [other]); self.assertEqual(other.read_bytes(), b'preserve')
+
+    def test_windows_reparse_attribute_refuses_without_reading_the_log(self):
+        log = self.profile / 'x4lan-debug.txt'; log.write_bytes(b'owned')
+        original = Path.lstat
+        def attributes(path):
+            info = original(path)
+            if path == log:
+                return SimpleNamespace(st_mode=info.st_mode,
+                    st_file_attributes=w.stat.FILE_ATTRIBUTE_REPARSE_POINT)
+            return info
+        with patch.object(Path, 'lstat', attributes), patch.object(w.os, 'open') as opened, \
+                self.assertRaisesRegex(RuntimeError, 'regular unlinked'):
+            w.archive_engine_log(self.root, self.profile, 'start')
+        opened.assert_not_called()
+        self.assertFalse((self.root / 'backups').exists())
 
 if __name__=='__main__':unittest.main()

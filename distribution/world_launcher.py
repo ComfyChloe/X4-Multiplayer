@@ -12,8 +12,10 @@ from pathlib import Path
 import re
 import shutil
 import socket
+import stat
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import xml.etree.ElementTree as ET
@@ -218,6 +220,68 @@ def launch(state):
     subprocess.run(command + GAME_ARGS, check=True)
 
 
+def archive_engine_log(root, profile, operation):
+    """Preserve the previous session before X4 truncates its shared profile log.
+
+    Archives are private raw evidence. Only export sanitized copies; the normal
+    diagnostics folder must not include this history. No automatic pruning.
+    A missing manifest or .partial file identifies an interrupted archive.
+    """
+    if operation not in ('prepare', 'start'):
+        raise ValueError('Unknown engine-log archive operation.')
+    source = Path(profile) / 'x4lan-debug.txt'
+    try:
+        original = source.lstat()
+    except FileNotFoundError:
+        return None
+
+    def linked(info):
+        return (stat.S_ISLNK(info.st_mode)
+                or getattr(info, 'st_file_attributes', 0)
+                & getattr(stat, 'FILE_ATTRIBUTE_REPARSE_POINT', 0))
+
+    def signature(info):
+        return info.st_dev, info.st_ino, info.st_size, info.st_mtime_ns
+
+    try:
+        if linked(original) or not stat.S_ISREG(original.st_mode):
+            raise RuntimeError('The engine log is not a regular unlinked file.')
+        history = Path(root) / 'backups' / 'engine-logs'
+        for directory in (history.parent, history):
+            directory.mkdir(exist_ok=True)
+            info = directory.lstat()
+            if linked(info) or not stat.S_ISDIR(info.st_mode):
+                raise RuntimeError('The engine-log archive directory is linked or invalid.')
+        created = time.time_ns()
+        prefix = 'before-' + operation + '-' + time.strftime('%Y%m%d-%H%M%S-', time.gmtime())
+        run = Path(tempfile.mkdtemp(prefix=prefix, dir=history))
+        partial = run / 'x4lan-debug.txt.partial'
+        flags = os.O_RDONLY | getattr(os, 'O_BINARY', 0) | getattr(os, 'O_NOFOLLOW', 0)
+        with os.fdopen(os.open(source, flags), 'rb') as incoming, partial.open('xb') as outgoing:
+            if signature(os.fstat(incoming.fileno())) != signature(original):
+                raise RuntimeError('The engine log changed before it could be archived.')
+            sha = hashlib.sha256(); remaining = original.st_size
+            while remaining:
+                chunk = incoming.read(min(1024 * 1024, remaining))
+                if not chunk:
+                    raise RuntimeError('The engine log was truncated while being archived.')
+                outgoing.write(chunk); sha.update(chunk); remaining -= len(chunk)
+            if (incoming.read(1) or signature(os.fstat(incoming.fileno())) != signature(original)
+                    or signature(source.lstat()) != signature(original)):
+                raise RuntimeError('The engine log changed while being archived.')
+            outgoing.flush(); os.fsync(outgoing.fileno())
+        archive = run / 'x4lan-debug.txt'
+        partial.rename(archive)
+        write(run / 'manifest.json', dict(schema=1, complete=True, before_operation=operation,
+            created_utc_ns=created, source_name=source.name, source_size=original.st_size,
+            source_mtime_ns=original.st_mtime_ns, sha256=sha.hexdigest(), raw_private=True))
+    except (OSError, RuntimeError) as exc:
+        raise RuntimeError('Could not preserve the previous X4 log; X4 was not launched. '
+                           'Retain the source and any partial archive for review. ' + str(exc)) from exc
+    print('Previous X4 log preserved (private raw evidence): ' + str(archive), flush=True)
+    return archive
+
+
 def game_closed(ensure_closed):
     try:
         ensure_closed(); return True
@@ -298,14 +362,15 @@ def prepare(root, package, session, ensure_closed, timeout=600):
         print('Previous capture produced no save; evidence retained. Retrying preparation.')
     if save_files(state['profile']):
         raise RuntimeError('World preparation requires an empty test save directory. Existing saves were preserved.')
+    previous_log = archive_engine_log(root, state['profile'], 'prepare')
     folder.mkdir(mode=0o700, exist_ok=True); run.mkdir(mode=0o700)
     config = target / 'ui/config.lua'; old = config.read_bytes(); new = capture_config(identity)
     (run / 'config-before.lua').write_bytes(old)
     write(run / 'ownership.json', dict(seed_id=identity['seed_id'], identity=identity,
         before_config_sha256=hashlib.sha256(old).hexdigest(), capture_config_sha256=hashlib.sha256(new).hexdigest()))
     logfile = Path(state['profile']) / 'x4lan-debug.txt'
-    if logfile.exists():
-        shutil.copy2(logfile, run / 'previous.log')
+    if previous_log is not None:
+        shutil.copy2(previous_log, run / 'previous.log')
     replace_bytes(config, new)
     print('Creating the shared starting world. X4 will save it and close automatically. Do not play or load another save.', flush=True)
     launched_ns = time.time_ns()
@@ -354,12 +419,9 @@ def start(root, package, session, ensure_closed):
             raise RuntimeError('An incomplete world bundle exists; preserved for review.')
         incoming.rename(bundle)
     manifest = verify_bundle(bundle, identity)
+    archive_engine_log(root, state['profile'], 'start')
     stage(root, state['profile'], bundle)
     install_play_config(root, target, identity)
-    logfile = Path(state['profile']) / 'x4lan-debug.txt'
-    if logfile.exists():
-        logs = Path(root) / 'logs'; logs.mkdir(exist_ok=True)
-        shutil.copy2(logfile, logs / ('before-world-start-' + str(time.time_ns()) + '.txt'))
     print('Loading the verified shared starting world. The temporary loading world is replaced automatically.', flush=True)
     launch(state)
 

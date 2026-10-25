@@ -1,0 +1,56 @@
+ENGINE LOG PRESERVATION BEFORE LAUNCH
+25 October 2026 | Astra | INTERNAL, pending integration
+
+Both operating systems use profile45841/x4lan-debug.txt. Starting another
+package can therefore replace the previous session's log. Existing7.5.0 already
+saves a pre-preparation copy at NEW-PACKAGE/world/capture/previous.log; failed
+captures can retain it under world/failed-capture-*/previous.log. The05 launcher
+uses logs/before-world-start-*.txt. These locations are easy to overlook when
+looking only in the former guest package. Check retained files against the
+original byte count/hash before declaring a log recovered or lost.
+
+CHANGE
+The shared world launcher now archives any existing engine log before02 world
+preparation or05 play launch, using a unique directory under:
+  PACKAGE/backups/engine-logs/before-prepare-UTC-RANDOM/
+  PACKAGE/backups/engine-logs/before-start-UTC-RANDOM/
+The launcher prints the resulting path. Each complete archive has:
+  x4lan-debug.txt — exact bytes, including non-UTF8 output
+  manifest.json — byte count, SHA256, original mtime_ns, creation UTC nanoseconds,
+                  next operation, complete=true, raw_private=true
+The operation identifies the NEXT launch, not the role of the archived session.
+No session/JOIN files, saves or settings are copied into this history.
+Native capture's existing world/capture/previous.log is also retained for recovery
+compatibility. Old archives are never reused or automatically pruned. A .partial
+file or missing complete manifest means interruption, not a complete capture.
+
+If an existing log cannot be copied completely, changes during copying, is linked
+or the archive destination is invalid, the launcher refuses before staging a save,
+changing capture/play configuration, or starting X4. The source log is unchanged.
+A genuinely absent log is normal on first use. Copying is streamed with bounded
+memory; backup storage depends on the existing log size. Insufficient space stops
+the launch instead of silently sacrificing evidence. This is launch-time backup,
+not the continuous recorder requested separately by the owner.
+
+SHARING / RECORDER INTERFACE
+These are PRIVATE raw archives and can contain session keys, paths and IPs.
+They deliberately live outside the shareable diagnostics logs/ folder. Never
+upload the raw history automatically. A recorder/exporter may read it, but must
+sanitize separate export copies and preserve source hashes/provenance; do not
+rewrite archive content. Existing launcher.diagnostics() is not a live recorder:
+it scrubs files in logs/ in place. Future continuous capture remains separately
+coordinated with Ferrite/Cobalt; this change does not add packet capture, telemetry
+protocol fields, background processes or package entrypoints.
+
+VALIDATION
+23 focused Linux world-launcher tests PASS, no skips, including7 added cases:
+pre-start truncation with repeated clock values; pre-prepare truncation and the
+capture backup; simulated disk failure before launch/configuration/save staging;
+mid-copy source changes; absent/empty logs; linked source/destination refusal;
+Windows reparse attributes without reading the target. Exact binary log bytes,
+hashes and source mtime provenance are checked. Raw archives stay outside logs/.
+No native game or two-player test was run for this file-copy change. Windows
+native validation remains pending; the real-symlink fixture requires Windows
+developer privileges and skips there, while the reparse-attribute case is portable.
+No sealed7.5.0 package was rebuilt. Source: distribution/world_launcher.py;
+tests/test_world_launcher.py. Retained local output: .local/evidence-112-withheld
