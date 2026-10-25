@@ -36,7 +36,7 @@ Docking remains unchanged: optionally run HUMAN-DOCK-TEST.txt B01–B05 in a sep
 run, stopping before landing if both games grant the SAME occupied bay.
 Captured ships, fleet orders, NPC AI/weapon visuals, L/XL surface combat, general
 mission families, station/economy evolution and campaign resume remain open.
-Story-Koop, voting, text chat and dedicated hosting have not been implemented.
+Story co-op, voting, text chat and dedicated hosting have not been implemented.
 
 RETAINED HUMAN PASSES
 Radar, ordinary cargo, smooth motion, initial station/asteroid alignment, Alt+Tab

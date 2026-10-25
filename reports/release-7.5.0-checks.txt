@@ -49,7 +49,7 @@ offers; guest countdown and reputation display are not mirrored. An unavailable
 eligible offer is INCONCLUSIVE, not a mission pass or a reason to use Trial instead.
 Captured ships/fleet commands, ongoing station/economy authority and progressed
 campaign save/resume are unfinished. Host still runs X4; no dedicated/headless
-mode, four-to-six-player support, story-Koop, voting or text chat is activated.
+mode, four-to-six-player support, story co-op, voting or text chat is activated.
 Guest HUD selection of the moving host ship remains a reported open issue.
 Docking code is unchanged; two-native occupied-bay/boarding acceptance remains open.
 One historical combined startup refused shooter2's loadout; later repetitions
