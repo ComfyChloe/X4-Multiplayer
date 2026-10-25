@@ -1,0 +1,48 @@
+X4 Multiplayer - continuous playtest recorder
+=============================================
+
+What it does
+  Records the whole playtest on THIS PC (host or guest) into a new folder, so that logs are not
+  lost when X4 restarts, a launcher step rewrites the engine log, or a server window is closed.
+  It copies:
+    - the X4 engine log of the test profile (x4lan-debug.txt), segment by segment;
+    - every relay stream logs/server-*.jsonl (host only; one per server start);
+    - the launcher's capture copies (world/capture/*.log, logs/before-world-start-*.txt);
+    - server start/stop/stale changes from logs/server-status.json.
+  It only reads these files. It does not change the test profile, saves, Workshop, the game
+  or the running server, and it does not need administrator rights.
+
+Privacy
+  The session key never reaches the recording. Lease/nonce-like ids are replaced by stable
+  pseudonyms (the same on host and guest of one session). World seeds stay readable.
+  The recording stays on your PC. For sharing, use the export step below, which also hides
+  IPv4 addresses and the user name in local paths. Still look through the export before sending.
+
+Use (package folder, until starters are added to the package)
+  1. Copy playtest_recorder.py into the package folder (next to launcher.py).
+  2. Before starting X4, open a terminal in the package folder and run:
+       Windows:  runtime\python.exe -I -B playtest_recorder.py record
+       Linux:    python3 -I -B playtest_recorder.py record
+     Keep this window open for the whole playtest (all X4 starts, the server, everything).
+  3. After the playtest press Ctrl+C in that window. It prints the run folder:
+       recordings\<UTC start>-<host|guest>-<pid>\
+  4. To share: runtime\python.exe -I -B playtest_recorder.py export recordings\<run folder>
+     This creates <run folder>.zip. Send it privately; never post it publicly.
+
+  Options: --max-mb N (default 1024; copying stops, events continue), --interval S (default 0.5),
+  --duration S (stop automatically), --profile DIR (override), --out DIR (other parent folder).
+
+What is in a run folder
+  events.jsonl   one line per event with UTC time, monotonic time and sequence number:
+                 start, present/missing, truncated/replaced (X4 restarted or the log was
+                 rewritten), snapshot, server_status, heartbeat (every 10 s), storage_limit, stop
+  sources/       engine.<n>.log and relay-<start>.<n>.log; a new <n> after each truncation
+  snapshots/     launcher capture copies, named by modification time
+  manifest.json  package version/build/role, platform, start/stop and SHA-256 of every file.
+                 It is missing if the window was closed instead of Ctrl+C; events.jsonl and the
+                 copied logs are still complete up to the last poll.
+
+Limits
+  Only complete lines are copied; a final line without a newline is added at stop.
+  Text written and then deleted between two polls (0.5 s) cannot be seen.
+  It records what files say; it is not a packet capture and does not prove gameplay results.
