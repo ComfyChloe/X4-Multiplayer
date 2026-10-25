@@ -1,0 +1,78 @@
+X4 MULTIPLAYER 7.5.0 — HUMAN PLAYTEST FOLLOW-UP
+25 October 2026; Linux host / Windows guest; internal test
+
+RESULT
+The users confirm that the supported shared mission, NPC destruction and PvP
+damage work. NPC synchronization remains unreliable. Map jumps recur at high
+speed, including when both players are in highways, and disappeared when the
+players approached each other in normal space. This is a reported association,
+not a proven cause or a fix. No gameplay code or running installation was changed
+during this diagnostic work. Package source: 4078f44.
+
+ACCEPTED HUMAN OBSERVATIONS
+- Shared kill mission: guest kills counted, including the reported remote-sector
+  encounter. Host MISSION_NATIVE id=2 reaches progress=11/11, revision=14, state=C
+  at game time 2658.90. This supports the human completion report; it does not
+  establish every mission family, independent reward arithmetic or abort/deadline
+  behavior. The separate mines mission had no guest log entry or visible mines;
+  receiving its reward alone did not establish shared mission functionality.
+- NPC damage/destruction: users saw damage and successful destruction. Retained
+  NPC_APPLIED includes real host hull reaching zero (for example id=2385,
+  shooter=1 after the ship swap, game time 2614.65). An immediate dead=0 on that
+  action is not proof of survival: destruction/event handling can follow it.
+- PvP damage: explicitly accepted in the consolidated human report.
+- Docking and ship exchange: the users accepted their observed sequence. Guest
+  boarding by teleport, seeing host motion and inability to seize the occupied
+  controls also worked. This does not establish all occupied-pad collision cases
+  or arbitrary player-fleet control.
+
+OPEN NPC BEHAVIOR
+The guest initially saw targets at 0 m/s, poor shot tracking and no NPC fire.
+After the host arrived, only the host saw NPCs firing. Later the guest temporarily
+saw shots, nonzero target speed and mission kill progress; NPC fire then stopped
+again in Tharka's Cascade XV. Preserve both outcomes as intermittent behavior.
+Sector shield hazards confound damage attribution; shield drain alone is not
+evidence of NPC hits. Guest diagnostics are needed to distinguish received scene
+data, native application and local NPC behavior in each phase.
+
+Source findings guide the next investigation; they are not complete causal proof:
+extension/x4_lan_lab/ui/universe_game.lua already sends and receives velocity in
+UMOVE, but its replica renderer applies pose through SetObjectSectorPos without
+applying native NPC velocity. The player-ship velocity path is separate. A moving
+visual replica therefore does not establish native target-speed or firing state.
+After one kill, the guest saw despawn while the host saw a wreck and debris.
+md/x4lan_npc_combat.xml destroys the guest target with explosion=false; synchronized
+wreck/debris presentation is not implemented by that death-state path.
+
+The guest's ordered Erlking was absent on the host. General player-fleet orders
+and arbitrary controlled-ship handoff remain outside the implemented two-ship
+path; universe_game.lua excludes owner=player from its ordinary NPC capture.
+
+POSITION JUMPS
+Both directions were reported, including a stationary-host report earlier in the
+session. The final high-speed/highway association narrows investigation toward
+motion sampling, coordinate/parent transitions and native position/velocity
+application, without ruling out other causes. Relay status is not a coordinate
+trace or proof of guest reception/application.
+
+The authorized 20-second passive capture at 20:11:50–20:12:09 Europe/Berlin was
+SYMPTOM-FREE: the user confirmed the host was moving and jumps had stopped.
+All 712 captured forwarded NAV2 rows matched captured inputs; AUTH retained the
+swapped pilot ownership. Offline motion replay did not reproduce jumps. This is
+a comparison sample, not failed-state evidence or native guest validation.
+The capture finished; no capture process remains.
+
+EVIDENCE / NEXT WORK
+Private retained evidence: .local/evidence-223-withheld with human-observations.jsonl
+and encounter-specific receipts. Latest feedback-snapshot-193028Z contains host
+log, relay JSONL, status, mission events and SHA256 receipt, taken 19:30:28 UTC.
+These are sequential read-only snapshots, not an atomic capture or proof that
+the human session has ended. Raw logs/packets remain private and uncommitted.
+Current guest logs have not been supplied; Downloads contains only older 22/23
+October debug/diagnostic files, which cannot establish this session's guest state.
+
+Next priorities: reliable NPC scene/native velocity/fire state across sectors;
+player motion across highway/high-speed transitions; death visuals and remaining
+fleet/mission-family limitations. Preserve the accepted human results and repeat
+only affected checks after a relevant change or a new symptom. No new package,
+native experiment, game/server restart or background schedule was started here.
