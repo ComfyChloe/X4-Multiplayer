@@ -1,8 +1,8 @@
--- Default-enabled STATEHASH recorder and Stage 1 MoveWorker reseed; no network changes.
+-- Default-enabled STATEHASH, MoveWorker seed and shared ship/zone attention; no network changes.
 local cfg=X4LAN_CONFIG
 if not cfg or cfg.engine_hooks~=true then return end
 local ffi=require('ffi');local C=ffi.C;local bit=require('bit')
-local M={failed=false,observed=false};X4LAN_ENGINE_HOOKS=M
+local M={failed=false,observed=false,attentionProxy='0'};X4LAN_ENGINE_HOOKS=M
 local function esc(value)
  value=tostring(value==nil and '' or value);return (value:gsub('[^%w_%.:%-]',function(c)return string.format('%%%02X',c:byte())end))
 end
@@ -10,6 +10,7 @@ local function out(kind,text) DebugError('[X4LAN] '..kind..' '..text) end
 local function disabled(reason)
  M.failed=true;out('HOOKS_DISABLED','reason='..esc(reason))
  if M.owner then pcall(function()M.owner:stop()end);M.owner=nil end
+ M.attentionProxy='0'
 end
 local function declare(name,definition)if not pcall(ffi.typeof,name)then pcall(ffi.cdef,definition)end end
 local function key(id)return(tostring(id):gsub('ULL$',''))end
@@ -44,7 +45,7 @@ local ok,err=pcall(function()
  local wanted={};for _,sector in ipairs(settings.sectors)do assert(atom(sector),'invalid engine hash sector');wanted[sector]=true end
  settings.wanted=wanted
  local load,message=package.loadlib(X4LAN_HOOKS_PATH or './extensions/x4_lan_lab/native/x4lan_hooks_64.dll','luaopen_x4lan_hooks')
- assert(load,message);native=load();assert(native and native.start and native.inspect,'invalid hooks module')
+ assert(load,message);native=load();assert(native and native.start and native.inspect and native.set_remote_attention,'invalid hooks module')
 end)
 if not ok then disabled(err);return end
 
@@ -143,12 +144,23 @@ local function safeSample(frame,gameTime,dt,rng,sessionSeed)
  if not ok then disabled(result);return end
  if not result then incomplete(frame,gameTime,dt,reason,sessionSeed)end
 end
+local function syncAttention()
+ if not M.owner then return true end
+ local api=rawget(_G,'X4LAN_BUBBLE_API');local state=api and api.state;local proxy=state and state.proxy
+ local id=proxy and C.IsComponentOperational(proxy) and key(proxy) or '0'
+ if id==M.attentionProxy then return true end
+ local ok,reason=native.set_remote_attention(id)
+ if not ok then disabled(reason or 'remote attention registration refused');return false end
+ M.attentionProxy=id
+ return true
+end
 function M.start()
  if M.failed or M.owner then return end
  local owner,reason=native.start(safeSample,settings.cadence)
  if not owner and reason=='loading'then return end
  if not owner then disabled(reason or 'registration refused');return end
- M.owner=owner
+ M.owner=owner;M.attentionProxy='0'
+ if not syncAttention()then return end
  out('HOOKS_READY',string.format('slot=12 cadence=%d run=%s session=%s maxships=%d',settings.cadence,esc(settings.run),esc(settings.session),settings.maxShips))
 end
 RegisterEvent('X4LAN.Loaded',M.start)
@@ -157,6 +169,7 @@ SetScript('onUpdate',function()
  if M.failed then return end
  if M.owner then
   if not M.owner:active()then disabled('observer disarmed');return end
+  if not syncAttention()then return end
   local now=GetCurRealTime()
   if now>=(M.nextStatus or 0)then out('HOOKS_STATUS','frames='..tostring(M.owner:frames()));M.nextStatus=now+5 end
   return

@@ -1,6 +1,7 @@
-# Experimental Windows engine observer and MoveWorker seed
+# Experimental Windows engine observer, MoveWorker seed and shared attention
 
-Tasks: Stages 0–1 of `x4-re/DETERMINISM-PLAN.md`; GitHub issue #57.
+Tasks: Stages 0–1 and the ship/zone slice of Stage 3 of
+`x4-re/DETERMINISM-PLAN.md`; GitHub issue #57. Physics-tick work is separate.
 Target: Windows X4 9.00, Steam build 23660954 only.
 
 The dependency-free Rust crate is separate from the hook-free UDP transport. It
@@ -10,7 +11,17 @@ simtick work. The module never patches executable bytes on disk or in memory.
 Stage 0's only engine write was a verified-empty callback-slot pointer. Stage 1
 additionally reseeds the current MoveWorker TLS RNG stream from the session seed
 and the stable `MoveWorker` role at observer frame 0. Other streams, timestep,
-attention, physics, objects and orders are unchanged.
+physics stepping, objects and orders are unchanged.
+
+The shared-attention slice atomically replaces the verified ComputeAttention
+pointer in two Zone and seven Ship primary vtables. The wrappers call the original
+engine function and never lower its result. A live remote proxy raises its
+containing Zone to level 8. The proxy and ships within its engine-computed
+attention radius in an active directly-parented Zone can reach level 9. The
+engine's transform, radius and squared-distance functions supply the proximity
+result. Actual transitions still run through the engine's SetAttention path; the
+module never writes Component+0x1ec. This does not claim camera/adjacent-zone
+parity, deterministic physics or matched RNG sequences.
 
 Build outputs stay under ignored `.local/` and are not release packages:
 
@@ -20,10 +31,12 @@ python native/hooks/build.py --test
 
 In an explicitly isolated development installation, load
 `x4lan_hooks_64.dll` through `engine_hooks.lua`, not manually into a normal game.
-Observation is enabled by default in the supported isolated profile. It requires
-profile 45841, Protected UI off and a loaded disposable world. Wrong builds,
-modified signatures, occupied slots, loading, foreign threads and lifetime changes
-refuse or disarm observation. These paths log `HOOKS_DISABLED reason=...`.
+Observation and shared attention are enabled by default in the supported isolated
+profile. They require profile 45841, Protected UI off and a loaded disposable
+world. Wrong builds, modified signatures, occupied slots/vtables, loading, foreign
+threads and lifetime changes refuse or disarm the module. These paths log
+`HOOKS_DISABLED reason=...`. Disarm clears the proxy ID and restores only vtable
+slots still owned by this module; foreign replacements are left untouched.
 
 `module.start(callback, cadence)` returns an owning userdata or `false, reason`.
 Retain the userdata. The callback receives
@@ -33,6 +46,12 @@ engine frame numbers. `handle:active()`, `handle:stop()` and `handle:frames()`
 inspect or end registration. `module.inspect(decimalComponentId)` returns read-only
 registry generation, attention, absolute hull, evaluated shield percentage and
 owner pointer while armed on the owning MoveWorker thread.
+`module.set_remote_attention(decimalComponentId)` registers the remote ship proxy;
+ID `0` clears it. Every use resolves the ID through the generation-checked engine
+registry, so removal or generation reuse withdraws remote attention. Registration
+changes recompute the old and new proxy/Zone through SetAttention(1), including
+already-present proxies in low-attention Zones. The Lua adapter publishes the
+existing NAV2 proxy's current ID and does not change motion or relay messages.
 
 `reports/determinism-stage-0.md` and `determinism-stage-1.md` record the native
 read-only launches and the limited seeded comparison. The initial RNG matches, but

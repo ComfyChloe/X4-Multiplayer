@@ -23,6 +23,19 @@
     {"name": "sync_thread_game_time", "rva": 21728800, "length": 32, "sha256": "47607eb1de710e125f0bc5ea084b067f798f48fd75b9e74ebe396990eea6ab2e"},
     {"name": "get_current_game_time", "rva": 11521472, "length": 32, "sha256": "16eb923df8d37ae6b7daefbccf3398925b0e3ee360d688410ba1d7571cf1e169"},
     {"name": "get_shield_percent", "rva": 5371312, "length": 32, "sha256": "a2b4364ca7de1e4d30388ad9e5f9432dbf97a2faaa272084693b0008bcd0090a"},
-    {"name": "get_transform_relative", "rva": 4044960, "length": 32, "sha256": "2964d204251dcce8a745407fe85cfe69106ba70a2507937577c7fe220422c6b2"}
+    {"name": "get_transform_relative", "rva": 4044960, "length": 32, "sha256": "2964d204251dcce8a745407fe85cfe69106ba70a2507937577c7fe220422c6b2"},
+    {"name": "zone_compute_attention", "rva": 8665888, "length": 1192, "sha256": "b92e75128f6a0849de28ef5c913cd2e3c4d724c37edd30c87e25fd9afe099516"},
+    {"name": "ship_compute_attention", "rva": 8212752, "length": 350, "sha256": "f77821b926165edbf624dd73550b7b5aad739efda149f619fc75b9e19ea852be"},
+    {"name": "component_distance_sq", "rva": 4066368, "length": 554, "sha256": "7e70525adbeb32c7d9cc9a10ea41ffe712641c3a5729486a33d33294f1f87f73"},
+    {"name": "component_set_attention", "rva": 4019808, "length": 534, "sha256": "6e03eb394d53282c5b5b7c00daff0692fa4f00ed5f5bf4c365d204496a9a7805"},
+    {"name": "zone_highway_vtable_attention", "rva": 45131736, "length": 8, "sha256": "3e7a57cf45cd92955126302541edce77815801e93b28108b6aa0e46c360bd375"},
+    {"name": "zone_vtable_attention", "rva": 45512312, "length": 8, "sha256": "3e7a57cf45cd92955126302541edce77815801e93b28108b6aa0e46c360bd375"},
+    {"name": "ship_vtable_attention", "rva": 45637776, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
+    {"name": "ship_xl_vtable_attention", "rva": 45723776, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
+    {"name": "ship_xs_vtable_attention", "rva": 45608240, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
+    {"name": "ship_l_vtable_attention", "rva": 45733360, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
+    {"name": "ship_m_vtable_attention", "rva": 45627960, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
+    {"name": "ship_s_vtable_attention", "rva": 45618352, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
+    {"name": "space_suit_vtable_attention", "rva": 45588392, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"}
   ]
 }
