@@ -19,6 +19,10 @@ w=importlib.util.module_from_spec(spec);spec.loader.exec_module(w)
 class WorldLauncher(unittest.TestCase):
     def setUp(self):
         self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        # Filesystem fixtures do not contain an installed PowerShell backend.
+        # Keep unit tests from launching native commands on either platform;
+        # the Windows guard's command contract is checked explicitly below.
+        commands = patch.object(w.subprocess, 'run'); commands.start(); self.addCleanup(commands.stop)
         self.root=Path(self.temp.name)/'package';self.root.mkdir()
         self.profile=Path(self.temp.name)/'45841';self.profile.mkdir()
         (self.profile/'config.xml').write_text('<root><autosave>false</autosave><uisafemode>false</uisafemode></root>')
