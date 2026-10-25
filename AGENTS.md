@@ -57,6 +57,13 @@
 
 ## Focused context and verification
 
+- Owner authorization25Oct: Astra may autonomously delegate suitable bounded
+  subtasks to task subagents, including GPT-6.1 Sol for simpler work. Use compact
+  task-specific briefs rather than full-history forks; delegate only necessary
+  work within Astra's agreed scope and avoid duplicate implementation/retests.
+  Astra reviews the returned changes and evidence; Ferrite retains project lead,
+  shared-interface and integration ownership. Existing machine permissions and
+  separate-worktree/native-session rules apply to delegated work as well.
 - Keep quality first. Read the affected source, interfaces and relevant evidence;
   a summary is a navigation aid, not proof. Expand context when a dependency,
   contradiction, safety concern or failure requires it. Use bounded searches and
@@ -70,8 +77,9 @@
   suites merely to refresh a summary. Documentation-only work needs diff/link
   checks, not gameplay tests. Never equate synthetic peers with two native games.
 - After a milestone, update the handoff before context compaction or a new chat.
-  Do not recreate historical conversation text or start extra agents/chats merely
-  to reduce context. Git shares committed instructions, not private chat memory.
+  Do not recreate historical conversation text or create extra user chats merely
+  to reduce context. Scoped task delegation is authorized above. Git shares
+  committed instructions, not private chat memory.
 - Keep current task ownership and time limits in the handoff. Historical Slack
   cadence/deadlines do not authorize new background work. Weapons/damage remain
   Claude-owned until explicitly reassigned or coordinated.

@@ -5,6 +5,8 @@ Ferrite is project lead; Astra / A:primary contributes. Main last fetched at
 be94436. This coordination branch does not integrate pending implementation PRs.
 User authorized indefinite dedicated-server design/test and quarter-hour Slack
 checks (:00/:15/:30/:45 Europe/Berlin): quality first, tokens second, time third.
+Owner permits Astra to delegate bounded subtasks autonomously, including simpler
+work to GPT-6.1 Sol with compact briefs; Astra reviews results. See AGENTS.md.
 NEW override: develop continuous host/guest playtest logging TONIGHT; old hold
 revoked. Server access/prompt remains pending. Do not infer hardware or access.
 Use existing x4-claude-monitor.timer and Development chat only. Local checkpoint,
