@@ -7,21 +7,35 @@ messages naming Astra as project lead.
 Astra / A:primary: contributing agent; coordinates this Linux PC's native sessions
 within its owner's authorization. Coordinate new implementation/release scope
 with Ferrite. Existing test sessions and sealed packages stay unchanged.
-Claude: existing player-weapons/damage work; verify current availability/scope
-before overlap. Neither completion nor ownership transfer follows from silence.
+Cobalt (formerly Claude/C, human TheJens98): Ferrite assigned the sealed7.5.0
+Windows installer/native check; no rebuild or source changes. Awaiting transfer
+of the exact archive. Verify actual scope before overlap; silence is not a handoff.
 Incoming agent: no implementation assignment yet. Use its own branch/worktree.
 The project owner or integrator agrees the task and shared interface before edits.
 Current results: CONTINUE-HERE.txt and reports/PLAYTEST-7.5.0-20261025.txt on
-contrib/astra-7-5-delivery / PR46. Historical candidate tasks below are unassigned.
+main after Ferrite's PR46/48 integration. Historical candidate tasks below are
+unassigned unless explicitly agreed; do not duplicate Cobalt's current check.
 The owner requested continuous host/guest logging tools for the next version but
 explicitly deferred development while human testing continues.
 
-Communications use the existing Slack channel private-coordination-channel
-(channel PRIVATECOORDINATIONID; existing threadPRIVATE-THREAD-ID) when access is provided and
-posting is authorized. Do not create a replacement chat or polling timer. There
-is no active automatic schedule in this handoff. Historical15-minute deadlines
-do not grant a new night shift. GitHub task/PR records hold durable scope/evidence;
-Slack is for short coordination. Git does not share either agent's private chat.
+NEXT SHARED ASSIGNMENT / CURRENT AUTHORIZATION (25 October 2026)
+Design/test a dedicated-server setup under Ferrite; his user provides server and
+task prompt. Actual access, hardware, scope and acceptance criteria remain pending.
+Owner authorizes work without a fixed cutoff: quality first, tokens second, time
+third. Logging-tool development remains deferred while human testing continues.
+
+Communications use existing Slack private-coordination-channel, PRIVATECOORDINATIONID,
+current threadPRIVATE-THREAD-ID. The owner requested checks for Ferrite and Cobalt
+every15 minutes. Existing x4-claude-monitor.timer/service is reused, targeting
+Development chat01a12b73-6924-7121-aaf3-05475cbd5099 at :00/:15/:30/:45 Europe/Berlin.
+Local prompt/checkpoint are in preparation/claude-monitor outside Git. Read new
+channel messages and replies; deduplicate and stay quiet on unchanged state.
+Old A:coord receipt is archived, not falsely acknowledged or resubmitted; old
+08:00/17:00 deadlines do not control this new authorization. No second scheduler.
+PC must be awake with the app running; queued receipt is not proof of execution.
+GitHub task/PR records hold durable scope/evidence; Slack is for short coordination.
+Stop the timer on user cancellation or lead-confirmed task completion with no
+follow-up pending. Git does not share either agent's private chat.
 
 FIRST READINESS MESSAGE (one compact message, no repeated polling)
   Agent/contributor; repository/branch/HEAD; OS and test capabilities;

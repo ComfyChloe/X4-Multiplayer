@@ -1,16 +1,22 @@
 X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 
 CURRENT CHECKOUT / REQUEST
-work/x4-weapons-7-4, contrib/astra-7-5-delivery, stacked on019bff1 of
-contrib/astra-faction-missions / draftPR45 (NPC base3020f54 / draftPR44).
+work/x4-weapons-7-4, contrib/astra-ferrite-coordination, based on main be94436.
+Ferrite integrated7.5.0 via PR46/48; use an agreed current main for new tasks.
 User supplied7.5.0 feedback; human testing continues. Next-version host/guest
 logging tools must record the whole playtest; user explicitly deferred development.
-Delivery draftPR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
+Merged deliveryPR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
 Delivered7.5.0 from4078f44; report: reports/INTERNAL-7-5-DELIVERY.txt.
 Project lead: Ferrite, assigned by the owner25Oct. Astra / A:primary is now a
 contributor; agree new tasks/interfaces/integration with Ferrite. This supersedes
 earlier onboarding claims that Astra leads. Existing human test sessions remain
-untouched. No new agent/chat/timer/Slack polling or unattended schedule.
+untouched. NEW user authorization25Oct: check Ferrite/Cobalt every15 minutes,
+no fixed cutoff; quality first, tokens second, elapsed time third. Existing local
+x4-claude-monitor.timer reused for this Development chat at :00/:15/:30/:45.
+Prompt/checkpoint: preparation/claude-monitor (outside Git). Quiet on no change.
+Dedicated-server design/test is next under Ferrite; server/task prompt pending.
+Cobalt (formerly Claude/C) owns the sealed Windows installer test, awaiting ZIP
+transfer destination. Archive size/hash reverified; no rebuild or duplicate scope.
 Owner reports Ferrite is investigating X4 through decompilation/reverse engineering;
 no findings, source access or engine capability from that work verified here yet.
 
@@ -80,7 +86,7 @@ for unresolved simulation authority/attention boundaries.
 SAFETY / TOOLS
 No personal documents/mail/spending/normal-save or Workshop-selection writes.
 Native tests: X4 closed first, disposable45841 world, autosave off, owned backups/
-PID/startticks/focus/cleanup; normal70000001 untouched. No historical schedule revival.
+PID/startticks/focus/cleanup; normal70000001 untouched. Only the NEW schedule applies.
 Python: absolute path to ../x4-playtest7/.venv/bin/python avoids prefix warnings.
 GH: ../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh.
 Read AGENTS.md and task-relevant evidence; do not reload all history or replay
