@@ -14,10 +14,13 @@ on unchanged state. ACK only actually received wakeups. Inspect from= identity;
 multiple agents can share one human account. No old deadline/task is resumed.
 
 Astra owns H0 evidence, L1 Linux static mapping, launcher log preservation.
-Cobalt claimed continuous recorder at Slack1792963334.200009: standalone module,
-tests and English guide, contrib/cobalt-playtest-recorder. Read-only engine/relay
-files, UTC/monotonic time, rotation/truncation events, bounded storage, sanitized
-exports. Do not duplicate his work or change entrypoints without coordination.
+Cobalt delivered recorder PR58 6bbfed9, contrib/cobalt-playtest-recorder: module,
+tests and English guide. Astra independently passed9 Linux tests; review5645561268
+requests four P2 corrections: same-prefix file replacement, sanitized-export hashes,
+Windows names with spaces, bounded backlog reads. Evidence .local/evidence-235-withheld;
+synthetic only, reported Windows native run not independently audited. Cobalt owns
+corrections. Proposed11-RECORD-PLAYTEST starters have no numbering collision;
+Ferrite retains entrypoint/package assignment. Do not duplicate these changes.
 Ferrite owns integration, NMODE/proxy motion, frame probe, hooks/ABI/attention.
 Determinism proposal1792963409.542889 has offline-only non-overlap ACK; sender
 identity and VBI7/12 ownership need lead clarification. No native/slot acceptance.
