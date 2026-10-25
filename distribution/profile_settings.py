@@ -8,6 +8,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 
 TEST_PROFILES = {'45841', '45842'}
+SETTINGS_API = 1
 INPUT_FILE = re.compile(r'inputmap(?:_[A-Za-z0-9_-]+)?\.xml\Z')
 
 
@@ -97,13 +98,13 @@ def atomic_write(path, data):
             temporary.unlink()
 
 
-def import_settings(package_root, source=None, keep=False, ask=input, slot_validator=None):
+def import_settings(package_root, source=None, keep=False, ask=input, slot_validator=None, force_select=False):
     profile = owned_profile(package_root, slot_validator)
     if source and keep:
         raise ValueError('Choose a source profile or keep the test settings, not both.')
     if source is None and not keep:
         choices = candidates(profile)
-        if len(choices) == 1:
+        if len(choices) == 1 and not force_select:
             source = choices[0]
         elif choices:
             print('Choose the normal game profile whose display and controls you use:')

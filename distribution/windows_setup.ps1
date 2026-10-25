@@ -23,13 +23,22 @@ function Assert-Closed {
     if (Get-Process -Name X4 -ErrorAction SilentlyContinue) { throw 'X4 is still running. Close it first.' }
 }
 function Get-SteamRoot {
+    $candidates = @()
     try {
-        $p = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Valve\Steam').SteamPath
-        if (Test-Path -LiteralPath (Join-Path $p 'steam.exe')) { return $p }
+        $p = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Valve\Steam' -ErrorAction Stop).SteamPath
+        if ($p) { $candidates += [string]$p }
     } catch {}
-    $p = Join-Path ${env:ProgramFiles(x86)} 'Steam'
-    if (Test-Path -LiteralPath (Join-Path $p 'steam.exe')) { return $p }
-    throw 'Steam was not found. Install Steam and sign in first.'
+    foreach ($folder in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+        if ($folder) { $candidates += [IO.Path]::Combine($folder, 'Steam') }
+    }
+    foreach ($p in ($candidates | Select-Object -Unique)) {
+        if ([IO.File]::Exists([IO.Path]::Combine($p, 'steam.exe'))) { return $p }
+    }
+    $p = (Read-Host 'Steam was not found. Enter the folder containing steam.exe').Trim().Trim('"')
+    if (!$p -or ![IO.File]::Exists([IO.Path]::Combine($p, 'steam.exe'))) {
+        throw 'Steam was not found in that folder. Install Steam and sign in first.'
+    }
+    return $p
 }
 function Find-Game([string]$SteamRoot) {
     $libraries = @($SteamRoot)
@@ -41,6 +50,11 @@ function Find-Game([string]$SteamRoot) {
     }
     $found = @()
     foreach ($lib in ($libraries | Select-Object -Unique)) {
+        # Join-Path can throw on an unplugged drive before Test-Path runs.
+        if (![IO.Directory]::Exists($lib)) {
+            Write-Host ('Skipping unavailable Steam library: ' + $lib)
+            continue
+        }
         $manifest = Join-Path $lib 'steamapps\appmanifest_392160.acf'
         if (!(Test-Path -LiteralPath $manifest)) { continue }
         $m = [regex]::Match((Get-Content -Raw -LiteralPath $manifest), '"installdir"\s+"([^"]+)"')
@@ -199,6 +213,9 @@ function Install-Package {
     $steam = Get-SteamRoot
     $game = $GamePath
     if (!$game) { $game = Find-Game $steam }
+    $game = $game.Trim().Trim('"')
+    if ([IO.Path]::GetFileName($game) -ieq 'X4.exe') { $game = [IO.Path]::GetDirectoryName($game) }
+    if (![IO.Directory]::Exists($game)) { throw ('X4 installation folder is unavailable: ' + $game) }
     $game = (Resolve-Path -LiteralPath $game).Path
     Assert-Game $game $pkg.steam_build
     $address = $ServerIP

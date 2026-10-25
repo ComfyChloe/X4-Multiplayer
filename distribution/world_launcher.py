@@ -90,7 +90,10 @@ def local_content(game, profile):
         if not enabled.get(name, item.get('enabled', 'true') != 'false'):
             continue
         if name != 'x4_lan_lab' and not name.startswith('ego_dlc_'):
-            raise RuntimeError('Enabled extra mod: ' + name + '. Use a matching test setup; no Workshop selection was changed.')
+            raise RuntimeError('Enabled extra mod: ' + name + '. Installed manifest: ' + str(path)
+                               + '. Multiplayer profile selection: ' + str(selection)
+                               + '. Normal-profile preferences do not copy mod selections. '
+                               'No Workshop or profile selection was changed.')
         version = item.get('version', '')
         if not re.fullmatch(r'[0-9]{1,9}', version):
             raise RuntimeError('Unresolved extension version: ' + name)

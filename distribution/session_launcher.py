@@ -90,15 +90,21 @@ def backend_module(name):
     spec = importlib.util.spec_from_file_location('internal_' + name, ROOT / (name + '.py'))
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)
+    if name == 'profile_settings' and (getattr(module, 'SETTINGS_API', None) != 1
+            or not callable(getattr(module, 'import_settings', None))
+            or not callable(getattr(module, 'atomic_write', None))):
+        raise RuntimeError('Mixed launcher modules: extract the complete matching package into a new folder. '
+                           'Keep the existing session folder for recovery; do not overlay individual files.')
     return module
 
 
 def ensure_closed():
     if sys.platform == 'win32':
         result = subprocess.run(['tasklist.exe', '/FI', 'IMAGENAME eq X4.exe', '/FO', 'CSV', '/NH'],
-                                capture_output=True, text=True, check=True,
+                                capture_output=True, check=True,
                                 creationflags=subprocess.CREATE_NO_WINDOW)
-        if '"x4.exe"' in result.stdout.lower():
+        # The ASCII executable name needs no decoding of localized console bytes.
+        if b'"x4.exe"' in result.stdout.lower():
             raise RuntimeError('Close X4 before changing the session or installation.')
     else:
         backend_module('setup_linux').ensure_closed()
@@ -115,7 +121,92 @@ def configured():
     expected_host = '127.0.0.1' if package['slot'] == 'p1' else session['server']
     if session.get('host') != expected_host:
         raise RuntimeError('Session role/address mismatch. Remove the mod and run setup again.')
+    if package.get('package_id') != session_package_id(session, package['slot']):
+        raise RuntimeError('Package ownership does not match the saved session. Preserve this folder for recovery.')
     return package, session
+
+
+def session_package_id(session, slot):
+    return 'lan-' + hashlib.sha256(session['token'].encode()).hexdigest()[:16] + '-' + slot
+
+
+def session_config(session, slot, host):
+    cfg = dict(enabled=True, interaction_test=False, bubble_actions=True, trading=True,
+               walking_avatars=False, test_profile=PROFILE, host=host, port=PORT,
+               token=session['token'], build=BUILD, bubble=session['bubble'], coop=True, fire2=True,
+               world_sync=True, world_mode='replica',
+               ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental', ship_weapons=6,
+               seed_id=session['bubble'], seed_verified=False, coop_docks=True,
+               pilot_health=True, shot_claims=True, shot_visual=True, shot_capture=True,
+               projectile_visuals=True, shot_undo=False,
+               slot=slot, mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
+    return ('-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
+            + ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n')
+
+
+def recover_session_metadata():
+    """Repair an overlaid package from a complete same-version session, never a game/save.
+
+    Refuse partial/conflicting ownership. Keep exact prior bytes and roll back a
+    failed write; the existing invitation, token and world directory stay intact.
+    """
+    with session_lock():
+        package = read_json(ROOT / 'package.json')
+        if package.get('slot') is not None or package.get('package_id') is not None:
+            return  # configured() validates explicit ownership; never guess it away.
+        if package.get('channel') != 'internal' or package.get('version') != VERSION:
+            raise RuntimeError('Cannot recover a session into a different package version/channel.')
+        saved = read_json(ROOT / 'session.json')
+        if not isinstance(saved, dict) or 'host' not in saved:
+            raise RuntimeError('Incomplete session.json; no files were changed.')
+        invitation = validate_invite({k: v for k, v in saved.items() if k != 'host'})
+        if saved['host'] == '127.0.0.1':
+            slot = 'p1'
+        elif saved['host'] == saved['server']:
+            slot = 'p2'
+        else:
+            raise RuntimeError('Conflicting saved session address; no files were changed.')
+        package.update(slot=slot, package_id=session_package_id(saved, slot))
+        state_path = ROOT / 'installation.json'
+        if state_path.exists():
+            backend_module('world_launcher').owned_installation(ROOT, package)
+        invite_path = ROOT / 'JOIN-SESSION.json'
+        if invite_path.exists() and read_json(invite_path) != invitation:
+            raise RuntimeError('Existing invitation conflicts with session.json; no files were changed.')
+        config_path = ROOT / 'extension/x4_lan_lab/ui/config.lua'
+        updates = {config_path: session_config(saved, slot, saved['host']).encode('utf-8')}
+        if slot == 'p1' and not invite_path.exists():
+            updates[invite_path] = (json.dumps(invitation, indent=2) + '\n').encode('utf-8')
+        updates[ROOT / 'package.json'] = (json.dumps(package, indent=2) + '\n').encode('utf-8')
+        for path in (*updates, ROOT / 'session.json', state_path, invite_path):
+            if path.is_symlink() or any(p.is_symlink() for p in path.parents if p != ROOT and ROOT in p.parents):
+                raise RuntimeError('Linked session metadata is unsupported; no files were changed.')
+        settings = backend_module('profile_settings')
+        before = {p: p.read_bytes() if p.exists() else None for p in updates}
+        backup = ROOT / 'backups' / ('session-recovery-' + datetime.now(timezone.utc).strftime('%Y%m%dT%H%M%S-%fZ'))
+        backup.mkdir(parents=True)
+        for path, data in before.items():
+            if data is not None:
+                target = backup / path.relative_to(ROOT)
+                target.parent.mkdir(parents=True, exist_ok=True); target.write_bytes(data)
+        write_json(backup / 'before.json', {p.relative_to(ROOT).as_posix(): b is not None for p, b in before.items()})
+        changed = []
+        try:
+            for path, data in updates.items():
+                if path.is_symlink() or (path.read_bytes() if path.exists() else None) != before[path]:
+                    raise RuntimeError('Session metadata changed during recovery; retry.')
+                settings.atomic_write(path, data); changed.append(path)
+        except Exception as error:
+            failures = []
+            for path in reversed(changed):
+                try:
+                    if before[path] is None: path.unlink()
+                    else: settings.atomic_write(path, before[path])
+                except OSError as exc: failures.append(str(exc))
+            if failures:
+                raise RuntimeError('Recovery rollback incomplete. Preserve backup: ' + str(backup)) from error
+            raise
+    print('Recovered existing session metadata; session key and installed world are unchanged.')
 
 
 def configure(role, server=None, invite=None):
@@ -140,19 +231,9 @@ def configure(role, server=None, invite=None):
         if package.get('channel') != 'internal' or package.get('version') != VERSION:
             raise RuntimeError('Not a matching internal package.')
         package['slot'] = 'p1' if role == 'host' else 'p2'
-        package['package_id'] = 'lan-' + hashlib.sha256(session['token'].encode()).hexdigest()[:16] + '-' + package['slot']
+        package['package_id'] = session_package_id(session, package['slot'])
         host = '127.0.0.1' if role == 'host' else session['server']
-        cfg = dict(enabled=True, interaction_test=False, bubble_actions=True, trading=True,
-                   walking_avatars=False, test_profile=PROFILE, host=host, port=PORT,
-                   token=session['token'], build=BUILD, bubble=session['bubble'], coop=True, fire2=True, world_sync=True, world_mode='replica',
-                   ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental', ship_weapons=6,
-                   seed_id=session['bubble'], seed_verified=False, coop_docks=True,
-                   pilot_health=True, shot_claims=True, shot_visual=True, shot_capture=True,
-                   projectile_visuals=True, shot_undo=False,
-                   slot=package['slot'], mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
-        lua = '-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
-        lua += ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n'
-        (ROOT / 'extension/x4_lan_lab/ui/config.lua').write_text(lua, encoding='utf-8')
+        (ROOT / 'extension/x4_lan_lab/ui/config.lua').write_text(session_config(session, package['slot'], host), encoding='utf-8')
         write_json(ROOT / 'package.json', package)
         if role == 'host': write_json(ROOT / 'JOIN-SESSION.json', session)
         write_json(ROOT / 'session.json', {**session, 'host': host})
@@ -275,7 +356,7 @@ def verify():
     print(f'PASS: {count} package files verified.' + (' Session-specific configuration excluded.' if configured_files else ''))
 
 
-def import_settings(source=None, keep=False):
+def import_settings(source=None, keep=False, force_select=False):
     configured()
     ensure_closed()
     validator = None
@@ -284,7 +365,8 @@ def import_settings(source=None, keep=False):
         world.owned_installation(ROOT, configured()[0])
         manifest, _ = world.seed.read_bundle(ROOT / 'world/bundle')
         validator = lambda profile: world.validate_slot(ROOT, profile, manifest)
-    return backend_module('profile_settings').import_settings(ROOT, source=source, keep=keep, slot_validator=validator)
+    return backend_module('profile_settings').import_settings(ROOT, source=source, keep=keep,
+                                                            force_select=force_select, slot_validator=validator)
 
 
 def choose_invitation():
@@ -329,7 +411,60 @@ try {
     return value
 
 
+def choose_game_executable():
+    """Return a selected installation path as data, before creating a session."""
+    print('Select X4.exe (Steam > X4 > Properties > Installed Files > Browse).', flush=True)
+    script = r'''[Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
+Add-Type -AssemblyName System.Windows.Forms
+$dialog = New-Object System.Windows.Forms.OpenFileDialog
+$dialog.Title = 'X4 LAN - Select X4.exe'
+$dialog.Filter = 'X4 executable (X4.exe)|X4.exe'
+$dialog.CheckFileExists = $true
+$dialog.RestoreDirectory = $true
+try {
+    if ($dialog.ShowDialog() -eq [System.Windows.Forms.DialogResult]::OK) {
+        [Console]::WriteLine($dialog.FileName)
+    } else { exit 2 }
+} finally { $dialog.Dispose() }
+'''
+    try:
+        result = subprocess.run(['powershell.exe', '-NoLogo', '-NoProfile', '-STA', '-Command', script],
+                                capture_output=True, check=False)
+    except OSError:
+        result = None
+    if result is not None:
+        if result.returncode == 0:
+            try:
+                return normalize_windows_game(result.stdout.decode('utf-8-sig').strip())
+            except UnicodeError:
+                pass  # Never substitute characters inside a filesystem path.
+        elif result.returncode == 2 and not result.stderr.strip():
+            raise RuntimeError('X4.exe selection cancelled; no session or installation changed.')
+    print('File selection is unavailable; paste X4.exe or its installation folder.')
+    return normalize_windows_game(input('X4 game path: '))
+
+
+def normalize_windows_game(value):
+    value = str(value).strip().strip('"')
+    if not value:
+        raise ValueError('Select X4.exe or the folder containing it.')
+    path = Path(value).expanduser()
+    if path.name.lower() == 'x4.exe': path = path.parent
+    if not path.is_dir() or not (path / 'X4.exe').is_file():
+        raise ValueError('X4.exe was not found in the selected installation folder.')
+    return str(path.resolve())
+
+
 def setup(args):
+    game = args.game
+    if not args.server_only:
+        ensure_closed()
+        backend_module('profile_settings')  # Detect an incomplete module update before setup writes.
+        if sys.platform == 'win32':
+            if game: game = normalize_windows_game(game)
+            elif not (ROOT / 'installation.json').exists(): game = choose_game_executable()
+    if (ROOT / 'session.json').exists():
+        recover_session_metadata()
     if not (ROOT / 'session.json').exists():
         role = args.role or input('Role: [H]ost or [G]uest? ').strip().lower()
         role = {'h': 'host', 'g': 'guest'}.get(role, role)
@@ -342,9 +477,27 @@ def setup(args):
             configure(role, invite=invite or choose_invitation())
         else: raise ValueError('Choose H for host or G for guest.')
     package, _ = configured()
-    if not args.server_only and not (ROOT / 'installation.json').exists(): platform_action('install', args.game)
-    if not args.server_only and not (ROOT / 'settings-import.json').exists():
-        import_settings(getattr(args, 'settings_profile', None), getattr(args, 'keep_test_settings', False))
+    if not args.server_only:
+        if not (ROOT / 'installation.json').exists():
+            platform_action('install', game)
+        else:
+            state, _ = backend_module('world_launcher').owned_installation(ROOT, package)
+            if game and Path(game).expanduser().resolve() != Path(state['game']).resolve():
+                raise RuntimeError('Already installed in another game folder. Use 09-REMOVE-MOD before relocating.')
+            print('Existing owned installation:', state['game'])
+        source, keep = getattr(args, 'settings_profile', None), getattr(args, 'keep_test_settings', False)
+        record_path = ROOT / 'settings-import.json'
+        if source or keep or not record_path.exists():
+            import_settings(source, keep)
+        else:
+            record = read_json(record_path)
+            print('Current settings source:', record.get('source') or '(kept test settings)')
+            if sys.stdin.isatty():
+                answer = input('Choose the settings source again? [y/N]: ').strip().lower()
+                if answer in ('y', 'yes', 'j', 'ja'): import_settings(force_select=True)
+                elif answer not in ('', 'n', 'no', 'nein'): raise ValueError('Choose Y or N.')
+            else:
+                print('Use 08-IMPORT-SETTINGS to select a different profile.')
     print('Next: ' + ('02-PREPARE-WORLD-HOST, then 03-START-SERVER-HOST, then ' if package['slot'] == 'p1' else '04-TEST-CONNECTION, then ') + '05-START-X4.')
 
 
@@ -364,7 +517,7 @@ def main():
         print('X4 Multiplayer ' + VERSION + ' - INTERNAL TEST', flush=True)
         if args.action == 'setup': setup(args)
         elif args.action == 'server': server(console=args.console)
-        elif args.action == 'settings': import_settings(args.settings_profile, args.keep_test_settings)
+        elif args.action == 'settings': import_settings(args.settings_profile, args.keep_test_settings, force_select=True)
         elif args.action == 'test': test_connection()
         elif args.action in ('start', 'prepare-world'):
             package, session = configured()

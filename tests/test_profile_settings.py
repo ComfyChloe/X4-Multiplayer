@@ -71,6 +71,14 @@ class ProfileSettings(unittest.TestCase):
         record = settings.import_settings(self.package, keep=True)
         self.assertEqual((self.target / 'config.xml').read_bytes(), old); self.assertEqual(record['files'], [])
 
+    def test_explicit_reselection_allows_declining_a_single_detected_profile(self):
+        before = {p: p.read_bytes() for p in self.target.iterdir() if p.is_file()}
+        prompts = []
+        record = settings.import_settings(self.package, force_select=True, ask=lambda q: prompts.append(q) or '0')
+        self.assertEqual(len(prompts), 1)
+        self.assertIsNone(record['source'])
+        self.assertEqual({p: p.read_bytes() for p in before}, before)
+
     def test_malformed_input_fails_before_any_preferences_are_written(self):
         old = (self.target / 'config.xml').read_bytes(); (self.source / 'inputmap.xml').write_bytes(b'<invalid')
         with self.assertRaisesRegex(ValueError, 'Invalid XML'): settings.import_settings(self.package)

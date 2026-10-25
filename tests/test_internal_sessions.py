@@ -98,7 +98,8 @@ class InternalSessions(unittest.TestCase):
     def test_setup_retries_failed_settings_import_without_reinstalling_or_reimporting_success(self):
         self.configure();(self.host/'installation.json').write_text('{}')
         args=SimpleNamespace(server_only=False,game=None,settings_profile=None,keep_test_settings=False)
-        with patch.object(launcher,'ROOT',self.host),patch.object(launcher,'platform_action') as install,patch.object(launcher,'import_settings') as settings:
+        backend=SimpleNamespace(owned_installation=lambda *_: ({'game':str(self.root/'game')},None))
+        with patch.object(launcher,'ROOT',self.host),patch.object(launcher,'ensure_closed'),patch.object(launcher,'backend_module',return_value=backend),patch.object(launcher.sys.stdin,'isatty',return_value=False),patch.object(launcher,'platform_action') as install,patch.object(launcher,'import_settings') as settings:
             settings.side_effect=RuntimeError('invalid source input XML')
             with self.assertRaisesRegex(RuntimeError,'invalid source'):launcher.setup(args)
             settings.side_effect=lambda *_:(self.host/'settings-import.json').write_text('{}')

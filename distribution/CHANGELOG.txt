@@ -1,3 +1,16 @@
+Unreleased — 25 October 2026 — reviewed community installer fixes
+- Inspect Windows process output as bytes; localized tasklist output cannot cause
+  a decoding crash or bypass the running-game check.
+- Select X4.exe or its folder explicitly on a fresh Windows setup. Skip unavailable
+  Steam libraries and stale registry paths; offer a manual Steam-folder fallback.
+- Recover overlaid same-version session metadata only after ownership validation,
+  with exact backups and rollback. Preserve existing keys, invitations and worlds.
+- Honor an explicit settings-profile override on repeat installation and offer
+  source-profile reselection. Detect mixed launcher/settings modules before setup.
+- Explain test-profile versus normal-profile mod selection without changing it.
+  Community mod-selection writers and experimental fleet/combat/map code are not
+  included. Existing sealed 7.4.1 archives remain unchanged.
+
 Version 7.4.1 — 24 October 2026 — INTERNAL launcher correction
 - All ten Linux starters open a visible terminal when launched without one.
 - Installer questions and errors remain visible; missing input no longer raises

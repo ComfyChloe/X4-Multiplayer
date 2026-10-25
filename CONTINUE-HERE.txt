@@ -1,109 +1,87 @@
-X4 MULTIPLAYER — ACTIVE INTERNAL DEVELOPMENT — 24 OCTOBER 2026
+X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 
-REQUEST / SAFETY
+CURRENT TASK / CHECKOUT
 work/x4-weapons-7-4, contrib/astra-7-4-integration, draft PR37 based on
-contrib/astra-7-3-1-delivery. Read AGENTS.md and affected source/evidence only.
-User: continue until last-playtest faults and correct weapons are fixed; former
-noon estimate superseded. Conserve tokens: affected checks and retained evidence.
-No personal docs/mail/spending/Workshop writes, ordinary saves or sealed-release
-changes. No extra agents/chats/timers. Human finished-release playtests; isolated
-local native checks allowed. Keep two-native acceptance distinct from synthetic.
+contrib/astra-7-3-1-delivery. Read AGENTS.md, Git state and affected references only.
+User supplied community Windows v6 and fleet-map9 ZIPs for review/integration.
+Review is complete; selected installer fixes are in source, NOT a new package.
+A second independent team reported the same tasklist UnicodeDecodeError and an
+errors='replace' workaround. Our raw-byte process check addresses that failure.
 
-PRIORITIES / OWNERSHIP
-Damage both directions preserving native aim/spread/misses; native pad occupancy,
-barriers/boarding/same-pad crash; post-handoff oscillation; completed-story preset.
-Human PASS radar/cargo/Trial/station+asteroid alignment/movement/Alt+Tab: do not
-repeat without symptoms. Human artifacts ../x4-release-7-3-1/.local/evidence-054-withheld
-Primary owns Linux/native/integration. Claude ACTIVE again since08:02; his08:34
-independent stock heat calculation agrees with498 shots/18 overheat events.
-PR39/40/41/42 merged. Windows45841 still unlaunched after Workshop incident;
-owner permission required there. No matched Windows/Linux run.
-Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID: latest primary checkpoint
-1792842963.545109 announces7.4.1 delivery/installed host and unchanged acceptance.
-Claude PR43 d33c9ea reviewed/integrated: sanitized monitor diagnostics, no authority
-change. No further Claude assignment; user will announce the evening human test.
-No ongoing native task or new scheduler. Primary owns implementation/integration.
+SAFETY / OWNERSHIP
+Default INTERNAL. No public release/source-mirror update inferred. Conserve tokens;
+reuse unaffected evidence. No personal docs/mail/spending/Workshop selection writes,
+normal saves, sealed archives, extra agents/chats/timers. No current background
+schedule. Human finished-release playtests; isolated native probes remain permitted
+when X4 is closed, with recorded ownership and backups. Recheck live processes.
+Primary owns integration/Linux/native. Coordinate player-weapon overlaps with
+Claude; no new assignment or current availability inferred from historical status.
+Slack PRIVATECOORDINATIONID threadPRIVATE-THREAD-ID, last primary checkpoint1792842963.545109
+announced7.4.1. This review did not modify any live installation or contact Claude.
 
-CURRENT STATE / DELIVERY
-Latest request: smaller Linux download for Discord. Delivered alternative encoding:
-Desktop/X4 Online/Internal Tests/7.4.1-2026-10-24/X4-LAN-7.4.1-Linux-Small.7z
-19,929,193 bytes (<20 decimalMB). Same7.4.1 payload/server/runtime/docs; all4,699
-file contents and effective modes match. Only300 internal terminfo symlinks are
-materialized as identical target files for safe default7z extraction.748 links
-retained. Package checksum verification/runtime/server imports PASS. No update or
-fresh invitation needed for existing7.4.1. Original archives unchanged. See
-reports/INTERNAL-7-4-1-SMALL-ARCHIVE.txt and delivery SMALL-ARCHIVE-README.txt.
+COMMUNITY REVIEW / NEXT SOURCE
+reports/COMMUNITY-PATCH-REVIEW-20261025.txt contains input hashes, decisions and
+reproducers. Inputs remain unchanged in /home/developer/Downloads. Accepted/adapted:
+- Raw Windows tasklist bytes; missing Steam drives/registry fallback; explicit
+  X4.exe/folder selection before session creation, cancellation leaves no session.
+- Same-version overlaid-session recovery with ownership marker validation, exact
+  backups/rollback; preserves installed config, keys, invitation and saved world.
+- Validate existing installation; honor settings overrides on repeat setup, offer
+  profile reselection; reject mixed settings modules; clearer read-only mod errors.
+No profile content.xml writers accepted after the22October Workshop incident.
+No experimental fleet/combat/map production changes accepted: real supplied-source
+fixtures reproduce lost hit deltas, whole Lua adapter STOP after fleet17->1 with
+healthCursor15, and optional installed-only map script failing the launcher's own
+content digest. Gameplay architecture needs acknowledged intent/result transactions,
+identity generations, execution-time fencing and native evidence before integration.
 
-7.4.1 implementation1987b75; package source235f9ba;577PASS/no skips. All10 Linux
-starters open a terminal, preserve args, hold errors and prevent recursion.
-Original installer EOF bug fixed; local host installed/configured with normal
-settings copied read-only. Previous7.3.1 ownership-checked removal archived37
-files and retained immutable seed;13 normal-profile files unchanged at install.
-reports/INTERNAL-7-4-1-DELIVERY.txt records source/hash/evidence. Actual human run
-subsequently prepared/loaded the new world. Recheck processes before native work;
-no process/session manipulation during observation or archive preparation.
+Validation:590 Linux/Python/LuaJIT PASS/no skips; PowerShell discovery and existing
+installer/profile rollback fixtures PASS on Linux. Native Windows dialogs/metadata
+remain untested here. Initial2 terminal-fixture failures and final corrected-fixture
+checks retained in .local/evidence-013-withheld, along with complete ZIP diffs,
+audit.py and independent-audit.json. No native game or broad unchanged gameplay replay.
+VERSION remains7.4.1; changelog marks these source changes Unreleased. Keep PR37 draft.
 
-HUMAN7.4.1 TEST24OCT
-User announced host->guest and guest->host firing. Explicit confirmation:
-guest-to-host damage visible on both screens; firing appears to work. Host native
-SHOT_APPLIED confirms declining shields; relay records both directions. Full
-hull/death/docking acceptance still pending. NEW OPEN: guest cannot select host
-ship while its motion remains correct; user confirms only flying/firing, no dock,
-exit, teleport or pilot switch. At14:07 both peers fresh18-20Hz, pilots/owners
-unchanged, scene revision30 committed. Need guest HUD/sensor diagnostics; do not
-call this a transport/position failure from host evidence alone. Host absent
-HEALTH frame is expected (host health uses WORLD; guest pilot uses HEALTH).
-Evidence .local/evidence-056-withheld, desync-140718,
-retained-165452. User postponed further human tests and will report later.
+SEALED7.4.1 DELIVERY
+Desktop/X4 Online/Internal Tests/7.4.1-2026-10-24 contains Windows/Linux with server,
+private Python and English docs. Implementation1987b75, packaged source235f9ba;
+original delivery577PASS/no skips. All10 Linux starters open a terminal, preserve
+args, hold errors and prevent recursion. reports/INTERNAL-7-4-1-DELIVERY.txt.
+Alternative Linux archive X4-LAN-7.4.1-Linux-Small.7z:19,929,193 bytes (<20MB).
+Same4,699 file contents/effective modes;300 internal terminfo links materialized,
+748 links retained; default extraction/runtime/package checks PASS. Existing7.4.1
+Windows and invitations remain compatible; existing installs need no archive update.
+reports/INTERNAL-7-4-1-SMALL-ARCHIVE.txt. Never distribute configured package folders.
 
-Gameplay unchanged from7.4.0; native evidence below is historical. Source config
-inert; launcher enables pilot_health/shot_claims/shot_visual/shot_capture/
-projectile_visuals/coop_docks; shot_undo=false. VERSION7.4.1,extension11. KeepPR37
-draft. Two players; no played-campaign persistence/full shared economy. No public
-release. No new Claude assignment, agents/chats/timers or native replay for packing.
+HUMAN FEEDBACK / OPEN GAMEPLAY
+24October: host->guest and guest->host firing observed. User explicitly confirmed
+guest->host shield damage visible on both screens; relay/native logs support it.
+No full hull/death/docking acceptance. Guest could no longer select host ship while
+its motion remained correct; only flying/firing, no dock/exit/teleport/pilot switch.
+At14:07 both peers fresh18-20Hz, pilots unchanged, scene revision30 committed.
+Need guest HUD/sensor logs. Host absent HEALTH frame is expected (WORLD authority).
+Evidence .local/evidence-056-withheld and retained captures.
+Human tests were postponed.25October additional teams report captured ships, NPC
+combat and faction-fleet orders not synchronized. These remain open; installer
+fixes do not implement them. Keep stable human radar/cargo/Trial/station/asteroid/
+movement/Alt+Tab results unless new symptoms justify a repeat.
 
-COMBAT / COMBINED NATIVE EVIDENCE
-reports/SHOT-CAPTURE-INTEGRATION.txt: separate native host/guest actual-hit capture
-through real relay to synthetic victim authority, misses, clipped hull/death,
-guest receive/ejection and surviving-ship continuation. Original gun IDs/groups
-retained, native proof; stock uniform unmodified Shuttle plasma/PulseMk1/Mk2 only.
-Mid-session reload unsupported; pristine snapshot gate rejects active sessions.
-reports/PROJECTILE-{RENDER-PRIMITIVE,VISUAL-PROTOCOL}.txt: harmless meshless finite
-visuals, native velocity + first C pose/time, independent MD trajectory witnesses,
-fixed slots, refusal retry/fences/cleanup. Actual moving/far-sector shots pass.
-Heat03 sourcecca3301:498 real shots/ends,83 per gun,18 overheats; first2 cycles/gun
-resume under one20.10s held input. Xwayland needs ONE xdotool client through
-mousedown/keydown, sleep, release. Old short-client54/60-shot failures retained.
+RETAINED IMPLEMENTATION / LIMITS
+Source config remains inert; launcher enables pilot_health/shot_claims/shot_visual/
+shot_capture/projectile_visuals/coop_docks; shot_undo=false. Two players. PR39-42
+merged; Claude PR43 d33c9ea integrated sanitized monitoring without authority change.
+No played-campaign persistence/full shared economy/general NPC combat acceptance.
+Relevant reports: SHOT-CAPTURE-INTEGRATION.txt, PROJECTILE-RENDER-PRIMITIVE.txt,
+PROJECTILE-VISUAL-PROTOCOL.txt, COOP-DOCKING-PLAN.txt, STORY-TEST-PRESET.txt,
+INTERNAL-7-4-INTEGRATION.txt. Preserve intermittent first-loadout refusal, walking/
+boarding partials and failed raw captures. Native primitive/synthetic-peer evidence
+is not a matched human pair. Story preset14plots+28research is technical only.
 
-reports/INTERNAL-7-4-INTEGRATION.txt:
-01 FAIL: captures/seals but shooter2 refused after load; no detailed refusal
-reason, no Lua/MD load errors. Capture dev probe nil-A error separately retained.
-02 same seed/unchanged production admits both:84 actual physical births/ends,
-then9 native dock phases including occupied refusal and stale queued warp.
-03 fresh seed + guarded probe: capture/seal/load same84 +9 phases PASS. Both
-markets single identity,24 unique saved bay indices. First refusal unresolved.
-04 f4f4280 expiry guard IsValidComponent before class lookup:84 births/ends,
-zero invalid-class errors. No repeated dock acceptance. All runs70 production+5
-probes/UI/config,37-file restoration and7actual-save bytes/mtime audited.
-Integrated final suite572PASS/no skips (.local/evidence-011-withheld);
-reason diagnostics81affectedPASS, expiry18PASS. First refusal remains unresolved.
-Do not call earlier raw logs error-free: baseline/zero-damage/expiry warnings exist.
-
-DOCK / STORY
-reports/COOP-DOCKING-PLAN.txt: saved reservations/native execution checks; actual
-undock+cancel, occupied refusal, queued pose fence. Handover01 retains175 exact
-bay/one-occupant reads through guest landing/exit and host reclaim/exit.
-Board03/04/05 walking partials retained;05 sourcef4f4280/new7.4 seed gives5,646
-stable exact-bay reads and normal walking/F input, never aboard. No further UI
-walking without concrete new finding; human B02 still needed. No same-pad crash
-acceptance inferred. reports/STORY-TEST-PRESET.txt:14 completed plots+28 research/
-native HQ;42 flags verified fresh/capture/reload, bounded windows only.
-
-TOOLS / NATIVE SAFETY
-Python ../x4-playtest7/.venv/bin/python absolute; PYTHONPATH=tests:.
+TOOLS / NATIVE
+Python ../x4-playtest7/.venv/bin/python (absolute path); PYTHONPATH=tests:.
 GH ../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh.
-Schema worker48913 JSON files array; schemas ../../preparation/game-schemas.
-Fresh owned45841 only, never70000001; shaderquality2, -noworkshopsync/-nocputhrottle.
-One controller/install at a time; PID/startticks/profile/focus guards before input
-or signals. Restore37-file mod/settings/ownedslot;7normal save bytes+mtime, vdf
-bytes only. Never read live45841 log AFTER cleanup: use archived native/load.log.
+PowerShell ../../build-cache/powershell/pwsh; schemas ../../preparation/game-schemas.
+Disposable45841 only, never70000001; -noworkshopsync/-nocputhrottle; autosave disabled.
+One controller/install at a time. PID/startticks/profile/focus guards before input
+or signals. Preserve normal-save bytes/mtime and owned installation/settings/slot.
+Use archived logs after cleanup, not the later live profile log.

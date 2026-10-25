@@ -72,6 +72,9 @@ class LinuxStarters(unittest.TestCase):
 
     def prepare_launcher(self):
         shutil.copy2(build_packages.DIST / 'session_launcher.py', self.package / 'launcher.py')
+        shutil.copy2(build_packages.DIST / 'profile_settings.py', self.package / 'profile_settings.py')
+        # Terminal/input regression only; do not depend on the user's live game.
+        (self.package / 'setup_linux.py').write_text('def ensure_closed(): pass\n')
         (self.package / 'VERSION.txt').write_text(build_packages.version())
         runtime = self.package / 'runtime/bin'
         runtime.mkdir(parents=True)
