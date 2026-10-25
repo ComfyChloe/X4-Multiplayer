@@ -109,6 +109,8 @@ mod platform {
 }
 
 /// Resolve every symbol or none, like net.c's `resolve_lua`.
+// Each transmute's target type is the `Api` field it initialises.
+#[allow(clippy::missing_transmute_annotations)]
 fn resolve() -> Option<&'static Api> {
     if let Some(api) = API.get() {
         return Some(api);
@@ -197,7 +199,8 @@ pub fn parse_ipv4(text: &[u8]) -> Option<Ipv4Addr> {
 
 /// The host/port checks of net_open, in its order. `Err` carries the exact message.
 pub fn validate_target(host: &[u8], port: f64) -> Result<SocketAddrV4, &'static CStr> {
-    if !(port >= 1.0 && port <= 65535.0) || port != f64::from(port as i32) {
+    // NaN is outside the range, exactly as `!(port >= 1 && port <= 65535)` in C.
+    if !(1.0..=65535.0).contains(&port) || port != f64::from(port as i32) {
         return Err(c"UDP port must be an integer from 1 to 65535");
     }
     // `length != strlen(host)`: an embedded NUL is rejected rather than truncated.
