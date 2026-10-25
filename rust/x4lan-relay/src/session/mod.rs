@@ -192,11 +192,7 @@ impl Session {
 
     /// bubble.py `_peer`: the slot whose lease and source address both match.
     pub fn authenticated(&self, lease: &str, address: SocketAddr) -> Option<(Slot, Hex32)> {
-        self.core
-            .peers
-            .iter()
-            .find(|(_, p)| p.address == address && p.lease.matches(lease))
-            .map(|(s, p)| (*s, p.lease))
+        self.core.peers.iter().find(|(_, p)| p.address == address && p.lease.matches(lease)).map(|(s, p)| (*s, p.lease))
     }
 
     pub fn live_leases(&self) -> Vec<Hex32> {
@@ -228,12 +224,8 @@ impl Session {
 
     fn expire_core(&mut self, now: f64) {
         let core = &mut self.core;
-        let expired: Vec<Slot> = core
-            .peers
-            .iter()
-            .filter(|(_, p)| now - p.last_seen >= LEASE_SECONDS)
-            .map(|(s, _)| *s)
-            .collect();
+        let expired: Vec<Slot> =
+            core.peers.iter().filter(|(_, p)| now - p.last_seen >= LEASE_SECONDS).map(|(s, _)| *s).collect();
         for slot in expired {
             let peer = core.peers.remove(&slot).expect("listed");
             core.retired.push_back((slot, peer.nonce));
@@ -309,7 +301,8 @@ impl Session {
             },
         };
         let saved_sector_differs = !live && core.resumable.get(&slot).is_some_and(|(_, s)| s.as_ref() != Some(&sector));
-        let nonce_ok = candidate.nonce == previous || (candidate.nonce == nonce && candidate.resume_from == Some(previous));
+        let nonce_ok =
+            candidate.nonce == previous || (candidate.nonce == nonce && candidate.resume_from == Some(previous));
         if !candidate.lease.matches(lease.as_str())
             || !nonce_ok
             || core.sector.as_ref().is_some_and(|s| *s != sector)
@@ -380,12 +373,8 @@ impl Session {
     }
 
     fn state(&mut self, f: &[&str], address: SocketAddr, now: f64) {
-        let Some(slot) = self
-            .core
-            .peers
-            .iter()
-            .find(|(_, p)| p.address == address && p.lease.matches(f[2]))
-            .map(|(s, _)| *s)
+        let Some(slot) =
+            self.core.peers.iter().find(|(_, p)| p.address == address && p.lease.matches(f[2])).map(|(s, _)| *s)
         else {
             return;
         };
@@ -454,7 +443,8 @@ impl Session {
                 Some(_) if self.level >= Level::Coop => {}
                 Some((remote, pose)) => {
                     let pose: Vec<String> = pose.iter().map(|x| fmt_g(*x, 9)).collect();
-                    let packet = format!("PEER|1|{}|{tick}|{}|{}|{}", peer.lease, remote.lease, remote.seq, pose.join("|"));
+                    let packet =
+                        format!("PEER|1|{}|{tick}|{}|{}|{}", peer.lease, remote.lease, remote.seq, pose.join("|"));
                     out.push((peer.address, packet.into_bytes()));
                 }
             }

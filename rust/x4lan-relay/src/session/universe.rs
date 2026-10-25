@@ -71,7 +71,11 @@ pub struct Baseline {
 
 impl Baseline {
     pub fn create(epoch: Hex32, revision: u32, sector: Atom, rows: Vec<String>) -> Parsed<Self> {
-        if revision == 0 || revision > MAX_SEQ || !sector.as_str().ends_with("_macro") || rows.len() > MAX_OBJECTS as usize {
+        if revision == 0
+            || revision > MAX_SEQ
+            || !sector.as_str().ends_with("_macro")
+            || rows.len() > MAX_OBJECTS as usize
+        {
             return Err(Reject);
         }
         let mut previous = 0;
@@ -243,7 +247,11 @@ impl Sender {
             vec![0]
         } else {
             let outstanding: Vec<usize> = (1..=count).filter(|i| !self.acked.contains(i)).take(WINDOW).collect();
-            if outstanding.is_empty() { vec![count + 1] } else { outstanding }
+            if outstanding.is_empty() {
+                vec![count + 1]
+            } else {
+                outstanding
+            }
         };
         let mut out = Vec::new();
         for i in indices {
@@ -295,7 +303,8 @@ pub struct Universe {
     pub npc: NpcCombat,
 }
 
-const UNIVERSE_PREFIXES: [&[u8]; 7] = [b"UBEGIN|", b"UOBJECT|", b"UCOMMIT|", b"UACK|", b"UINTEREST|", b"UPOS|", b"UMOVE|"];
+const UNIVERSE_PREFIXES: [&[u8]; 7] =
+    [b"UBEGIN|", b"UOBJECT|", b"UCOMMIT|", b"UACK|", b"UINTEREST|", b"UPOS|", b"UMOVE|"];
 
 impl Session {
     /// UniverseSession.receive -> DockSession.receive -> CoopSession.receive.
@@ -398,7 +407,10 @@ impl Session {
                 if sequence <= old.seq {
                     return Err(Reject);
                 }
-                if kind == MotionKind::Umove && old.kind == MotionKind::Umove && sample_time <= float(&old.fields[4]).expect("validated") {
+                if kind == MotionKind::Umove
+                    && old.kind == MotionKind::Umove
+                    && sample_time <= float(&old.fields[4]).expect("validated")
+                {
                     return Err(Reject);
                 }
             }

@@ -42,7 +42,8 @@ impl Session {
         if self.universe.epoch.is_some_and(|e| e != lease) {
             return Err(Reject);
         }
-        let (sequence, scope, entity, code, name, known, contact) = (seq(f[4])?, f[5], seq(f[6])?, f[7], f[8], f[9], f[10]);
+        let (sequence, scope, entity, code, name, known, contact) =
+            (seq(f[4])?, f[5], seq(f[6])?, f[7], f[8], f[9], f[10]);
         let scope = match scope {
             "P" if matches!(entity, 1 | 2) => Scope::Player,
             "F" if matches!(entity, 1..=4) => Scope::Fixture,
@@ -72,16 +73,15 @@ impl Session {
             return;
         }
         ids.next_send = now + 0.1;
-        let (Some(host), Some(guest)) = (self.core.peers.get(&Slot::P1), self.core.peers.get(&Slot::P2)) else { return };
+        let (Some(host), Some(guest)) = (self.core.peers.get(&Slot::P1), self.core.peers.get(&Slot::P2)) else {
+            return;
+        };
         let entity_ids = &self.universe.entity_ids;
-        ids.rows.retain(|(scope, entity), _| *scope != Scope::Npc || entity_ids.values().any(|set| set.contains(entity)));
+        ids.rows
+            .retain(|(scope, entity), _| *scope != Scope::Npc || entity_ids.values().any(|set| set.contains(entity)));
         // Only forward fresh observations; the guest expires forced visibility.
-        let rows: Vec<&Vec<String>> = ids
-            .rows
-            .values()
-            .filter(|v| v.2[0] == host.lease.as_str() && now - v.1 < 2.0)
-            .map(|v| &v.2)
-            .collect();
+        let rows: Vec<&Vec<String>> =
+            ids.rows.values().filter(|v| v.2[0] == host.lease.as_str() && now - v.1 < 2.0).map(|v| &v.2).collect();
         let budget = rows.len().min(rows.len().div_ceil(10).clamp(32, 256));
         for i in 0..budget {
             let fields = rows[(ids.cursor + i) % rows.len()];

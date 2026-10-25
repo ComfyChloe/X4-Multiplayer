@@ -127,12 +127,21 @@ impl Session {
         for (slot, peer) in self.core.peers.iter() {
             for (ship, row) in self.dock.rows.iter() {
                 let owner = self.core.peers.get(&row.owner);
-                if row.owner == *slot || !self.current_dock(*ship, row) || owner.is_none_or(|o| o.lease != row.lease) || now - row.at > FRESH {
+                if row.owner == *slot
+                    || !self.current_dock(*ship, row)
+                    || owner.is_none_or(|o| o.lease != row.lease)
+                    || now - row.at > FRESH
+                {
                     continue;
                 }
                 let packet = format!(
                     "CDOCK|1|{}|{}|{ship}|{}|{}|{}|{}",
-                    peer.lease, row.lease, row.epoch, row.seq, row.mode.as_str(), row.dock
+                    peer.lease,
+                    row.lease,
+                    row.epoch,
+                    row.seq,
+                    row.mode.as_str(),
+                    row.dock
                 );
                 out.push((peer.address, packet.into_bytes()));
             }

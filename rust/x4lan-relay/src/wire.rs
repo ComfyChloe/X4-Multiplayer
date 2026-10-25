@@ -77,13 +77,21 @@ impl Atom {
     pub fn parse(text: &str) -> Parsed<Self> {
         let ok = (1..=96).contains(&text.len())
             && text.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'.' | b'-'));
-        if ok { Ok(Atom(text.to_owned())) } else { Err(Reject) }
+        if ok {
+            Ok(Atom(text.to_owned()))
+        } else {
+            Err(Reject)
+        }
     }
 
     /// An atom that names an X4 macro (`..._macro`), e.g. a sector.
     pub fn parse_macro(text: &str) -> Parsed<Self> {
         let atom = Self::parse(text)?;
-        if atom.0.ends_with("_macro") { Ok(atom) } else { Err(Reject) }
+        if atom.0.ends_with("_macro") {
+            Ok(atom)
+        } else {
+            Err(Reject)
+        }
     }
 
     pub fn as_str(&self) -> &str {
@@ -100,7 +108,9 @@ impl fmt::Display for Atom {
 /// economy.py `WARE`: `[a-z][a-z0-9_]{0,63}`.
 pub fn is_ware(text: &str) -> bool {
     let b = text.as_bytes();
-    !b.is_empty() && b.len() <= 64 && b[0].is_ascii_lowercase()
+    !b.is_empty()
+        && b.len() <= 64
+        && b[0].is_ascii_lowercase()
         && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
 }
 
@@ -233,8 +243,10 @@ pub fn is_shot_digest(text: &str) -> bool {
     let Some((whole, fraction)) = strength.split_once('.') else { return false };
     (1..=48).contains(&name.len())
         && name.bytes().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == b'_')
-        && (1..=9).contains(&whole.len()) && whole.bytes().all(|c| c.is_ascii_digit())
-        && fraction.len() == 3 && fraction.bytes().all(|c| c.is_ascii_digit())
+        && (1..=9).contains(&whole.len())
+        && whole.bytes().all(|c| c.is_ascii_digit())
+        && fraction.len() == 3
+        && fraction.bytes().all(|c| c.is_ascii_digit())
 }
 
 /// identity.py `CODE`: `[A-Z0-9-]{1,32}`.
@@ -275,10 +287,7 @@ pub fn pose(fields: &[&str], position: f64) -> Parsed<[f64; 6]> {
 
 /// Every value finite; the first three within `linear`, the rest within `angular`.
 pub fn bounded(values: &[f64], linear: f64, angular: f64) -> bool {
-    values
-        .iter()
-        .enumerate()
-        .all(|(i, v)| v.is_finite() && v.abs() <= if i < 3 { linear } else { angular })
+    values.iter().enumerate().all(|(i, v)| v.is_finite() && v.abs() <= if i < 3 { linear } else { angular })
 }
 
 /// Python's `'|'.join(...)` of an envelope.
@@ -317,7 +326,9 @@ mod tests {
         assert_eq!(seq("0002147483647"), Ok(MAX_SEQ));
         assert!(seq("2147483648").is_err() && seq("").is_err() && seq("+1").is_err() && seq(" 1").is_err());
         assert_eq!(integer("-12", 12, true), Ok(-12));
-        assert!(integer("-12", 12, false).is_err() && integer("13", 12, true).is_err() && integer("-", 5, true).is_err());
+        assert!(
+            integer("-12", 12, false).is_err() && integer("13", 12, true).is_err() && integer("-", 5, true).is_err()
+        );
         assert_eq!(integer(&"9".repeat(60), 5, false), Err(Reject));
     }
 

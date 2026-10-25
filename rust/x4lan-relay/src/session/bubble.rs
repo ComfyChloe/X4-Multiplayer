@@ -287,7 +287,10 @@ impl Session {
             ("SUITKILL", 4) if slot == Slot::P1 => {
                 let generation = seq(f[3])?;
                 if let Some(guest) = self.core.peers.get(&Slot::P2) {
-                    let suited = b.bodies.get(&guest.lease).is_some_and(|body| body.mode == BodyMode::Suit && body.generation == generation);
+                    let suited = b
+                        .bodies
+                        .get(&guest.lease)
+                        .is_some_and(|body| body.mode == BodyMode::Suit && body.generation == generation);
                     if suited {
                         b.suit_kills.insert(guest.lease, (lease, generation));
                     }
@@ -344,17 +347,20 @@ impl Session {
         for (slot, peer) in self.core.peers.iter() {
             if let (Some(world), Some(host)) = (&b.world, host) {
                 let payload: Vec<String> = world.iter().map(|v| fmt_g(*v, 9)).collect();
-                let packet = format!("WORLD|1|{}|{}|{}|{}", peer.lease, host.lease, b.world_revision, payload.join("|"));
+                let packet =
+                    format!("WORLD|1|{}|{}|{}|{}", peer.lease, host.lease, b.world_revision, payload.join("|"));
                 out.push((peer.address, packet.into_bytes()));
             }
             if let Some(other) = self.core.peers.get(&slot.other()) {
                 if let Some(w) = b.walkers.get(&other.lease).filter(|w| now - w.at < 1.0) {
-                    let packet = format!("WALK|1|{}|{}|{}|{}|{}", peer.lease, other.lease, w.seq, w.context, w.pose.join("|"));
+                    let packet =
+                        format!("WALK|1|{}|{}|{}|{}|{}", peer.lease, other.lease, w.seq, w.context, w.pose.join("|"));
                     out.push((peer.address, packet.into_bytes()));
                 }
                 // Co-op replaces legacy BODY/FIRE with BODY2/FIRE2.
                 if let Some(body) = b.bodies.get(&other.lease).filter(|_| !coop) {
-                    let packet = format!("BODY|1|{}|{}|{}|{}", peer.lease, other.lease, body.head(), body.pose.join("|"));
+                    let packet =
+                        format!("BODY|1|{}|{}|{}|{}", peer.lease, other.lease, body.head(), body.pose.join("|"));
                     out.push((peer.address, packet.into_bytes()));
                 }
                 if let Some((seq, _)) = b.fire.get(&other.lease).filter(|(_, at)| now - at < 0.5 && !coop) {

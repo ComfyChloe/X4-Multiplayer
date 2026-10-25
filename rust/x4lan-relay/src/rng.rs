@@ -10,7 +10,8 @@ pub fn random16() -> [u8; 16] {
     const BCRYPT_USE_SYSTEM_PREFERRED_RNG: u32 = 2;
     let mut out = [0u8; 16];
     // SAFETY: a valid 16-byte buffer and the documented system-RNG flag.
-    let status = unsafe { BCryptGenRandom(std::ptr::null_mut(), out.as_mut_ptr(), 16, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
+    let status =
+        unsafe { BCryptGenRandom(std::ptr::null_mut(), out.as_mut_ptr(), 16, BCRYPT_USE_SYSTEM_PREFERRED_RNG) };
     assert!(status >= 0, "BCryptGenRandom failed: {status:#x}");
     out
 }
@@ -19,9 +20,7 @@ pub fn random16() -> [u8; 16] {
 pub fn random16() -> [u8; 16] {
     use std::io::Read;
     let mut out = [0u8; 16];
-    std::fs::File::open("/dev/urandom")
-        .and_then(|mut f| f.read_exact(&mut out))
-        .expect("read /dev/urandom");
+    std::fs::File::open("/dev/urandom").and_then(|mut f| f.read_exact(&mut out)).expect("read /dev/urandom");
     out
 }
 

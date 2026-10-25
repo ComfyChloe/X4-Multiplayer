@@ -168,7 +168,17 @@ pub fn parse(raw: &[u8]) -> Parsed<(Hex32, Message)> {
     if !bolt {
         return Ok((lease, Message::End(head)));
     }
-    let limits = [MAX_POSITION, MAX_POSITION, MAX_POSITION, MAX_VELOCITY, MAX_VELOCITY, MAX_VELOCITY, MAX_ANGLE, MAX_ANGLE, MAX_ANGLE];
+    let limits = [
+        MAX_POSITION,
+        MAX_POSITION,
+        MAX_POSITION,
+        MAX_VELOCITY,
+        MAX_VELOCITY,
+        MAX_VELOCITY,
+        MAX_ANGLE,
+        MAX_ANGLE,
+        MAX_ANGLE,
+    ];
     let mut numbers = [0.0; 9];
     for (i, limit) in limits.iter().enumerate() {
         numbers[i] = number(f[HEAD + 7 + i], *limit)?;
@@ -253,7 +263,10 @@ impl Stream {
     fn retire(&mut self, source: f64, sector: &str) {
         for record in self.seen.values_mut().filter(|r| r.live) {
             let bolt = record.bolt.as_ref().expect("live records are births");
-            if source >= bolt.head.time + bolt.ttl || bolt.sector.as_str() != sector || (record.end.is_some() && record.end_sent >= REPEATS) {
+            if source >= bolt.head.time + bolt.ttl
+                || bolt.sector.as_str() != sector
+                || (record.end.is_some() && record.end_sent >= REPEATS)
+            {
                 record.live = false;
             }
         }
@@ -289,7 +302,12 @@ impl Session {
         if nav.kind != NavKind::Nav2 || nav.lease != lease || now - nav.at > NAV_FRESH {
             return None;
         }
-        Some(Authority { epoch: self.epoch(ship), gen, sector: nav.sector().to_owned(), source: nav.source_time() + (now - nav.at) })
+        Some(Authority {
+            epoch: self.epoch(ship),
+            gen,
+            sector: nav.sector().to_owned(),
+            source: nav.source_time() + (now - nav.at),
+        })
     }
 
     pub(super) fn receive_projectile(&mut self, slot: Slot, lease: Hex32, raw: &[u8], now: f64) {
@@ -336,9 +354,12 @@ impl Session {
                     stream.mark(head.id, record);
                 }
                 Some(record) => {
-                    let first_end = record.live && record.end.is_none() && record.bolt.as_ref().is_some_and(|b| end.time >= b.head.time);
+                    let first_end = record.live
+                        && record.end.is_none()
+                        && record.bolt.as_ref().is_some_and(|b| end.time >= b.head.time);
                     if first_end {
-                        stream.seen.get_mut(&head.id).expect("present").end = Some(end); // first end wins
+                        stream.seen.get_mut(&head.id).expect("present").end = Some(end);
+                        // first end wins
                     }
                 }
             },
@@ -414,19 +435,28 @@ mod tests {
         assert_eq!(sender.as_str(), lease());
         assert!(matches!(message, Message::End(Head { entity: Ship::One, id: 4, .. })));
         for bad in [
-            format!("BEND|1|{}|3|2|3|4|5.5", lease()),     // entity
-            format!("BEND|1|{}|1|02|3|4|5.5", lease()),    // leading zero
-            format!("BEND|1|{}|1|2|3|4|-5", lease()),      // negative time
-            format!("BEND|1|{}|1|2|3|4|5.", lease()),      // number grammar
-            format!("BEND|1|{}|1|2|3|4| 5", lease()),      // space is not printable
-            format!("BEND|1|{}|1|2|3|4|1e13", lease()),    // bound
+            format!("BEND|1|{}|3|2|3|4|5.5", lease()),  // entity
+            format!("BEND|1|{}|1|02|3|4|5.5", lease()), // leading zero
+            format!("BEND|1|{}|1|2|3|4|-5", lease()),   // negative time
+            format!("BEND|1|{}|1|2|3|4|5.", lease()),   // number grammar
+            format!("BEND|1|{}|1|2|3|4| 5", lease()),   // space is not printable
+            format!("BEND|1|{}|1|2|3|4|1e13", lease()), // bound
         ] {
             assert!(parse(bad.as_bytes()).is_err(), "{bad}");
         }
         let bolt = format!("BOLT|1|{}|2|1|1|9|10|sector_macro|2|1|2|3|4|5|6|0.1|0.2|0.3|1.5", lease());
         let (_, message) = parse(bolt.as_bytes()).unwrap();
-        let forwarded = String::from_utf8(serialize_forwarded(&message, Hex32::parse(&"d".repeat(32)).unwrap(), Hex32::parse(&lease()).unwrap())).unwrap();
-        assert!(forwarded.starts_with(&format!("BOLT|1|{}|{}|2|1|1|9|10|sector_macro|2|1|2|3|4|5|6|0.10000000000000001|", "d".repeat(32), lease())));
+        let forwarded = String::from_utf8(serialize_forwarded(
+            &message,
+            Hex32::parse(&"d".repeat(32)).unwrap(),
+            Hex32::parse(&lease()).unwrap(),
+        ))
+        .unwrap();
+        assert!(forwarded.starts_with(&format!(
+            "BOLT|1|{}|{}|2|1|1|9|10|sector_macro|2|1|2|3|4|5|6|0.10000000000000001|",
+            "d".repeat(32),
+            lease()
+        )));
         assert!(parse(bolt.replace("|1.5", "|0").as_bytes()).is_err()); // ttl must be > 0
     }
 }

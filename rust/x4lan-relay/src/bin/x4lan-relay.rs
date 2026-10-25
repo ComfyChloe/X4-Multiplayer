@@ -99,7 +99,8 @@ fn parse(argv: Vec<String>) -> Result<Option<Args>, String> {
             "--bind" => args.bind = value,
             "--port" => {
                 let text = value.unwrap_or_default();
-                let port = text.trim().parse::<i64>().map_err(|_| format!("argument --port: invalid int value: '{text}'"))?;
+                let port =
+                    text.trim().parse::<i64>().map_err(|_| format!("argument --port: invalid int value: '{text}'"))?;
                 args.port = Some(port);
             }
             "--token" => args.token = value,
@@ -140,7 +141,8 @@ fn main() -> ExitCode {
         },
         None => Json::Object(vec![]),
     };
-    let (Some(token), Some(build)) = (or_config(args.token, &config, "token"), or_config(args.build, &config, "build")) else {
+    let (Some(token), Some(build)) = (or_config(args.token, &config, "token"), or_config(args.build, &config, "build"))
+    else {
         return fail("supply --session or both --token and --build");
     };
     let bubble = or_config(args.bubble, &config, "bubble").unwrap_or_else(|| "bubble-01".into());

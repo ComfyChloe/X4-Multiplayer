@@ -14,7 +14,9 @@ use super::quests::QuestState;
 use super::{Fields, Level, Packet, Session};
 use crate::ordmap::OrderedMap;
 use crate::pynum::fmt_f;
-use crate::wire::{bounded, float, is_shot_digest, pose, seq, ship_field, uint, Atom, Hex32, Parsed, Reject, Ship, Slot};
+use crate::wire::{
+    bounded, float, is_shot_digest, pose, seq, ship_field, uint, Atom, Hex32, Parsed, Reject, Ship, Slot,
+};
 
 pub const POSITION_LIMIT: f64 = 50_000_000.0;
 /// Seconds without a pilot frame before a live health generation ends.
@@ -155,7 +157,20 @@ impl Default for Coop {
 }
 
 const COOP_KINDS: [&str; 14] = [
-    "CREW", "NAV", "NAV2", "FIRE2", "HEALTH", "HACK", "HSTALE", "SHOT", "BODY2", "PERF", "COOPORDER", "QUEST", "BOLT", "BEND",
+    "CREW",
+    "NAV",
+    "NAV2",
+    "FIRE2",
+    "HEALTH",
+    "HACK",
+    "HSTALE",
+    "SHOT",
+    "BODY2",
+    "PERF",
+    "COOPORDER",
+    "QUEST",
+    "BOLT",
+    "BEND",
 ];
 
 impl Session {
@@ -181,11 +196,8 @@ impl Session {
         let orders = self.economy.orders.iter().any(|(k, v)| {
             v.result == OrderResult::Pending && self.coop.order_ships.get(k).is_some_and(|(s, _)| *s == ship)
         });
-        let commands = self
-            .bubble
-            .commands
-            .values()
-            .any(|c| c.result == CommandResult::Pending && c.ship == Some(ship.number()));
+        let commands =
+            self.bubble.commands.values().any(|c| c.result == CommandResult::Pending && c.ship == Some(ship.number()));
         orders || commands || (self.level >= Level::Universe && self.universe.cargo.busy(ship))
     }
 
@@ -333,7 +345,14 @@ impl Session {
         None
     }
 
-    fn coop_update(&mut self, fields: &Fields, slot: Slot, lease: Hex32, address: SocketAddr, now: f64) -> Parsed<Vec<Vec<u8>>> {
+    fn coop_update(
+        &mut self,
+        fields: &Fields,
+        slot: Slot,
+        lease: Hex32,
+        address: SocketAddr,
+        now: f64,
+    ) -> Parsed<Vec<Vec<u8>>> {
         let f = &fields.f;
         match (f[0], f.len()) {
             ("QUEST", 8) if slot == Slot::P1 => self.coop.quest.receive(lease, &f[3..])?,
@@ -347,7 +366,8 @@ impl Session {
                     return Err(Reject);
                 }
                 let gen = u64::from(gen);
-                if gen != self.health_generation(ship) || gen != self.coop.health_live[ship.index()] || self.dead(ship) {
+                if gen != self.health_generation(ship) || gen != self.coop.health_live[ship.index()] || self.dead(ship)
+                {
                     return Err(Reject);
                 }
                 let values = [float(f[6])?, float(f[7])?];
@@ -368,7 +388,9 @@ impl Session {
             ("HACK", 5) => {
                 let (ship, gen) = (ship_field(f[3])?, u64::from(seq(f[4])?));
                 if let Some(ship) = ship {
-                    if self.owner(ship) == slot && self.pilot(ship) == Some(slot) && gen == self.health_generation(ship)
+                    if self.owner(ship) == slot
+                        && self.pilot(ship) == Some(slot)
+                        && gen == self.health_generation(ship)
                         && self.coop.health_live[ship.index()] != gen
                     {
                         self.coop.health_live[ship.index()] = gen;
@@ -517,8 +539,12 @@ impl Session {
         }
         let shots = [seq(f[9])?, seq(f[10])?];
         if let Some(old) = self.coop.fire2.get(&ship) {
-            if old.lease == lease && old.epoch == epoch
-                && (sequence <= old.seq || source_time <= old.time || shots[0] < old.shots[0] || shots[1] < old.shots[1])
+            if old.lease == lease
+                && old.epoch == epoch
+                && (sequence <= old.seq
+                    || source_time <= old.time
+                    || shots[0] < old.shots[0]
+                    || shots[1] < old.shots[1])
             {
                 return Err(Reject);
             }
@@ -561,7 +587,14 @@ impl Session {
         Ok(())
     }
 
-    fn coop_order(&mut self, f: &[&str], slot: Slot, lease: Hex32, address: SocketAddr, now: f64) -> Parsed<Vec<Vec<u8>>> {
+    fn coop_order(
+        &mut self,
+        f: &[&str],
+        slot: Slot,
+        lease: Hex32,
+        address: SocketAddr,
+        now: f64,
+    ) -> Parsed<Vec<Vec<u8>>> {
         let (request, host, entity, epoch, market, lines) = (f[3], f[4], f[5], f[6], f[7], f[8]);
         let (ship, epoch) = (ship_field(entity)?, seq(epoch)?);
         let ship = ship.ok_or(Reject)?;
@@ -571,7 +604,11 @@ impl Session {
             if self.coop.order_ships.get(&key) != Some(&(ship, epoch)) {
                 return Err(Reject);
             }
-        } else if self.owner(ship) != slot || u64::from(epoch) != self.epoch(ship) || self.pilot(ship) != Some(slot) || self.dead(ship) {
+        } else if self.owner(ship) != slot
+            || u64::from(epoch) != self.epoch(ship)
+            || self.pilot(ship) != Some(slot)
+            || self.dead(ship)
+        {
             return Ok(vec![Self::order_reply(lease, key, "REJECTED")]);
         }
         // Python re-enters EconomySession.receive with a synthesized ORDER packet,
@@ -585,11 +622,13 @@ impl Session {
     }
 
     pub(super) fn snapshots_coop(&mut self, now: f64, out: &mut Vec<Packet>) {
-        let slots: Vec<(Slot, Hex32, SocketAddr)> = self.core.peers.iter().map(|(s, p)| (*s, p.lease, p.address)).collect();
+        let slots: Vec<(Slot, Hex32, SocketAddr)> =
+            self.core.peers.iter().map(|(s, p)| (*s, p.lease, p.address)).collect();
         for &(slot, lease, address) in &slots {
             let mut authority = format!("AUTH|1|{lease}|{}", self.coop.authority_revision);
             for ship in Ship::BOTH {
-                authority += &format!("|{}|{}|{}", self.owner(ship).as_str(), self.epoch(ship), pilot_str(self.pilot(ship)));
+                authority +=
+                    &format!("|{}|{}|{}", self.owner(ship).as_str(), self.epoch(ship), pilot_str(self.pilot(ship)));
             }
             out.push((address, authority.into_bytes()));
             for (ship, nav) in self.coop.navigation.iter() {
@@ -601,7 +640,11 @@ impl Session {
             }
             for (ship, fire) in self.coop.fire2.iter() {
                 // A frame from an old owner/epoch is never forwarded; stale fire must stop.
-                if self.owner(*ship) == slot || u64::from(fire.epoch) != self.epoch(*ship) || now - fire.at > 0.75 || self.dead(*ship) {
+                if self.owner(*ship) == slot
+                    || u64::from(fire.epoch) != self.epoch(*ship)
+                    || now - fire.at > 0.75
+                    || self.dead(*ship)
+                {
                     continue;
                 }
                 let packet = format!("FIRE2|1|{lease}|{}|{}", fire.lease, fire.fields.join("|"));
@@ -618,8 +661,11 @@ impl Session {
                         out.push((address, packet.into_bytes()));
                     }
                 }
-                if slot != Slot::P1 && self.owner(ship) == slot && self.pilot(ship) == Some(slot)
-                    && self.coop.health_live[ship.index()] != gen && !self.dead(ship)
+                if slot != Slot::P1
+                    && self.owner(ship) == slot
+                    && self.pilot(ship) == Some(slot)
+                    && self.coop.health_live[ship.index()] != gen
+                    && !self.dead(ship)
                 {
                     if let Some(world) = self.bubble.world {
                         let (hull, shield) = (world[ship.index() * 3], world[ship.index() * 3 + 1]);
@@ -638,13 +684,20 @@ impl Session {
                 // Never back to the shooter's own slot: where it is the authority its hits are native.
                 let shot = self.coop.shots.get(&key).expect("present");
                 let (shot_lease, at, fields) = (shot.lease, shot.at, shot.fields.join("|"));
-                if self.victim_authority(victim) == slot && self.owner(shooter) != slot && now - at <= 0.75 && !self.dead(shooter) {
+                if self.victim_authority(victim) == slot
+                    && self.owner(shooter) != slot
+                    && now - at <= 0.75
+                    && !self.dead(shooter)
+                {
                     out.push((address, format!("SHOT|1|{lease}|{shot_lease}|{fields}").into_bytes()));
                 }
             }
             if let Some(other) = self.core.peers.get(&slot.other()) {
-                if let (Some(body), Some(sector)) = (self.bubble.bodies.get(&other.lease), self.coop.body_sectors.get(&other.lease)) {
-                    let packet = format!("BODY2|1|{lease}|{}|{}|{sector}|{}", other.lease, body.head(), body.pose.join("|"));
+                if let (Some(body), Some(sector)) =
+                    (self.bubble.bodies.get(&other.lease), self.coop.body_sectors.get(&other.lease))
+                {
+                    let packet =
+                        format!("BODY2|1|{lease}|{}|{}|{sector}|{}", other.lease, body.head(), body.pose.join("|"));
                     out.push((address, packet.into_bytes()));
                 }
             }

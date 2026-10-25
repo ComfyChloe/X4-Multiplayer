@@ -130,12 +130,16 @@ impl Session {
                 let npc = &mut self.universe.npc;
                 let d = npc.descriptors.get(&entity);
                 let alive = f[13];
-                let valid = entity != 0 && gen != 0 && sequence != 0
+                let valid = entity != 0
+                    && gen != 0
+                    && sequence != 0
                     && d.is_some()
                     && owner != "player"
                     && is_code(code)
                     && Atom::parse(macro_name).is_ok()
-                    && d.is_some_and(|d| (sector, macro_name, owner) == (d.sector.as_str(), d.macro_name.as_str(), d.owner.as_str()))
+                    && d.is_some_and(|d| {
+                        (sector, macro_name, owner) == (d.sector.as_str(), d.macro_name.as_str(), d.owner.as_str())
+                    })
                     && [hull, shield].iter().all(|v| v.is_finite() && (0.0..=100.0).contains(v))
                     && matches!(alive, "0" | "1")
                     && !(alive == "0" && hull != 0.0)
@@ -145,7 +149,8 @@ impl Session {
                 }
                 let identity = (sector.to_owned(), code.to_owned(), macro_name.to_owned(), owner.to_owned());
                 if let Some(old) = npc.states.get(&entity) {
-                    if sequence <= old.seq || gen != old.gen || identity != old.identity || (!old.alive && alive == "1") {
+                    if sequence <= old.seq || gen != old.gen || identity != old.identity || (!old.alive && alive == "1")
+                    {
                         return Err(Reject);
                     }
                 }
@@ -161,14 +166,21 @@ impl Session {
                 npc.states.insert(entity, state);
             }
             ("NCLAIM", 11, Slot::P2) => {
-                let (entity, gen, shooter, sg, sequence, hits) = (seq(f[4])?, seq(f[5])?, seq(f[6])?, seq(f[7])?, seq(f[8])?, seq(f[9])?);
+                let (entity, gen, shooter, sg, sequence, hits) =
+                    (seq(f[4])?, seq(f[5])?, seq(f[6])?, seq(f[7])?, seq(f[8])?, seq(f[9])?);
                 let ok = sequence != 0
                     && (1..=1_000_000).contains(&hits)
                     && self.universe.npc.current(entity, gen, now)
                     && self.npc_pilot(shooter, sg)
                     && is_shot_digest(f[10])
                     && self.universe.interest.as_ref().is_some_and(|i| {
-                        i.lease == lease && self.universe.npc.states.get(&entity).is_some_and(|s| s.descriptor.0 == i.sector.as_str())
+                        i.lease == lease
+                            && self
+                                .universe
+                                .npc
+                                .states
+                                .get(&entity)
+                                .is_some_and(|s| s.descriptor.0 == i.sector.as_str())
                     });
                 if !ok {
                     return Err(Reject);
@@ -183,7 +195,13 @@ impl Session {
                     return Err(Reject);
                 }
                 let ack = old.map_or(0, |o| o.ack);
-                let claim = Claim { seq: sequence, hits, digest: f[10].to_owned(), fields: f[3..].iter().map(|s| (*s).to_owned()).collect(), ack };
+                let claim = Claim {
+                    seq: sequence,
+                    hits,
+                    digest: f[10].to_owned(),
+                    fields: f[3..].iter().map(|s| (*s).to_owned()).collect(),
+                    ack,
+                };
                 npc.claims.insert(key, claim);
             }
             ("NACK", 10, Slot::P1) => {
@@ -211,7 +229,8 @@ impl Session {
         if self.universe.epoch != Some(host_lease) {
             return;
         }
-        let interest_sector = self.universe.interest.as_ref().filter(|i| i.lease == guest_lease).map(|i| i.sector.to_string());
+        let interest_sector =
+            self.universe.interest.as_ref().filter(|i| i.lease == guest_lease).map(|i| i.sector.to_string());
         let npc = &mut self.universe.npc;
         let states: Vec<&NpcState> = npc
             .states

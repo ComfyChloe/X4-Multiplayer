@@ -190,7 +190,8 @@ impl Session {
                 if m.records.get(&ident).is_some_and(|old| rev <= old.rev) {
                     return Err(Reject);
                 }
-                let (part, total, digest) = (py_int(f[6]).ok_or(Reject)?, py_int(f[7]).ok_or(Reject)?, py_int(f[8]).ok_or(Reject)?);
+                let (part, total, digest) =
+                    (py_int(f[6]).ok_or(Reject)?, py_int(f[7]).ok_or(Reject)?, py_int(f[8]).ok_or(Reject)?);
                 let bounded = 1 <= part && part <= total && total <= MAX_PARTS && (0..=0xffff_ffff).contains(&digest);
                 if !bounded || !(1..=PART_SIZE).contains(&f[9].len()) {
                     return Err(Reject);
@@ -256,11 +257,16 @@ impl Session {
             let ident = if m.changed.is_empty() { ids[m.cursor] } else { m.changed.remove(0) };
             m.cursor += 1;
             let r = &m.records[&ident];
-            let parts: Vec<&str> = r.payload.as_bytes().chunks(PART_SIZE).map(|c| std::str::from_utf8(c).expect("ascii")).collect();
+            let parts: Vec<&str> =
+                r.payload.as_bytes().chunks(PART_SIZE).map(|c| std::str::from_utf8(c).expect("ascii")).collect();
             for (i, part) in parts.iter().enumerate() {
                 let packet = format!(
                     "MSTATE|1|{}|{host}|{ident}|{}|{}|{}|{}|{part}",
-                    guest.lease, r.rev, i + 1, parts.len(), r.digest
+                    guest.lease,
+                    r.rev,
+                    i + 1,
+                    parts.len(),
+                    r.digest
                 );
                 out.push((guest.address, packet.into_bytes()));
             }

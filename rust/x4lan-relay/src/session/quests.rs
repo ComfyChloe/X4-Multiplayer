@@ -75,7 +75,9 @@ impl Session {
     pub(super) fn snapshots_quest(&mut self, now: f64, out: &mut Vec<Packet>) {
         let Some(host) = self.core.peers.get(&Slot::P1) else { return };
         let quest = &mut self.coop.quest;
-        let Some(p) = quest.progress.filter(|_| quest.owner == Some(host.lease) && now >= quest.next_send) else { return };
+        let Some(p) = quest.progress.filter(|_| quest.owner == Some(host.lease) && now >= quest.next_send) else {
+            return;
+        };
         quest.next_send = now + 0.5;
         for peer in self.core.peers.values() {
             let packet = format!(

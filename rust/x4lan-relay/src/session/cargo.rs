@@ -178,7 +178,11 @@ impl Session {
         if self.core.peers.get(&Slot::P1).is_none_or(|p| p.lease != host) {
             return Ok(reply(lease, request, CargoResult::Stale, 0));
         }
-        if self.owner(ship) != slot || self.epoch(ship) != u64::from(epoch) || self.pilot(ship) != Some(slot) || self.dead(ship) {
+        if self.owner(ship) != slot
+            || self.epoch(ship) != u64::from(epoch)
+            || self.pilot(ship) != Some(slot)
+            || self.dead(ship)
+        {
             return Ok(reply(lease, request, CargoResult::Rejected, 0));
         }
         if self.busy(ship) {
@@ -228,7 +232,13 @@ impl Session {
             let s = &item.signature;
             let packet = format!(
                 "CARGOEXEC|1|{host_lease}|{request}|{}|{}|{}|{}|{}|{}|{}",
-                s.ship, s.epoch, s.verb.name(), s.verb.object(), s.ware, s.amount, s.slot.as_str()
+                s.ship,
+                s.epoch,
+                s.verb.name(),
+                s.verb.object(),
+                s.ware,
+                s.amount,
+                s.slot.as_str()
             );
             out.push((host_address, packet.into_bytes()));
         }

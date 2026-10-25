@@ -157,7 +157,8 @@ impl Parser<'_> {
             }
             Some(_) => {
                 let start = self.i;
-                while self.i < self.b.len() && matches!(self.b[self.i], b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9') {
+                while self.i < self.b.len() && matches!(self.b[self.i], b'-' | b'+' | b'.' | b'e' | b'E' | b'0'..=b'9')
+                {
                     self.i += 1;
                 }
                 let text = std::str::from_utf8(&self.b[start..self.i]).map_err(|e| e.to_string())?;
@@ -191,7 +192,8 @@ impl Parser<'_> {
                         b'r' => out.push('\r'),
                         b't' => out.push('\t'),
                         b'u' => {
-                            let hex = std::str::from_utf8(self.b.get(self.i..self.i + 4).ok_or("bad \\u")?).map_err(|e| e.to_string())?;
+                            let hex = std::str::from_utf8(self.b.get(self.i..self.i + 4).ok_or("bad \\u")?)
+                                .map_err(|e| e.to_string())?;
                             let code = u32::from_str_radix(hex, 16).map_err(|e| e.to_string())?;
                             self.i += 4;
                             out.push(char::from_u32(code).unwrap_or('\u{fffd}'));
@@ -218,7 +220,8 @@ mod tests {
 
     #[test]
     fn session_file() {
-        let v = Json::parse(r#"{"token": "ab", "port": 45841, "coop": true, "x": [1, -2.5e3, null], "s": "a\"é"}"#).unwrap();
+        let v = Json::parse(r#"{"token": "ab", "port": 45841, "coop": true, "x": [1, -2.5e3, null], "s": "a\"é"}"#)
+            .unwrap();
         assert_eq!(v.get("token").and_then(Json::as_str), Some("ab"));
         assert_eq!(v.get("port").and_then(Json::as_f64), Some(45841.0));
         assert!(v.get("coop").unwrap().truthy());

@@ -74,7 +74,8 @@ fn main() {
             }
             "snap" => {
                 let packets = session.as_mut().expect("session").snapshots(t);
-                let items: Vec<String> = packets.iter().map(|(a, p)| format!("[{},{}]", quote(&a.to_string()), quote(&hex(p)))).collect();
+                let items: Vec<String> =
+                    packets.iter().map(|(a, p)| format!("[{},{}]", quote(&a.to_string()), quote(&hex(p)))).collect();
                 format!("{{\"out\":[{}]}}", items.join(","))
             }
             "expire" => {
@@ -90,7 +91,12 @@ fn main() {
                     Some(bits) => f64::from_bits(u64::from_str_radix(bits, 16).expect("bits")),
                     None => cmd.get("x").and_then(Json::as_f64).expect("x"),
                 };
-                format!("{{\"g9\":{},\"g17\":{},\"f3\":{}}}", quote(&fmt_g(x, 9)), quote(&fmt_g(x, 17)), quote(&fmt_f(x, 3)))
+                format!(
+                    "{{\"g9\":{},\"g17\":{},\"f3\":{}}}",
+                    quote(&fmt_g(x, 9)),
+                    quote(&fmt_g(x, 17)),
+                    quote(&fmt_f(x, 3))
+                )
             }
             other => panic!("unknown op {other}"),
         };

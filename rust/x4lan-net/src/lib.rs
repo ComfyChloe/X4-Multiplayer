@@ -214,8 +214,8 @@ pub fn validate_target(host: &[u8], port: f64) -> Result<SocketAddrV4, &'static 
 }
 
 fn connect(target: SocketAddrV4) -> Result<UdpSocket, &'static CStr> {
-    let socket = UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0))
-        .map_err(|_| c"UDP socket creation failed")?;
+    let socket =
+        UdpSocket::bind(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 0)).map_err(|_| c"UDP socket creation failed")?;
     // std creates the socket close-on-exec / non-inheritable, as net.c's FD_CLOEXEC.
     if socket.set_nonblocking(true).is_err() || socket.connect(target).is_err() {
         return Err(c"UDP nonblocking/connect failed");
@@ -333,8 +333,20 @@ mod tests {
         assert_eq!(parse_ipv4(b"0.0.0.0"), Some(Ipv4Addr::UNSPECIFIED));
         assert_eq!(parse_ipv4(b"255.255.255.255"), Some(Ipv4Addr::BROADCAST));
         for bad in [
-            &b""[..], b"1", b"1.2.3", b"1.2.3.4.5", b"256.1.1.1", b"01.2.3.4", b"1..2.3",
-            b".1.2.3", b"1.2.3.", b"1.2.3.4 ", b" 1.2.3.4", b"0x1.2.3.4", b"1.2.3.-4", b"localhost",
+            &b""[..],
+            b"1",
+            b"1.2.3",
+            b"1.2.3.4.5",
+            b"256.1.1.1",
+            b"01.2.3.4",
+            b"1..2.3",
+            b".1.2.3",
+            b"1.2.3.",
+            b"1.2.3.4 ",
+            b" 1.2.3.4",
+            b"0x1.2.3.4",
+            b"1.2.3.-4",
+            b"localhost",
         ] {
             assert_eq!(parse_ipv4(bad), None, "{:?}", String::from_utf8_lossy(bad));
         }

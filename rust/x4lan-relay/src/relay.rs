@@ -55,7 +55,11 @@ fn disable_connreset(socket: &UdpSocket) -> std::io::Result<()> {
             std::ptr::null_mut(),
         )
     };
-    if status == 0 { Ok(()) } else { Err(std::io::Error::last_os_error()) }
+    if status == 0 {
+        Ok(())
+    } else {
+        Err(std::io::Error::last_os_error())
+    }
 }
 
 impl Relay {

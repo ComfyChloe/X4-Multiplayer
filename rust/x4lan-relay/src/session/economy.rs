@@ -294,7 +294,15 @@ impl Session {
     }
 
     /// `ORDER|1|lease|request|owner|market|lines` (also reached from co-op COOPORDER).
-    pub(super) fn order(&mut self, slot: Slot, lease: Hex32, request: &str, owner: &str, market: &str, lines: &str) -> Parsed<Vec<Vec<u8>>> {
+    pub(super) fn order(
+        &mut self,
+        slot: Slot,
+        lease: Hex32,
+        request: &str,
+        owner: &str,
+        market: &str,
+        lines: &str,
+    ) -> Parsed<Vec<Vec<u8>>> {
         let (request, owner, market) = (Hex32::parse(request)?, Hex32::parse(owner)?, Market::parse(market)?);
         parse_lines(lines)?;
         let reply = |status: &str| Ok(vec![Self::order_reply(lease, request, status)]);
@@ -331,10 +339,12 @@ impl Session {
         }
         for (slot, peer) in self.core.peers.iter() {
             if let (true, Some(economy)) = (publish_economy, &e.economy) {
-                let chunks: Vec<&str> = economy.as_bytes().chunks(500).map(|c| std::str::from_utf8(c).expect("ascii")).collect();
+                let chunks: Vec<&str> =
+                    economy.as_bytes().chunks(500).map(|c| std::str::from_utf8(c).expect("ascii")).collect();
                 let revision = e.assembly.revision;
                 for (i, payload) in chunks.iter().enumerate() {
-                    let packet = format!("ECON|1|{}|{}|{revision}|{}|{}|{payload}", peer.lease, host.lease, i + 1, chunks.len());
+                    let packet =
+                        format!("ECON|1|{}|{}|{revision}|{}|{}|{payload}", peer.lease, host.lease, i + 1, chunks.len());
                     out.push((peer.address, packet.into_bytes()));
                 }
             }
@@ -354,7 +364,8 @@ impl Session {
             };
             if let Some(target) = target {
                 let kind = if coop { "COOP_EXEC" } else { "ORDER_EXEC" };
-                let packet = format!("{kind}|1|{}|{request}|{target}|{}|{}", host.lease, order.market.as_str(), order.lines);
+                let packet =
+                    format!("{kind}|1|{}|{request}|{target}|{}|{}", host.lease, order.market.as_str(), order.lines);
                 out.push((host.address, packet.into_bytes()));
             }
         }
