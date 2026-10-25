@@ -1,40 +1,52 @@
 X4 Multiplayer {{VERSION}} — INTERNAL HUMAN TEST CANDIDATE
-24 October 2026 | Windows/Linux host or guest | Two players
+25 October 2026 | Windows/Linux host or guest | TWO players per session
 
-Use the same new version in both roles, including its host server/invitation.
+Use the matched 7.5.0 packages, included host server and a NEW invitation.
+Do not overlay a configured 7.4.1 folder. Close both games and the old server;
+use the ORIGINAL package's 09-REMOVE-MOD, then extract the new package separately.
 Host: 01 INSTALL -> 02 PREPARE WORLD -> 03 SERVER -> 05 START X4.
-Guest: 01 INSTALL (choose host invitation) -> 04 CONNECTION -> 05 START X4.
-Open 00-START-HERE.html. Allow UDP 45841 and TCP 45844 on the host.
+Guest: 01 INSTALL (host invitation) -> 04 CONNECTION -> 05 START X4.
+Open 00-START-HERE.html. Host network: UDP 45841 and TCP 45844.
+The host still runs X4. This is not a dedicated/headless or 4–6-player release.
 
-FOCUSED ACCEPTANCE
-Use HUMAN-TEST-RESULT.txt to record run ID, roles, exact version and case times.
-1. Run HUMAN-DAMAGE-TEST.txt D01 and D02 first: stationary host->guest and
-   guest->host, supplied original Shuttle guns. If either disagrees, collect both
-   logs and stop. Expected convergence: within 2 seconds of the final hit, accounting for
-   recharge and observation time. Allow one displayed percentage point for HUD
-   rounding. Compare recharge readings at matching times; sustained divergence
-   is a failure. These are the human acceptance thresholds.
-2. After both pass, run D03-D06: modest hull damage, slow moving target,
-   deliberate misses/free aim, then stop/recharge. Retain native spread and gun
-   tracking; an ordinary miss is not a synchronization error.
-3. Optional D07 after those pass: deliberate destruction/ejection in the isolated
-   test world. Do not shoot the suit or immediately chain respawn/ship takeover.
-4. Restart BOTH games and the relay for the independent dock sequence B01-B05
-   in HUMAN-DOCK-TEST.txt at LAN Trading Station Beta. Check the occupied bay,
-   walk into the peer ship, then guest flight/landing/exit and host reclaim.
-   If both games grant the same occupied pad, stop before forcing the old crash.
-5. During these checks, note any main story mission that starts. The completed
-   story preset should leave ordinary optional missions, upkeep and Trial alone.
+NEW FEATURES TO TEST FIRST
+Follow HUMAN-NPC-MISSION-TEST.txt:
+N01/N02: host and guest damage the SAME free-flying S/M NPC.
+N03/N04: guest damages/destroys an NPC in ANOTHER sector while host stays behind.
+N05: guest leaves and returns; the destroyed NPC must not reappear.
+M01–M03: shared native kill contract, guest acceptance, cross-sector progress,
+completion and one shared credit reward. M04: shared abort on a separate offer.
+Shared missions cover one native kill-contract family, not all ordinary missions.
+If no suitable [Shared] offer appears, record INCONCLUSIVE; do not substitute Trial.
 
-RETAINED / NOT REQUESTED AGAIN
-Radar, ordinary cargo, movement, station/asteroid alignment, Alt+Tab and Trial
-have prior human passes. Repeat only if a new symptom appears. No general NPC
-orders/combat, new station construction, or ongoing economy acceptance follows.
-Very short-lived shots, in-flight pilot handoff and arbitrary weapon loadouts
-are outside this candidate's qualified combat cases.
+INSTALLER CHECKS
+Each player records successful extraction, 01 setup and first 05 launch.
+Confirm imported resolution/controls; the normal profile and Steam Workshop
+subscriptions must remain unchanged. On Windows use manual X4.exe selection or
+profile reselection only if needed; record errors rather than changing scripts.
+If another team can host on Windows, repeat N03 and M02 with that host arrangement.
+Each test group uses its own new invitation; do not share one session across groups.
 
-Stop both games and relay together to restart. Both reload the same STARTING
-world; played progress is not resumed. Never load/save a normal campaign here.
-After a failure run06-DIAGNOSTICS on BOTH PCs before restarting. Preserve host
-server logs, roles/OS, object codes and case time. Keep invitations/session keys
-private. A local engine test with a synthetic peer is not a human-pair pass.
+AFFECTED REGRESSIONS / EXISTING OPEN ISSUES
+After N/M checks, use HUMAN-DAMAGE-TEST.txt D01/D02 for a short player-vs-player
+check: NPC hit capture now shares this path. Do not repeat the full old suite.
+Check whether the guest can still select the moving host ship. This previously
+failed and has no dedicated fix in this release; report both views and the time.
+Docking remains unchanged: optionally run HUMAN-DOCK-TEST.txt B01–B05 in a separate
+run, stopping before landing if both games grant the SAME occupied bay.
+Captured ships, fleet orders, NPC AI/weapon visuals, L/XL surface combat, general
+mission families, station/economy evolution and campaign resume remain open.
+Story-Koop, voting, text chat and dedicated hosting have not been implemented.
+
+RETAINED HUMAN PASSES
+Radar, ordinary cargo, smooth motion, initial station/asteroid alignment, Alt+Tab
+and Cooperative Trial already passed. Repeat only if a new symptom appears.
+The completed-story preset and full personal teleportation research remain enabled.
+
+REPORTING / RESTART
+Use HUMAN-TEST-RESULT.txt. Record case, local time/timezone, role, target code,
+sector, short observation and screenshots if values disagree. Run 06-DIAGNOSTICS
+on BOTH PCs after each run and before any restart after a failure. Keep the host
+server logs too. Do not publish invitations, session.json or ui/config.lua.
+Stop BOTH games AND relay together for a retry. Both reload the same STARTING
+world; played progress is not resumed. Never use a normal campaign here.

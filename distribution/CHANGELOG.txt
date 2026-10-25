@@ -1,24 +1,22 @@
-Unreleased — 25 October 2026 — opt-in NPC combat development
-- Add host-native NPC health/death and acknowledged cumulative guest hits, including
-  NPCs in a different sector from the host player. Internal S/M stock-gun scope.
-- Fence native identity/authority transitions, duplicate hits and terminal death;
-  keep capture permissions fresh without extending the native validity window.
-- Include the new relay module in both Windows and Linux server builds.
-- Not enabled in the launcher or sealed7.4.1 packages; matched human testing and
-  broader combat scope remain pending. See reports/NPC-COMBAT-20261025.txt.
-
-Unreleased — 25 October 2026 — reviewed community installer fixes
-- Inspect Windows process output as bytes; localized tasklist output cannot cause
-  a decoding crash or bypass the running-game check.
-- Select X4.exe or its folder explicitly on a fresh Windows setup. Skip unavailable
-  Steam libraries and stale registry paths; offer a manual Steam-folder fallback.
-- Recover overlaid same-version session metadata only after ownership validation,
-  with exact backups and rollback. Preserve existing keys, invitations and worlds.
-- Honor an explicit settings-profile override on repeat installation and offer
-  source-profile reselection. Detect mixed launcher/settings modules before setup.
-- Explain test-profile versus normal-profile mod selection without changing it.
-  Community mod-selection writers and experimental fleet/combat/map code are not
-  included. Existing sealed 7.4.1 archives remain unchanged.
+Version 7.5.0 — 25 October 2026 — INTERNAL human-test candidate
+- Enable host-native NPC health/death and acknowledged cumulative guest hits,
+  including guest sectors remote from the host. Supported free-flying S/M targets
+  and uniform stock Shuttle plasma / Pulse Mk1/Mk2 main guns only.
+- Enable the first shared ordinary mission adapter: standalone visible native
+  matching-ship kill contracts without inventory rewards. Guest acceptance/abort,
+  faction kill progress, host deadline and single shared credit reward.
+- Include reviewed Windows setup fixes: safe localized process output, missing
+  Steam-drive handling, manual game-path selection, settings-profile reselection,
+  same-version owned session recovery and launcher/module compatibility checks.
+- Keep normal profiles and Workshop selections untouched. Do not import community
+  mod-selection writers or the unvalidated fleet/map experiment.
+- Retain existing player combat, motion, cargo, radar, shared starting world,
+  completed-story/teleportation preset and docking candidate behavior.
+- Both OS packages include server, runtime and English focused human test guides.
+  Use a new matched pair/server/invitation; existing sealed archives are unchanged.
+- NPC/faction-mission native evidence uses separate real-game/synthetic-peer runs.
+  Windows and matched human acceptance remain pending. This is not a persistent
+  campaign, dedicated server, 4–6-player release or universal mission sharing.
 
 Version 7.4.1 — 24 October 2026 — INTERNAL launcher correction
 - All ten Linux starters open a visible terminal when launched without one.

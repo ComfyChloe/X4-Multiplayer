@@ -1,19 +1,21 @@
 X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 
 CURRENT TASK / CHECKOUT
-work/x4-weapons-7-4, contrib/astra-faction-missions, stacked on3020f54 of
-contrib/astra-npc-combat / draftPR44. Missions sourcecba4391 is pushed in draftPR45:
+work/x4-weapons-7-4, contrib/astra-7-5-delivery, stacked on019bff1 of
+contrib/astra-faction-missions / draftPR45. Missions sourcecba4391 is pushed in:
 https://github.com/Lith7ium/X4-Multiplayer/pull/45
-Integration remains contrib/astra-7-4-integration
-/ draftPR37. User's latest goal: ordinary missions shared across the player faction,
-not just Cooperative Trial. Primary works alone. No agent/chat/timer/Slack polling.
+User requested matched Windows/Linux INTERNAL packages for all implemented work.
+7.5.0 candidate activates NPC/faction missions and includes installer fixes.
+636 Linux/LuaJIT PASS/no skips; archive assembly/verification is in progress.
+Primary works alone. No agent/chat/timer/Slack polling. Dedicated/headless,
+story-Koop and persistent-server discussions were analysis only, not implementation.
 
 LATEST MILESTONE
 First ordinary-mission adapter: native GM_Destroy_RarelyOnSight matching-ship kill
 contracts. Host retains original native mission/criteria/reward/timers. Guest can
 accept a shared host offer, see progress and abort. Guest's admitted NPC kills in
 another sector produce the stock host player-faction kill event and count normally.
-Source faction_missions=false; no launcher activation/package/version change.
+Source faction_missions=false stays inert;7.5.0 launcher enables both new paths.
 Read reports/FACTION-MISSIONS-20261025.txt before extending. Files: x4lan/missions.py,
 ui/mission_{protocol,game}.lua, md/x4lan_missions.xml, two small stock GM/RML diffs.
 Existing quests.py/Cooperative Trial logic unchanged. English code/docs/interfaces.

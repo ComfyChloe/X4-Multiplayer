@@ -26,13 +26,31 @@ class InternalSessions(unittest.TestCase):
             self.assertEqual((meta['slot'],cfg['host'],cfg['port']),(slot,address,45841))
             self.assertEqual(cfg['token'],invite['token']);self.assertTrue(cfg['world_sync']);self.assertTrue(cfg['fire2'])
             lua=(folder/'extension/x4_lan_lab/ui/config.lua').read_text()
-            for text in ('world_sync = true','fire2 = true','ship_weapons = 6','ship_ter_s_xperimental_01_a_macro','test_profile = "45841"', 'coop_docks = true', 'pilot_health = true', 'shot_claims = true', 'shot_visual = true', 'shot_capture = true', 'projectile_visuals = true', 'shot_undo = false'):
+            for text in ('world_sync = true','fire2 = true','ship_weapons = 6','ship_ter_s_xperimental_01_a_macro','test_profile = "45841"', 'coop_docks = true', 'pilot_health = true', 'shot_claims = true', 'shot_visual = true', 'shot_capture = true', 'projectile_visuals = true', 'shot_undo = false', 'npc_combat = true', 'faction_missions = true'):
                 self.assertIn(text,lua)
     def test_separate_test_groups_get_distinct_keys_and_world_ids(self):
         a=self.configure();other=self.package('other','Windows11')
         with patch.object(launcher,'ROOT',other):launcher.configure('host','192.0.2.202')
         b=json.loads((other/'JOIN-SESSION.json').read_text())
         self.assertNotEqual(a['token'],b['token']);self.assertNotEqual(a['bubble'],b['bubble'])
+    def test_seed_admission_preserves_both_roles_and_enables_candidate_gameplay(self):
+        from distribution.world_launcher import install_play_config
+        from lupa.luajit21 import LuaRuntime
+        invite = self.configure()
+        for folder, slot in ((self.host, 'p1'), (self.guest, 'p2')):
+            template = folder / 'extension/x4_lan_lab/ui/config.lua'
+            before = template.read_bytes()
+            target = self.root / ('installed-' + slot)
+            (target / 'ui').mkdir(parents=True)
+            install_play_config(folder, target, {'extensions': [{'id': 'ego_dlc_timelines', 'version': '900'}]})
+            lua = LuaRuntime()
+            lua.execute((target / 'ui/config.lua').read_text())
+            cfg = lua.globals().X4LAN_CONFIG
+            self.assertEqual((cfg.slot, cfg.token, cfg.seed_id), (slot, invite['token'], invite['bubble']))
+            self.assertTrue(cfg.seed_verified and cfg.npc_combat and cfg.faction_missions)
+            self.assertTrue(cfg.shot_capture and cfg.shot_claims and cfg.pilot_health)
+            self.assertEqual(cfg.seed_content, 'ego_dlc_timelines:900')
+            self.assertEqual(template.read_bytes(), before)
     def test_public_old_incomplete_and_unsafe_invites_are_rejected(self):
         a=self.configure()
         for key,value in [('channel','public'),('port',45842),('version','7.1.1'),('fire2',False),('world_sync',1),('world_mode','host'),('server','127.0.0.1'),('extra',True)]:

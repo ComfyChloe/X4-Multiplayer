@@ -9,7 +9,7 @@ New contributors and coding agents: start with the
 [onboarding packet](onboarding/00-START-HERE.txt), including its pinned code baseline,
 [starter prompt](onboarding/01-AGENT-START-PROMPT.txt) and
 [source map](onboarding/03-CODE-AND-STATUS.txt). Current development is on
-`contrib/astra-7-4-integration` ([draft PR37](https://github.com/Lith7ium/X4-Multiplayer/pull/37));
+`contrib/astra-7-5-delivery`, stacked on the NPC/mission development branches;
 do not assume `main` has these changes.
 
 Read [AGENTS.md](AGENTS.md) and the short [current handoff](CONTINUE-HERE.txt).
@@ -19,30 +19,27 @@ Load only task-relevant evidence rather than the entire historical archive.
 
 ## Delivered packages and current source
 
-The sealed internal Windows/Linux pair is **7.4.1**, from source `235f9ba`.
-Both packages contain the server, private Python runtime and English procedures.
-Linux's alternative Small.7z is 19,929,193 bytes with the same payload. Follow
+The current internal candidate is **7.5.0**. Both Windows/Linux packages include
+the server, private Python runtime and English procedures. Follow
 [installation instructions](distribution/INSTALL.html), the
 [package guide](distribution/README.txt) and [human test procedures](distribution/NEXT-TEST.txt).
 The host runs X4 and the relay; UDP45841 and TCP45844 are required. Both players
-use profile45841 with matching game/DLC content and a private host invitation.
+use profile45841 with matching game/DLC content and a new private host invitation.
+The sealed7.4.1 pair from235f9ba remains unchanged and does not contain these additions.
 
-The source additionally contains **unreleased** community installer fixes from
-`7c6ec19`: Windows process decoding, unavailable Steam drives, explicit game path
-selection, validated session recovery and preference reselection. They are not in
-those sealed archives. See the [review](reports/COMMUNITY-PATCH-REVIEW-20261025.txt)
-for accepted changes and reproduced failures in the excluded fleet/map experiment.
+This candidate includes reviewed installer fixes from7c6ec19: Windows process
+output, unavailable Steam drives, explicit game paths, owned same-version session
+recovery and preference reselection. See the
+[community review](reports/COMMUNITY-PATCH-REVIEW-20261025.txt).
 
-An additional opt-in [NPC combat development path](reports/NPC-COMBAT-20261025.txt)
-transfers host health and acknowledged guest hits across sectors. It is disabled
-in the delivered packages; current S/M stock-gun scope and retained native failures
-are documented separately from human multiplayer acceptance.
-
-An opt-in [ordinary faction mission adapter](reports/FACTION-MISSIONS-20261025.txt)
-now connects stock matching-ship kill contracts to a shared host-owned journal:
-acceptance, objective progress, completion, abort and failure. Separate native
-host/guest runs passed within the documented scope; other mission families and
-matched human multiplayer acceptance remain open. It is not in sealed packages.
+The [NPC combat path](reports/NPC-COMBAT-20261025.txt) and first
+[ordinary faction mission adapter](reports/FACTION-MISSIONS-20261025.txt) are now
+enabled in launcher-generated test configurations. Source and unconfigured
+packages remain inert. NPC scope is free-flying S/M main hull/shields with admitted
+stock guns; mission scope is standalone matching-ship kill contracts without
+inventory rewards. Separate native host/guest runs passed within their documented
+scope. Matched human acceptance remains pending; use the
+[new NPC/mission procedure](distribution/HUMAN-NPC-MISSION-TEST.txt).
 
 ## Acceptance and remaining work
 
@@ -58,7 +55,7 @@ catchup remain unfinished. Restarting currently returns to the pristine starting
 world. See [world requirements](WORLD-SYNC-REQUIREMENTS.txt) and the current handoff
 for evidence limits and the relevant native reports.
 
-The source baseline `7c6ec19` has 590 passing Linux/Python/LuaJIT tests without skips;
+The7.5.0 candidate has636 passing Linux/Python/LuaJIT tests without skips;
 PowerShell installation/discovery fixtures also passed on Linux. Native Windows
 and human gameplay acceptance remain separate. A new contributor runs the suite
 once to establish their environment, then verifies affected behavior and required

@@ -19,6 +19,10 @@ Start time:
 Attacker (host/guest):
 Victim name/code as shown on HOST:
 Victim name/code as shown on GUEST:
+Host sector / guest sector:
+Mission title / target requirements / quota (if applicable):
+Objective count on host / guest:
+Shared credits before / after; advertised reward:
 
 OPTIONAL READINGS: use this table OR reference screenshots/video/assigned telemetry.
 Do not transcribe the same values twice. Time, case, roles and observation matter most.

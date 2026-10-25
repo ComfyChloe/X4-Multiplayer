@@ -1,27 +1,31 @@
 X4 Multiplayer {{VERSION}} — INTERNAL TEST
-24 October 2026 | Windows/Linux host or guest | Two players per session
+25 October 2026 | Windows/Linux host or guest | Two players per session
 X4 9.00, Steam build 23660954 | Matching official DLC including Timelines
 
 Both packages include the server and a private Python runtime. No Python install
 or download is needed. Open 00-START-HERE.html for detailed instructions.
-Extract Linux's .tar.xz or Windows' .zip completely before running any action.
+Extract Linux's .tar.xz (or equivalent Small.7z) or Windows' .zip completely before running any action.
 
-WHAT CHANGED
-7.4.1 corrects Linux desktop startup: all numbered starters open a terminal for
-questions and errors. Gameplay is unchanged from the 7.4.0 candidate below.
-This candidate transmits damage from actual stock-weapon impacts and renders the
-other pilot's observed projectiles, preserving native aim, spread and misses.
-It reserves the same saved station pad in both games and fences stale movement
-after landing or changing pilots. A fixed completed-story preset prevents the
-main story plots from starting during technical tests. It changes some campaign
-outcomes and grants research/HQ progression; it is not a normal campaign preset.
+WHAT CHANGED IN 7.5.0
+- Enable host-authoritative NPC shield/hull damage and death for free-flying S/M
+  targets, including when the guest is in a different sector from the host.
+- Enable shared native matching-ship kill contracts: either role can accept,
+  qualifying faction kills count, the shared objective resolves and host pays once.
+- Include reviewed Windows installer fixes: localized process output, missing
+  Steam drives, manual X4.exe selection, profile reselection and owned recovery.
+- Retain the 7.4.1 Linux terminal starters, player damage/projectile work, saved
+  dock handling, completed-story preset and personal teleportation research.
 
-These corrections have local Linux engine and real-relay/synthetic-peer evidence.
-The Windows/Linux human pair still needs the checks in NEXT-TEST.txt. Supported
-combat scope: the two supplied player Shuttles with uniform, unmodified Shuttle
-plasma or generic pulse Mk1/Mk2 guns. Other weapons, NPC/station combat, short-range
-shots that end before UI capture, and changing pilot during live fire are not
-qualified. Do not treat a visible replica as complete shared NPC gameplay.
+NPC scope: uniform, unmodified stock Shuttle plasma or generic Pulse Mk1/Mk2;
+free-flying S/M main hull/shields. No L/XL surfaces, beams, missiles, turrets,
+mixed/modified weapons, captured-fleet orders or synchronized NPC AI claims.
+Mission scope: standalone visible native GM_Destroy_RarelyOnSight offers without
+inventory rewards. Guest copies use [Shared]. Other ordinary missions and plots
+are not shared; host reputation is not mirrored in the guest UI. Host generates
+offers normally, so an eligible offer is not guaranteed immediately.
+Local Linux engine tests used one real game and a synthetic peer. The combined
+Windows/Linux human pair still needs HUMAN-NPC-MISSION-TEST.txt / NEXT-TEST.txt.
+These are new candidate features, not completed full-universe multiplayer.
 
 One combined startup check refused the second ship's weapon loadout; later runs
 did not reproduce it. If damage is unavailable after connection, collect both
@@ -36,7 +40,7 @@ host-authoritative. Saving/resuming a played multiplayer campaign is not ready.
 
 HOST
 1. Close X4 and the old server. Remove the previous mod using its ORIGINAL
-   package's REMOVE-MOD action (09 in 7.3.1; 5 in 7.3.0). Extract into a new folder.
+   package's REMOVE-MOD action (09 in 7.3.1–7.4.1; 5 in 7.3.0). Extract into a new folder.
 2. Run 01-INSTALL, choose H, enter your reachable LAN/ZeroTier IPv4 address.
    Choose your normal settings profile if asked.
 3. Run 02-PREPARE-WORLD-HOST once. X4 opens, creates the shared world, saves and closes
@@ -84,7 +88,7 @@ The withdrawn 7.2 Fix-1 helper is not included. A separate profile does not by
 itself isolate the Steam account. If content differs, stop and compare the two
 setups; no automatic mod-selection rewrite is performed.
 
-NEXT-TEST.txt describes tonight's focused test. Run 06-DIAGNOSTICS on BOTH PCs before
+NEXT-TEST.txt describes the focused NPC/mission and affected regression tests. Run 06-DIAGNOSTICS on BOTH PCs before
 restarting after a failure. Keep logs, role/OS, object code and approximate time.
 Do not share JOIN-SESSION.json, session.json or ui/config.lua publicly.
 This remains an INTERNAL test, with two simultaneous players per session.
