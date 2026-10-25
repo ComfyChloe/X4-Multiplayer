@@ -1,4 +1,4 @@
-"""Default-enabled engine observer, STATEHASH recorder and MoveWorker seed (engine doubles only)."""
+"""Default-enabled observer, MoveWorker seed and shared attention (engine doubles only)."""
 from pathlib import Path
 import unittest
 
@@ -15,10 +15,13 @@ logs, events = {}, {}
 savePath = "C:/Users/x/Documents/Egosoft/X4/45841/save"
 callback, cadence, nativeStarts = nil, nil, 0
 wallNow, wallDt = 0, 0.001
+remoteAttention, nativeStops = {}, 0
 ships = {
  [1001]={sector=22,macro='ship_arg_m_trans_01_a_macro',owner='argon',idcode='AAA-1',pos={x=1,y=2,z=3,yaw=0,pitch=0,roll=0}},
  [1002]={sector=22,macro='ship_arg_s_fighter_01_a_macro',owner='player',idcode='PLAY-1',pos={x=4,y=5,z=6,yaw=0,pitch=0,roll=0}},
+ [2002]={sector=22,macro='ship_arg_s_fighter_01_a_macro',owner='player',idcode='PLAY-2',pos={x=7,y=8,z=9,yaw=0,pitch=0,roll=0}},
 }
+X4LAN_BUBBLE_API={state={proxy=2002}}
 api = {
  GetSaveFolderPath=function() return savePath end,
  IsPlayerValid=function() return true end,
@@ -31,7 +34,7 @@ api = {
 }
 native = {
  start=function(cb, rate) nativeStarts=nativeStarts+1;callback=cb;cadence=rate
-  return {stop=function() end,active=function() return true end,frames=function() return 0 end} end,
+  return {stop=function() nativeStops=nativeStops+1 end,active=function() return true end,frames=function() return 0 end} end,
  inspect=function(id) return {attention=9,hull=50,shield=75,owner_pointer='0000000000001234',generation=3,registry=true} end,
  walltime=function() wallNow=wallNow+wallDt;return wallNow end,
  hash=function(rows)
@@ -41,6 +44,7 @@ native = {
   end
   return string.format('%08x%08x',tonumber(value/4294967296ULL),tonumber(value%4294967296ULL))
  end,
+ set_remote_attention=function(id) remoteAttention[#remoteAttention+1]=id;return true end,
 }
 local realRequire = require
 require = function(name)
@@ -218,6 +222,28 @@ class EngineHookTests(unittest.TestCase):
         lua = self.runtime("native.start=function() return false,'bad build' end")
         lua.eval("events['X4LAN.Loaded']")()
         self.assertIn("HOOKS_DISABLED reason=bad%20build", self.logs(lua)[-1])
+
+    def test_remote_attention_tracks_proxy_lifetime(self):
+        lua = self.runtime()
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertEqual(lua.eval("remoteAttention[1]"), "2002")
+        lua.eval("onUpdate")()
+        self.assertEqual(lua.eval("#remoteAttention"), 1)
+        lua.execute("ships[2003]=ships[2002];X4LAN_BUBBLE_API.state.proxy=2003")
+        lua.eval("onUpdate")()
+        self.assertEqual(lua.eval("remoteAttention[2]"), "2003")
+        lua.execute("ships[2003]=nil")
+        lua.eval("onUpdate")()
+        self.assertEqual(lua.eval("remoteAttention[3]"), "0")
+
+    def test_remote_attention_refusal_tears_down_owner(self):
+        lua = self.runtime("native.set_remote_attention=function() return false,'stale proxy' end")
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertEqual(lua.eval("nativeStops"), 1)
+        self.assertTrue(lua.eval("X4LAN_ENGINE_HOOKS.failed"))
+        self.assertIsNone(lua.eval("X4LAN_ENGINE_HOOKS.owner"))
+        self.assertIn("HOOKS_DISABLED reason=stale%20proxy", self.logs(lua)[-1])
+        self.assertNotIn("HOOKS_READY", "\n".join(self.logs(lua)))
 
     def test_lua_has_no_gameplay_writes_or_transport(self):
         text = SOURCE.read_text()

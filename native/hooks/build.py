@@ -1,4 +1,4 @@
-"""Build and test the default-enabled Windows read-only observer using Rust."""
+"""Build and test the default-enabled Windows engine hooks using Rust."""
 import argparse
 import os
 from pathlib import Path
