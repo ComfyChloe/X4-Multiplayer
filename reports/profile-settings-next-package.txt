@@ -1,0 +1,31 @@
+Personal settings import prepared for the next INTERNAL package
+22 October2026
+
+Problem: setup created a sparse isolated configuration and both launchers reset
+it to fixed display/graphics values. Custom input bindings were not imported.
+
+Behavior: the shared internal launcher imports normal config.xml and active/named
+inputmap XML files after installation, only once per package setup. With multiple
+normal profiles it asks for a source; without one it keeps current preferences or
+game defaults. --settings-profile chooses an explicit source; --keep-test-settings
+opts out.9-IMPORT-SETTINGS provides an explicit later reimport. Failed import leaves
+setup retryable without reinstalling the already installed mod. Server-only setup
+never imports preferences. Both platform backends retain preferences on start.
+
+Safety: source profiles are read-only. Target ownership/profile and empty-save
+checks remain. Saves, mod lists and uidata are not imported. Only autosave=false
+and uisafemode=false override config values. Exact prior test-file backups and
+rollback cover partial writes, including a failed completion record. Linked
+settings and invalid source XML are refused before writes.
+
+Validation:302 Python/Linux/LuaJIT checks, no skips. Cases include5120x1440,
+borderless mode, personal quality/audio, exact key/controller XML, source file
+bytes/mtimes, multiple profiles, no source, retained mod selection, rollback,
+retry after failure, and startup preserving settings and rejecting linked profiles.
+Windows installer/start fixtures pass under Linux PowerShell, including unchanged
+5120x1440 configuration on start. Exactly2 drive-root Windows-only assertions were
+omitted in the local adaptation; native metadata reads remain simulated.
+Temporary thin packages for both OSes contain profile_settings.py and9-IMPORT-
+SETTINGS with matching file inventories. No portable-runtime or native Windows
+run was performed for this change. Existing release ZIPs, installed game files
+and real user profiles were not modified.

@@ -1,0 +1,24 @@
+23 October2026 — human7.3.0 playtest follow-up
+
+User-reported accepted: ordinary station AND asteroid alignment. Preserve previous
+radar, ordinary cargo, smooth ship movement and Cooperative Trial acceptance.
+No claim of persistent campaign or ongoing station economy follows from this.
+
+Open findings:
+- Station docking: barriers open only for own local ship, peer cannot be boarded;
+  NPC ships spawn through peer ship. Existing NAV2 dock field covers only fixture
+  markets0/1/2. General station/pad identities and native occupancy are absent.
+  Pose agreement cannot reserve a pad. A repair needs stable station+specific
+  docking-bay identity, native request_docking_at_dock admission, occupancy
+  readback and detach handling, with conflicts rejected rather than warped away.
+- Alt+Tab stops updates. The installed45841 config has fullscreen=true and
+  borderless=false. -nocputhrottle was already shipped. Candidate uses borderless
+  while preserving resolution/input; native Linux focus test is recorded separately.
+- All personal teleportation research requested; grant the four verified stock
+  research_teleportation/range_01/range_02/range_03 wares after admitted ship setup.
+- Repeated starter numbers and invitation-path typing confuse testers: candidate
+  uses01–10 unique actions, HOST labels,00-START-HERE and an OS invitation picker.
+
+User requests INTERNAL Windows/Linux candidate by23Oct20:30CEST, priority correct
+weapon damage. Claude owns production damage fromf29d3ef; primary distribution,
+research, native Linux and integration. No public mirror/package update requested.

@@ -5,8 +5,10 @@ These tests do not prove engine behaviour; the SHIP_SPEC debug line is the nativ
 from pathlib import Path
 import importlib.util
 import re
+import shutil
 import tempfile
 import unittest
+from unittest.mock import patch
 import xml.etree.ElementTree as ET
 from test_game_adapter import MOCK, LuaRuntime
 
@@ -79,7 +81,23 @@ class ShipSpecContractTests(unittest.TestCase):
 
     def test_built_pair_configures_identical_ship_for_both_slots(self):
         with tempfile.TemporaryDirectory() as temp:
-            folders = build_packages.build(Path(temp) / 'pair')
+            # Exercise current assembly before release reports exist. These
+            # fixture reports cannot become production validation records.
+            source = Path(temp) / 'source'
+            source.mkdir()
+            for name in ('VERSION.txt', 'VERSIONING.txt', 'extension', 'x4lan'):
+                if (ROOT / name).is_dir():
+                    shutil.copytree(ROOT / name, source / name,
+                                    ignore=shutil.ignore_patterns('__pycache__'))
+                else:
+                    shutil.copy2(ROOT / name, source / name)
+            (source / 'reports').mkdir()
+            release = build_packages.version()
+            for name, suffix in (('automated', 'tests'), ('release', 'checks')):
+                (source / 'reports' / f'{name}-{release}-{suffix}.txt').write_text(
+                    'Unit-test fixture only; no release acceptance.\n')
+            with patch.object(build_packages, 'SOURCE', source):
+                folders = build_packages.build(Path(temp) / 'pair')
             configs = [(f / 'extension/x4_lan_lab/ui/config.lua').read_text() for f in folders]
             for config in configs:
                 self.assertIn('ship_macro = "%s",' % build_packages.SHIP_MACRO, config)

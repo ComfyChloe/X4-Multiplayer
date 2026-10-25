@@ -1,0 +1,70 @@
+CHECKOUT AND VERIFICATION — NO GAME INSTALLATION REQUIRED
+
+REQUIREMENTS
+Own access to the private repository, Git, Python3.10+, and dependency-download
+access for a fresh virtual environment. The complete suite targets Linux x86_64:
+tests/test_lua.py loads the tracked Linux native transport. Local UDP is required.
+Windows contributors can run that suite in a suitable Linux x86_64 WSL2 environment
+or Linux host; this does not qualify native Windows launchers or X4. Do not install
+an OS environment or system packages without the machine owner's authorization.
+Use an existing Git authentication method; never put credentials in these commands.
+
+NEW CLONE (use a new folder name if this one exists)
+  git clone --branch contrib/astra-7-4-integration https://github.com/Lith7ium/X4-Multiplayer.git X4-Multiplayer-contributor
+  cd X4-Multiplayer-contributor
+  git status --short
+  git rev-parse HEAD
+  git show --no-patch 7c6ec19ec9ea26f9ee73b88e4816e0a85bb86253
+
+The clone includes current onboarding documentation. Read it before creating the
+task branch. Unless a newer agreed baseline is supplied, use the pinned CODE:
+  git switch -c contrib/yourname-task 7c6ec19ec9ea26f9ee73b88e4816e0a85bb86253
+
+Replace yourname-task with a unique agreed task name. The onboarding documents
+were added after that code commit, so retain this packet or read them on the
+integration branch; a newer agreed integration commit can include both.
+
+EXISTING CHECKOUT / SECOND AGENT ON ONE MACHINE
+Inspect git status and preserve any edits. Do not switch the primary writer's
+branch. From the existing repository, create a NEW sibling worktree:
+  git fetch origin
+  git worktree add ../X4-Multiplayer-yourname-task -b contrib/yourname-task 7c6ec19ec9ea26f9ee73b88e4816e0a85bb86253
+  cd ../X4-Multiplayer-yourname-task
+
+A worktree isolates source files, not the installed mod, profile45841, game process,
+Steam account or relay ports. Never use it as permission for concurrent engine runs.
+
+LINUX DEVELOPMENT ENVIRONMENT
+  python3 dev/bootstrap.py
+  .venv/bin/python dev/check.py
+
+Bootstrap installs pinned development dependencies in this checkout's .venv.
+It does not install/launch X4. Do not copy .venv from another machine. Missing
+LuaJIT coverage, skipped tests or blocked UDP mean incomplete validation, not PASS.
+The pinned code's retained result is590 PASS/no skips. On first setup, one full
+run establishes your environment. Do not rerun it merely to refresh a status note.
+
+FOCUSED EXAMPLE FOR THE RECENT INSTALLER CHANGES (Linux repository root)
+  PYTHONPATH=tests:. .venv/bin/python -m unittest test_launcher_recovery test_internal_sessions test_profile_settings test_world_launcher test_linux_starters
+
+POWERSHELL FIXTURES (use an already available PowerShell executable)
+  pwsh -NoLogo -NoProfile -File tests/test_windows_discovery.ps1
+  pwsh -NoLogo -NoProfile -File tests/test_windows_profiles.ps1
+
+On Windows with PowerShell5.1, the corresponding executable is powershell.exe.
+These scripts use temporary fixtures; the profile suite doubles native Windows
+metadata access. Running them on Windows still does not prove real OneDrive,
+native file dialogs, Steam subscriptions or X4 gameplay. Review the tests before use.
+
+CURRENT HANDOFF AND PR TARGET
+Fetch before integration and compare your baseline with the integration head.
+Do not silently upgrade the baseline or force-push shared history. For a task
+stacked on the unmerged7.4 work, target contrib/astra-7-4-integration so reviewers
+see only your delta. The integrator maintains PR37 toward its upstream branch and
+eventual main integration. If main later contains the baseline, agree the new PR
+base. Generic origin/main examples in CONTRIBUTING.txt are not today's baseline.
+
+READ-ONLY RECEIPT TO SEND TO THE TEAM
+Repository/branch/HEAD; OS/architecture; environment/check status with command and
+limits; proposed task and files/interfaces; known overlaps; any missing evidence.
+Send no access tokens, JOIN-SESSION.json, session keys, saves or personal paths/logs.

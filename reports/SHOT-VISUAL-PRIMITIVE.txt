@@ -1,0 +1,88 @@
+HARMLESS VISUAL PROJECTILES — ACTIVE INTERNAL RESEARCH, 24 OCTOBER 2026
+
+HP undo is not a complete replay solution: real native hits still delay shield
+recharge. LAST-ATTACKER-NATIVE.txt records the zero-impact/recharge controls.
+An original zero-damage bullet can preserve native model/effect references,
+speed, lifetime, spread and firing cadence while inflicting no HP damage or
+recharge delay in the qualified single-engine experiments.
+
+ZERO-SWITCH NATIVE API PRIMITIVE
+The Linux9.00 executable exports GetWeaponLaunchedMacro and SetWeaponLaunchedMacro.
+Local disassembly pins the getter's UniverseID/string-return and setter's
+UniverseID/C-string arguments; retained code uses those exported functions, not
+raw memory patches. No declaration/use was found by an MD5-checked scan of the
+base game's packed UI Lua files. This is runtime-qualified on this exact Linux
+build, not an official header guarantee or Windows qualification.
+
+zero-switch-01 FAILS before the setter: the probe used the decimal-string ID
+converter on an MD hexadecimal ID. No setter result is inferred from that run.
+The same audit exposed the SHOT loadout mod gate's invalid-ID false-negative;
+faeb16d fixes it with ConvertIDTo64Bit plus nonzero/operational validation.
+
+zero-switch-02 bounded pulse observations: the same installed gun ID and groupP1
+remain through stock->zero->stock.8 stock hits cost288shield;9zero hits cost0;
+9restored hits cost324. Overall PARTIAL: its additional mod observer incorrectly
+requires6 physical slots. X-Shuttle actually has7 slots, with slot4 empty.
+The earlier suggestion of a second raw-object conversion failure was incorrect.
+
+zero-switch-03 bounded PASS on source0dec7e6: six installed X-Shuttle guns at
+physical slots1/2/3/5/6/7 preserve exact IDs and deliberately different primary/
+secondary memberships (P1/P2/S3), plus active groups2/3, through both switches.
+Every fired projectile macro matches the selected mode.67 stock hits cost2680
+shield,56zero hits cost0,56restored hits cost2240; each native damage step agrees
+with40 per hit. Only the three active primary-group2 guns emit projectiles.
+A separate native equipment-mod installation on the co-op ship is read back as
+one modified gun, DamageFactor1.1799199581146, and five unmodified guns. The actual
+corrected production gate admits the initial loadout then permanently stops after
+that mod installation. No mod-query/ID/callback errors occur in run03.
+Raw SHA2562b3af6ba86960484682f48ee2e80e2e27751babeebb48e55d5e4edfd97fd01d1.
+All three runs retain raw logs/source/probe inventories and audited restoration
+of37 installed files and unchanged actual save bytes/timestamps.
+
+LIMITS / NEXT IMPLEMENTATION
+No source capture, network role transition, near-overheat/burst-state continuity,
+free-aim replay or Windows acceptance follows these isolated primitives. Native
+shoot_at is a diagnostic control only; production must not auto-lock a selected
+victim or remove native scatter/misses. Source installed gun macros stay stock
+even when their launched bullet is zero: capture requires a separate verified
+original-bullet mode, not merely the stock loadout/mod gate.
+
+Primary owns an INERT visual-mode module and FIRE2 fences. Proposed native proof:
+shotVisualMode (0unknown/1original/2zero), shotVisualGen, shotVisualAt, plus ordered
+request/proof serials. Stop native scripted fire and clear finite FIRE2 budgets,
+wait for matching native ACK, then switch/read back all actual installed guns.
+Only then publish mode proof under the current SHOT generation/state/time window.
+Lua and native FIRE2 execution must both require current zero-mode proof; queued
+old firing requests must never fire a newly restored original weapon. Capture
+requires fresh matching original-mode proof. All flags remain off pending review
+and focused native integration. In-flight damage across authority handovers is
+an additional qualification, not solved merely by changing future bullets.
+
+OPT-IN ADAPTER AND OWNERSHIP HANDOVER (983f5a4)
+
+New shot_visual=false module retains original gun components and switches only
+their launched macro. A native stop/budget-clear ACK precedes the setter; every
+installed gun is read back before a fresh native proof. FIRE2 checks this proof
+both before enqueueing and again in native execution. Unknown/expired proof,
+closed generations and local piloting refuse positive replay and clear budgets.
+The three new harmless definitions reference stock resources without shipping
+game asset files. Capture separately requires fresh original-projectile proof.
+
+.local/evidence-249-withheld: actual remote/local/remote ownership changes (health
+generations2/4/6), all six gun IDs at slots1/2/3/5/6/7 retained. Exactly six harmless
+bullets before takeover and six after return. While locally piloted, two injected
+positive FIRE2 requests (old AND current generation) produce no bullets; twelve
+readbacks stay original mode/gen4. All18 gun readbacks match zero/original/zero.
+Bounded native adapter PASS; this is one Linux engine with a synthetic peer, not
+a matched Windows/Linux game or free-aim acceptance. Raw SHA256
+c50680de55a1b2ebcc9e495059105a1e52ba28780a96a0f9a36b5d65ecdf6788.
+37 restored files and seven actual normal-save bytes/timestamps verified; owned
+game/helpers closed. Native zero-damage-macro warning remains in engine-errors.txt.
+No parser/API failure. Source schema valid;58 focused SHOT/FIRE2/visual checks
+passed after correcting one test-only token-substitution ordering bug;25 adjacent
+co-op adapter checks also passed. No default flag or package activation.
+
+Following source delta changes the NEW FIRE2 pilot exclusion from occupiedship to
+player.controlled: a passenger must not suppress harmless remote fire. This
+property is used by stock inituniverse.xml/setup.xml. Two affected gate checks
+pass; the passenger/native variant remains pending for the integrated run.

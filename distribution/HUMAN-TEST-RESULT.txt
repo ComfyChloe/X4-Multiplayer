@@ -1,0 +1,52 @@
+X4 MULTIPLAYER — HUMAN TEST RESULT
+Copy this file for each run. Short observations are enough; do not transcribe logs.
+
+Run ID:
+Assigned package version / candidate identifier:
+Enabled cases (assigned by developer):
+Expected settling time / allowed health tolerance (assigned by developer):
+Date / agreed clock / timezone:
+Known host/guest clock difference, if any:
+Host OS:
+Guest OS:
+Who ran the relay (host/other):
+Weapon / active group / changes from supplied Shuttle:
+Relevant non-default game content, if any:
+
+COPY THIS BLOCK FOR EACH CASE
+Case ID:
+Start time:
+Attacker (host/guest):
+Victim name/code as shown on HOST:
+Victim name/code as shown on GUEST:
+Host sector / guest sector:
+Mission title / target requirements / quota (if applicable):
+Objective count on host / guest:
+Shared credits before / after; advertised reward:
+
+OPTIONAL READINGS: use this table OR reference screenshots/video/assigned telemetry.
+Do not transcribe the same values twice. Time, case, roles and observation matter most.
+                         HOST VIEW                 GUEST VIEW
+Before: time             __________                __________
+Before: shield / hull    __________                __________
+After firing: time       __________                __________
+After: shield / hull     __________                __________
+Later sample: time       __________                __________
+Later: shield / hull     __________                __________
+
+Use "unavailable" for values not displayed. Attach a screenshot if useful.
+Result (PASS / FAIL / INCONCLUSIVE / NOT RUN):
+What happened (one or two sentences):
+Recharge, repair, collision, NPC interference, pause/Alt+Tab, seat change:
+Unexpected death/ejection or health jumping back:
+Evidence archive / screenshot / clip names:
+Clip event time or marker:
+Missing diagnostics / other notes:
+
+END OF RUN
+Stopped at case / reason:
+Host diagnostics collected before restart: YES / NO
+Guest diagnostics collected before restart: YES / NO
+Both games and relay stopped together if restarting: YES / NO / NO RESTART
+
+Do not include session keys or invitation/configuration contents.

@@ -65,8 +65,11 @@ local function applyVelocity(i,sector,linear,now)
  -- Changed vectors, especially the packet-loss freeze, never wait for a timer.
  if changed or now>=(v.next or 0) then
   v.next=now+.1;v.sequence=v.sequence+1;v.linear={linear[1],linear[2],linear[3]}
+  local dockStamp,dockAge
+  if cfg.coop_docks and c.attachmentWindow then dockStamp,dockAge=c.attachmentWindow(i,now) end
   AddUITriggeredEvent('X4LAN_Coop','Velocity',{ship=i,generation=v.generation,session=v.session,epoch=v.epoch,
-   sequence=v.sequence,sector=A.id(sector),parent=A.id(parent),x=linear[1],y=linear[2],z=linear[3],expires=GetCurTime()+.3})
+   sequence=v.sequence,sector=A.id(sector),parent=A.id(parent),x=linear[1],y=linear[2],z=linear[3],expires=GetCurTime()+.3,
+   dockGeneration=cfg.coop_docks and c.attachmentGeneration and c.attachmentGeneration(i) or nil,dockStamp=dockStamp,dockAge=dockAge})
  end
 end
 local function stopFire2(i)
@@ -178,7 +181,7 @@ function c.receive(f,now)
    r.track=track
    resumeCutoff(entity) -- Latch an unknown mapping at its first valid NAV2 baseline.
   else r.track=nil end
-  r.seq,r.at,r.dock=seq,now,dock
+  r.seq,r.at,r.dock,r.sourceLease=seq,now,dock,f[4]
   -- In fire2 mode the NAV counter never triggers fire; there is no protocol transition.
   if fire>r.fire and not fire2Mode then r.fireDeadline=now+.35 end;r.fire=fire
   r.samples[#r.samples+1]={time=now,pose=p};while #r.samples>5 do table.remove(r.samples,1) end
@@ -242,9 +245,13 @@ local function render(r,now)
 end
 -- Play FIRE2 trigger evidence back at the same source time as the rendered NAV2 pose.
 local function fire2Frame(i,r,ship,now)
+ -- Observed-projectile mode never aims/fires a native replay gun.
+ if cfg.projectile_visuals then stopFire2(i);return end
  local q=c.fire2[i]
  if not q then return end
- if now-q.at>.35 or c.owners[i]==cfg.slot or not C.IsComponentOperational(ship) then
+ local visualGen=A.health and A.health.valid[i]
+ local visualReady=not cfg.shot_visual or A.shotVisual and A.shotVisual.readyReplay(i,visualGen,now)
+ if not visualReady or now-q.at>.35 or c.owners[i]==cfg.slot or not C.IsComponentOperational(ship) then
   -- Freshness: stop even if motion keeps rendering a frozen prediction.
   stopFire2(i);return
  end
@@ -280,7 +287,7 @@ local function fire2Frame(i,r,ship,now)
   -- MD stops the old group before activating a new one, in the same action block.
   q.on=on;AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,epoch=q.epoch,primary=on[1],secondary=on[2],
    primaryShots=grant[1],secondaryShots=grant[2],primaryGroup=q.group[1],secondaryGroup=q.group[2],
-   resetPrimary=reset[1],resetSecondary=reset[2]})
+   resetPrimary=reset[1],resetSecondary=reset[2],visual=cfg.shot_visual==true,visualGen=visualGen or 0})
  end
 end
 local function publishMetrics(now)
@@ -316,6 +323,7 @@ function c.frame(now)
     if sector~=0 then
      local name=GetComponentData(A.id(sector),'macro');c.sectors[name]=sector
      local p=C.GetObjectPositionInSector(ship);c.seq[i]=c.seq[i]+1
+     if cfg.coop_docks and c.publishDock then c.publishDock(i,c.seq[i],now) end
      local fields={'NAV2','1',s.client.lease,tostring(i),tostring(c.epochs[i]),tostring(c.seq[i]),name}
      for _,value in ipairs({p.x,p.y,p.z,p.yaw,p.pitch,p.roll}) do fields[#fields+1]=string.format('%.9g',value) end
      fields[#fields+1]=tostring(c.docks[i]);fields[#fields+1]=tostring(c.shots[i])
@@ -337,18 +345,27 @@ function c.frame(now)
  for i=1,2 do
   local r=c.remote[i];local ship=c.ships[i];local p,linear=render(r,now);local velocityApplied=false
   if r and r.firing and (not p or now>(r.fireDeadline or 0)) then r.firing=false;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
-  if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) then
+  if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) and C.GetPlayerControlledShipID()~=ship then
    if (r.fireDeadline or 0)>now and not r.firing then r.firing=true;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=true}) end
    local sector=c.sectorId(r.sector)
-   if c.docks[i]~=r.dock and sector and now>=(r.nextDock or 0) then
+   if not cfg.coop_docks and c.docks[i]~=r.dock and sector and now>=(r.nextDock or 0) then
     r.nextDock=now+1
     AddUITriggeredEvent('X4LAN_Coop','Dock',{ship=i,market=r.dock,sector=A.id(sector),x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
    end
-   if sector and r.dock==0 and c.docks[i]==0 then
+   -- The legacy market index is zero at ordinary stations too. Recheck the
+   -- actual native attachment before a synchronous pose write; a stale/free
+   -- network sample must not pull a locally docked ship out of its parent.
+   local dockAllowed=not cfg.coop_docks or (c.dockPoseAllowed and c.dockPoseAllowed(i,r,now))
+   if dockAllowed and sector and r.dock==0 and c.docks[i]==0 and GetComponentData(A.id(ship),'isdocked')~=true then
     local value={x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}
     if C.GetContextByClass(ship,'sector',false)~=sector then
      if now>=(r.nextWarp or 0) then
-      r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector);AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
+      r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector)
+      if cfg.coop_docks then
+       value.dockGeneration=c.attachmentGeneration and c.attachmentGeneration(i)
+       if c.attachmentWindow then value.dockStamp,value.dockAge=c.attachmentWindow(i,now) end
+      end
+      AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
      end
     elseif now>=(r.nextApply or 0) then
      -- There are only two cooperative ships. Correct their native controller

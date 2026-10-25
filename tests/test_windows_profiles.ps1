@@ -60,7 +60,7 @@ try {
     New-Item -ItemType Directory -Path $profile -Force | Out-Null
     New-Item -ItemType Directory -Path $PackageRoot -Force | Out-Null
     $configPath = Join-Path $profile 'config.xml'
-    $original = '<root><autosave>false</autosave><uisafemode>false</uisafemode><res_width>3840</res_width><res_height>2160</res_height><language>49</language></root>'
+    $original = '<root><autosave>false</autosave><uisafemode>false</uisafemode><res_width>5120</res_width><res_height>1440</res_height><fullscreen>false</fullscreen><borderless>true</borderless><texturequality>high</texturequality><shaderquality>3</shaderquality><language>49</language></root>'
     [IO.File]::WriteAllText($configPath, $original, $Utf8)
     $stateFile = Join-Path $PackageRoot 'installation.json'
     @{profile=$profile;game='fixture-game';steam='fixture-steam';server='192.0.2.109';package_id='fixture-p2';version='5.0.1'} | ConvertTo-Json | Set-Content -LiteralPath $stateFile
@@ -74,11 +74,9 @@ try {
     Check ($script:launchCount -eq 1) 'OneDrive did not reach Steam launch'
     Check ($script:launchArgs -contains '45841' -and $script:launchArgs -contains 'custom_creative') 'Isolated launch arguments changed'
     [xml]$after = Get-Content -Raw -LiteralPath $configPath
-    Check ($after.root.res_width -eq '1920' -and $after.root.res_height -eq '1080' -and $after.root.texturequality -eq 'low' -and $after.root.shaderquality -eq '2') 'Cloud config not set to 1080p Low'
-    Check ($after.root.fullscreen -eq 'true' -and $after.root.borderless -eq 'false') 'Exclusive fullscreen was not selected'
-    Check ($after.root.language -eq '49' -and $after.root.autosave -eq 'false') 'Unrelated settings/safeguards changed'
-    $backedUp = @(Get-ChildItem -LiteralPath (Join-Path $PackageRoot 'backups') -Recurse -Filter config.xml)
-    Check ($backedUp.Count -eq 1 -and [IO.File]::ReadAllText($backedUp[0].FullName) -ceq $original) 'Cloud configuration not backed up exactly'
+    Check ($after.root.res_width -eq '5120' -and $after.root.res_height -eq '1440' -and $after.root.texturequality -eq 'high' -and $after.root.shaderquality -eq '3') 'Personal graphics settings changed on launch'
+    Check ($after.root.fullscreen -eq 'false' -and $after.root.borderless -eq 'true') 'Personal window mode changed'
+    Check ([IO.File]::ReadAllText($configPath) -ceq $original) 'Launch rewrote personal configuration'
     $unchangedConfig = [IO.File]::ReadAllText($configPath)
     foreach ($path in @($profile, $configPath)) {
         $oldTag = $script:tags[$path]
@@ -97,7 +95,7 @@ try {
     Must-Fail { Start-TestGame } '*test profile contains saves*'
     Check ([IO.File]::ReadAllText($save) -ceq 'save must remain unchanged') 'Existing save changed'
     Check ($script:launchCount -eq 1) 'Profile with saves launched'
-    # A stale linked temporary config must not be followed during graphics writes.
+    # A stale linked temporary config must not be followed during installation writes.
     $temp = Join-Path $profile 'config.x4lan.tmp'
     [IO.File]::WriteAllText($temp, 'unrelated temporary target', $Utf8)
     $script:tags[$temp] = 'A000000C'
@@ -263,8 +261,10 @@ try {
     [IO.File]::WriteAllText($installConfig, $configured.OuterXml, $Utf8)
 
     # Removal archive: same volume beside the package, otherwise outside extensions\.
-    Check (Test-SameVolume 'C:\Games\X4' 'c:\Packages\x') 'Same volume not recognised'
-    Check (!(Test-SameVolume 'D:\SteamLibrary\X4' 'C:\Packages\x')) 'Different volumes treated as same'
+    if ([Environment]::OSVersion.Platform -eq [PlatformID]::Win32NT) {
+        Check (Test-SameVolume 'C:\Games\X4' 'c:\Packages\x') 'Same volume not recognised'
+        Check (!(Test-SameVolume 'D:\SteamLibrary\X4' 'C:\Packages\x')) 'Different volumes treated as same'
+    } else { Write-Host 'NOT RUN on Linux: 2 Windows drive-root assertions; native Windows remains pending.' }
     $realSameVolume = ${function:Test-SameVolume}
     ${function:Test-SameVolume} = { param($First, $Second) $false }
     Remove-Package
@@ -301,6 +301,21 @@ try {
     Install-Package
     Check ((Get-Content -Raw -LiteralPath $freshState | ConvertFrom-Json).package_id -eq 'fixture-fresh-p2') 'Fresh retry did not install'
 
+    # The same Windows package can host locally; guests still reject loopback.
+    Remove-Package
+    @{steam_build='23660954';channel='internal';slot='p1';package_id='fixture-host-p1'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'package.json')
+    $ServerIP = '127.0.0.1'
+    Install-Package
+    $hostMod = Join-Path $GamePath 'extensions/x4_lan_lab'
+    $hostState = Get-Content -Raw -LiteralPath (Join-Path $PackageRoot 'installation.json') | ConvertFrom-Json
+    Check ($hostState.server -eq '127.0.0.1') 'Internal Windows host did not use loopback'
+    Check ((Get-Content -Raw -LiteralPath (Join-Path $hostMod 'ui/config.lua')).Contains('host = "127.0.0.1",')) 'Windows host Lua address wrong'
+    Assert-WorldProfile # Uses the same native reparse/cloud guard for the shared-world launcher.
+    Remove-Package
+    @{steam_build='23660954';channel='internal';slot='p2';package_id='fixture-guest-p2'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $PackageRoot 'package.json')
+    Must-Fail { Install-Package } '*localhost*'
+    Check (!(Test-Path -LiteralPath $hostMod)) 'Guest loopback refusal left a mod'
+    Write-Host 'PASS: internal Windows host loopback install/remove; guest loopback refused.'
     Write-Host 'PASS: cloud tag classification; OneDrive start; links/unknowns/errors blocked; config backup; saved-profile protection; isolated launch; paired updater, backups, checksums, rollback and version guards; uninstalled legacy v5 update.'
     Write-Host 'PASS: IPv4 text validation; host entry contract; install staging, exact rollback and retry after injected failures (prior config/state present and absent, pre-existing state temp preserved); UTF-8 profile config; missing safeguard node; removal archive across volumes.'
     Write-Host 'Native Windows metadata reads were simulated. This is not a live Windows/OneDrive test.'

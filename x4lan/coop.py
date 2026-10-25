@@ -4,11 +4,16 @@ The relay arbitrates pilot ownership, not game physics. Host X4 remains the
 sole authority for damage, cargo, treasury and mission outcomes.
 """
 import math
+import re
 from .economy import EconomySession, integer, parse_lines
 from .host import ATOM, HEX, sequence
+from .projectile_relay import ProjectileRelay
 from .quests import QuestState
+from .missions import MissionJournal
 
 POSITION_LIMIT = 50_000_000
+HEALTH_STALE = .75   # seconds without a pilot frame before a live health generation ends
+SHOT_DIGEST = re.compile(r'[a-z0-9_]{1,48}:\d{1,9}\.\d{3}')   # weapon macro : per-shot strength
 
 
 def pose(values):
@@ -28,11 +33,21 @@ class CoopSession(EconomySession):
         self.navigation = {}
         # FIRE2: latest weapon-group/shot-counter frame per ship (see coop_game.lua).
         self.fire2 = {}
+        # HEALTH (health_game.lua): one generation per ship covers one (owner, epoch, pilot). Its
+        # pilot must acknowledge the host's canonical WORLD baseline (HBASE/HACK) before frames count.
+        self.health = {}
+        self.health_gen, self.health_key, self.health_live = {1: 0, 2: 0}, {1: None, 2: None}, {1: 0, 2: 0}
+        self.health_seen = {1: 0.0, 2: 0.0}      # last HACK or accepted HEALTH of the live generation
+        # SHOT (shot_game.lua): cumulative hit counts per (shooter, shooter gen, victim, victim gen).
+        self.shots = {}
+        # BOLT/BEND (projectile_relay.py): visual-only observed projectile births/ends.
+        self.projectiles = ProjectileRelay()
         self.body_sectors = {}
         self.game_metrics = {}
         self.authority_revision = 1
         self.order_ships = {}
         self.quest = QuestState()
+        self.missions = MissionJournal(self)
 
     def expire(self, now):
         super().expire(now)
@@ -43,6 +58,15 @@ class CoopSession(EconomySession):
         retained = live | {p.lease for p, _ in self.resumable.values()}
         self.body_sectors = {k: v for k, v in self.body_sectors.items() if k in retained}
         self.game_metrics = {k: v for k, v in self.game_metrics.items() if k in live}
+        self.health = {k: v for k, v in self.health.items() if v['lease'] in live}
+        # Every message and snapshot starts here, so each authority transition gets its own
+        # generation even when no snapshot falls between a leave and a re-entry. A live generation
+        # whose pilot stream stopped is an authority boundary too: the host takes the ship back and
+        # the pilot may only continue from a new generation with a fresh canonical baseline.
+        for entity in (1, 2):
+            gen = self.health_generation(entity)
+            if self.health_live[entity] == gen and now - self.health_seen[entity] > HEALTH_STALE:
+                self.end_health(entity)
 
     def pilot(self, entity):
         for slot, peer in self.peers.items():
@@ -57,14 +81,42 @@ class CoopSession(EconomySession):
     def dead(self, entity):
         return bool(self.world and self.world[(entity - 1) * 3] <= 1.01)
 
+    def end_health(self, entity):
+        self.health_gen[entity] += 1
+        self.health_live[entity] = 0
+        self.health.pop(entity, None)
+
+    def victim_generation(self, victim):
+        """Co-op ships carry their health generation; LAN targets (3, 4) are always host objects."""
+        return self.health_generation(victim) if victim in (1, 2) else 0
+
+    def victim_authority(self, victim):
+        """The slot whose world decides the victim: a co-op ship's remote pilot while its health
+        generation is live, otherwise the host."""
+        if victim in (1, 2):
+            slot = self.owners[victim]
+            gen = self.health_generation(victim)
+            if slot != 'p1' and self.pilot(victim) == slot and self.health_live[victim] == gen: return slot
+        return 'p1'
+
+    def health_generation(self, entity):
+        key = (self.owners[entity], self.epochs[entity], self.pilot(entity))
+        if key != self.health_key[entity]:
+            self.health_key[entity] = key
+            self.health_gen[entity] += 1
+            self.health.pop(entity, None)
+        return self.health_gen[entity]
+
     def receive(self, raw, address, now):
+        if raw.startswith((b'MSTATE|', b'MREQ|')):
+            return self.missions.receive(raw, address, now)
         self.expire(now)
         if len(raw) > 768: return []
         try: f = raw.decode('ascii').split('|')
         except UnicodeError: return []
         if len(f) < 3 or f[1] != '1': return []
         kind = f[0]
-        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'BODY2', 'PERF', 'COOPORDER', 'QUEST'):
+        if kind not in ('CREW', 'NAV', 'NAV2', 'FIRE2', 'HEALTH', 'HACK', 'HSTALE', 'SHOT', 'BODY2', 'PERF', 'COOPORDER', 'QUEST', 'BOLT', 'BEND'):
             # Legacy movement/fire/dock frames must never override cooperative authority.
             if kind in ('STATE', 'FIRE', 'DOCKSTATE', 'BODY', 'ORDER'): return []
             old_leases = {s: p.lease for s, p in self.peers.items()}
@@ -146,6 +198,44 @@ class CoopSession(EconomySession):
                 if self.dead(entity): return []
                 self.fire2[entity] = dict(lease=peer.lease, epoch=epoch, seq=seq, time=source_time,
                                           shots=shots, at=now, fields=f[3:])
+            elif kind == 'HEALTH' and len(f) == 8:
+                # entity|gen|seq|hull%|shield%: the pilot's own reading of the ship it owns and
+                # pilots, after it acknowledged this generation's baseline. The life tick stays host-side.
+                entity, gen, seq = integer(f[3], 2), sequence(f[4]), sequence(f[5])
+                if entity not in (1, 2) or self.owners[entity] != slot or self.pilot(entity) != slot: return []
+                if gen != self.health_generation(entity) or gen != self.health_live[entity] or self.dead(entity): return []
+                values = [float(v) for v in f[6:8]]
+                if not all(math.isfinite(v) and 0 <= v <= 100 for v in values): return []
+                old = self.health.get(entity)
+                if old and seq <= old['seq']: return []
+                self.health[entity] = dict(lease=peer.lease, seq=seq, at=now, fields=f[3:])
+                self.health_seen[entity] = now
+            elif kind == 'SHOT' and len(f) == 10:
+                # shooter|shooterGen|victim|victimGen|seq|hits|digest: hits the sender's OWN piloted
+                # ship scored in its world, as a cumulative count. The victim's authority applies the
+                # increase natively; the relay only checks authority and order.
+                shooter, sgen, victim, vgen = integer(f[3], 2), sequence(f[4]), integer(f[5], 4), integer(f[6], 2147483647)
+                seq, hits = sequence(f[7]), integer(f[8], 1000000)
+                if (shooter not in (1, 2) or self.owners[shooter] != slot or self.pilot(shooter) != slot or
+                        sgen != self.health_generation(shooter) or not victim or victim == shooter or
+                        vgen != self.victim_generation(victim) or self.victim_authority(victim) == slot or
+                        (slot != 'p1' and self.health_live[shooter] != sgen) or not SHOT_DIGEST.fullmatch(f[9])): return []
+                key = (shooter, sgen, victim, vgen)
+                old = self.shots.get(key)
+                if old and (old['lease'] != peer.lease or seq <= old['seq'] or hits < old['hits'] or f[9] != old['fields'][-1]): return []
+                self.shots[key] = dict(lease=peer.lease, seq=seq, hits=hits, at=now, fields=f[3:])
+            elif kind in ('BOLT', 'BEND'):
+                self.projectiles.receive(self, slot, peer, raw, now)
+            elif kind == 'HACK' and len(f) == 5:
+                entity, gen = integer(f[3], 2), sequence(f[4])
+                if (entity in (1, 2) and self.owners[entity] == slot and self.pilot(entity) == slot and
+                        gen == self.health_generation(entity) and self.health_live[entity] != gen):
+                    self.health_live[entity], self.health_seen[entity] = gen, now
+            elif kind == 'HSTALE' and len(f) == 5:
+                # The host's own freshness release ends the generation it names, if still current.
+                entity, gen = integer(f[3], 2), sequence(f[4])
+                if slot == 'p1' and entity in (1, 2) and gen == self.health_generation(entity):
+                    self.end_health(entity)
             elif kind == 'BODY2' and len(f) == 14:
                 seq, mode, dead, gen = sequence(f[3]), f[4], integer(f[5], 1), sequence(f[6])
                 if mode not in ('ship', 'foot', 'suit') or (mode == 'suit' and not gen): return []
@@ -208,10 +298,30 @@ class CoopSession(EconomySession):
                 if (self.owners[entity] == slot or fire['epoch'] != self.epochs[entity] or
                         now - fire['at'] > .75 or self.dead(entity)): continue
                 result.append((peer.address, ('FIRE2|1|' + peer.lease + '|' + fire['lease'] + '|' + '|'.join(fire['fields'])).encode()))
+            # HGEN names the generations of THIS authority revision (every change bumps both).
+            result.append((peer.address, f'HGEN|1|{peer.lease}|{self.authority_revision}|{self.health_generation(1)}|{self.health_generation(2)}'.encode()))
+            for entity in (1, 2):
+                gen, hp = self.health_generation(entity), self.health.get(entity)
+                if hp and self.owners[entity] != slot and now - hp['at'] <= .75 and not self.dead(entity):
+                    result.append((peer.address, ('HEALTH|1|' + peer.lease + '|' + hp['lease'] + '|' + '|'.join(hp['fields'])).encode()))
+                if (slot != 'p1' and self.owners[entity] == slot and self.pilot(entity) == slot and
+                        self.health_live[entity] != gen and self.world and not self.dead(entity)):
+                    hull, shield = self.world[(entity - 1) * 3:(entity - 1) * 3 + 2]
+                    result.append((peer.address, f'HBASE|1|{peer.lease}|{entity}|{gen}|{hull:.3f}|{shield:.3f}'.encode()))
+            for key, shot in list(self.shots.items()):
+                shooter, sgen, victim, vgen = key
+                if sgen != self.health_generation(shooter) or vgen != self.victim_generation(victim):
+                    del self.shots[key]; continue                 # an ended generation never forwards
+                # Never back to the shooter's own slot: where it is the authority its hits are native.
+                if (self.victim_authority(victim) == slot and self.owners[shooter] != slot and
+                        now - shot['at'] <= .75 and not self.dead(shooter)):
+                    result.append((peer.address, ('SHOT|1|' + peer.lease + '|' + shot['lease'] + '|' + '|'.join(shot['fields'])).encode()))
             other = self.peers.get('p2' if slot == 'p1' else 'p1')
             if other and other.lease in self.bodies and other.lease in self.body_sectors:
                 b = self.bodies[other.lease]
                 fields = [other.lease, *map(str, b[:4]), self.body_sectors[other.lease], *b[4:]]
                 result.append((peer.address, ('BODY2|1|' + peer.lease + '|' + '|'.join(fields)).encode()))
+        result.extend(self.projectiles.packets(self, now))
         result.extend(self.quest.snapshots(self.peers, now))
+        result.extend(self.missions.snapshots(now))
         return result

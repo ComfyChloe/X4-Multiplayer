@@ -1,0 +1,19 @@
+<?xml version='1.0' encoding='utf-8'?>
+<macros>
+  <macro class="bullet" name="x4lan_visual_pulse_mk2_bullet_macro">
+    <component ref="bullet_gen_s_laser_01_mk2" />
+    <properties>
+      <ammunition value="4" reload="0.7" />
+      <bullet amount="1" barrelamount="1" maxhits="1" ricochet="0" scale="0" attach="0" speed="5000" lifetime="0.7" timediff="0.02" icon="weapon_laser_mk2" />
+      <heat value="180" />
+      <reload rate="6" />
+      <damage value="0" repair="0" />
+      <effects>
+        <bigobjectimpact ref="impact_gen_s_laser_01_mk1_bigobject" inside="impact_gen_s_laser_01_mk1_bigobject_inside" />
+        <impact ref="impact_gen_s_laser_01_mk1" inside="impact_gen_s_laser_01_mk1_inside" />
+        <launch ref="muzzle_gen_s_laser_01_mk2" />
+      </effects>
+      <weapon system="weapon_standard" />
+    </properties>
+  </macro>
+</macros>

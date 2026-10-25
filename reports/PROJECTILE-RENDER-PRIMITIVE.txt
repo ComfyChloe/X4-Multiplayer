@@ -1,0 +1,339 @@
+OBSERVED-PROJECTILE RENDERING — 24 OCTOBER 2026 — DEV ONLY
+
+Motivation: stock primary-gun replay still does not reproduce a player's actual
+free-aim trajectory. SHOT capture/application already measures real local hits;
+a separate visual must preserve those native hits, misses, spread and cadence.
+The following is an unshipped rendering experiment, not a new damage/transport
+protocol. No default flag or sealed package changes.
+
+An original dev component references installed Timelines projectile geometry
+bullet_ter_s_plasma_01_mk1_data / part_bullet and its stock material. It contains
+no copied mesh/binary asset. Its initial class was navbeacon, created directly
+as a temporary object; no deployable launch or player inventory consumption.
+
+projectile-visual-01 FAIL: screenshot ran before delayed parent creation; three
+rotation values omitted angle units; queued movement/removal were read too early.
+The controller completed, but that does not qualify the primitive. Raw
+3e3383726b145f9f2aaf9e875d4c144205c448d80bc4df5e5eb92e4ab50c93e6
+
+projectile-visual-02, source e892377: bounded creation/rendering/move/removal PASS.
+Native creation exists1/classnavbeacon precedes screenshot; the cockpit image
+shows the bright projectile graphic. A later native readback is exactly
+1030/10000/160 after the requested move. After removal exists0. This is neither
+collision transparency nor original animation equivalence/performance/network
+acceptance. Raw c304148edb7a0dc846d53238c70b5628ab7049672c252d576a9b31efcb6ec301.
+Screenshot7518deea35454b032e5bfd7e22308d32c6329807806ce4725a7b0285fbf64ca5.
+55 unchanged production files+6 dev overrides and UI registration independently
+matched;37-file restoration and actual-save bytes/timestamps verified.
+
+projectile-collision-01 INCOMPLETE/FAIL: its child completion-event listeners
+missed instantaneous parent completion; the firing phases never executed. Raw
+b45ba2c57b9bd7446d72e6ffe99c1c78b5981e0454d939994c791dd50832b234.
+
+projectile-collision-02 uses persistent parent-complete conditions. It executes
+the phases and conclusively REJECTS the navbeacon visual: real stock pulse rounds
+hit it for36,36,28 HP and destroy its100HP hull. Lack of an explicit collision
+connection does not make this object transparent. The intended Shuttle control
+victim registers no hits in either phase, so no control-target hit ratio is
+qualified. The positive anchor-damage evidence is sufficient to reject this
+variant. Raw3705d0136b0c7b143d800eaa0c6c9b0573a56585d6474ff9f297c864514109a5.
+Both collision runs:54 unchanged production files+7 dev overrides/UI registration,
+37 restored files and actual-save bytes/timestamps verified. Raw failures remain.
+
+Next bounded investigation: the stock effectobject class (effect_dummy pattern),
+with original geometry-reference metadata, followed by explicit collision and
+continuous-position checks if creation succeeds. No implementation acceptance
+is inferred from a class name or from a setter returning without an exception.
+
+effect-01 FAIL: changing the original reference component/macro to effectobject
+and using create_object produces exists0/null. This is not a created moving
+visual. The dependent readback then emits missing-position errors, retained in
+raw eecbed0a37952b5cc8af7b346d2e12805819695d8969866c97bda9f58edde8f1.
+55 unchanged source files+6 overrides/UI registration,37 restored files and
+actual save bytes/timestamps audited. Engine-specific effect instantiation must
+not be equated with ordinary create_object support.
+
+The next probe uses class object, following stock FX dummy metadata. It adds a
+stronger independent passage witness: each real pulse projectile is read100ms
+after firing and must remain alive beyond the visual's plane. This does not rely
+on the earlier Shuttle victim's unqualified hit geometry. It also checks actual
+per-frame SetObjectSectorPos readback at about2332m/s if the object survives.
+
+object-01, source245dfc5, is also REJECTED as a transparent visual. Creation and
+visible geometry work;315 per-frame native setter/readbacks at2332.38m/s have a
+maximum position error of0.00216911m. But9 control bullets survive beyond the
+visual plane, while all9 bullets in the anchor phase disappear before the100ms
+sample. The generic object survives: it absorbs bullets without having hull.
+The renamed Shot namespace also exposed three unqualified fields in its birth
+DEBUG line; those diagnostics emit missing-variable errors. The separate trace
+uses correctly scoped saved bullet/phase/sector references. Overall FAIL remains;
+the raw is not filtered to PASS. SHA256
+3d0069ac78289cf0ba8e52718e776086d5b482eaa642bcb764dda02df0e7b140.
+54 unchanged production files+7 dev overrides/UI registration,37 restored files
+and actual-save bytes/timestamps verified. No production renderer follows this.
+
+object-02 corrects those diagnostic scopes and applies documented
+ disable_collision_response after the object has been visible for one second.
+Stock MD uses this action for temporary HQ-effect navbeacons. Its visible-attention
+restriction and actual effect on bullets still require the current native test.
+
+object-02 FAIL: fixed diagnostics, but all anchor-phase projectiles still vanish.
+The action reports attention=inzone, which does not satisfy its documented
+visible-attention precondition. Do not claim a test of that action under its
+required attention. Raw34b950c93cb43fc6aa1dcf0cf8f1fd06c67c5d28066db55cabab2abdf9c05b2d.
+54 source files+7 overrides/UI registration,37 restored files/actual saves audited.
+
+MESHLESS CARRIER + SEPARATE EFFECT — BOUNDED PASS
+effect-carrier-01 (245dfc5) removes the geometry from the class object carrier.
+An original class effectobject component references the installed projectile
+geometry; libraries/effects.xml attaches it via add_effect with finite duration.
+Real shots:9 control and9 with the effect, all18 still exist beyond the visual
+plane at the100ms observation. The carrier survives and is explicitly removed.
+No diagnostic/parser/API error is observed. The two viewed cockpit screenshots
+show the bright projectile graphic move from the centre toward the left after
+a100m lateral carrier move. This is actual graphic attachment, not merely a
+position value. After a2s stationary observation,285 moving frame readbacks at
+2332.38076m/s have maximum position error0.00223871m. remove_effect precedes carrier
+destruction; final native carrier exists0. Native source/control setup remains
+one pulse gun, one visible graphical effect, one Linux engine.
+Raw d8eb13a51326ec01b901e3d6683880a406d922fad5726e1ebb73a24cdb3da614.
+54 unchanged production files+10 dev overrides/UI registration,37 restored files
+and actual-save bytes/timestamps verified. No two-native, dense rendering, save
+lifecycle, original animation equivalence or network-projectile acceptance yet.
+
+ACTUAL PROJECTILE POSE / VELOCITY — projectile-pose-01
+Source705b30c, fresh owned45841; one real host/real relay/synthetic idle peer.
+No production flags activated. A focused, PID/start-ticks/profile-checked XTest
+right-button press fired the player's six original X Shuttle plasma guns toward
+an off-centre cursor. Targets were moved away; no selected-target substitution.
+The first12 actual event_weapon_fired projectiles were sampled by read-only
+GetPositionalOffset(bullet,sector) every Lua frame, guarded by IsComponentClass,
+and independently by MD relativeposition/relativerotation every100ms. All12 birth
+witnesses have player.controlled==source ship; each has native/Lua disappearance.
+
+PASS within this measurement scope:1577 C frames and202 MD frames, maximum matched
+position discrepancy0.000756m; Euler discrepancy<8.71e-7rad after converting MD
+angle units. Native bullet speed2300m/s; first>=30ms C position difference gave
+2300.0003..2300.0096m/s and predicted subsequent retained positions to<=0.03564m.
+Flight was10.49..11.10deg off the ship's near-zero forward yaw: this preserves the
+actual gun trajectory, not cursor/ship-forward guesses. GetCurRealTime minus
+native age was~0.0333s here; independent positions were matched before comparing
+clock offsets. No inference that those clocks are always interchangeable.
+
+Raw346e76afd7cd1227c9e56b8a5df962d9671b081d456b88c77b7605f46576d3a9.
+Local analysis.json/analyze.py retain all12 per-projectile errors and raw samples.
+Audit verifies56 production files+2 probes+UI registration,37 restored installation
+files, actual normal-save bytes/timestamps and selection preservation. All owned
+processes closed. Stock missing voice-text diagnostic retained; no MD/Lua/API
+errors. This does not prove moving-shooter capture, pause/lag, other weapons,
+network rendering, Windows or matched two-native gameplay.
+
+INERT PURE BUFFER
+ui/projectile_motion.lua is not registered or imported. It follows source-clock
+observed translation, preserves Euler orientation, caps active visuals256 and
+reorder tombstones2048, expires missing ends, rejects duplicates/end-before-birth,
+retains replay rejection through pause and refuses changed authority keys. Eight
+focused LuaJIT tests pass; no native/transport authority is conferred by this
+buffer. Later adapter must independently admit pilot/lease/generation/sector and
+map NAV2 source time before issuing any engine operation.
+
+OBSERVED-SHOT LOCAL LOOPBACK — projectile-loopback-01
+Source10b5d7b,12 actual local plasma shots, no network projectile transport. The
+unregistered pure buffer follows measured positions/velocity on the source clock
+with150ms render delay. Meshless carriers and finite attached effects are offset
+150m vertically for this dev comparison; no real gun is aimed or replayed.
+PASS within this scope:12 captured/created/ended/removed identities,1559 C move
+frames,197 independent MD readbacks. Largest setter error0.000499m; native position
+readbacks stay within0.001099m of each measured trajectory line. Removal requests
+follow actual projectile disappearance by152..161ms, matching delay/frame rounding.
+Final native count:12 ever-created,zero live. Screenshot retained/viewed (cockpit
+and native/rendered shots coexist; it is not independent visual identity proof).
+Raw e1140d18497cbd57591b13da4ba2d16185c2ad7f16ccd1031c83bd2ffbb853b8.
+Audit:56 unchanged production files,9 dev overrides, explicit motion/probe UI
+registration,37-file restore, actual save bytes/timestamps, helpers/game closed.
+No MD/Lua/API errors. This is not a network adapter, matched two-native run,
+moving-shooter qualification, dense-fire performance test or other-weapon proof.
+
+PULSE / MOVING-SHOOTER FOLLOW-UP — projectile-pulse-loopback-01
+Source8725f85, raw22ed43c2e8bf219c0ae7aef8372522fa0e96fe8a10de10561679325afc398e3a.
+FAIL/incomplete: native SHIP_SPEC reports six operational PulseMk1 guns, but the
+focused physical press produces no weapon-fired events and final created count0.
+A constant-velocity ship command was also introduced in this fixture; neither
+the absence of firing nor weapon compatibility is inferred from this capture.
+Viewed screenshot has no visible weapon group indicators. Do not call the
+controller's completed=true an accepted firing/rendering run. Source69 files,
+3 overrides/UI registration,37-file restoration and actual saves audited; all
+owned processes closed. Pulse graphics and moving-shooter acceptance remain open.
+Next real-relay adapter run keeps the previously qualified stationary plasma
+fixture to separate the transport/native integration from this setup problem.
+
+REAL RELAY ADAPTER FIRST RUN — projectile-adapter-01
+Source8832a15, rawc06600f849cf9e5adb634717a77ab7655b35d60d4b59fd69a100cc925b5ef429.
+FAIL before firing: context-key table.concat received engine LuaID userdata
+returned by A.id. Corrected to stable native ID strings; MD/API arguments retain
+the typed LuaID. New engine-userdata regression plus11 existing adapter tests PASS.
+70 source files/2 probes/UI registration,37-file restoration and actual save
+bytes/timestamps independently audited. All owned processes closed.
+
+REAL RELAY ADAPTER SECOND RUN — projectile-adapter-02
+Source65d6213, rawec8301e47d2c8c768c19b73f92462a994b7e6a29fe47aa712eb486f97044ebf3.
+FAIL:12 remote carriers created and removed, but1 of126 independent MD position
+readbacks leaves its transmitted trajectory (slot5,operation7,age13.5281;
+x=-50008.496,z=-5897.971). Adjacent readbacks are on the expected line; cause
+unresolved. No original fired events during early physical input at native12s.
+70 source files/2 probes/UI registration,37-file restoration and actual save
+bytes/timestamps audited. Do not infer acceptance from controller completion.
+Next dev run adds cockpit readiness delay/count and native zone/C position
+observations; no production collision/teleport workaround based on inference.
+
+projectile-adapter-03 also FAILS: dev-only readiness logger passed size_t cdata to
+string.format %d, stopping the bubble adapter before work. Corrected only in next
+fixture with tonumber, not a production change. Raw
+ee7f4e8da66e05366beccfc104191add65e36516ec5065d8d79efcb976798de0;
+70 source/2 probes/UI registration,37-file restore and actual saves audited.
+
+projectile-adapter-04 FAIL: same65d6213 production. Native MD positions and
+immediate C readback both reproduce zone reparent displacement: old zone center
+(50742.008,0,5897.971) -> zero-center zone while retaining old local coordinates.
+C error peaks51083.632531m;2 of123 MD samples leave the line by5897.971m.
+Twelve effects expire; no source shots despite6 UI primary weapons/3s settle.
+Rawb6c406c95cea875838803a9afdd39cded02b4b0f8949f5fd06c140f8a2596106.
+70 source/2 probes/UI registration,37 restore and actual saves audited.
+Candidate repair reads back each owned meshless carrier, corrects at most once
+within the frame, removes persistent disagreement. Setup now stops only remote
+scripted fire, preserving actual local pilot input.14 adapter tests/schema PASS;
+native qualification remains pending. No other object's placement is repaired.
+
+projectile-adapter-05 (af6a5ba): bounded receiver subset PASS, overall FAIL.
+All12 carriers/127 MD readbacks remain on transmitted lines; maximum immediate
+setter residual1.966mm, final0 objects. One-write correction removes the observed
+zone transition jump within tested scope. Still0 original fired events: limiting
+Setup stop_shooting to remote ships does NOT explain/correct absent physical fire.
+Next fixture compares the verified primary keyboard binding (Space).
+Rawfb5db5081ec71d3ee9852fc5777855bd3a9ee49223cdaa31b9ac6a202599fba9.
+70 source/2 probes/UI registration,37 restore and actual saves audited.
+
+projectile-adapter-06 remains FAIL (af6a5ba): Space is the profile's primary-fire
+binding, focused physical press still causes0 events; native group0 has6 guns.
+Raw7c6d09108223cbecf7655749d7b0c341f32f8a9fcc2117fe3f539bda2d91c18b.
+70 source/2 probes/UI registration,37 restore and actual saves audited.
+Next dev diagnostic distinguishes direct input from explicit native shoot and
+records ready/group/mode/stance; scripted fire cannot prove physical input works.
+
+projectile-adapter-07 (af6a5ba): PASS only bounded SCRIPTED-source transport/render.
+Physical input first:0 shots, ready=false/grouped=true, no stance suppression.
+Explicit native shoot at18.70s:54 original plasma shots,54 observed births/ends
+through real relay,12 unique independent MD oracles within0.051015m of measured
+trajectories.12 synthetic remote observations render on their transmitted lines
+(<1e-9m perpendicular error), all objects/captures/slots expire; host health100.
+Later reset/group/scripted phase adds0 shots. This DOES NOT qualify real input.
+Raw4e30b06724a7bce550cbd0e436597399bef1691527195d14015e26cab3f37515.
+70 production files/2 probes/UI registration,37 restore and actual saves audited.
+
+Review follow-up: position tolerance now scales per axis with float precision
+(max0.01m,abs(command)*2^-21), covering250km zone-sum rounding. A regression
+accepts0.03125m rounding and rejects50742m displacement;15 adapter tests PASS.
+GetObjectPositionInSector/SetObjectSectorPos declarations explicit in adapter.
+The earlier .01m native run remains its recorded bounded scope.
+
+projectile-adapter-08: controlled dev correction makes PHYSICAL source work.
+Sourcebec0113 with one explicit ShotVisual StopEntity override skipping the
+actual controlled ship; no scripted shoot controls. Focused middle mouse fires54
+original plasma bullets,54 source births/ends pass real relay;12 MD oracles
+within0.047721m.12 synthetic remote visuals stay on line;final0,health100.
+Raw5371bf4764506f553f2d0d51bfd71de38bb9acdc2e43b3d5686c5d8408d34c8e.
+69 source/3 overrides/UI registration,37 restore and actual saves audited.
+This isolates native stop_shooting on the player as the physical-input blocker.
+Production candidate latches observed mode at ShotVisual.Setup before Prepare,
+blocks positive legacy/Bubble/FIRE2 replay, and in this mode never stops the
+actual controlled ship through those queued routes or StopEntity. Remote and
+legacy-mode quiescence remain.59 affected checks/3 MD schemas PASS; next09 tests
+the production implementation plus queued positive/negative legacy requests.
+
+projectile-adapter-09 (production1b711bc): full bounded PHYSICAL-source path PASS.
+No production override.54 middle-mouse plasma shots produce54 observed births/ends
+through real relay;12 unique MD trajectories agree within0.039514m.12 synthetic
+remote effects remain on line; all carriers/slots/captures removed,health100.
+Queued positive/negative Coop Fire/FIRE2 and Bubble FireOn/Off requests produce
+zero remote native shots and do not suppress the actual player's input.
+Raw2c2f14e5bdfcc76f2d889bd603322ae6702fee804128eefa0634b12568729e5b.
+70 production/2 probes/UI registration,37 restore and actual saves audited.
+This is one Linux native engine with a real relay and synthetic peer, not a
+matched two-native or moving/pulse/heat-handover qualification.
+
+projectile-pulse-moving-01 (1b711bc): PASS in bounded moving PulseMk1 scope.
+Physical W strafe + middle fire:18 original shots, native ship speed>30m/s.
+Twelve independent MD trajectories are matched by retained native object IDs to
+local capture IDs, agreeing within0.009837m with transmitted measured velocity.
+12 synthetic kind2 effects render/expire,0 legacy remote shots,health100.
+Raweb5bf2759a9f65bd85c559e47b7bedfbe6366274506e4ec2f8bdd91fa8d9f857.
+69 production/3 overrides (PulseMk1 loadout plus probes)/UI registration,37-file
+restore and actual saves audited. Previous constant-velocity pulse fixture stays
+FAIL. This uses real player strafe, not a forced constant-velocity command.
+
+24 October, far-sector moving Pulse Mk2 capture correction
+Native projectile-pulse2-far-01 at source fa397df remains FAIL: shot8's observed
+trajectory differs by0.282061m, exceeding the unchanged0.2m gate. Raw SHA256
+6e77135ab97e38c6d4c1e3cd9c526203616aec90838c6e7f90d37edbad556e00.
+24 physical shots with inherited ship motion; independent native Born velocity
+transformed through bullet relative-rotation basis matches12 MD trajectories /
+84 readbacks within0.014374m. Differencing global float sector positions caused
+precision loss. Source capture now uses that actual native velocity with its
+first alive C pose/source timestamp, without selected-target substitution or a
+wire change. No short-lived-before-Lua admission claim. Production repeat pending.
+69 production files +3 overrides audited;37-file installation,7 actual normal
+save bytes/timestamps and owned slot restored, helpers/game closed.
+Claude1b711bc review accepts early latch/replay gates; Fire2 now clears stale
+replay budgets even when it must preserve actual-controlled input. Observed
+sessions still start from pristine seed; arbitrary mid-session save reload is
+not accepted. Legacy InteractionTest assets excluded by both package builders.
+29 affected adapter/visual tests PASS; projectile and coop MD schemas VALID.
+
+Far02, b0eb05d: native velocity correction passes the source subset:24 physical
+Mk2 shots,12 ID-matched independent trajectories within0.011425m. Overall FAIL
+retained: three short receiver visuals have only2/1/1 MD readbacks, below the
+unchanged3-readback gate. Later native creation ACKs after a wall-second boundary
+suggest queued-window refusals followed by the old0.3s missing-ACK retry. There
+was no explicit rejection diagnostic, so this cause is an inference. Raw SHA256
+b4559be2c74451728fd45c6cef24d889373399602d399425660b293c9f8dd2de.
+Full installed-source/save/restoration audit matches the first far run.
+Native now emits an operation-scoped Rejected ACK; Lua waits50ms then retries
+only the still-live observation. Stale rejection cannot touch a newer slot or
+an acknowledged object; ended observations do not revive.17 adapter checks PASS,
+changed MD schema VALID. Next run deliberately crosses that queue boundary.
+
+Far03, source7564b9c, bounded PASS:24 actual physical moving Mk2 shots at249km,
+12 independent native trajectories within0.014766m; all12 synthetic remote
+observations render/remove, at least3 MD readbacks each, final0 objects, unchanged
+health. Dev fixture deliberately replaces first Create's wall stamp with1970;
+operation3 never creates an object, the same observation retries atoperation5.
+The synthetic early end is now0.6s into original0.7s TTL (previous0.45s retained
+in failed far02); all prior geometric, identity, count and cleanup gates remain.
+Raw SHA25604184cec176e20994911b4d968809e9ee404840ef549a123882109a791e11668.
+69 production files+loadout/two probes audited;37-file restore,actual7 save
+bytes/timestamps and owned slot verified. No two-native gameplay acceptance.
+
+Next package preparation now includes docking/projectile protocol/relay Python
+modules. An isolated packaged-server import/constructor check reproduced missing
+imports in BOTH artifacts before correction and passes after it. This executes
+both platform-neutral server trees on Linux, not the Windows executable runtime.
+Only disposable test archives were built; sealed7.3.1 was not touched.
+
+PHYSICAL HELD TRIGGER / OVERHEAT,24 October
+Heat01 (9195696) FAIL54 shots/no overheat; raw
+f2a96bd0d14df12308a83f66fae64615db84c5f6e93ef3cde1d95164458dd343.
+Heat02 same source FAIL60 shots/no overheat despite deferred screenshots and
+focus assertions; rawc37a1f46c189c82cd2da22772b2b8f25ae581cbdda4f8f3cb00c40de9df87b0b.
+The screenshot explanation is not established. Both used separate short-lived
+xdotool down/up clients: intended20s hold produced only~1s of actual gun events.
+Heat03 sourcecca3301 keeps one XTest client alive for down/sleep20/up, still
+asserting owned focus and deferring screenshots. PASS498 actual native plasma
+shots/498 captures/ends through real relay; six identical original gun IDs each
+fire83 times and report3 actual overheat events. First2 cycles per gun resume
+3..5s after overheat during the same20.10s hold. Third cycle reaches overheat
+before release. No source/module errors, no health change, final0 visual objects.
+Independent first12 MD trajectories agree within1.78mm; all12 synthetic remote
+effects render/retire. Rawb595fec2d3dc3b43d856b559e77257e6ac2f4f102f8948c85406a7d9e594615b.
+70production+2probes and exact registered UI audited;37restored files and7actual
+normal saves/ownedslot bytes+mtime preserved. One native/synthetic-peer scope.
+The same input-client lifetime correction is applied to the next walking fixture.

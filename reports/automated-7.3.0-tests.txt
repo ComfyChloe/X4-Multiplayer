@@ -1,0 +1,31 @@
+X4 Multiplayer7.3.0 — automated source checks —23 October2026
+
+Linux x86_64, Python3.14, real LuaJIT through lupa.luajit21.
+Integration suite:375 tests PASS, no skips (1.282s).
+After subsequent launcher/profile/content guards:83 affected tests PASS, no skips.
+Final capture retry regression: all16 world-launcher tests PASS, no skips.
+The final discovery contains379 tests; unchanged gameplay suites were not rerun
+for every launcher-only correction. Raw commands/results are retained under
+.local/evidence-231-withheld This is code coverage, not a two-native gameplay test.
+
+Covered changed behavior: authenticated save transfer/corruption/content mismatch,
+pristine MD load admission, native capture completion ordering, actual content
+checks, exact-owned-slot staging/removal/recovery, inactive/default gates, native
+role evidence including rejection of a stale opposite-role log, personal settings
+import with an owned world slot, internal role/secret/session boundaries.
+
+Windows PowerShell installer/profile fixtures pass on Linux PowerShell7, including
+shared-world profile guard invocation. Two Windows drive-root assertions are
+explicitly NOT RUN on Linux; Windows reparse metadata is doubled. The initial
+unconditioned fixture run fails at the known Windows drive-root assertion; that
+raw failure is retained. Final tests gate those2 assertions by actual platform.
+This does not establish native Windows execution or live OneDrive behavior.
+
+x4lan_seed.xml validates against the local X4 MD schema. UI registrations and
+content.xml parse and reference existing files. The new native role validator
+accepts both retained actual roles and rejects the stale host log submitted asp2.
+
+No broad human radar/cargo/Cooperative Trial gameplay suite was repeated. Those
+previous human results remain accepted; tonight's focus is the shared starting
+world and ordinary station/docking alignment. Native engine evidence and limits
+are in reports/SHARED-START-20261023.txt. Final archive checks are delivery records.

@@ -1,0 +1,65 @@
+X4 MULTIPLAYER 7.5.0 — INTERNAL HUMAN-TEST CANDIDATE CHECKS
+25 October 2026 | Two players | Matched human Windows/Linux acceptance pending
+
+PACKAGE ACTIVATION
+Launcher-generated private configurations enable npc_combat and faction_missions
+for both roles, together with their existing hit-capture/health/seed prerequisites.
+Source and unconfigured archive configs remain disabled and contain no credentials.
+Both OS packages include the same server modules, portable Python and English
+instructions. Runtime pins and license notices remain unchanged from7.4.1.
+Reviewed installer fixes from7c6ec19 are included; no Workshop-selection writers.
+
+AUTOMATED VALIDATION
+636 Linux/Python/LuaJIT tests PASS, no skips. This includes a new real LuaJIT
+readback of host and guest configurations after seed admission, preserving private
+identity and enabling both new features. Existing tests exercise packet loss,
+reordering, authority/identity transitions, terminal death, mission progress,
+native execution guards, Windows process decoding/discovery/profile recovery,
+Linux desktop starters, save ownership and both packaged server dependency trees.
+Test doubles are not native Windows or paired-gameplay acceptance.
+Final extracted-archive/runtime/hash checks accompany the delivered pair in
+assembly-validation.json; the optional compact Linux archive has separate evidence.
+
+REUSED NATIVE EVIDENCE (GAMEPLAY SOURCE UNCHANGED)
+NPC implementationa1c720b and missionscba4391 were exercised before packaging.
+Their native MD schemas/merged stock mission patches passed at those exact sources.
+NPC host02: host stayed in cluster14; real NPC in cluster01 received cumulative
+synthetic-guest damage with one native application per batch, then native death.
+NPC guest05/06: real native impacts were captured; canonical health/death applied,
+including sector-return/rebinding cases. Restrictions/failures remain in the
+NPC-COMBAT-20261025 and NPC-COMBAT-VALIDATION-20261025 development reports.
+Missions host04: original native GM kill contract accepted by synthetic guest;
+two real matching NPC kills in another sector advanced0/2->1/2->2/2, paid25,000Cr
+once; separate native abort and deadline failure also observed.
+Missions guest02: native [Shared] offer/acceptance, objective progression and
+completion; no local guest reward. Native probes used fixed stock-GM parameters,
+not proof of every naturally generated offer. All retained source/cleanup evidence
+is documented in FACTION-MISSIONS-20261025. These are separate one-game runs.
+Prior7.4 local player-combat/dock evidence and human7.4.1 results remain bounded.
+No extra native run was performed merely to rebuild unchanged gameplay code.
+
+HUMAN ACCEPTANCE AND OPEN LIMITS
+First run HUMAN-NPC-MISSION-TEST.txt N01–N05 and M01–M04 where offers permit.
+NPC combat: free-flying S/M main hull/shields, uniform unmodified stock Shuttle
+plasma or generic Pulse Mk1/Mk2 guns. Exact NPC equipment/capacity replication,
+L/XL surface combat, beams/missiles/turrets and mixed/modded weapons are outside scope.
+Shared ordinary missions: standalone visible matching-ship kill contracts without
+inventory-item rewards. Other families/threads/plots are not shared. Host generates
+offers; guest countdown and reputation display are not mirrored. An unavailable
+eligible offer is INCONCLUSIVE, not a mission pass or a reason to use Trial instead.
+Captured ships/fleet commands, ongoing station/economy authority and progressed
+campaign save/resume are unfinished. Host still runs X4; no dedicated/headless
+mode, four-to-six-player support, story co-op, voting or text chat is activated.
+Guest HUD selection of the moving host ship remains a reported open issue.
+Docking code is unchanged; two-native occupied-bay/boarding acceptance remains open.
+One historical combined startup refused shooter2's loadout; later repetitions
+passed without establishing the original cause. Keep diagnostic refusal checks.
+
+USER DATA / DISTRIBUTION
+Previous sealed archives and configured installations are not overwritten.
+Neither normal profiles/saves nor Workshop subscriptions/selections are changed.
+This package task does not install the new candidate or launch X4 automatically.
+Use fresh extracted folders, original09-REMOVE-MOD, a new host world and invitation.
+Both roles plus relay must stop together on retry; restart reloads the STARTING
+world, not played progress. Invitations, session files, local leases and raw private
+native captures are excluded from downloadable archives. Internal release only.

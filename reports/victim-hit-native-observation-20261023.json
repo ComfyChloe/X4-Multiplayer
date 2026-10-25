@@ -1,0 +1,243 @@
+{
+  "source_commit": "2bf4d712af476cbacfc97949057ffe1db493b666",
+  "scope": "Development observation only: native Linux controlled p1 ship, synthetic p2 FIRE2 peer, one shooter, shields only; PR34 absent. No health-authority code or combat acceptance.",
+  "raw_directory": ".local/victim-hit-observation",
+  "hits": [
+    {
+      "time": 17.154,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x17d1f2",
+      "hull": 4580.0,
+      "shield": 4760.0
+    },
+    {
+      "time": 17.1707,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x17d1f8",
+      "hull": 4580.0,
+      "shield": 4720.0
+    },
+    {
+      "time": 17.1707,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x17d20a",
+      "hull": 4580.0,
+      "shield": 4680.0
+    },
+    {
+      "time": 17.2321,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x17d1ec",
+      "hull": 4580.0,
+      "shield": 4640.0
+    },
+    {
+      "time": 22.2091,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x17f564",
+      "hull": 4580.0,
+      "shield": 4600.0
+    },
+    {
+      "time": 22.2325,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x17f558",
+      "hull": 4580.0,
+      "shield": 4560.0
+    },
+    {
+      "time": 22.2325,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x17f55e",
+      "hull": 4580.0,
+      "shield": 4520.0
+    },
+    {
+      "time": 26.1318,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x180460",
+      "hull": 4580.0,
+      "shield": 4480.0
+    },
+    {
+      "time": 26.3907,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x180506",
+      "hull": 4580.0,
+      "shield": 4440.0
+    },
+    {
+      "time": 26.7184,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x1805f7",
+      "hull": 4580.0,
+      "shield": 4400.0
+    },
+    {
+      "time": 26.8948,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x180717",
+      "hull": 4580.0,
+      "shield": 4360.0
+    },
+    {
+      "time": 26.9888,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x18071d",
+      "hull": 4580.0,
+      "shield": 4320.0
+    },
+    {
+      "time": 27.1769,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x18089e",
+      "hull": 4580.0,
+      "shield": 4280.0
+    },
+    {
+      "time": 27.6651,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x180bce",
+      "hull": 4580.0,
+      "shield": 4240.0
+    },
+    {
+      "time": 28.8743,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x181148",
+      "hull": 4580.0,
+      "shield": 4200.0
+    },
+    {
+      "time": 29.1477,
+      "expected_victim": true,
+      "expected_attacker": true,
+      "projectile": "0x181203",
+      "hull": 4580.0,
+      "shield": 4160.0
+    }
+  ],
+  "shield_damage_callbacks": [
+    {
+      "time": 17.154,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 17.1707,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 17.1707,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 17.2321,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 22.2091,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 22.2325,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 22.2325,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 26.1318,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 26.3907,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 26.7184,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 26.8948,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 26.9888,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 27.1769,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 27.6651,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 28.8743,
+      "root": true,
+      "amount": 40.0
+    },
+    {
+      "time": 29.1477,
+      "root": true,
+      "amount": 40.0
+    }
+  ],
+  "attack_notifications": 6,
+  "total_shield_damage": 640,
+  "hull_damage_callbacks": 0,
+  "cleanup": {
+    "owned_game_closed": true,
+    "helpers_closed": true,
+    "normal_saves_and_test_save_unchanged": true,
+    "original_installation_restored": true,
+    "selection_unchanged": true,
+    "controller_completed": true
+  },
+  "restored_sealed_731_installation": true,
+  "limits": [
+    "No lethality, authority transfer, min-hull2, 10Hz health setter or native guest WORLD guard test.",
+    "Player hit notifications are unnecessary for pilot-health authority; retain this result as a separate primitive observation.",
+    "Original sampler source_capture_pass remains false: no echo requested. No broad PASS inferred from controller completion."
+  ],
+  "artifacts": {
+    "native.log": "ff8d555feda0a887763c1e06003b529f53babdd9cbde7b9840b83318bd89eb0b",
+    "damage_events.xml": "e8367210076a0ef3d3936b7de81f8fa3cdf5fe3952de2377985728b6110ec909",
+    "installed-probe.json": "2f14fec0a95dfefa11b2a5ba39e1490fad57d66351ee65eb13d8cfeab55ab2d9",
+    "saves-before.json": "08dc1ba2fe8c057906e28588136850f3e4ff9aa7cebc9663af961359445dc882",
+    "saves-after.json": "0d2d9260f3b6c57abc9762747c80cd182d12fbfb4d38f1badc67d819c532114f",
+    "restored-files.json": "8101690a14d610efc219c3ee7ca3c6cc18604a3951f89fe908adee1bd6f17f18",
+    "cleanup.json": "4499d6e326cc035f0850dcfd64f6c724f3480c73cd8f511bce12b797262ec1ba"
+  }
+}

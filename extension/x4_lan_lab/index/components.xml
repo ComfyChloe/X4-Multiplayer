@@ -1,0 +1,9 @@
+<?xml version='1.0' encoding='utf-8'?>
+<diff>
+  <add sel="/index">
+    <entry name="x4lan_projectile_carrier" value="extensions/x4_lan_lab/assets/x4lan/projectiles/x4lan_projectile_carrier" />
+    <entry name="x4lan_projectile_plasma" value="extensions/x4_lan_lab/assets/x4lan/projectiles/x4lan_projectile_plasma" />
+    <entry name="x4lan_projectile_pulse1" value="extensions/x4_lan_lab/assets/x4lan/projectiles/x4lan_projectile_pulse1" />
+    <entry name="x4lan_projectile_pulse2" value="extensions/x4_lan_lab/assets/x4lan/projectiles/x4lan_projectile_pulse2" />
+  </add>
+</diff>

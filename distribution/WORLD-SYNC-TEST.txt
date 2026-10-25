@@ -1,3 +1,12 @@
+7.3.0 UPDATE: Use NEXT-TEST.txt first. Both peers now load a shared native
+starting snapshot through02-PREPARE-WORLD-HOST /05-START-X4. The longer historical
+regressions below are optional when a related regression is observed. A shared
+starting save is not continuous station/economy authority or campaign resume.
+
+7.2.0 PRIORITY: read NEXT-TEST.txt first. Native Shuttle sensors are corrected.
+Shared-save and ongoing whole-universe authority are NOT active in this package.
+The following broader regression remains useful; its limitations still apply.
+
 INTERNAL FOLLOW-UP - WORLD / CARGO / MOTION TEST
 20 October 2026 | X4 9.00 Steam build 23660954
 
@@ -25,7 +34,7 @@ elsewhere. Leaving a sector removes its local replicas, not its host objects.
 TEST SEQUENCE
 1. Close both games and stop the previous relay. Install the matching pair.
    Use isolated profile 45841, matching official DLC and no other third-party
-   mods. Enable X4: Timelines on both for the shared Shuttle. Start the Linux
+   mods. Enable X4: Timelines on both for the shared Shuttle. Start the HOST
    server, then fresh creative worlds on both computers.
 2. Stay in Argon Prime for at least 30 seconds. Watch the console's NPC scene:
    host revision, ship count and guest committed revision should advance.
@@ -60,7 +69,7 @@ TEST SEQUENCE
     are not synchronized; do not treat active-group indices as membership transfer.
     Include sideways flight while firing. A native projectile follow-up failed an
     orientation control; aim and shared hits remain acceptance work.
-11. Run 4-DIAGNOSTICS on both computers and retain the server logs. Report the
+11. Run 06-DIAGNOSTICS on both computers and retain the server logs. Report the
    sector, ship type, time, host/guest revisions and what differed visually.
 
 DO NOT USE THIS TEST TO CLAIM THESE WORK:

@@ -1,109 +1,71 @@
-# X4 LAN Lab — internal version 7.0.0 (W01)
+# X4 Multiplayer — internal development
 
-For development on either PC or the Fedora laptop, start with
-[DEVELOPMENT.txt](DEVELOPMENT.txt) and [CONTINUE-HERE.txt](CONTINUE-HERE.txt).
-Contributors using Claude Code, Codex or another agent should also read
-[CONTRIBUTING.txt](CONTRIBUTING.txt). Shared instructions live in
-[AGENTS.md](AGENTS.md); [CLAUDE.md](CLAUDE.md) imports them for Claude Code.
+Experimental two-player co-op for X4 Foundations 9.00, Steam build 23660954.
+The host prepares a native starting save and transfers it to the guest. Selected
+live gameplay is synchronized; full ongoing universe authority and campaign
+persistence remain unfinished.
 
-W01 adds original NPC sector scene replication: dynamic host object identities,
-complete acknowledged baselines, movement and guest replica lifecycle. Read
-[the focused internal test](distribution/WORLD-SYNC-TEST.txt) before using it.
-Public Test 01 remains withheld. Ordinary cargo/magnet pickup, NPC interactions,
-station economy and vanilla missions still prevent a fully shared universe.
-See [the shared-world requirements](WORLD-SYNC-REQUIREMENTS.txt).
+New contributors and coding agents: start with the
+[onboarding packet](onboarding/00-START-HERE.txt), including its pinned code baseline,
+[starter prompt](onboarding/01-AGENT-START-PROMPT.txt) and
+[source map](onboarding/03-CODE-AND-STATUS.txt). Current development is on
+`contrib/astra-7-5-delivery`, stacked on the NPC/mission development branches;
+do not assume `main` has these changes.
 
-Experimental two-player co-op for X4 Foundations: native Linux host and Windows 11
-guest, including ZeroTier. X4 9.00 (611726), Steam build 23660954.
+Read [AGENTS.md](AGENTS.md) and the short [current handoff](CONTINUE-HERE.txt).
+Use [development setup](DEVELOPMENT.txt) and [contribution rules](CONTRIBUTING.txt)
+for your own environment/worktree. [CLAUDE.md](CLAUDE.md) imports the same rules.
+Load only task-relevant evidence rather than the entire historical archive.
 
-The existing co-op fixture separates ships from player slots, carries sector-aware movement,
-arbitrates cockpit handoff, shares one treasury and introduces Cooperative Trial.
-Friendly fire, automatic reconnect, emergency ejection and station respawn remain.
-The user's real 5.1.0 playtest confirmed ejection and respawn; this release's exact
-native and automated evidence is in the release checks. It does not synchronize
-the entire universe or all vanilla missions.
+## Delivered packages and current source
 
-## Install and play
+The delivered internal candidate is **7.5.0**; see the
+[delivery evidence](reports/INTERNAL-7-5-DELIVERY.txt). Both Windows/Linux packages include
+the server, private Python runtime and English procedures. Follow
+[installation instructions](distribution/INSTALL.html), the
+[package guide](distribution/README.txt) and [human test procedures](distribution/NEXT-TEST.txt).
+The host runs X4 and the relay; UDP45841 and TCP45844 are required. Both players
+use profile45841 with matching game/DLC content and a new private host invitation.
+The sealed7.4.1 pair from235f9ba remains unchanged and does not contain these additions.
 
-Read [INSTALL.html](distribution/INSTALL.html). Replace both full packages and the
-relay; version 7 is incompatible with 6.x and older builds. Start two new creative worlds in the
-isolated profile `45841`. Disable additional third-party mods for testing and keep
-matching DLC. Linux needs Python 3.10+; Windows does not need Python. The OneDrive
-profile fix remains included.
+This candidate includes reviewed installer fixes from7c6ec19: Windows process
+output, unavailable Steam drives, explicit game paths, owned same-version session
+recovery and preference reselection. See the
+[community review](reports/COMMUNITY-PATCH-REVIEW-20261025.txt).
 
-Build a fresh matched pair with `python3 distribution/build_packages.py /path/to/new-folder`.
-The generated pair has a fresh shared key. Identical version numbers alone do not
-make packages from different builds compatible. `VERSION.txt` is canonical; see
-[VERSIONING.txt](VERSIONING.txt).
+The [NPC combat path](reports/NPC-COMBAT-20261025.txt) and first
+[ordinary faction mission adapter](reports/FACTION-MISSIONS-20261025.txt) are now
+enabled in launcher-generated test configurations. Source and unconfigured
+packages remain inert. NPC scope is free-flying S/M main hull/shields with admitted
+stock guns; mission scope is standalone matching-ship kill contracts without
+inventory rewards. Separate native host/guest runs passed within their documented
+scope. Matched human acceptance remains pending; use the
+[new NPC/mission procedure](distribution/HUMAN-NPC-MISSION-TEST.txt).
 
-Launchers apply 1920×1080 exclusive fullscreen, Low graphics and a 60 FPS cap only
-to the test profile, backing up changed settings. Autosave is disabled. Never load,
-quicksave or manually save a normal game in the test. Existing saves and unknown
-mod installations are protected from replacement.
+## Acceptance and remaining work
 
-## Shared scope
+Human tests have confirmed ordinary cargo/magnet interaction, Cooperative Trial,
+radar, station/asteroid starting alignment, movement and Alt+Tab within their tested
+scope. On 24 October, guest-to-host shield damage was explicitly confirmed on both
+screens. This does not establish full hull/death or arbitrary weapon/NPC acceptance.
 
-Two stable ships, two targets, two containers and two trading stations start in
-Argon Prime. Either player can pilot either ship after the previous pilot leaves
-its controls. One pilot per ship; cargo stays with the ship. Movement includes
-sector macros and absolute positions, so the old ±50 km cube no longer applies.
-A 50,000 km per-axis sanity limit rejects corrupt coordinates; it is not a
-sensor-visibility boundary. W01 mirrors host NPC scenes in the guest sector;
-NPC interactions and the surrounding economy still run independently. Travel drive/highways and passenger flight need further testing.
+Open reports include guest inability to select a correctly moving host ship,
+boarding/occupied-pad cases, captured-ship ownership, NPC combat and faction-fleet
+orders. Complete background economy, progressed-world save/resume and absent-client
+catchup remain unfinished. Restarting currently returns to the pristine starting
+world. See [world requirements](WORLD-SYNC-REQUIREMENTS.txt) and the current handoff
+for evidence limits and the relevant native reports.
 
-Both players belong to the player faction and share 200,000 initial credits.
-X4's normal trade menu works at Alpha/Beta for six wares and mixed baskets.
-The host game executes all shared trades and mirrors balances and cargo. Pickup
-uses `6-COLLECT-CONTAINER` within 250 m of the currently controlled ship's test
-container. Arbitrary containers and the normal cargo magnet are not integrated.
+The7.5.0 candidate has636 passing Linux/Python/LuaJIT tests without skips;
+PowerShell installation/discovery fixtures also passed on Linux. Native Windows
+and human gameplay acceptance remain separate. A new contributor runs the suite
+once to establish their environment, then verifies affected behavior and required
+integration gates. Documentation changes need reference/diff checks, not gameplay.
 
-Cooperative Trial appears in the mission interface: sell 20 Energy Cells to Beta
-together, then destroy both LAN Targets. Both pilots contribute to one mission.
-The host awards 25,000 credits once into the shared treasury. This custom mission
-is the first quest integration; ordinary plots and mission offers are not shared.
-
-Friendly fire remains enabled. A destroyed occupied ship ejects its occupants;
-a suit combat hit triggers station respawn at an accessible non-hostile station
-in the current sector. Destroyed ships/cargo are not replaced. Walking figures
-remain disabled; spacesuit replicas remain enabled. Suit weapons are not replicated.
-
-A 30-second timeout leads to automatic reconnect using the same lease and request
-history. Restarting either game or the relay requires both new worlds. A partial
-or uncertain native trade must not be resubmitted as a new transaction.
-
-## Performance and diagnostics
-
-The console reports connections, received updates, game callback timing, relay CPU
-and peak memory, ship pilots, world/economy revisions and shared mission progress.
-Callback/update rates are not rendering FPS or ping. CPU is a percentage of one
-logical core. JSON Lines logs and atomic status snapshots omit session keys.
-
-Unchanged remote poses and guest cargo snapshots are coalesced, with periodic
-authoritative reconciliation. This reduces avoidable work, but no general FPS improvement is established.
-The version 6 controlled relay benchmark measured 4.27% of one core and 17.6 MiB
-peak memory over 20 seconds with two synthetic peers and no send errors. This
-measures the relay, including its dashboard output, but excludes X4/mod/driver costs.
-The Linux host runs the authoritative game as well as the small Python relay.
-
-## Evidence and development
-
-- [7.0.0 release checks](reports/release-7.0.0-checks.txt).
-- [Recorded 7.0.0 automated tests](reports/automated-7.0.0-tests.txt).
-- [Earlier native trade tests](TRADE_TESTS.txt).
-- [Architecture](ARCHITECTURE.md), [research sources](RESEARCH.md).
-
-`x4lan/` contains relay sessions and the console. `extension/x4_lan_lab/` contains
-Lua, MD and AI adapters; `distribution/` contains installers and packaging.
-Set up with `python3 dev/bootstrap.py`, then run `.venv/bin/python dev/check.py`
-on Linux x86_64. The full suite loads the Linux native transport; Windows
-contributors can use a compatible Linux environment. LuaJIT tests need `lupa`;
-local UDP tests need socket access. Engine doubles do not establish native compatibility.
-
-Do not blindly regenerate the base MD files. If generator work is needed, run
-`dev/build_bubble_md.py` then `dev/build_trade_md.py` in a disposable copy and
-compare the output against current profile guards and gameplay changes.
-Cooperative, life and quest MD scripts are saved directly. Native libraries are
-unchanged. The current code uses no game-memory offsets or copied assets; engine
+Preserve normal saves, settings, Steam subscriptions and sealed packages. Preference
+import is read-only at the source. The withdrawn Workshop-selection writer stays
+withdrawn. Never commit credentials, saves, configured packages or installed
+`config.lua`; source configuration stays inert. Work remains internal; public
+packages or source-mirror updates require an explicit owner request.
+The current code uses no game-memory offsets or copied assets; engine
 instrumentation is opt-in under `ENGINE-INSTRUMENTATION.txt`.
-English documentation and interfaces are shipped; historical game logs retain the
-engine's own wording. Development harnesses must never enter distribution packages.

@@ -1,0 +1,57 @@
+X4 MULTIPLAYER — CONTRIBUTOR / CODING AGENT ONBOARDING
+25 October 2026 | INTERNAL / PRIVATE | English handoff
+
+PURPOSE
+Help another contributor and their coding agent join the existing project without
+loading the whole chat history or duplicating ongoing work. This packet contains
+documentation, not an installed mod, a playtest package or repository credentials.
+It does not assign implementation ownership or start an autonomous work schedule.
+
+START IN THIS ORDER
+1. Read this file and 01-AGENT-START-PROMPT.txt. Paste that prompt into the new
+   agent's coding environment after providing its own project checkout.
+2. Obtain access to https://github.com/Lith7ium/X4-Multiplayer using the contributor's
+   own GitHub account. The owner grants access separately. Never share a session
+   invitation, another contributor's token or a configured test folder for access.
+   The public X4-Multiplayer-Source mirror is not the current development checkout.
+3. Follow 02-SETUP.txt. Start from the pinned integration code below, in your OWN
+   clone/worktree and task branch. Do not assume main contains these changes.
+4. Read repository AGENTS.md and CONTINUE-HERE.txt. Then use 03-CODE-AND-STATUS.txt
+   and 04-COORDINATION-AND-TASKS.txt to select only the relevant source/reports.
+5. Record the actual branch/commit, environment and proposed narrow scope. Confirm
+   that it does not overlap another writer before editing those shared interfaces.
+
+PINNED CODE BASELINE
+Repository: https://github.com/Lith7ium/X4-Multiplayer
+Integration branch: contrib/astra-7-4-integration
+Code commit: 7c6ec19ec9ea26f9ee73b88e4816e0a85bb86253
+Integration draft PR: https://github.com/Lith7ium/X4-Multiplayer/pull/37
+Source VERSION.txt: 7.4.1; community installer changes are UNRELEASED.
+Last delivered Windows/Linux pair: internal7.4.1, package source235f9ba.
+Do not mistake the matching version string for identical packaged/source content.
+
+CHECKED AT THAT CODE COMMIT
+590 Python/Linux/LuaJIT tests PASS, no skips; PowerShell installer/discovery
+fixtures PASS on Linux. This is retained evidence, not a native Windows or whole
+multiplayer acceptance claim. Run a baseline once on a new test environment; then
+test affected behavior and required integration gates, not unchanged gameplay.
+
+WHERE THE REST LIVES
+This directory in Git is the maintained onboarding source. A downloadable ZIP
+also includes selected repository references in reference/ plus BASELINE.json
+and SHA256SUMS.txt. Paths inside those references are repository-relative unless
+explicitly described as machine-local; they are not files installed by this ZIP.
+The ZIP is a dated snapshot. Fetch current Git state and read the current handoff
+before work; a newer task agreement may supersede its pinned baseline.
+Raw .local/ engine evidence is not in Git or this packet. Request the specific
+sanitized capture needed for an independent review; report unavailable evidence.
+
+ESSENTIAL BOUNDARIES
+Two players; host X4 simulates, Python relays. Shared starting save works, but
+played-campaign persistence and full ongoing universe authority are unfinished.
+Keep work internal, preserve normal saves/settings/Workshop subscriptions and
+sealed packages. No personal documents/mail, spending, automatic public releases,
+new timers/chats or live installation changes inferred from this onboarding.
+Human teams perform finished-release playtests. Local isolated engine probes
+require the machine owner's authorization and coordination with its native owner.
+Use 05-HANDOFF-TEMPLATE.txt when delivering a scoped contribution.

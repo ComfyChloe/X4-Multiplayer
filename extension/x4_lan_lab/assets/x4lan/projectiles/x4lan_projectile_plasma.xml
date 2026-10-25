@@ -1,0 +1,28 @@
+<?xml version='1.0' encoding='utf-8'?>
+<components>
+  <component class="effectobject" name="x4lan_projectile_plasma">
+    <source geometry="extensions\ego_dlc_timelines\assets\fx\weaponfx\bullet_ter_s_plasma_01_mk1_data" />
+    <connections>
+      <connection name="position" tags="position" value="1" />
+      <connection name="space" tags="effectobject" />
+      <connection name="visual" tags="part">
+        <parts>
+          <part name="part_bullet">
+            <lods>
+              <lod index="0">
+                <materials>
+                  <material id="1" ref="p2fx.fx_p2_bullets_01_a" />
+                </materials>
+              </lod>
+            </lods>
+            <size>
+              <max x="4" y="4" z="10" />
+              <center x="0" y="0" z="0" />
+            </size>
+          </part>
+        </parts>
+      </connection>
+      <connection name="rendereffects" tags="rendereffect" value="0" optional="1" />
+    </connections>
+  </component>
+</components>

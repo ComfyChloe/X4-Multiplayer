@@ -1,0 +1,62 @@
+NPC COMBAT — VALIDATION / CLEANUP
+25 October 2026 | Unreleased opt-in source; no new package
+
+AUTOMATED
+614 Linux/Python/LuaJIT tests PASS, no skips (dev/check.py).
+This includes both packaged-server import/constructor checks outside the checkout,
+all existing player combat tests and24 new cases covering NPC transport, adapter,
+native MD execution fences and capture cadence. These are not native Windows tests.
+Full logs: .local/evidence-217-withheld Initial611 run with two missing-module
+package failures retained in full-check.log; corrected611 run in full-check-fixed.log.
+Current NPC MD and final native probe validate against the installed game's MD schema.
+
+NATIVE GUEST06 — SHIELD OVERFLOW AND ACTUAL MISS
+Five real hits on the replica each produced a shield callback and an overflow-hull
+callback: ten damage events, correctly five cumulative hit claims. Each pair's
+observed channel damage sums to40. The restored shield was positive in the hull
+callback, preventing a second count. The independent callbacks are retained raw.
+The later miss phase has native pose evidence x=5000,z=-1200, outside the firing
+corridor, with zero shield/hull callbacks and zero extra claims. Terminal host death
+caused one fenced native destroy; the final replica readback was operational=false.
+Native host02 separately proves real remote-sector shield/hull/death application;
+guest05 proves all41 hull hits counted and destruction despite an expired baseline.
+These are separate one-engine experiments with synthetic peers, not a matched pair.
+
+EVIDENCE INTEGRITY / LIMITS
+.local/evidence-216-withheld reproduces the retained results from raw captures and
+manifests. Its four negative mutations are rejected. Guest01-04 retain their failed
+or partial classifications; see NPC-COMBAT-20261025.txt for exact reasons.
+Guest03-06 retain full installed-source directories with byte hashes matching each
+run's inventory. Earlier host02 retains the source hash inventory, not a complete
+historical installed-source directory. No later live file was used as historical
+proof. The current source hashes below distinguish the final source from those runs.
+Guest06's first launch command had a mistyped interpreter path and exited before
+any changes; the corrected controller then ran. Both messages remain in its log.
+
+CLEANUP
+All eight native capture controllers (guest01-06, host01-02) recorded complete
+cleanup, including interrupted host01. Each run's before/after manifests verify
+all8 actual save-file bytes and timestamps unchanged; Steam cloud metadata bytes
+also match (its timestamp is not treated as an unchanged save). Each exact69-file
+owned installation inventory was restored. The current test config bytes also match
+the final run's recorded backup. Selection files were not edited. No normal save
+was loaded, created, deleted or overwritten. Owned probe port45843 is released;
+X4 is closed. Existing sealed delivery archives and any unrelated relay stay intact.
+
+SOURCE SHA256
+af368f8d8f4209cf9a76de89c666cbcf282c04bfffcf525fd5a8cc57b0c4c08c  x4lan/npc_combat.py
+d4694831707f939bcc006a5e558689b0f759b6e5bf3b24895ac0156e4b49762b  x4lan/universe.py
+74a8528b61402e1d31c18351164724d6aceb3e2bd83c60fc76f4330a3035b0f3  extension/x4_lan_lab/ui/npc_combat_game.lua
+1de8af2fbcf9588422ae97d7d41a558923effc9072a2ce8445fe8e0ae6138573  extension/x4_lan_lab/ui/shot_capture.lua
+a286448a322ac93e70d51738a7b60ccc4ca4397209840bc53f7e9f37831c7812  extension/x4_lan_lab/ui/universe_game.lua
+b6ca117eb5dc6cfc81d6b1a2e473b451c74a4e6f22175c671c32aa1af8ae2b16  extension/x4_lan_lab/md/x4lan_npc_combat.xml
+
+RETAINED RAW LOG SHA256
+459c6d5611ff2cefb7abd5d5884edfd76954f37b954afce8ea16b9bd845167b1  .local/evidence-207-withheld
+585adc4200c3e34dfde4990b2ccfc09b41182194cff7d333b397bda92d93ed4b  .local/evidence-213-withheld
+819b1492f0f72c4d46e8c5c23432d3554b750555a8a71b60a28dd35ceb101db2  .local/evidence-214-withheld
+5586589e609a54f4253cfdb4cb0b426c6775c1a5b2b2821c44d762fa59ffc980  .local/evidence-208-withheld
+0a12d269f0014f1b6151efad44747da13888223cfb4dc39414ea081a1adc3b58  .local/evidence-209-withheld
+fea97b46383d6bb7407b8b4752e693170a3af94e0334a0228d774215ef0c0726  .local/evidence-210-withheld
+21ebe4223d4cbbf97b090bf76366267446fb4e9c60ab693b800f7275aff97a6e  .local/evidence-211-withheld
+2f49e63333017a897a10fc6a165bb43f4da08eec6a08d774242c9794133fc211  .local/evidence-212-withheld

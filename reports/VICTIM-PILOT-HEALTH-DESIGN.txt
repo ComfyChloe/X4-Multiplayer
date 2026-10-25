@@ -1,0 +1,251 @@
+VICTIM-PILOT HEALTH AUTHORITY (option A) - DESIGN AND SOURCE FEASIBILITY
+23 Oct 2026, Claude (A:primary assignment 19:24 CEST). Base f29d3ef (7.3.0). DESIGN ONLY:
+no production change, not release-ready, no native run. Damage stays as in 7.3.0.
+
+WHY
+PR34 (HIT2) is withdrawn. Native Linux evidence on c5eae79 (A:primary, 19:10/19:24) showed
+that every attack notification is throttled to roughly one per second: event_object_attacked,
+event_object_attacked_object and the player-owned variants alike. Damage events are per hit
+and carry no source. A per-hit attacker exists only for the player's own controlled ship
+(event_player_ship_hit). Option A needs no attacker at all: the pilot's machine is the
+authority for the health of the co-op ship it pilots. All damage that the ship takes in the
+pilot's own world counts: local NPCs and the FIRE2-replayed shots of the other player.
+
+CURRENT SOURCE (f29d3ef)
+- Host health: x4lan_bubble.xml Publish (0.2 s) sends hullpercentage/shieldpercentage of both
+  co-op ships in WORLD. Guest Apply (bubble_game.lua) sets both ships' hull/shield from it on
+  every change, and at least every 1 s.
+- Death: x4lan_life.xml Tick (0.05 s), host only. A co-op ship with hull <= 1.01% (ships have
+  min hull 1, x4lan_bubble.xml:16) or not operational becomes Arena.$dead. The occupant is
+  ejected, then the ship is destroyed. The guest follows through WORLD (v <= 1.01 -> dead).
+  The relay dead() reads the same WORLD values.
+- Authority: x4lan/coop.py owners/epochs/pilot(entity). AUTH carries the revision, owner,
+  epoch and pilot of each ship. A HELLO with a new lease increments the epoch of the ships
+  that slot owns. coop_game.lua mirrors this as c.owners/c.epochs/c.pilots.
+- Result today: the guest ship's health is decided in the host world, where the host sees the
+  guest ship one latency late. Damage the guest takes from its own local NPCs is overwritten.
+
+PROPOSED WIRE: HEALTH|1|lease|entity|epoch|seq|hull%|shield%   (pilot -> relay -> other peer)
+- Sent by the machine whose slot both OWNS and PILOTS the entity (c.owners and c.pilots
+  equal cfg.slot), at 10 Hz and at once on a decrease. The host never sends HEALTH for a ship
+  it pilots: its native value is already the WORLD value.
+- Relay (coop.py, like FIRE2): accept only when owner == pilot == sender slot, the epoch is
+  current and the ship is not dead(). seq must be > the last seq of the same lease+epoch.
+  Values must be finite, 0..100. Keep the latest frame and forward it to the other peer for
+  0.75 s. A new epoch drops the old frame.
+- Order: one monotonic seq per lease/entity/epoch. A stale or out-of-order frame is dropped.
+  After an epoch change, nothing applies until the new pilot's first frame, which is the
+  baseline. Until then the host keeps its native value.
+
+HOST RULES (the remotely piloted proxy, entity e)
+1. On each accepted HEALTH: set_object_shield and set_object_hull to the reported values.
+   The host's own hits on the proxy are therefore overwritten, symmetric to the guest today.
+2. While e is remotely piloted with a current epoch, the proxy gets set_object_min_hull 2. So
+   host-world damage can never reach the 1.01% LifeTick threshold between frames. This
+   removes the life race that killed PR34.
+3. Lethal: a reported hull <= 1.01 restores min hull 1 and sets the reported value. LifeTick
+   then declares death exactly as today (eject, destroy, WORLD, relay dead()).
+4. Pilot loss or transfer (new epoch, pilot '0', HELLO lease change): restore min hull 1 and
+   keep the current native value. The host is authority again until a new pilot's baseline.
+   No health is invented.
+5. The WORLD the host publishes then carries the pilot's value back to the pilot: an echo.
+
+GUEST RULES (the ship it pilots, entity e)
+6. WORLD Apply must not write hull/shield of e while the guest owns and pilots e in the
+   current epoch. Otherwise the echo, about one RTT late, would heal or re-damage it.
+   Source change: one condition in x4lan_bubble.xml Apply, keyed on a session value that
+   coop_game.lua maintains from AUTH. This needs A:primary coordination (bubble owner).
+7. Dead state still comes from WORLD (v <= 1.01). Locally the guest ship stays at the 1% min
+   hull; the guest never destroys itself (unchanged: the coop LifeTick branch is host-only).
+
+FILES (estimate)
+x4lan/coop.py (HEALTH branch + snapshot), ui/coop_game.lua (send/receive, pilot flag),
+md/x4lan_coop.xml (Health apply, min-hull floor/restore), md/x4lan_bubble.xml (one Apply guard),
+tests (relay validation, order/epoch, LuaJIT doubles for floor/lethal/transfer/echo skip).
+Flag: pilot_health (default false). About 120 lines plus tests, no new MD event dependency.
+
+LIMITS (state them in any release note)
+- Victim-favoured: a shot counts when it hits in the victim's world. A shooter may see a hit
+  that does not count, or the reverse, by about one latency of relative motion. That is the
+  same lag as today, moved to the side whose health it is.
+- Co-op ships only. LAN targets, Arena.$donor (the test freighter, min hull 100 by
+  x4lan_trade.xml), stations and ordinary NPC combat are unchanged.
+- Shield regeneration runs locally on the pilot side. Host-side regeneration of the proxy is
+  overwritten at 10 Hz.
+- Lethal latency: death is declared on the host up to one HEALTH interval plus one-way
+  latency after the pilot's hull reaches the floor.
+
+UNVERIFIED NATIVELY
+(a) Repeated set_object_hull/shield at 10 Hz on a moving, FIRE2-driven proxy: side effects on
+    shield recharge delay or effects. A:primary's capture shows setters emit no damage events.
+(b) min hull 2 on the proxy holds against heavy bursts. Same mechanism as the existing 1%,
+    but a different value.
+(c) The guest Apply guard leaves no other writer of the piloted ship's health.
+
+SMALLEST HONEST NEXT TEST (native, after authorization; no human playtest needed first)
+One Linux host + synthetic or second native guest, profile-isolated, pilot_health=true:
+1. The guest-piloted ship takes 10 replayed host shots in the guest world. Expect: HEALTH seq
+   rises monotonically; the host proxy hull equals the reported value within 0.3 s;
+   no SHIP_LETHAL.
+2. Host-world damage to the proxy without any guest damage. Expect: overwritten at the next
+   frame; hull never below 2%; no SHIP_LETHAL.
+3. Drive the guest ship to the floor. Expect: one SHIP_LETHAL and SHIP_DESTROYED on the host,
+   and the guest dead via WORLD.
+4. Pilot transfer mid-fight. Expect: frames of the old epoch are dropped; min hull 1 is
+   restored; no health jump without a new baseline.
+Evidence: HEALTH send/accept/apply counts, LifeTick lines, readbacks at 5 Hz.
+
+IMPLEMENTATION STATUS (draft, pilot_health=false by default; A:primary review corrections 22:14)
+- Generation: the relay keeps one generation per ship for each (owner, epoch, pilot). Any change
+  starts a new one, including the same owner leaving and re-entering the pilot seat, and drops
+  the stored frame.
+- Canonical baseline: for an unacknowledged generation the relay repeats
+  HBASE|1|pilotLease|entity|gen|hull|shield to the pilot, taken from the host's latest WORLD. The
+  pilot writes it on the ship it occupies (MD Base, then Based) and answers
+  HACK|1|lease|entity|gen. HEALTH|1|lease|entity|gen|seq|hull|shield counts only for that
+  acknowledged generation. No first frame is guessed.
+- Host fencing: Lua accepts only the current or a newer generation, in seq order. Every queued
+  MD Apply/Release carries its generation, and MD executes it only when that generation is
+  >= Arena.$healthGen and the ship is operational and not dead.
+- Freshness: no accepted frame for 1 s, or an owner/pilot/epoch change, releases the 2% floor
+  (back to 1%, native value).
+- Canonical WORLD: Publish sends Arena.$healthValue (the last applied pilot value) for a ship in
+  Arena.$healthLive, not the proxy readback. So WORLD no longer depends on proxy damage or
+  regeneration. LifeTick death still publishes 0.
+- Guest guards in x4lan_bubble.xml: the ship setters are skipped and dead is assigned only on
+  the host-confirmed 0 while Arena.$healthOwn.{i} is set (only after Based). Without the flag
+  list (feature off) the expressions are unchanged.
+- x4lan_bubble.xml was edited directly: dev/build_bubble_md.py no longer reproduces the
+  committed file (its output differs in 45 lines on f29d3ef), so the generator was not run.
+Tests: tests/test_health.py (relay baseline/ack, validity/order/staleness, leave/re-enter
+generation; LuaJIT pilot baseline/ack/report, leave seat, host generation order/lethal/
+staleness/transfer release, flag/ui/bubble guard text). 94 focused tests pass. Both MD files
+validate against md.xsd.
+NOT FIXED BY OPTION A: guest-to-host damage (the 7.3.1 human report). The host ship's health is
+still decided in the host world, where FIRE2 replays guest shots one latency late.
+Second review round (A:primary, re-review of c7cb744):
+- Validity is bound to the AUTH revision. The relay sends HGEN|1|lease|authRevision|gen1|gen2 in
+  every snapshot. Every owner/epoch/pilot change bumps that revision, so a generation is valid
+  on a machine only once an HGEN of the AUTH revision it holds names it. HBASE, HEALTH and Based
+  count only for that valid generation. A frame that overtook its AUTH is ignored; its sender
+  repeats it.
+- Every accepted AUTH transition of a ship closes every generation used so far, at once: the
+  guest revokes live/basing, sets MD authority 0 and never re-adopts; the host releases the
+  floor (closed). A newer valid generation also ends the older one (host: closed Release).
+- The MD readback carries MD's game clock and the authority it was taken under. A reading taken
+  before the baseline can never be the first frame of a generation.
+- Queued Base/Apply carry a deadline on MD's game clock (TTL 1 s) that MD checks at execution.
+  Without a readback clock nothing is queued, and nothing is queued while paused.
+Third review round (A:primary on b88909f) and lifecycle self-audit:
+- Real-time freshness (corrected after review): MD's own wall clock, as qualified in
+  x4lan_attachment.xml. The readback (unpaused only) carries
+  player.systemtime.{'%Y-%m-%dT%H:%M:%S'} and player.age. Queued Base/Apply carry that second and
+  the [age, age + 1 s] window. MD executes them only when player.timewarp.factor > 0s, in the
+  same wall second and inside the window. Lua issues writes only from a readback at most 0.5 s
+  old and not while paused, and simply re-issues refused ones. No Lua-written clock and no
+  blackboard API.
+- Base retry: an unconfirmed Base is re-issued after 0.5 s. MD writes a generation's baseline
+  once ($healthBased) and only confirms repeats, so a retry never resets HP.
+- Reports: each fresh MD readback is sent at most once. Nothing is sent while paused or from a
+  reading older than 0.3 s; there is no cached republishing.
+- Host close: every closed generation is sent to MD as a closed Release, even after a stale
+  release removed the floor. A delayed queued Apply of it is refused natively.
+- Watchdog: host MD returns a live ship to host authority, from the canonical value, after 2 s
+  of game time without an applied pilot value. On a Lua failure the guest clears its MD
+  authority (best effort).
+Lifecycle audit (code and doubles only):
+- Start: no generation is valid until an HGEN of the held AUTH revision; no HBASE exists before
+  a host WORLD.
+- Handover: valid HBASE -> Authority(gen, false) -> Base (fenced, written once) -> Based (valid
+  only) -> Authority(gen, true) -> HACK on the next HBASE -> HEALTH accepted by the relay ->
+  host Apply (fenced, deadline).
+- Steady state: fresh readbacks, 10 Hz, at once on a decrease. Host freshness is 1 s real time;
+  the MD watchdog covers 2 s game time.
+- Leave, re-enter, transfer, epoch change: the AUTH hook closes at once on both sides. The relay
+  generation moves on; delayed frames are invalid.
+- Pause: no new writes; queued writes expire by real time; reports stop; freshness releases.
+- Death: a reported <= 1.01 restores the 1% floor -> LifeTick -> Publish 0 -> later writes are
+  refused (not operational / dead).
+- Accepted residual: a Base queued just before a revocation can still execute before the
+  revoking Authority event. It writes the host's canonical baseline of the ended generation on
+  the ship and its Based is then refused. No pilot value is accepted from it.
+Still unverified natively: 10 Hz setters on a FIRE2-driven proxy, min hull 2 under bursts.
+Stale, pause and failed-callback audit (after the MD wall-clock change):
+- Pause: readbacks stop (timewarp gate), so Lua stops issuing writes within 0.5 s and stops
+  reporting. Queued writes fail the timewarp/second/window check on resume. Host freshness
+  (1 s real) and the watchdog (2 s game) release the floor. After resume, the next readback
+  re-enables writes.
+- Lua stalls or fails while MD runs: no new writes or reports. The host watchdog releases, and
+  the guest clears its MD authority on a caught failure. A guest Lua that hangs without failing
+  keeps $healthOwn: it remains authoritative for its own ship and the host releases its floor.
+- MD refuses a write (second boundary, window, fence): Base -> no Based -> retried after 0.5 s
+  from a fresh readback, written once. Apply -> the next HEALTH frame (10 Hz) re-issues it.
+  Release is not windowed (restorative, fenced by generation).
+- Lost or late network frames: the relay repeats HBASE/HGEN every snapshot. HEALTH counts only
+  for the valid generation, in seq order. HACK is resent on each repeated HBASE.
+Fourth review round (A:primary on 4bf5163). This supersedes "a stale-only release may resume":
+- Staleness is an authority boundary. The relay ends a live generation after 0.75 s without a
+  pilot frame (checked at every message, so no-snapshot gaps are covered). The host ends it
+  after 1 s and sends HSTALE|1|lease|entity|gen, which the relay honours only for the current
+  generation. Either way the next generation starts from HBASE, i.e. the host's WORLD, which
+  includes any damage taken under host fallback. The old generation never resumes.
+- Hung guest: a guest whose Lua stops (with or without an error) stops its 0.5 s Keep events.
+  Its MD drops the WORLD guard and the authority after 2 s game time, so host values apply
+  again. Its relay generation also ends (no frames), so the host keeps authority until a new
+  baseline is acknowledged. The earlier hung-guest residual is closed.
+
+PRIMARY LINUX NATIVE FUNCTION CHECK,24 OCTOBER2026
+Integrated disabled-by-default source4324cd0 includes39758df. All424 integrated
+development checks PASS/no skips; Health/Bubble/probe MD schemas VALID.
+.local/evidence-047-withheld retains one real Linux host and a synthetic UDP pilot.
+110 native samples,153 Apply requests; baselines100→90→70, canonical WORLD stays
+90 during three labelled hull setters which request1.5 and read2. Closed-generation
+values4001/5006 deliberately delayed from the relay socket are refused. No Apply
+after a closing Release; reported lethal1 yields HEALTH_LETHAL then native
+SHIP_LETHAL/SHIP_DESTROYED next tick. Save/profile/install cleanup verified.
+Raw SHA25638ed132e0a7c67d5ec6094886ede722370622825e094db4ecd1ebc0331a9a390.
+PARTIAL acceptance: the original phase3 recovery deadline<=0.2s is NOT proven;
+first restored5Hz samples are0.2081–0.2215s after the drops. Do not silently relax
+that gate. A finer probe can resolve the sampling ambiguity. Native guest Base/
+WORLD guards, queued guest Authority after watchdog, MD-only watchdog expiry and
+real combat damage remain unqualified. No two-native playtest or weapon aim proof.
+Reviewed7beea45 now integrates monotonic native guest generations, named revokes,
+watchdog closure and an explicit own=true condition for promotion. Repeating a
+current-generation own=false start with a fresh window cannot grant ownership.
+29 focused health/probe/MD-expression tests PASS on both reviewed and integrated
+source; both changed MD schemas VALID. The expression interpreter is a source
+regression check, not native engine evidence. The optional probe now samples20Hz
+and logs immediate native post-write readbacks. Native guest validation pending;
+the previous host capture remains PARTIAL and is not relabelled by these changes.
+
+PERMANENT FAILURE CLOSURE AND NATIVE GUEST FOLLOW-UP,24 OCTOBER2026
+Review of66169d2 closes the guest01 failure-rearm finding. h.fail closes used
+native generations and permanently refuses further health baselines, ownership,
+reports and writes for this load, while ordinary WORLD processing continues.
+34 affected health/probe tests independently pass on both reviewed/integrated
+adfcff5. The e5a41b8 observer now derives send observations from health state;
+it does not mutate the native transport userdata. Relay forwarding is delivery
+truth, not that observer's send label.
+
+.local/evidence-050-withheld: one native Linux p2, real relay, synthetic p1; native
+Base/Based/own/HACK order confirmed,125 send observations all forwarded. Scripted
+local50% hull reported about0.02s later. WORLD40 does not overwrite the own ship;
+rebase adopts55/20; keepalive watchdog closes generation3, its deliberately late
+own=true request is refused, generation4 starts from the canonical baseline.
+Old generation2 HBASE cannot reapply. Deliberate phase7 callback failure at age32
+revokes gen4;72 subsequent samples have own=false/auth0. WORLD35/15 appears at
+age33.08 and stays, while fresh HBASE gen5 repeats without rearming or any new
+HACK/HEALTH/Base. Raw SHA256
+c95330fd402dcbce16a68303aefe076b7eaa43b857c234c525ec35a25efe01be.
+Overall contract remains PARTIAL: the phase2 controller used4s, whereas the
+written contract says5s (74 samples span3.96s). Keep this explicit; the failure
+closure and other bounded observations pass. No paired or real-combat claim.
+
+.local/evidence-051-withheld repeats ONLY the previously unresolved host timing
+phase with the finer native observer. Three labelled1.5% setters clamp at2%;
+actual immediate Apply readbacks restore90% after0.1052/0.0987/0.0989s (log-time
+precision about0.01s), within the unchanged0.2s gate. This bounded follow-up
+PASSES. Original health-function-01 remains historically PARTIAL. Not real shots.
+Raw SHA256d4c7d5bb43ce3f725c4a595c3ee5bf74fd82872f746bd29d2f220e84c8763143.
+Both new captures retain source inventories, original37-file restoration,
+preferences/owned slot and7actual normal-save hashes/timestamps.

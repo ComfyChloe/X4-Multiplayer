@@ -1,0 +1,102 @@
+CURRENT STATE AND SOURCE MAP — CODE BASELINE7c6ec19
+
+THE MODEL
+Host X4 supplies the simulated world. The Python server authenticates, routes and
+validates selected state/transactions; it does not simulate an X4 universe itself.
+Guest X4 loads the host's pristine starting snapshot, then applies supported live
+state while other engine behavior can still diverge. A numeric random seed alone
+did not align the initial stations. Restart currently returns to the starting
+world, not a saved played campaign. Two simultaneous players are implemented.
+
+EVIDENCE THAT SHOULD NOT BE NEEDLESSLY REPEATED
+- Human tests: ordinary dropped cargo/magnet, radar, Cooperative Trial, station/
+  asteroid starting alignment, ship movement and Alt+Tab have worked. This is
+  bounded evidence, not every cargo/radar/mission scenario or ongoing economy.
+-24October7.4.1: guest-to-host shield damage explicitly confirmed on BOTH screens;
+  user said firing appeared to work, and relay/native host records support it.
+  Full hull/death/docking acceptance is not implied by that result.
+- Native isolated probes cover actual shots/visuals, some authority/death paths
+  and docking primitives. Read the relevant report for role/peer type and omissions.
+-590 automated tests at7c6ec19 pass with LuaJIT/no skips. PowerShell fixtures pass
+  on Linux. None of these is a full native Windows gameplay result.
+
+OPEN FINDINGS / PRIORITIES TO SCOPE WITH THE TEAM
+- Guest cannot select the host ship despite correct motion, after only flying/
+  firing. No preceding docking/exit/teleport/pilot change; guest diagnostics absent.
+  Do not label it a position transport failure from the host log alone.
+- Additional25October teams report captured/boarded ships, NPC combat/damage and
+  faction-fleet move orders are not consistently shared. These remain incomplete.
+- Boarding/barriers/occupied-pad two-native crash regression and some ownership
+  handoff cases lack full human acceptance. Intermittent first weapon-loadout
+  refusal remains unresolved. No claim of every weapon/loadout being supported.
+- Host-owned background economy, lifecycle, persistence and late/absent-client
+  catchup remain the overall goal. Clients in different sectors must share one
+  universe; interest/bubble limits are bandwidth/detail choices, not separate worlds.
+- Ordinary shared missions are a later medium priority, in-game chat low priority.
+  Cooperative Trial works; arbitrary normal/story missions do not inherit that PASS.
+
+UNRELEASED INSTALLER WORK INCLUDED IN THIS BASELINE
+Raw tasklist byte matching; missing Steam-drive handling; manual game selection;
+ownership-checked session metadata recovery; preference reselection/module guard;
+clearer read-only mod diagnostics. These changes are not in the sealed7.4.1 ZIPs.
+Do not distribute a patched installed folder or pretend the version string pins it.
+
+COMMUNITY EXPERIMENTS NOT ACCEPTED
+Read reports/COMMUNITY-PATCH-REVIEW-20261025.txt before using the supplied v6 or
+fleet-map9 ideas. Source-level reproductions show overwritten hit deltas, a nil
+health cursor stopping the universe adapter after fleet shrink, and an installed-
+only map hook rejected by its own launcher digest. These archives are not a new
+working baseline. Content.xml mod-selection writers remain excluded after the
+reported Workshop subscription incident. Do not assume profile separation proves
+Steam account isolation or bypass the content digest to enable an extra API.
+
+TASK-RELEVANT SOURCE MAP (paths relative to repository root)
+Transport/session:
+  x4lan/host.py; native/net.c; extension/x4_lan_lab/ui/client.lua, transport.lua.
+  tests/test_host.py, test_lua.py, test_reconnect.py.
+Shared starting world/admission:
+  distribution/world_launcher.py; x4lan/seed.py, world_start.py, save_origin.py.
+  extension/x4_lan_lab/ui/seed_game.lua, seed_capture.lua, seed_content.lua.
+  extension/x4_lan_lab/md/x4lan_seed.xml, x4lan_seed_docks.xml.
+  tests/test_world_launcher.py, test_seed_gate.py, test_world_start.py.
+NPC scene/identity/sensors/motion:
+  x4lan/universe.py, identity.py; ui/universe_game.lua, universe_protocol.lua,
+  identity_game.lua, motion.lua under extension/x4_lan_lab/.
+  md/x4lan_universe.xml; tests/test_universe*.py, test_identity.py, test_motion.py.
+  dev/validate_native_sensors.py checks retained native observation captures.
+Pilot ownership/docking:
+  x4lan/coop.py, docking.py; ui/coop_game.lua, coop_dock_game.lua, coop_dock_exec.lua;
+  md/x4lan_coop.xml, x4lan_coop_attachment.xml, x4lan_coop_docks.xml.
+  tests/test_coop*.py, test_docking*.py; reports/COOP-DOCKING-PLAN.txt.
+Combat and visuals (coordinate with Claude before changes):
+  x4lan/bubble.py, projectile_relay.py, projectile_protocol.py;
+  ui/health_game.lua, shot_game.lua, shot_capture.lua, shot_visual.lua,
+  projectile_game.lua, projectile_motion.lua, projectile_protocol.lua;
+  md/x4lan_health.xml, x4lan_shot*.xml, x4lan_projectile.xml.
+  tests/test_health*.py, test_shot*.py, test_projectile*.py.
+Cargo and trade:
+  x4lan/cargo.py, economy.py; ui/cargo_game.lua, trade_game.lua, trade_protocol.lua;
+  md/x4lan_cargo.xml, x4lan_trade.xml; tests/test_cargo*.py, test_trade_adapter.py.
+  Reuse transaction/fencing ideas after checking current source; don't bolt on a
+  second unacknowledged action channel for each new gameplay feature.
+Launcher/packaging:
+  distribution/session_launcher.py, profile_settings.py, windows_setup.ps1,
+  linux_setup.py, linux_action.sh, build_packages.py; tests/test_launcher_recovery.py,
+  test_internal_sessions.py, test_profile_settings.py, test_linux_starters.py,
+  test_windows_discovery.ps1, test_windows_profiles.ps1.
+Missions and observation:
+  x4lan/quests.py, monitor.py; ui/quest_game.lua; md/x4lan_quest.xml.
+  tests/test_quests.py, test_monitor.py; distribution/NEXT-TEST.txt.
+
+INTERFACE RULES BEFORE AUTHORITY CHANGES
+Read WORLD-SYNC-REQUIREMENTS.txt and the relevant ARCHITECTURE.md section/source.
+Engine component handles are local; a matching number across processes is not
+stable identity. Separate entity generation, host/session epoch, pilot authority
+and message sequence. Enqueue-time checks do not protect delayed MD execution;
+recheck live identity/ownership/sector/docking there. Network ACK does not prove
+native execution. Define retries, duplicate/expiry handling and canonical outcomes.
+Host-owned health uses WORLD; absent host HEALTH frames are expected. The guest
+pilot HEALTH handshake is a different path, not proof of missing host health.
+
+All ui/ and md/ shorthand above is under extension/x4_lan_lab/. Headers and older
+reports can describe historical versions; use current source plus dated evidence.

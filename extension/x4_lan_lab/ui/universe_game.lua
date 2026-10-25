@@ -88,9 +88,11 @@ local function captured(scan)
  for _,entry in ipairs(scan.objects) do
   if C.IsComponentOperational(entry.object) and C.GetContextByClass(entry.object,'sector',false)==scan.sector then
    local identity=u.identities[entry.key]
-   if not identity or identity.macro~=entry.macro then
+   local code=A.npcCombat and A.npcCombat.code(entry.object)
+   if not identity or identity.retired or identity.macro~=entry.macro or A.npcCombat and
+    (identity.code~=code or identity.owner~=entry.owner or identity.sector~=scan.name) then
     u.nextId=u.nextId+1;assert(u.nextId<=2147483647,'world ID space exhausted')
-    identity={id=u.nextId,macro=entry.macro};u.identities[entry.key]=identity
+    identity={id=u.nextId,macro=entry.macro,code=code,owner=entry.owner,sector=scan.name};u.identities[entry.key]=identity
    end
    local row=identity.id..',ship,'..entry.macro..','..entry.owner..','..poseFields(pose(entry.object))..',none,0'
    assert(P.record(row),'invalid captured NPC state')
@@ -185,6 +187,8 @@ local function render(now,sector)
   if r.sector==u.interest and (not r.nextApply or now>=r.nextApply) then
    r.nextApply=now+.015
    if r.entity.kind=='drop' then A.cargo.ensure(r,sector)
+   elseif A.npcCombat and A.npcCombat.hidden(r) then
+    A.npcCombat.hide(r,now)
    else
    local p=r.entity.pose
    if r.track then p=M.render(r.track,now,r.modern and M.delay or .1) or p end

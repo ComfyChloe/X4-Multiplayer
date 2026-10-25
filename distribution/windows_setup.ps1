@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('Install','Start','Test','Diagnose','Remove','Version')][string]$Action = 'Install',
+    [ValidateSet('Install','Start','Test','Diagnose','Remove','Version','CheckWorldProfile')][string]$Action = 'Install',
     [string]$GamePath = '',
     [string]$ServerIP = ''
 )
@@ -16,20 +16,29 @@ function Get-PackageVersion {
 }
 function Read-State {
     $path = Join-Path $PackageRoot 'installation.json'
-    if (!(Test-Path -LiteralPath $path)) { throw 'Run 1-INSTALL.cmd first.' }
+    if (!(Test-Path -LiteralPath $path)) { throw 'Run 01-INSTALL.cmd first.' }
     return Get-Content -Raw -LiteralPath $path | ConvertFrom-Json
 }
 function Assert-Closed {
     if (Get-Process -Name X4 -ErrorAction SilentlyContinue) { throw 'X4 is still running. Close it first.' }
 }
 function Get-SteamRoot {
+    $candidates = @()
     try {
-        $p = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Valve\Steam').SteamPath
-        if (Test-Path -LiteralPath (Join-Path $p 'steam.exe')) { return $p }
+        $p = (Get-ItemProperty -LiteralPath 'HKCU:\Software\Valve\Steam' -ErrorAction Stop).SteamPath
+        if ($p) { $candidates += [string]$p }
     } catch {}
-    $p = Join-Path ${env:ProgramFiles(x86)} 'Steam'
-    if (Test-Path -LiteralPath (Join-Path $p 'steam.exe')) { return $p }
-    throw 'Steam was not found. Install Steam and sign in first.'
+    foreach ($folder in @(${env:ProgramFiles(x86)}, $env:ProgramFiles)) {
+        if ($folder) { $candidates += [IO.Path]::Combine($folder, 'Steam') }
+    }
+    foreach ($p in ($candidates | Select-Object -Unique)) {
+        if ([IO.File]::Exists([IO.Path]::Combine($p, 'steam.exe'))) { return $p }
+    }
+    $p = (Read-Host 'Steam was not found. Enter the folder containing steam.exe').Trim().Trim('"')
+    if (!$p -or ![IO.File]::Exists([IO.Path]::Combine($p, 'steam.exe'))) {
+        throw 'Steam was not found in that folder. Install Steam and sign in first.'
+    }
+    return $p
 }
 function Find-Game([string]$SteamRoot) {
     $libraries = @($SteamRoot)
@@ -41,6 +50,11 @@ function Find-Game([string]$SteamRoot) {
     }
     $found = @()
     foreach ($lib in ($libraries | Select-Object -Unique)) {
+        # Join-Path can throw on an unplugged drive before Test-Path runs.
+        if (![IO.Directory]::Exists($lib)) {
+            Write-Host ('Skipping unavailable Steam library: ' + $lib)
+            continue
+        }
         $manifest = Join-Path $lib 'steamapps\appmanifest_392160.acf'
         if (!(Test-Path -LiteralPath $manifest)) { continue }
         $m = [regex]::Match((Get-Content -Raw -LiteralPath $manifest), '"installdir"\s+"([^"]+)"')
@@ -181,25 +195,17 @@ function Assert-EmptyTestProfile([string]$Profile) {
         if (Get-ChildItem -LiteralPath $saves -Filter '*.xml*' -File) { throw 'The test profile contains saves. Back them up and use an empty test profile. Nothing will be deleted.' }
     }
 }
-function Set-TestGraphics([xml]$Config) {
-    # X4 9.00 low preset plus explicit test display settings; no main profile edits.
-    $settings = [ordered]@{
-        res_width='1920'; res_height='1080'; fullscreen='true'; borderless='false'
-        gfxquality='1'; shaderquality='2'; shadows='1'; softshadows='false'
-        ssao='0'; glow='0'; uiglow='0'; uiglowintensity='0.75'
-        lodfactor='0.15'; effectdistance='0.15'; distortion='false'
-        disableradar='false'; radarquality='0'; ssr='false'; ssrquality='low'
-        texturequality='low'; chromaticaberration='false'; volumetric='0'
-        pom='low'; envmapprobes='none'; frameratelimit='true'; frameratetarget='60'
-        upmode='none'; dlss='false'; dlssmode='off'; fsr3g='off'
+function Assert-WorldProfile {
+    Assert-Closed
+    $state = Read-State
+    if ((Split-Path -Leaf $state.profile) -ne $ProfileId) { throw 'Unexpected test profile path.' }
+    foreach ($path in @($state.profile, (Join-Path $state.profile 'config.xml'), (Join-Path $state.profile 'save'))) {
+        Assert-SafeProfileItem $path
     }
-    $changed = $false
-    foreach ($key in $settings.Keys) {
-        $node = $Config.DocumentElement.SelectSingleNode($key)
-        if ($null -eq $node) { $node = $Config.CreateElement($key); $Config.DocumentElement.AppendChild($node) | Out-Null }
-        if ($node.InnerText -ne $settings[$key]) { $node.InnerText = $settings[$key]; $changed = $true }
+    $save = Join-Path $state.profile 'save'
+    if (Test-Path -LiteralPath $save) {
+        foreach ($item in Get-ChildItem -LiteralPath $save -Force) { Assert-SafeProfileItem $item.FullName }
     }
-    return $changed
 }
 function Install-Package {
     Assert-Closed
@@ -207,11 +213,14 @@ function Install-Package {
     $steam = Get-SteamRoot
     $game = $GamePath
     if (!$game) { $game = Find-Game $steam }
+    $game = $game.Trim().Trim('"')
+    if ([IO.Path]::GetFileName($game) -ieq 'X4.exe') { $game = [IO.Path]::GetDirectoryName($game) }
+    if (![IO.Directory]::Exists($game)) { throw ('X4 installation folder is unavailable: ' + $game) }
     $game = (Resolve-Path -LiteralPath $game).Path
     Assert-Game $game $pkg.steam_build
     $address = $ServerIP
     if (!$address) { $address = Read-Host 'Host IP (LAN or ZeroTier; shown in the server window)' }
-    $localHost = $pkg.PSObject.Properties['channel'] -and $pkg.channel -eq 'public' -and $pkg.slot -eq 'p1'
+    $localHost = $pkg.PSObject.Properties['channel'] -and $pkg.channel -in @('public', 'internal') -and $pkg.slot -eq 'p1'
     $address = Assert-IPv4 $address.Trim() ([bool]$localHost)
     $documents = Get-DocumentsFolder
     if (!$documents) { throw 'The Windows Documents folder could not be located.' }
@@ -250,12 +259,12 @@ function Install-Package {
         [IO.File]::WriteAllText((Join-Path $staging 'ui\config.lua'), $lua, $Utf8)
         [IO.File]::WriteAllText((Join-Path $staging '.x4lan-package-id'), $pkg.package_id, $Utf8)
         New-Item -ItemType Directory -Force -Path $profile | Out-Null
-        foreach ($key in @('autosave','uisafemode')) {
+        $testSettings = @{autosave='false'; uisafemode='false'; fullscreen='false'; borderless='true'}
+        foreach ($key in $testSettings.Keys) {
             $node = $config.DocumentElement.SelectSingleNode($key)
             if ($null -eq $node) { $node = $config.CreateElement($key); $config.DocumentElement.AppendChild($node) | Out-Null }
-            $node.InnerText = 'false'
+            $node.InnerText = $testSettings[$key]
         }
-        Set-TestGraphics $config | Out-Null
         Assert-SafeProfileItem $tempConfig
         $config.Save($tempConfig)
         Move-Item -LiteralPath $tempConfig -Destination $configPath -Force
@@ -285,7 +294,7 @@ function Install-Package {
     }
     Write-Host 'Installed. Existing player profiles were not modified.'
     Write-Host ('Test profile: ' + $profile)
-    Write-Host 'Next: 2-TEST-CONNECTION.cmd, then 3-START-X4-TEST.cmd.'
+    Write-Host 'Installation complete. Follow the role-specific next step shown by the launcher.'
 }
 function Start-TestGame {
     Assert-Closed
@@ -298,16 +307,7 @@ function Start-TestGame {
     [xml]$config = Read-Utf8Text $configPath
     if ($config.DocumentElement.Name -ne 'root') { throw 'Unknown config.xml format.' }
     if ((Get-ConfigValue $config 'autosave') -ne 'false' -or (Get-ConfigValue $config 'uisafemode') -ne 'false') { throw 'The test profile must keep autosave=false and uisafemode=false. See INSTALL.html.' }
-    if (Set-TestGraphics $config) {
-        $backup = Join-Path $PackageRoot ('backups\graphics-' + (Get-Date -Format 'yyyyMMdd-HHmmss-fff'))
-        New-Item -ItemType Directory -Force -Path $backup | Out-Null
-        Copy-Item -LiteralPath $configPath -Destination (Join-Path $backup 'config.xml')
-        $tempConfig = Join-Path $state.profile 'config.x4lan.tmp'
-        Assert-SafeProfileItem $tempConfig
-        $config.Save($tempConfig)
-        Move-Item -LiteralPath $tempConfig -Destination $configPath -Force
-    }
-    Write-Host 'Test graphics: 1920x1080 exclusive fullscreen, Low preset, 60 FPS limit.'
+    Write-Host 'Using your test profile display, graphics and control settings.'
     $log = Join-Path $state.profile 'x4lan-debug.txt'
     if (Test-Path -LiteralPath $log) {
         $logs = Join-Path $PackageRoot 'logs'; New-Item -ItemType Directory -Force -Path $logs | Out-Null
@@ -374,6 +374,7 @@ try {
     Write-Host ('X4 LAN Lab ' + (Get-PackageVersion))
     switch ($Action) {
         'Version' { }
+        'CheckWorldProfile' { Assert-WorldProfile }
         'Install' { Install-Package }
         'Start' { Start-TestGame }
         'Test' { Test-ConnectionToRelay }

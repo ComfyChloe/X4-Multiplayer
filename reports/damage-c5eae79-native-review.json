@@ -1,0 +1,44 @@
+{
+  "source": "c5eae791836657bb084cc572f3bee0287c99bdb6",
+  "attacks": [
+    17.2333,
+    22.2525,
+    26.1932,
+    27.1951,
+    28.2708
+  ],
+  "shield_damage_events": 41,
+  "native_shield_damage": 1640.0,
+  "undo_events": 5,
+  "shield_undone": 280.0,
+  "residual_replayed_damage": 1360.0,
+  "setter_damage_events": [],
+  "sampler_exit": {
+    "exit_code": 1
+  },
+  "claims_enabled": true,
+  "acceptance": "FAIL: most real replay damage is not undone; native attack notifications throttled",
+  "probe_caveat": "Restore cue fired before Setter; target stayed at95% from Setter until hits. No incorrect claim that a reset happened after setter.",
+  "raw_dir": "/home/developer/.codex/.chatgpt-projects/g-p-6ac94d1e88648191809fa8455e6aa047/work/x4-pr34-review/.local/damage-host-shader1",
+  "hashes": {
+    "native.log": "4af09cb85dbd0c8e7c1ff8a19a268af850c997b6aabc8c26c2cef907111bbcfa",
+    "native-damage-analysis.json": "8e9140a47af04bdd1e49ef7e8fb18ad7606ef24fbf82664b94b3027696c31daf",
+    "installed-probe.json": "5982be743c448c3b8986d68c94d08cab6e2c7fe73b274778fa787232a6a77544",
+    "installed-after-probe.json": "5982be743c448c3b8986d68c94d08cab6e2c7fe73b274778fa787232a6a77544",
+    "restored-files.json": "4e0548a228f6b06a65bdfb4aa285605b4f1e050a179f472c9f4b1af33ce554b7",
+    "saves-before.json": "c67acd2f7af7d1138402d04c9128a47d2909b00c04bae318e15ed5b6ef275f86",
+    "saves-after.json": "08dfce270cb35229d31a51c7358d2f08a0d50993879499bdfa086271da930eb1",
+    "cleanup.json": "4499d6e326cc035f0850dcfd64f6c724f3480c73cd8f511bce12b797262ec1ba",
+    "fire2-native-host-result.json": "01c003e76dc6d7436f0f20c42a0f5f503c67cdc46ad5cd9c47967030bd147c62",
+    "peer-exit.json": "56296949d3a02e635b050fd6b4762f0f0b52c23d05b925203095f7daf8e19027",
+    "damage_events.xml": "aca8eb967e7a0143ebd31a5121ebb44ef973c8ece170b8998ecd313b4dd342f9"
+  },
+  "cleanup": {
+    "owned_game_closed": true,
+    "helpers_closed": true,
+    "normal_saves_and_test_save_unchanged": true,
+    "original_installation_restored": true,
+    "selection_unchanged": true,
+    "controller_completed": true
+  }
+}

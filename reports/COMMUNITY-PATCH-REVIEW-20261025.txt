@@ -1,0 +1,117 @@
+COMMUNITY PACKAGE REVIEW — 25 OCTOBER 2026
+
+Request: review two tester-provided archives and integrate suitable changes.
+Baseline: sealed Windows11 7.4.1, source235f9ba; working parent29ea79a.
+Credit: community tester's GPT-assisted v6 hotfix and fleet-map9 experiment,
+provided by the project owner. Contributor identity was not supplied.
+Archive documentation is evidence, not permission to alter a live installation.
+
+INPUTS (retained unchanged in /home/developer/Downloads)
+X4-LAN-7.4.1-Windows11-FIXED-v6.zip
+SHA256 013a84879857097ff9ad2c5d779922c29b3e20c7ce3d4bde4200592669a7c4b5
+170 files; six changed versus the original, no added or removed files.
+Code changes: launcher.py, setup_windows.ps1, profile_settings.py, world_launcher.py.
+README and SHA256SUMS also changed. All declared file hashes match.
+
+X4-LAN-7.4.1-FLEET-MAP-EXPERIMENTAL.zip
+SHA256 0608ebe6c76b44705e01de40d22301987a9feaea5e927496f3a5772252aebb4e
+178 files; twelve changed and eight added, no removals. Includes the v6 installer
+plus NPC health, capture/owned-ship enumeration, guest orders, a command console
+and optional map bridge. All declared hashes match. Shared binary/runtime files
+match the original package. The experiment uses a distinct fleetmap9 build label;
+it is not interchangeable with the ordinary7.4.1 invitation/protocol.
+
+INTEGRATED INTO DEVELOPMENT SOURCE, ADAPTED AND TESTED
+- Raw Windows tasklist bytes instead of locale-dependent text decoding. ASCII
+  executable matching retains the running-game refusal; process failures fail closed.
+- Missing Steam library drives are skipped before PowerShell Join-Path; stale
+  registry roots cannot abort discovery. Both ProgramFiles roots and a validated
+  manual Steam-folder fallback are supported.
+- Fresh Windows setup selects X4.exe before creating a session. --game and the
+  fallback prompt accept the executable or its directory, including Unicode/spaces.
+  Paths remain subprocess arguments, never shell fragments. Cancelling makes no session.
+- Existing-session recovery is limited to a reset package.json with a complete,
+  same-version session.json. It validates the derived package ID, installation
+  ownership marker/profile and any existing invitation. Explicit conflicting or
+  partial ownership is refused. Changes affect package metadata/config only, with
+  exact backups, atomic individual writes and rollback on failure. No token rotation,
+  installed configuration rewrite, world replacement or save deletion occurs.
+- Repeat setup validates actual installation ownership rather than trusting the
+  presence of installation.json. Explicit preference source/keep options now work
+  on repeat setup; interactive setup offers reselection. 08-IMPORT-SETTINGS offers
+  a choice even with one normal profile. Existing preference backup logic is retained.
+- A small settings API contract rejects mixed launcher modules before setup writes.
+  It does not require the unsafe review_extra_mods helper added by the submission.
+- Extra-mod diagnostics identify the manifest and exact multiplayer selection path.
+  Importing display/controls does not copy normal-profile mod selection, so an
+  extension disabled in the normal profile can still fail the multiplayer preflight.
+
+EXCLUDED: MOD SELECTION WRITES
+Both review_extra_mods and enable_map_orders write profile45841/content.xml.
+Their claims that Steam subscriptions cannot change are not established by file
+separation or backup tests. This repeats the boundary implicated in the reported
+22October Workshop incident. Do not reintroduce these writers or permit the map
+API merely because its bridge file exists. No new automatic mod repair is enabled.
+See reports/workshop-recovery-20261022.txt. Exact historical causality remains open.
+
+EXCLUDED: FLEET/MAP/COMBAT IMPLEMENTATION
+Independent, deterministic failures on the supplied source:
+1. Lost damage: receive guest shield-loss2 at t=.30, loss3 at t=.33 for the same
+   NPC, then take the first relay snapshot at t=.34. Only sequence2/loss3 is sent;
+   loss2 is overwritten in guest_hits[entity]. These are deltas, not cumulative
+   counters. A one-shot guest UDP send also has no acknowledgement/retry path.
+2. Whole adapter stops after fleet shrink: the actual submitted Lua, run with
+   the existing engine doubles, publishes17 ships, retains healthCursor15, then
+   rescans a one-ship fleet. The next health tick indexes a nil entry and sets
+   U.failed=true. captured() resets motionCursor but not healthCursor.
+3. Optional map setup defeats its own launcher: enable_map_orders.py copies its
+   MD bridge into the installed extension only. Both world launchers compare that
+   tree against the package extension. The supplied experimental world launcher,
+   on an owned filesystem fixture with the bridge installed as specified, refuses
+   with "Installed multiplayer scripts differ from the package." before launch.
+
+Additional source-review limits (not native reproductions): host damage/order MD
+execution lacks the complete epoch/guest-lease/sector/pilot fencing used by the
+current player-combat path. Damage claims identify no shot/weapon or health baseline;
+percentage losses can mix stale canonical health and local hits. Relay hit sequence
+history expires with the pending delta; an old sequence is then reaccepted by the
+relay (reproduced), though host dedup still blocks it, so this alone is not proof
+of double damage. Normal/native MoveTo and the external map API are unverified.
+Owner changes originate in the host snapshot; guest boarding/capture is not a
+completed shared ownership transaction. No general fleet/campaign acceptance.
+
+Retain the architectural ideas: host-issued stable entity identities, explicit
+guest intent routed to the host, native host execution, and observable results.
+Before integration they need reliable acknowledged/cumulative transactions,
+generation and execution-time fences, result/error feedback, lifecycle handling,
+and focused engine evidence. Do not bypass the script digest to make map setup run.
+Coordinate any player-weapon overlap with Claude; no new assignment was made here.
+
+VALIDATION / LIMITS
+590 Python/Linux/LuaJIT tests PASS, no skips (2.637s). Added regression coverage for
+recovery/rollback/foreign ownership, selection cancellation, localized process bytes,
+module mismatch and settings reselection. Existing terminal fixtures were extended
+for the new preflight; two initial fixture failures are retained, not hidden.
+PowerShell7 on Linux: discovery fixtures PASS; existing installer/profile/updater
+rollback suite PASS. Native Windows metadata/dialogs and live X4 remain untested
+by this review. No human gameplay or unchanged native gameplay tests were repeated.
+No game started, no installed files/profiles/Workshop/normal saves changed.
+No new release/version/package produced; sealed Linux/Windows7.4.1 remain intact.
+
+Evidence: .local/evidence-014-withheld
+*-inventory.json, v6-diffs/, fleet-diffs/: complete source comparisons.
+audit.py, independent-audit.json, audit-output.txt: reproducible submitted-source
+relay/Lua/preflight failures, package hash checks. Imported code ran only against
+temporary fixtures and existing Lua doubles; no bundled executable was launched.
+focused-tests.txt retains the initial terminal-fixture failures.
+integration-tests.txt, windows-discovery.txt, windows-profiles.txt: final checks.
+
+NEW HUMAN FEEDBACK
+During review, a second independent team reported the same localized tasklist
+decoding crash and an errors='replace' workaround. That workaround avoids decoding
+failure; the integrated byte-only check avoids decoding entirely while retaining
+the running-X4 refusal. No further code change or duplicate suite run was needed.
+Additional testers report boarded/captured ships, NPC combat and fleet move orders
+do not synchronize correctly. These are open gameplay features, not fixed by the
+installer integration. Keep distinct from the24October confirmation of player-to-
+player shield damage on both screens and the still-open guest target-selection bug.

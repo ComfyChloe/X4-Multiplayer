@@ -1,5 +1,13 @@
 SHARED UNIVERSE - INTERNAL REQUIREMENTS AND DIAGNOSIS
-11 October 2026 | Status: W01 NPC SCENE MILESTONE IN DEVELOPMENT | Public Test 01: WITHHELD
+Requirements established 11 October 2026 | Public Test 01: WITHHELD
+
+CURRENT READING NOTE — 23 OCTOBER 2026
+CONTINUE-HERE.txt owns current delivery and acceptance. 7.3.0 shares the initial
+native world; ongoing universe authority/persistence remain unfinished. Human
+7.2 radar, ordinary cargo/magnet and Cooperative Trial checks passed. The 6.0.0
+diagnosis and original acceptance order below are historical, not a claim those
+basic cargo checks still fail or instructions to repeat every passed scenario.
+The architectural requirements remain; run regressions relevant to actual changes.
 
 USER REQUIREMENT
 Both players must participate in one host-authoritative universe, including its

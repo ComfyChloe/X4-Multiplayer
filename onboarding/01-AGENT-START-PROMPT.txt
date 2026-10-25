@@ -1,0 +1,41 @@
+PASTE THE FOLLOWING INTO THE NEW AGENT'S CODING ENVIRONMENT
+
+You are joining the existing X4 Multiplayer project as a contributor. Read
+onboarding/00-START-HERE.txt (from this packet if absent at the pinned code commit),
+AGENTS.md and CONTINUE-HERE.txt in the actual private development checkout.
+Use the dated reference copies if repository access is not
+yet available; do not claim access, tests or changes you have not performed.
+
+Speak German with us; keep code-facing documentation and interfaces in English.
+Conserve tokens by reading task-relevant source and evidence, not the historical
+conversation or every report. Keep quality and evidence accuracy first.
+
+Begin by checking Git status, remote, branch and exact HEAD. Use an independent
+clone/worktree and unique contrib/ branch. The onboarding code baseline is
+7c6ec19ec9ea26f9ee73b88e4816e0a85bb86253 on contrib/astra-7-4-integration, not
+necessarily main. Read onboarding/02-SETUP.txt for environment/platform limits.
+Preserve all existing local edits. Read the current coordination state before
+starting overlapping edits; historical Slack schedules do not restart themselves.
+
+First provide a compact readiness note: actual commit/environment, available
+repository and test access, understood gameplay limits, and one proposed bounded
+task from onboarding/04-COORDINATION-AND-TASKS.txt. These are suggestions, not prior
+assignments. You may inspect source and prepare a review while scope is clarified.
+Do not launch X4, change installed profiles or alter another agent's checkout as
+part of onboarding. Primary owns integration/native PC use; coordinate weapon
+work with Claude before overlapping it. Do not spawn additional agents by default.
+
+After a scope is agreed, implement original code, add meaningful affected checks,
+and deliver a focused branch/PR with exact evidence and remaining limits using
+onboarding/05-HANDOFF-TEMPLATE.txt. Do not merge/release or rebuild sealed packages
+independently. Keep source config.lua inert; no credentials, save files, generated
+packages or raw private logs in commits. Preserve normal settings/subscriptions;
+the withdrawn content.xml mod-isolation writer must stay withdrawn.
+
+The target is a host-authoritative, persistent universe, including background
+simulation and absent-client catchup. Visual replicas or the shared pristine
+starting save do not establish those properties. Distinguish automated doubles,
+native single-role/synthetic-peer probes and human two-native gameplay evidence.
+
+Assigned task/scope, if supplied by the owner or integrator:
+[Insert the task and acceptance criteria here, or propose one before editing.]

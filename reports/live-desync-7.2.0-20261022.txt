@@ -1,0 +1,21 @@
+Human live7.2.0 desync observation,22 October2026 around22:45 CEST
+
+Server PID163713 remained the original21:48 relay. Current host game started
+22:35:32. New host captured NPC revision1/136 objects at sim62.90, then waited.
+Relay continued reporting prior-run revision44/133 objects and no new guest ACK.
+UniverseSession.receive pins universe_epoch for relay lifetime and rejects a new
+host lease. Reusing this relay therefore prevents the fresh host NPC baseline.
+The previous instruction to restart both worlds omitted restarting the relay;
+source setup/test docs now explicitly require all three processes to restart.
+
+Guest no-updates started22:45:28 and timed out22:45:56 after30 seconds without
+valid updates. Host also had an approximately30-second update gap. User confirms
+backgrounding games in this interval, with position desync and unreliable guest
+radar since first alt-tab. This is consistent with suspended client updates;
+server send_errors=0 and CPU around1% do not prove absence of network loss.
+Host MD also rejected some remote shooting at adjacentzone attention (minimum
+visible). Radar-specific cause is not proven by these server observations.
+
+Read-only capture only: no process restart, network/session injection or game
+installation change. Raw server/current host captures, sanitized host log and
+hashes retained under.local/evidence-109-withheld No new acceptance claimed.

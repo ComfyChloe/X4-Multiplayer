@@ -44,6 +44,7 @@ local function closeNetwork()
 end
 local function receiveExtension(client,f,now)
  if X4LAN_BUBBLE_API.universe and X4LAN_BUBBLE_API.universe.receive(f,now) then return true end
+ if X4LAN_BUBBLE_API.missions and X4LAN_BUBBLE_API.missions.receive(f,now) then return true end
  if X4LAN_BUBBLE_API.quest and X4LAN_BUBBLE_API.quest.receive(f,now) then return true end
  if X4LAN_BUBBLE_API.coop and X4LAN_BUBBLE_API.coop.receive(f,now) then return true end
  if X4LAN_BUBBLE_API.life and X4LAN_BUBBLE_API.life.receive(client,f,now) then return true end
@@ -94,6 +95,13 @@ X4LAN_BUBBLE_API={state=s,id=id,nonce=nonce,paused=function() return C.IsGamePau
 local function frame()
  local now=GetCurRealTime()
  if s.failed then return end
+ if cfg.seed_id then
+  local gate=X4LAN_SEED_GATE
+  if not gate or gate.failed then
+   error('native seed admission unavailable: '..tostring(gate and gate.failed))
+  end
+  if not gate.frame(now) then return end
+ end
  if not s.loaded then
   if C.IsPlayerValid() and now>=(s.probe or 0) then AddUITriggeredEvent('X4LAN','Ready');s.probe=now+1 end
   return
@@ -169,6 +177,7 @@ local function frame()
  if X4LAN_BUBBLE_API.coop then X4LAN_BUBBLE_API.coop.frame(now) end
  if X4LAN_BUBBLE_API.universe then X4LAN_BUBBLE_API.universe.frame(now) end
  if X4LAN_BUBBLE_API.trade then X4LAN_BUBBLE_API.trade.frame(now) end
+ if X4LAN_BUBBLE_API.missions then X4LAN_BUBBLE_API.missions.frame(now) end
  if X4LAN_BUBBLE_API.quest then X4LAN_BUBBLE_API.quest.frame(now) end
  if not cfg.coop and client.lease and now>=(s.nextFire or 0) then
   s.transport:send('FIRE|1|'..client.lease..'|'..tostring(s.fire));s.nextFire=now+.05

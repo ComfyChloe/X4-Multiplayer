@@ -1,0 +1,187 @@
+WEAPON AIM PRIMITIVES — 23 OCTOBER 2026 — INTERNAL DEVELOPMENT
+
+FIRE2 carries weapon groups/counters and source time, but no projectile/gimbal
+orientation. Native MD shoot explicitly fires without a target. The hypothesis
+that missing aim causes guest-to-host misses remains under investigation.
+
+The isolated projectile-steering-02 run observes 24 actual Xperimental Shuttle
+bullets from a synthetic guest's four six-shot bursts in one native Linux host.
+Original sealed 7.3.1 source plus an unshipped observer; no production change.
+Each bullet is sampled after at least150ms. Native baseline, bullet warp yaw15,
+set_object_velocity and combined warp/velocity each cover six shots. Observed
+sector yaw ranges: baseline[-0.104,0.137], warp[-0.075,0.162], velocity
+[-0.076,0.106], combined[-0.219,-0.032] degrees. None reaches requested15deg.
+All12 velocity writes emit the native class error: the plasma bullet is not
+destructible. Warp alone also leaves actual forward/trajectory unchanged.
+RESULT: this MD steering primitive fails; it cannot be enabled for these bullets.
+This is not evidence about every projectile type or other native APIs.
+
+Raw log SHA256:
+9b147ae229148a001d723378b101cbf0f8e4e1fd4f052dd02031eca510970af4
+Private local capture: .local/evidence-229-withheld, including source inventory,
+24 trajectory records, analysis.json, per-run save manifests and restored-file
+inventory. Game/helpers closed; original installation, settings, test save and
+seven actual normal saves retained. The first run never reached gameplay within
+its observation deadline and remains separately failed/incomplete.
+
+SUBSEQUENT NATIVE AIM COMPARISON
+
+aim_turret rejects these primary guns as non-turrets. A minimal shoot_at AI script
+can aim primary guns at a fixed native object without a flight command. Initial
+six-shot-budget probes (with simultaneous-barrel overrun) did not hit. Neither
+passive warmup nor temporarily disarming the guns proved early-hit behavior.
+Those captures remain retained; early misses do NOT establish a multiplayer bug.
+
+The user clarified that native gun tracking, slewing and misses are intended,
+and that the X Shuttle weapons are particularly inaccurate. Preserve these
+mechanics, including deliberate misses/free aim. Never tighten tolerance, change
+spread, rotate the whole ship, or substitute automatic victim targeting merely
+to make a multiplayer hit test pass. Other stock weapons are authorized for
+comparison, with unchanged weapon properties.
+
+aim-sustained-01 uses the same source 5c5133a and fixed 100 m lateral / 800 m
+longitudinal target offset, normal shoot_at tolerance and a four-second burst.
+206 native shots and 206 delayed trajectory observations were retained. Native
+player-hit events identify the expected shooter AND player ship for 52 hits;
+shield-damage events total 2080 HP. The first shot is at game time17.0739s, first
+hit17.7076s. Maximum absolute shooter yaw in native MD logging is0.00446182;
+the six-gun source stays nearly stationary. Outcome: player hull100%, shield
+56.6667%. No weapon properties changed. CORRECTION: the initial error scan missed
+two native story-condition parser errors (Paranid/Split debug wrappers). These
+remain in the raw log; the separate story startup acceptance is withdrawn. They
+do not erase the recorded projectile/hit observations. All non-probe error lines
+are now retained in analysis.json, including baseline engine/signature warnings.
+Raw SHA2560758a6ff0f70498f21f7231034c2a64c59dbc781af3f4d2df8b24e3f5a7c143f.
+The original installation/settings and actual save hashes/timestamps were
+restored; game and helpers closed. Source inventory, raw log, observations and
+cleanup are under .local/evidence-003-withheld
+
+This qualifies a fixed-target native primitive ONLY. It does not transmit a
+human shooter's actual aim or qualify two-native damage synchronization. FIRE2
+still lacks that information. aim-pulse-01 reached no WORLD sample and remains
+incomplete after an owned-window focus failure; it proves nothing about pulse
+weapons. Its installation/save restoration was verified. The next combined
+comparison is .local/evidence-257-withheld, with the user's native completed-story
+start replacing all29 cue patches.
+
+PULSE COMPARISON
+story-preset-pulse-01 observes one stock weapon_gen_s_laser_01_mk1_macro on a
+native one-slot Argon fighter, firing at the same X Shuttle target with the same
+100 m lateral / 800 m longitudinal offset. Native readback confirms the weapon
+and one occupied slot. Twelve shots,11 expected-shooter/player-victim hits,
+396 shield HP damage; first shot16.9896s, first hit17.2939s. Shooter yaw remains0.
+No artificial tolerance or spread changes. These are small, different-barrel-count
+samples, not a statistical weapon accuracy benchmark or network acceptance.
+Raw SHA25632162a23a6d1aaf1e7e66dee232538025b916080e640386b5a624af8abfac2b4.
+This run also exposed missing early-HQ and obsolete research-entry errors in the
+new story preset, plus a native probe-pilot voice warning. The story portion is
+FAILED and separately corrected in story-preset-02; the pulse comparison was
+not repeated merely to refresh passing firing evidence. Original cleanup verified.
+
+WEAPON-COMPONENT POSE EXPERIMENT
+weapon-pose-01 (a7b0b2d plus private observer) uses the same single stock pulse
+weapon. Baseline12 shots, MD weapon warp12, FFI weapon pose15; all39 delayed
+trajectory samples have sector yaw0, while the requested weapon yaw is15deg.
+The ship stays yaw0 and the offset target takes no damage. MD weapon rotation
+readback remains0. IsComponentOperational and GetContextByClass succeed for the
+weapon reference, but GetObjectPositionInSector/SetObjectSectorPos emit three
+native failed-to-retrieve-object errors for that component. Lua pcall returning
+true does not establish native success. This is a FAILED setter experiment,
+not proof about every possible engine interface. No production aim change.
+Raw SHA256713b12cca8e14f195bf410bf610d5316062030f0bf6344997c7cdf55e5d17519.
+Source/readback/cleanup inventories and all native error lines are retained in
+.local/evidence-267-withheld Original installation/settings/save bytes and actual-save
+timestamps restored; game and helpers closed.
+
+NATIVE POSITIONAL OFFSET SETTER (24 OCTOBER, bounded FAIL)
+.local/evidence-265-withheld verifies the existing GetPositionalOffset/
+SetPositionalOffset signatures and degree/radian conversion against the native
+menu_mapeditor.lua declarations/use. The getter reads the gun offset correctly
+(x0,y-1.59929,z7.60469), but setting yaw15 degrees leaves the readback at0 and all
+27 actual projectile directions unchanged (12 baseline,15 setter phase). No
+setter error does NOT mean a weapon aim change. Raw SHA256
+c5e5f32933d5b28ae9b20e84aac405952fb000c9220b55e7846b463b34d14818.
+Owned installation/preferences/slot and7 actual normal saves verified restored.
+This closes another ineffective primitive; actual free-aim transmission remains
+open, and selected-victim auto-lock is not an acceptable substitute.
+
+SPATIAL AIM REFERENCE (24 OCTOBER)
+Original dev-only navbeacon component/macro, no geometry/collision/explosion,
+radar hidden. This is a spatial point, not an automatic victim target.
+aim-point-01: point behind the player gave zero shots; deliberately leftward
+point produced12 shots, settled direction about-7.16deg with ship yaw0. Native
+IFF/obstruction inhibition is a hypothesis, not proven cause.
+aim-point-02 FAIL: nested delay fired the direct trigger before AI, and the
+fixture target was overwritten by Arena startup placement. Do not count it as
+correct aim or hit evidence. Raw retained.
+aim-point-03 delays fixture until after setup, logs poses continuously and puts
+the direct trigger after AI start. Farther point plus direct trigger still
+produces zero shots. Near collinear point(1050,10000,-1600), victim(1100,10000,
+-1200), shooter(1000,10000,-2000):12 pulse shots,11 confirmed player hits/396HP,
+ship yaw0; one delayed projectile sample absent. Raw SHA256
+ba5d0f96442cb185b5781274f40fb9585b66c6e1e8aff6845d3ef69fc989bb04.
+This qualifies a bounded spatial aiming primitive only. A nearer shared point
+changes convergence across gun offsets; it does not reproduce each sender shot
+exactly. Actual sender aim capture, per-gun targeting, native trigger/heat/budget
+and arbitrary friendly blockers still need work. Original gun spread/tolerance
+unchanged. All runs retain source/saves/restoration inventories.
+
+INDIVIDUAL GUN OBJECTS
+aim-weapon-object-02 invokes shoot_at, shoot and stop_shooting on the actual
+single primary-gun component. All reject it as not of class defensible; no shots.
+Raw SHA256c3fecd609ea4314b44e636d8aaa0c29b7ac857cadc0ddd08d731e5d22e1fdca1.
+The first run never reached the probe after losing its owned window at age0;
+it is INCOMPLETE, not an API result. Owned cleanup verified for both.
+
+The next probe observes actual physical-player fire-at-cursor input and compares
+GetPlayerTargetOffset/GetLocalMousePosition with initial projectile forward and
+later displacement. cursor-aim-01 also failed before any probe/input at age0;
+its raw startup failure and verified cleanup are retained. No getter conclusion
+can be drawn from that run; subsequent observations follow below.
+
+CURSOR AND PROJECTILE FFI FOLLOW-UP
+cursor-aim-02 reached the cockpit but XSendEvent produced no shots.04 uses
+focused XTest input and observes168 physical-player shots plus168 delayed native
+trajectory samples. GetPlayerTargetOffset stays zero throughout off-axis fire
+(yaw9.293..10.032deg); no soft target. It is not a free-aim getter in this case.
+Initial projectile forward agrees with later displacement within0.181deg in this
+sample. Native mouse capture prevented the intended exact centre/left/right sweep;
+no coordinate calibration or replay is claimed. Raw SHA256
+c6efbced786c7ae634ed479bbb51f41c887d739a3d49d84e2fc080d9d2702334.
+cursor-aim-03 failed before input with native fatal1119: p1_glass shader failed
+to compile under the harness's temporary shaderquality1. Screenshot/stacks retained.
+Subsequent harnesses preserve the original shaderquality2. Do not infer earlier
+startup failures had the same cause without their own dialog evidence.
+
+projectile-ffi-01:24 actual X Shuttle shots,6 per phase. SetPositionalOffset on
+the bullet succeeds in rotating its native forward readback to15deg, but actual
+flight remains approximately straight (-0.067..0.154deg). SetObjectSectorPos
+rejects the bullet as not an object (12 errors across sector and combined phases).
+Combined setters likewise fail physical steering. A visual rotation is not a
+correct ballistic replay. Raw SHA256
+af50b0895f672eb162bb61dc3839f88e0ec1d345b0c38a8e6155ac912fa9d4c7.
+All these completed/aborted runs retain verified owned cleanup. No production
+weapon change or aim replay acceptance results from them.
+
+ADDITIVE VELOCITY / AIM RELEASE FOLLOW-UP
+projectile-add-velocity-01 isolates the previously unexecuted additive test:
+6 actual shots, 6 add_object_velocity destructible-class rejections, all observed
+flight remains near forward. FAIL. Raw SHA256
+79ecee840ded6c9bf38ddc65f8a82d8716a854a0318de871c42d1640f8b85979.
+aim-latch-01 remains PARTIAL: after stopping object-targeted aim, direct shooting
+produces 12 forward pulse shots and no hits. The AI script cannot resolve the MD
+namespace used by the diagnostic phase marker; the intended additive-velocity
+half was therefore not executed. Raw SHA256
+db41cf6af89f03b777d7fcf99a5bf0f59c13f2e2db55bef7108280e054803b97.
+Both runs retain cleanup inventories and their failures; neither qualifies aim
+replay. The engine-contact draft now asks specifically for primary-gun aim and
+projectile physical-velocity interfaces. It has not been sent.
+
+GENERIC BULLET CREATION
+projectile-create-01 tries create_object with each of6 actual observed native
+bullet_ter_s_plasma_01_mk1_macro projectiles' macro, an isolated position offset
+and15deg rotation. All6 return no component; no copied projectile exists at the
+later readback. FAIL, without a specific creation error. This is not a supported
+projectile-construction hook. Raw SHA256
+781aaed1552e393754235eb6ce78b29be35d2c2b00b7ce704e1156a2f930e160.
+Owned cleanup verified. No production weapons change.

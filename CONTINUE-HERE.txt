@@ -1,155 +1,90 @@
-CURRENT HANDOFF — INTERNAL 7.1.1 PLAYTEST FOLLOW-UP, 20 OCTOBER 2026
+X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 
-LATEST USER PLAYTEST — READ BEFORE THE HISTORICAL DELIVERY NOTES BELOW
-The real Windows/Linux 7.1.1 playtest is complete. Ordinary cargo WORKED with a
-small visibility delay, ship motion is excellent and the shared mission works.
-Preserve these results. Radar/HUD discovery, ordinary station alignment and
-test-freighter orders/motion/hull remain faulty. HUD Problem 1-3 and Map Problem
-are HOST screenshots; the docked-host screenshot is from the GUEST.
-reports/PLAYTEST-7.1.1-FOLLOWUP.txt records the evidence and current investigation.
-PR17 corrects native sensor initialization through MD ship creation; its native
-host/guest runs are separate from the user's joint playtest. Save bootstrap and
-ongoing NPC/station authority remain separate work. The sealed 7.1.1 packages
-are unchanged. Do not claim the whole shared universe is now implemented.
-Coordinate with Claude every ten minutes at :00/:10/:20/:30/:40/:50 Europe/Berlin
-(user update at 22:08, superseding the hourly rule) in the compact thread:
-https://example.invalid/private-coordination-withheld
-Verify both source and installed package versions before another joint run.
+CURRENT CHECKOUT / REQUEST
+work/x4-weapons-7-4, contrib/astra-7-5-delivery, stacked on019bff1 of
+contrib/astra-faction-missions / draftPR45 (NPC base3020f54 / draftPR44).
+User supplied7.5.0 feedback; human testing continues. Next-version host/guest
+logging tools must record the whole playtest; user explicitly deferred development.
+Delivery draftPR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
+Delivered7.5.0 from4078f44; report: reports/INTERNAL-7-5-DELIVERY.txt.
+Primary works alone. No agent/chat/timer/Slack polling or new unattended schedule.
 
-HISTORICAL DELIVERY AND PRE-PLAYTEST CHECKS
+DELIVERY / CURRENT HUMAN RESULTS
+Desktop/X4 Online/Internal Tests/7.5.0-2026-10-25
+Windows ZIP12,981,837 bytes, Linux tar.xz21,404,432; equivalent Small.7z19,961,040
+bytes (<20MB). Both include server/runtime/English docs. Two players per session.
+636 Linux/LuaJIT PASS/no skips;10 later top-level-guide/package tests PASS.
+Extracted inventory/runtime/real-UDP checks pass.74 common extension files and16
+server modules match across OSes/source; compact payload/modes match clean Linux.
+Packaging checks did not establish native Windows gameplay. Subsequent matched
+human testing accepted the supported kill mission, NPC destruction and PvP damage;
+NPC scene synchronization and high-speed/highway map jumps remain unreliable.
+Docking/ship exchange and guest boarding/occupied-control protection also worked
+in the reported sequences. Host mission id2 completed11/11. See
+reports/PLAYTEST-7.5.0-20261025.txt for evidence and bounded acceptance.
+No game launched or installation changed for packaging. Source configs stay inert.
+01-INSTALL enables npc_combat and faction_missions with their existing prerequisites.
+Use fresh matched folders/new host world/invitation; original09-REMOVE-MOD first.
+Never distribute a configured folder. Old7.4.1 archives/hashes remain unchanged.
+Do not repeat accepted steps without relevant changes/new symptoms. NEXT-TEST.txt
+and HUMAN-NPC-MISSION-TEST.txt remain the procedure reference, not unrun checklists.
 
-The real two-computer 7.0 playtest drove the overnight follow-up. PRs8-14 are
-integrated through main 320a775. PR13's native linear-velocity lifecycle
-evidence is independently accepted. Internal 7.1.1 is built, installed cleanly
-and startup-tested. It is not full-universe or two-native acceptance.
-No new public release was requested or prepared.
+IMPLEMENTATION / BOUNDED EVIDENCE
+NPC sourcea1c720b, draftPR44: actual host NPC health/death and cumulative guest
+hits across sectors. See reports/NPC-COMBAT-20261025.txt and
+NPC-COMBAT-VALIDATION-20261025.txt. Free-flying S/M main hull/shields; uniform
+unmodified stock Shuttle plasma or PulseMk1/Mk2. No L/XL surfaces, beams/missiles/
+turrets, captured-fleet orders, exact equipment or generalized NPC AI acceptance.
 
-DELIVERY STATE — MATCHED PAIR AND CLEAN LOCAL INSTALLATION
-The existing canonical 7.1.0 pair remains unchanged at:
-Desktop/X4 Online/Internal Tests/7.1.0-2026-10-19
-Its packaged source f2b37b1 equals the full tree of merge fd5230b. The original 7.0
-pair is preserved. Do not rebuild or mix either historical pair.
-New destination: Desktop/X4 Online/Internal Tests/7.1.1-2026-10-20.
-Exactly one pair was built from reviewed 1c3fea3 (tree22fee978), production tree
-1f852523. Inventories/digests pass. The probe-free local installation has 33 files
-matching the Linux package. The actual packaged native game/server smoke passes:
-131/142-object baselines, 340 WORLD snapshots, 149 identities including P1/P2 and
-F1-F4, no mod errors. The peer was synthetic, not a second native game. Normal
-save bytes and actual save timestamps are unchanged; no test saves were created.
-The prior instrumented extension/settings are preserved locally. Native game and
-relay are closed. reports/package-7.1.1-checks.json records archive/evidence hashes;
-the delivery folder contains SOURCE-CHECKPOINT.json, DELIVERY-CHECKS.json,
-CLEAN-INSTALL-HASHES.json and NEXT-TEST.txt. Canonical 7.1.0 digests are unchanged.
-Do not rebuild or mix the pair. Post-build handoff/report commits do not change
-the exact source1c3fea3 already sealed in the archives.
-Generated private packages contain matched credentials; keep them out of Git.
+Missions sourcecba4391, draftPR45: original GM_Destroy_RarelyOnSight kill contracts;
+host retains native criteria/deadlines/rewards. Guest accepts/aborts [Shared] offer,
+faction kills count across sectors, credits paid once. Standalone visible offers
+without item rewards only; host generates offers; guest countdown/reputation not
+mirrored. Other mission types, plots and loaded running missions are unsupported.
+Read reports/FACTION-MISSIONS-20261025.txt. Existing Trial unchanged.
+Mission host04: one real game/synthetic guest, native cross-sector0/2->1/2->2/2,
+one25,000Cr reward plus separate abort/deadline. Guest02: native acceptance/list/
+objective/completion, no local payout. Not a matched two-game proof. New MD plus
+merged stock XMLs schema VALID. Gameplay not changed merely for packaging.
+Failures, raw logs/source/cleanup inventories remain under .local/evidence-038-withheld
+and .local/evidence-206-withheld No task-owned game/relay retained from these runs.
+Installer source7c6ec19: localized Windows process bytes, missing drives/manual
+path/profile reselection and owned recovery. Excluded fleet/mod-selection writers.
 
-AFTER-MIDNIGHT FINDINGS
-- The user requested a retry with Claude after midnight and solo work if no reply
-  by 00:15 Europe/Berlin. A 00:01 request and 00:15:09 check received no Claude reply;
-  the primary continued alone. The separate AI Coms coordinator reviewed source
-  and evidence but never launched X4 on this PC.
-- PR11 repairs actual remote pose drift every render frame. PR12 establishes
-  non-component-local native velocity input in the tested aligned parent spaces.
-- PR13 aligns native linear velocity with displayed motion and fences/revokes
-  stale commands. Native d5caf04 lifecycle PASS: 12 phases, 17 settled samples each,
-  six negative-command cases with 25 readbacks each, watchdog release .0534s after
-  expiry, real pilot acceleration to 565.875 m/s after takeover. Adapter-pause
-  injection is explicitly not an engine-menu pause test.
-- The separate bcde58f 24-projectile run FAILS its unchanged .002 orientation gate
-  in one reference phase (.00224463). No projectile/aim/hit acceptance is claimed;
-  residual between-frame rotation needs further measurement before an angular
-  override is considered. Production currently changes linear velocity only.
-- Follow-up source4699e65 records 2932 pre/post frames, 2932 native basis samples
-  and 24 correlated shots. Reanalysis with the corrected engine-prefix parser
-  efc9b5c passes observation coverage; 268 tests pass. First three phases show
-  nonzero pre-frame rotation despite zero post-frame angles. This repeat passes
-  the original projectile gate, but does not invalidate the prior failure or
-  establish a production fix. reports/ANGULAR-OBSERVATION.txt distinguishes the
-  measured between-frame drift from its still-unproven engine cause. No native
-  angular getter or production angular override is claimed. Clean 7.1.1 was
-  restored exactly after the diagnostic; native game/relay are closed.
-- Two Low-texture startup shader failures are preserved separately. High textures
-  completed the lifecycle and projectile runs on this Linux PC; the new Linux
-  installer prepares that isolated-profile workaround. Windows defaults remain
-  unchanged. This is not a general root-cause, performance or PiP fix claim.
-- Exact evidence/limits: reports/NATIVE-VELOCITY-FOLLOWUP.txt,
-  native-velocity-lifecycle-checks.json, native-velocity-projectile-observation.json,
-  VELOCITY-FRAME-RESEARCH.txt and stationary-pose-native-checks.json.
+OPEN / ANALYSIS DIRECTION
+Priorities: unreliable NPC scene/native velocity/fire across sectors and player
+map jumps associated with high-speed/highway travel. Flickering recurred in a
+second playtest with another player; user confirmed IN THE HIGHWAY. Cause unproven;
+no audited failure capture from that second test. UMOVE already carries velocity;
+NPC replica renderer applies pose but not native velocity. Guest temporarily saw
+NPC fire/speed, then lost fire again; not stable acceptance. Guest destruction
+despawns instead of matching host wreck/debris. Mines mission, player-fleet/Erlking
+orders, moving-host selection and remaining occupied-pad cases remain open.
+Full economy and progressed-world save/absent-client catchup remain unfinished.
+Private session evidence: .local/evidence-224-withheld Current guest diagnostics
+still missing. The authorized20s packet capture was symptom-free, not a reproduction;
+712 forwarded NAV2 rows matched inputs. No task-owned capture process remains.
+Restart currently returns to pristine starting save. User favors future dedicated
+4–6-player host, pause/save/transfer/load/resume joins and shutdown when empty.
+Architecture/Story-Koop/leader-or-vote dialogue discussions were analysis only.
+Headless static findings: .local/evidence-044-withheld;
+internal disable_rendering string is NOT a proven GPU-free mode. Network uses UI
+Lua onUpdate. No native headless experiment, engine patch or purchase was performed. See preparation/ATTENTION-ARCHITECTURE-NOTE.txt
+for unresolved simulation authority/attention boundaries.
 
-INTEGRATED WORK AND EVIDENCE
-- Ordinary co-op cargo uses real full-quantity native drops and magnet pickup,
-  authenticated/deduplicated host transactions, inventory reconciliation and
-  generation-aware callbacks. Native host/guest paths passed separately, including
-  lost completions, duplicate requests, capacity limits and partial 10+10 pickup.
-- NAV2/UMOVE share source time, linear/angular velocity, interpolation and bounded
-  prediction. Native transform/HUD checks passed through deliberate packet gaps.
-- Shared player/NPC/fixture display identities and radar observations are bound
-  to local engine objects. Native guest P1/P2 and F1-F4 each produced 61 matching
-  name/code/live headers after initial metadata arrival. All 310 selections of
-  five selectable objects were targetable; own-ship self-selection is unavailable.
-  Late trade readiness and new host identity epochs have focused regressions.
-- Claude's Shuttle PR #6 and FIRE2 history through 6069cbb are integrated with the
-  primary's pause-boundary, native classification and finite-budget corrections.
-  Native tap 6 -> 6, sustained 78 -> 78, real source capture/echo 6 -> 6, disjoint dual
-  triggers and unequal/staggered exhaustion passed. Custom group membership is
-  not transmitted; the dual fixture explicitly configured both ships identically.
-- Native guest health replay passed 63 exact eight-field readbacks, including 27
-  nonconstant recorded host states. A deliberate local 42/5 perturbation recovered
-  to unchanged host 65/45 in 0.83 s. The validator rejects plateau-only evidence.
-  This proves receiver convergence, not native hit/aim equivalence.
-- Both Xperimental Shuttles have six guns, matching hardware, all six software
-  modules, Mk3 combat thrusters and Docking Computer Mk2 (Timelines required).
-  Native Windows hardware/docking and installer fixtures passed as reported by
-  Claude; expanded software/thruster readback was performed on Linux only.
-- Historical 7.1.0: Linux 225 Python/LuaJIT tests passed without skips; all 15 production/opt-in MD
-  scripts validate against the installed X4 9.00 schema. Independent review and
-  matched package inventories/digests passed. The clean packaged Linux game/server
-  startup smoke passed: 116/117-object baselines and 123 identities reached a
-  synthetic peer, including both players and all four fixtures; no MD errors.
-
-Details and actual limits:
-reports/release-7.1.0-checks.txt
-reports/native-7.1.0-checks.json
-reports/package-7.1.0-checks.json
-reports/PLAYTEST-7.0-FOLLOWUP.txt
-Earlier failed probes are retained as failed evidence, not acceptance.
-
-NEXT WORK
-1. Address the completed 7.1.1 playtest findings in the follow-up report, then run
-   a matched Windows/Linux regression. Preserve accepted ordinary cargo, motion
-   and the Cooperative Trial mission. Both cargo directions, contested/partial
-   pickup and all cargo types were not separately confirmed by the latest user
-   report. Check Claude's current source, installed version and next usage reset.
-2. Measure and address off-axis aiming/projectile inheritance and actual shared
-   hit behavior. Default shot cadence and snapshot repair do not establish these.
-   Claude reserved dev/damage_probe.* and Windows testing; coordinate before
-   overlapping that scope. Do not merge an old standalone FIRE2 implementation
-   over the corrected integrated source.
-3. Extend authority beyond scene replicas: general NPC combat/equipment/loot,
-   docking/trading, stations/production, faction/mission consequences and saves.
-   Arbitrary NPC loot, multi-ware crates and unrestricted cargo are not accepted.
-   Shared mission success does not prove arbitrary vanilla mission synchronization.
-4. NPC PiP artifacts remain open. Linux High textures plus shaderquality2 are
-   a measured local startup workaround, not a PiP fix or general root cause.
-
-WORKFLOW AND USER CHOICES
-- Default to internal work; public packages require an explicit request.
-- Write original code and keep this project separate from Neresco's projects.
-- Documentation/interfaces are English; speak German with the user.
-- Private repository: https://github.com/Lith7ium/X4-Multiplayer
-- The other development computer runs Fedora and already has a project folder.
-  Preserve local changes/history; follow DEVELOPMENT.txt for synchronization.
-- Native tests on this PC were authorized only with fresh isolated worlds/profile
-  45841 and autosave disabled. Never load or alter normal saves. Keep the new
-  internal installation for the user's next test. Other machines need their
-  owner's authorization. No personal documents, mail or spending.
-- Each agent uses its own worktree/branch. Coordinate shared protocols and native
-  launches; worktrees do not isolate the game installation or relay port.
-- Slack gameplay thread:
-  https://example.invalid/private-coordination-withheld
-  The AI Coms coordinator reviewed source/evidence and did not launch native X4.
-
-Read AGENTS.md, CONTRIBUTING.txt, DEVELOPMENT.txt, ARCHITECTURE.md and
-WORLD-SYNC-REQUIREMENTS.txt. Do not regenerate historical MD fixture scripts
-blindly. INTERNET-HOSTING-ANALYSIS.txt remains research separate from LAN work.
+SAFETY / TOOLS
+No personal documents/mail/spending/normal-save or Workshop-selection writes.
+Native tests: X4 closed first, disposable45841 world, autosave off, owned backups/
+PID/startticks/focus/cleanup; normal70000001 untouched. No historical schedule revival.
+Python: absolute path to ../x4-playtest7/.venv/bin/python avoids prefix warnings.
+GH: ../../build-cache/github-cli/gh_2.102.0_linux_amd64/bin/gh.
+Read AGENTS.md and task-relevant evidence; do not reload all history or replay
+unchanged accepted gameplay. Source config stays inert. Public packages/mirror
+updates need explicit owner request. Local7.5.0 installation completed25Oct after
+the user's missing-installation.json report: old7.4.1 owned mod archived through
+its original launcher; owned pristine test slot removed, original bundle retained.
+New session/invitation preserved; normal profile/settings, Workshop selection and
+sealed archives unchanged (35-file hash/timestamp comparison). World-preparation
+preflight passed; user subsequently launched the human session. Diagnostic work
+made no live gameplay/installation changes and did not stop the user's game/relay.
+Local recovery evidence: .local/evidence-057-withheld,result}.json.

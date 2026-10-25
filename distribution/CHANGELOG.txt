@@ -1,3 +1,95 @@
+Version 7.5.0 — 25 October 2026 — INTERNAL human-test candidate
+- Enable host-native NPC health/death and acknowledged cumulative guest hits,
+  including guest sectors remote from the host. Supported free-flying S/M targets
+  and uniform stock Shuttle plasma / Pulse Mk1/Mk2 main guns only.
+- Enable the first shared ordinary mission adapter: standalone visible native
+  matching-ship kill contracts without inventory rewards. Guest acceptance/abort,
+  faction kill progress, host deadline and single shared credit reward.
+- Include reviewed Windows setup fixes: safe localized process output, missing
+  Steam-drive handling, manual game-path selection, settings-profile reselection,
+  same-version owned session recovery and launcher/module compatibility checks.
+- Keep normal profiles and Workshop selections untouched. Do not import community
+  mod-selection writers or the unvalidated fleet/map experiment.
+- Retain existing player combat, motion, cargo, radar, shared starting world,
+  completed-story/teleportation preset and docking candidate behavior.
+- Both OS packages include server, runtime and English focused human test guides.
+  Use a new matched pair/server/invitation; existing sealed archives are unchanged.
+- NPC/faction-mission native evidence uses separate real-game/synthetic-peer runs.
+  Windows and matched human acceptance remain pending. This is not a persistent
+  campaign, dedicated server, 4–6-player release or universal mission sharing.
+
+Version 7.4.1 — 24 October 2026 — INTERNAL launcher correction
+- All ten Linux starters open a visible terminal when launched without one.
+- Installer questions and errors remain visible; missing input no longer raises
+  an unhandled EOF traceback. Paths and invitation arguments retain their quoting.
+- Gameplay is unchanged from 7.4.0. Use the matched 7.4.1 pair/server and a new
+  private invitation. Previous sealed archives remain unchanged.
+
+Version 7.4.0 — 24 October 2026 — INTERNAL candidate, human acceptance pending
+
+- Capture actual stock-gun hits; transmit cumulative counts to the victim's
+  authority, with generation/pilot/freshness checks and duplicate protection.
+- Render actual observed projectile directions/velocity without aiming remote
+  guns at a selected target. Preserve manual input, misses and native overheating.
+- Reserve saved station bays and apply real native attachments. Fence stale
+  poses after docking and pilot handoff; refuse an occupied bay.
+- Use a completed-story technical-test preset and native research/HQ setup.
+- Include new server dependencies in both Windows and Linux packages.
+- Keep both servers/runtimes, profile safeguards and prior human-tested features.
+- Separate local/synthetic evidence from pending two-native human acceptance;
+  follow NEXT-TEST.txt. Persistent shared campaign/economy remains unfinished.
+
+Version 7.3.1 — 23 October 2026 — INTERNAL candidate
+
+- Recognize station/asteroid alignment as passed in the human7.3.0 test.
+- Select the host invitation in an OS file dialog, with terminal fallback.
+- Use unique launcher numbers01–10, explicit HOST-only labels and00-START-HERE.
+  Group technical evidence under reports/ and remove duplicate report copies.
+- Import personal resolution/controls while using borderless mode in the TEST
+  profile for Alt+Tab. Keep -nocputhrottle; normal preferences stay read-only.
+- Unlock all four personal teleportation research levels after admitted ship
+  setup, including maximum/unlimited range. No HQ relocation progression change.
+- Weapon/damage synchronization remains unchanged and unreliable. The candidate
+  damage correction failed a native engine check and is not shipped.
+- Ordinary-station dock occupancy/barriers and ongoing-world authority remain open.
+
+Version 7.3.0 — 23 October 2026 — INTERNAL
+
+- Create one pristine native host world with2-PREPARE-WORLD. X4 saves and exits
+  automatically, before multiplayer ships/markets or player roles are created.
+- Download and verify the host snapshot over authenticated TCP45844. Both roles
+  load the same save, then initialize their own native ship and authority role.
+- Refuse differing game/DLC/mod content or changed/unowned test saves. Keep
+  normal saves and Workshop selections untouched; do not use the withdrawn helper.
+- Retain Windows/Linux servers and portable runtimes, visible Linux server console,
+  personal display/audio/input imports and9-IMPORT-SETTINGS.
+- Preserve accepted radar, ordinary cargo, smooth movement and Cooperative Trial.
+- Shared starting layout only: ongoing station/economy authority and a persistent
+  multiplayer campaign remain unfinished. Weapons/damage scope is unchanged.
+
+Version 7.2.0 — 22 October 2026 — INTERNAL
+
+- Include a server and portable Python runtime in BOTH OS packages.
+- Select Host or Guest during setup; use a private invitation to join.
+- Keep groups separate with fresh keys/world IDs; reject wrong versions/channels.
+- Permit loopback only for the Windows host; guests use the invited host address.
+- Include the sensor correction and Linux graphics workaround described below.
+- Still two players per session. No full-universe, NPC order/damage, vanilla
+  mission, chat or headless-simulation completion is claimed.
+
+Staged 7.1.2 candidate — superseded before delivery by 7.2.0
+
+- Fix native radar discovery by creating the shared Shuttles through Mission
+  Director, retaining loadouts and guarded asynchronous setup. Nearby ship and
+  station HUD/radar checks passed separately on Linux host and guest.
+- Preserve 7.1.1 cargo/magnet, movement, shared identities and Cooperative Trial.
+- Use shader quality 1 with High textures in the isolated Linux test profile
+  after local startup failures at quality 2. Windows settings stay unchanged.
+- Add a short human test checklist and distinguish verified fixes from open
+  universe, NPC order/damage, station, mission and chat work.
+- Experimental save/bootstrap/attachment branches are not shipped or activated.
+- Replace both packages and relay together; this is not a public release.
+
 Version 7.1.1 INTERNAL motion/physics follow-up — 20 October 2026
 
 - Correct actual cooperative ship drift even when the received pose is unchanged;

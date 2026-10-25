@@ -1,0 +1,76 @@
+INTERNAL7.4 — COMBINED NATIVE INTEGRATION — 24 OCTOBER 2026
+
+Scope: one local Linux X4, the real relay and a synthetic second player. These
+checks do not establish matched Windows/Linux gameplay or complete boarding.
+All stack flags are enabled together: shared starting world, saved dock registry,
+pilot health, hit claims/capture, native gun proof and observed projectile visuals.
+
+integration74-01, sourcea7c5e0a: FAIL/INCOMPLETE. Production capture_config and
+finish_capture seal the fresh starting save with ordered DOCKS_MARKED, save and
+exit markers. The disabled capture also raises a nil-A error in the added dev
+combat probe; no clean-capture claim. On load both SHIP_SPEC reports show six
+stock Shuttle guns, but only shooter1 is admitted. Shooter2 remains refused;
+the combined scenario does not start. Stop/restore verified. The failure is not
+removed by the later passes; its specific refusal reason was not logged.
+Capture raw bd9f819006aea1e556fd93d2ee401cc5277f28351e767bce24bd560601fbadd6
+Load raw e92f27f2f7932809c494b7b3ff0e20ba2d7ccb84309c5f4ce7ae76ff85799ae2
+
+integration74-02, unchanged productiona7c5e0a: guarded dev probe and added
+loadout diagnostics; reloads the SAME sealed seed. Bounded combined PASS:
+84 actual mouse-input shots,84 unique BOLT births and84 ends traverse the relay.
+No remote native-gun shots. The shot sequence completes before nine dock phases:
+FREE, reserve, attach, actual undock, occupied bay, refused attachment, release
+and retry, undock, then stale queued free-pose fence. Final free-pose error
+0.000488281m. Both saved market identities occur once; all24 bay indices unique.
+Raw2482e4a0fab47b26ac9e4d6bacdbe36dd5bb86b15102aa2e33cfaf51214c2c1d
+
+integration74-03, sourcef776fcc: repeats the production capture/sealing path with
+a NEW seed and guarded diagnostic probe. Both shooters admit; same84 physical
+births/ends and nine dock phases PASS, same final free-pose error. No capture
+probe execution error. The first refusal was not reproduced by02 or03; it remains
+an unresolved intermittent observation, not an identified/fixed root cause.
+Capture raw c5023d1efc2e8914bc3faaa23f185bec0a07db85ba626fe80c77ac8dd247b6ce
+Load raw87b4b84ecf9ad36a9f1431983320768d21928ab7072255978695c9728d59cb36
+
+integration74-04, sourcef4f4280: focused expiry follow-up on03's retained pristine
+seed. IsValidComponent precedes class queries for observed bullet handles.
+84 physical shots/births/ends remain; zero invalid IsComponentClass queries.
+Earlier runs retain those engine messages when normal projectiles expired.
+This change has18 affected LuaJIT/gate checks, including invalid-handle rejection
+and end transmission. No repeat of the nine dock phases is claimed in04.
+Rawe5d5ec2f33c6619ee4e1f37ca12c30cf35ce0bf3bf6641e03bcb6d6f44c785ba
+
+Each run's ignored .local/evidence-058-withheld verifies70 production files,
+5 diagnostic files, exact UI registration/config bytes,37-file restoration and
+seven actual normal-save bytes/timestamps (plus owned slot; autocloud bytes only).
+02/03 validation.json checks source count equality, phase order, occupied refusal,
+saved station/bay identity and final fenced pose.04 retains its focused gate.
+Ordinary engine startup warnings and the zero-damage visual-macro warning remain
+in raw logs; a bounded PASS is not a claim of a completely empty engine error log.
+
+Full integration suite after activation/test-contract updates:565 Linux/LuaJIT
+PASS/no skips. After portable test-fixture-only update:10 affected PASS. After
+expiry guard:18 affected PASS; final candidate suite/package checks still pending.
+No7.4 package or matched human acceptance follows from this report alone.
+
+TARGETED STARTUP DIAGNOSTIC — 24 OCTOBER 2026
+.local/evidence-110-withheld reloads the original integration01 sealed pristine seed
+using production c7e0b6f and an observation-only loadout probe. Both shooters
+admit at age15.22. Four reports per ship over15 seconds contain48 successful
+operational/unmodified gun reads and turret count0. No firing or dock sequence
+was repeated. The original refusal is STILL unresolved, not a claimed fix.
+Raw load.log SHA256:
+03b447294a0ab660713d2a7c55d26353941c5cc08a2b657348dfef379218418a
+Audit verifies70 production files,5 dev probes/UI/config,37 restored files and
+seven actual normal-save bytes/timestamps. Controller and owned game closed.
+
+BOUNDED STARTUP REPEATS — 24 OCTOBER 2026
+Production e7bbe76, original failed pristine seed, three fresh processes:
+loadout-diag-02 raw SHA256 ec261e2b9829ea75fc7b679a6371754370e27710821fec81ec564cdbe1b36a2d
+loadout-diag-03 raw SHA256 63d6ca9a85fdf09f7b321bd433c5c32c337f9f6439fd9bb89c62da2d4f589e08
+loadout-diag-04 raw SHA256 709d5e812f71531253469615de8b2630efbf9bb6217cf5adf685bc7639d69185
+All three admit both ships:24 total reports,144 successful operational/unmodified
+gun reads. Each run has70 exact production source hashes plus5 probes/UI/config,
+37-file restore and seven actual normal-save bytes/timestamps audited. No firing
+or docking was repeated. No rejection recurred; the original cause stays OPEN.
+The batch is complete; no further unattended retries. Final owned X4/relay closed.

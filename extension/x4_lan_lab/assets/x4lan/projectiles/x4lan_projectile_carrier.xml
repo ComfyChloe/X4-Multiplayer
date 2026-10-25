@@ -1,0 +1,10 @@
+<?xml version='1.0' encoding='utf-8'?>
+<components>
+  <component class="object" name="x4lan_projectile_carrier">
+    <connections>
+      <connection name="position" tags="position" value="1" />
+      <connection name="space" tags="object" />
+      <connection name="rendereffects" tags="rendereffect" value="0" optional="1" />
+    </connections>
+  </component>
+</components>

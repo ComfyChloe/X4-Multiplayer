@@ -1,0 +1,236 @@
+COOPERATIVE STATION DOCKING — ACTIVE INTERNAL IMPLEMENTATION
+
+The shipped NAV2 market field names only two test markets; zero also describes
+ordinary station docking. First guards stop actual docked ships and locally
+controlled ships from receiving free-flight pose corrections. This is not yet
+shared occupancy. Same-pad crashes remain unproven at the exact native call.
+
+Next bounded path reuses our previously qualified saved dock-reference registry,
+not numeric process handles. Capture it inside the same pristine starting save.
+Two fixed co-op ship IDs may publish FREE/APPROACH/EXTERNAL/STORED/UNKNOWN with a
+saved dock index, movement epoch and sequence. The relay accepts only the current
+movement owner, arbitrates same-index player claims and repeats fresh state.
+A stale or unknown attachment never authorizes pose correction or pad release.
+
+On the recipient, native execution rechecks the saved dock's container, parent,
+macro, relative position, capacity/type, docking permission and actual occupancy.
+Use request_docking_at_dock for the exact approach reservation; never force an
+occupied/reserved foreign bay. Attach only the corresponding unpiloted replica;
+actual native readback is required before resuming free flight after undocking.
+Same-pad races reject the conflicting claim and must never overwrite a player
+or NPC occupant. Unresolved/rejected outcomes remain fenced and explicit.
+
+This path is separately gated and disabled until focused protocol/adapter/native
+checks pass. It covers initial saved stations/carriers and the two co-op ships;
+newly built docks, NPC authority, carrier-with-player transforms and long-term
+campaign persistence remain outside this bounded change. Existing broad saved-
+attachment evidence is in x4-attachment-session; it is not two-PC acceptance.
+
+Initial prepared source: x4lan/docking.py extends CoopSession; its
+request watermark advances even on conflict denial, so a delayed older FREE
+cannot release an existing claim. The existing native saved dock registry is
+reused unchanged. seed_capture.lua now has an optional coop_docks handshake:
+matching Marked acknowledgement, then a new pristine-world readback, then save.
+Missing/foreign/error acknowledgements prevent saving. Normal capture has no
+new registry dependency unless explicitly opted in. Launcher does not enable it.
+Eight dock-related tests and five capture tests passed under Linux/LuaJIT;
+registry MD schema VALID. Native capture/reload evidence follows below. No ordinary-pad synchronization
+acceptance yet.
+
+NATIVE READBACK AND EXECUTION PROGRESS (24 OCTOBER)
+The completed-story save contains51506 dock references. After reload,51504 pass
+all retained parent/container/macro/type/capacity/relative-position witnesses.
+Indices20054/20055 resolve as a non-dockingbay type. Both belonged to the saved
+Scale Plate Teladi transport ZJQ-435 (ship_tel_s_trans_container_01_b_macro), which
+has a low-attention attack recorded in the captured save. The exact later type/
+transition is not established; do not call this a proven serializer bug. The
+strict whole-registry result remains FAIL. A nested existence/class guard rejects
+these without querying invalid docking-only properties. No witness is relaxed.
+.local/evidence-253-withheld has unique full coverage including the2 explicit rejects;
+raw SHA256cc49451cd8ed47d4c37a0b25999b1f8d80a8c3ae84bcb75fbbda39fba7d6167c.
+Earlier probe failure and native property errors are retained separately.
+
+coop_dock_game.lua / x4lan_coop_docks.xml provide optional native observations.
+Free-flight pose requires matching NAV/CDOCK sequence, source lease, epoch and
+fresh native FREE state. Missing/stale/unknown attachment cannot authorize pose.
+Four new LuaJIT adapter tests PASS;25 existing cooperative adapter tests and23
+FIRE2 tests PASS on the changed cooperative source. UI is registered, but the
+feature flag is unset. UniverseSession now inherits DockSession (see integration below).
+Queued movement execution must also be tied to attachment transitions before
+activation; synchronous pose fencing alone does not close the MD queue race.
+
+x4lan_coop_attachment.xml is an inert, explicit-start adaptation of our previously
+qualified attachment consumer to the two Arena ships. It adds per-ship generation
+fences, exact-bay RESERVE/CANCEL, native handle matching and physical actor guards.
+An optional client executor now prepares operations and waits for actual native
+readback, with session-bound generation acknowledgements and queued movement
+freshness checks. The flag remains unset; relay/launcher activation is pending.
+All three changed MD schemas VALID;8 observer/executor adapter tests,25 existing
+co-op adapter tests and23 FIRE2 tests PASS. These tests do not emulate X4 physics.
+.local/evidence-020-withheld: exact native HQ bay35497 reserved for ship1; conflicting
+ship2 reservation refused; ship1 attached with native EXTERNAL readback; ship2
+attachment into the occupied bay refused. The run FAILS at an undock readback
+sampled after0.5s. Command invocation is not completion. Follow-up coop-dock-exec-02 PASSES all8 phases: both conflict refusals,
+exact attachment, both actual undocks and a prepared-then-fenced operation. Native
+undock takes about8 seconds. Raw SHA256
+37535d753f746bdeed51496182f4df0a4e26bfb996cdc0b96887b7dc3d19f5e1.
+coop-dock-exec-03 PASSES11 phases with the additional session/freshness checks:
+stale Prepare rejected; foreign-session Fence ignored; subsequent valid attach
+and actual undock confirmed. The gate checks combined Prepare/Window/Lua/native
+readback/completion ordering and physical bay assignments/counts. Raw SHA256
+2bff5f8e8d2ac2889a0cbd6e38f980af0864c91dfac938619d37948c9fded6a6.
+This proves the native consumer; the complete network/client executor and queued
+SectorMove race remain separate checks. No end-to-end/boarding/
+same-pad crash acceptance. All completed runs have verified owned cleanup.
+
+OPTIONAL CLIENT/RELAY INTEGRATION IN PROGRESS
+UniverseSession now derives from DockSession; clients with the feature disabled
+send no docking records.8 relay/integration tests and26 universe tests PASS.
+A denied local approach is cancelled only if its published epoch/sequence still
+belongs to the same approach, a fresh native reading agrees, and MD execution
+rechecks the local physical player, saved bay, session, generation and time
+window. Never force-undock/teleport a physical player.9 observer/executor adapter
+tests PASS; changed MD schema VALID. Full native transport/adapter function check
+.local/evidence-016-withheld is running; no new docking acceptance yet.
+
+FULL ADAPTER FIRST RUN / FOLLOW-UP
+coop-dock-adapter-01 passes native saved-seed admission, real UDP relay NAV/CDOCK
+pairing, exact reservation/attachment and occupied NPC bay refusal/recovery.
+Overall PARTIAL: both X Shuttle undocks physically detach at about8s but retain
+an assigned dock, so the executor waits30s before a separate CANCEL reachesFREE.
+Raw and restored inventories remain in that directory; controller completion is
+not full acceptance. The executor now detects the fresh native APPROACH state
+only after synchronous isdocked=false, then issues a separately checked CANCEL.
+Pose remains fenced until actual FREE.10 adapter tests PASS.
+coop-dock-adapter-02 PASSES the bounded full adapter cycle on6ce2af7. Both actual
+undocks finish through a separate residual CANCEL; the NPC-occupied bay refuses
+attachment and succeeds after release. A queued stale SectorMove after native
+Fence leaves three native pose readings unchanged while Lua correction is frozen.
+Raw SHA2568c3ffe80713a41ed8962cd4b9f84fe8fdab95a20f9ab0fe624810b3acab80212.
+One freshness refusal retries normally. Native voice/text warnings are retained.
+
+coop-dock-denial-02 also PASSES the bounded local approach conflict. The relay
+first claims the bay for synthetic p2 while its CDOCK snapshots to p1 are delayed.
+The actual physical player receives a native granted docking request. Production
+relay denial then cancels that approach; subsequent native readings show the
+local ship unassigned and undocked. The remote reservation and real attachment
+then succeed with bay count1. denial-01 remains INCOMPLETE: its player11km away
+never obtained the prerequisite native request. Both runs preserve raw evidence
+and verified installation/settings/save cleanup. No human boarding/platform,
+two-native same-pad crash acceptance or newly created bay support is claimed.
+
+SAVED TEST STATIONS
+Optional dock capture now creates both existing LAN fixture stations before bay
+enumeration. Arena/Trade reuse those saved references; feature-off/older seeds
+keep the previous creation path. Seed admission refuses a missing/changed saved
+fixture. Construction, stock and trading rules otherwise remain the same.
+seed-market-dock-01 FAIL: a probe source rewrite missed its exact node and chose
+the first generic factory, so its completed cycle does not qualify the intended
+test station. The required marker was absent and the gate correctly failed.
+seed-market-dock-02 proves both saved station references are reused and all24
+bays retain distinct positive registry indices. The complete reserve/attach/
+occupied-refusal/undock/cancel/fenced-warp cycle succeeds on Beta. Overall PARTIAL:
+the name-count gate finds Alpha once but Beta zero times after reload. Raw kept;
+an explicit Beta rename after owner assignment is added, with native confirmation
+confirmed by the station witness in health-guest-01: both exact saved references
+and one station of each name. Its health portion FAILS in the dev observer; that
+does not establish health acceptance. Do not relabel the older dock capture.
+24 seed +23 bubble +12 trade adapter tests PASS; changed MD schemas VALID and
+the two changed generator branches match. No unrelated cargo/mission reruns.
+
+HOST-SHIP HANDOVER / LAND / EXIT — 24 OCTOBER 2026
+.local/evidence-023-withheld, source bc178aa, one native Linux p1 and a labelled
+synthetic UDP p2 with the real relay. Host leaves its ship for saved station
+Beta; p2 claims ship1 (epoch2), moves/reserves/attaches it, then leaves the seat.
+The remote owner continues to publish EXTERNAL with an intentionally distant
+free-flight NAV pose. Host then reclaims the actual docked ship (epoch3), and
+leaves it again. Old p2 epoch2 NAV/CDOCK continue and cannot displace it.
+Bounded PASS: 97 post-guest-exit,29 reclaim and49 post-host-exit retained readbacks
+all show the exact occupied bay, one docked ship and zero local-position spread.
+Both native seat transitions and the relay owner/epoch changes are recorded.
+Raw SHA2567177ca7df9554fbe818875b965e2ffeec36235ea409d417b6ee731ed2ea846c7.
+46 installed production-source files match; original37-file installation,
+preferences,owned test slot and7actual normal-save bytes/timestamps restored.
+This tests the reported ownership/docking oscillation path in one engine. It is
+not a two-native gameplay acceptance or walking/barrier test: seat changes were
+native teleports. Baseline engine warnings are preserved, not called error-free.
+
+WALKABILITY DIAGNOSTIC — bounded PARTIAL
+coop-dock-walk-01, sourced7fab12, repeats only remote station attachment then
+examines the walking prerequisite. Actual indexed bay43866 has one docked ship;
+local player remains on the station. Bay and ship controlroom are both walkable,
+currently walkable and unlocked. With a native pilot actor and supplied station
+airmarshal/cockpit slots, check_walk_path(checkstate=false) returns false in both
+directions. This is an NPC route query, not a player movement/barrier observation;
+it neither establishes a player barrier bug nor qualifies human boarding.
+Raw SHA256dd6ecd20de39d96950eddbf5bcbcb7de38219ce75b1e1e6c045e9e7b3a53fba2.
+37-file restoration and actual save bytes/timestamps independently match. No
+production unlock/teleport workaround follows this diagnostic. Compare the query
+with an ordinary local docking control and valid chair-approach slots before
+interpreting the negative NPC path as a synchronization defect.
+
+PLAYER PLATFORM OBSERVATION — 24 OCTOBER 2026
+board-01 (e174521) remains PARTIAL: add_actor_to_room rejects the normal player
+entity because it is not an NPC. Screenshot is the original station transporter,
+not successful placement. Raw SHA256
+4c0f47da6499017f4b76c2f4d4f963b41db7cb88693e6d362415ddc976e40c9b.
+board-02 (bbd0013) uses the documented find_player_transporter_slot and
+activate_transporter instead. Exactly one player is scheduled; subsequent native
+readback confirms player.room equals the actual remotely occupied bay. Bounded
+focused XTest walking exits the transporter and approaches the visible X Shuttle.
+Screenshots and native positions retained. This establishes platform access and
+visible actual attachment, not completed boarding: the walk reached a railing,
+and the bounded peer finished before a route to the entrance was completed. No
+production barrier override/actor teleport is introduced. Input after owned game
+exit was refused before any key action. Raw SHA256
+72a7dda832fef165f697d16ba1f8261777107a60b4f0b0e6f649704272270515.
+Both runs:56 installed production files and2 probes independently matched;
+original37 files and actual-save bytes/timestamps restored, owned game/helpers
+closed. Native gameplay warnings retained. Two-native same-pad crash acceptance
+and a complete walk through the remote ship entrance remain open.
+
+Board03 source7564b9c remains PARTIAL: actual XTest movement crosses the lowered
+boundary onto the occupied pad and reaches the ship exterior.5681 native reads
+retain exact bay/count1/fixed pose. No aboard readback; controller deadline ends
+the observation. Raw2383c4df2ed97143d0ba6e2b4202572e555713b530f6bd599dfbd23f66372d92.
+70source+2probes/37restore/7actual normal-save hashes+mtime audited. The very short
+walk distance during nominal8s commands matches the separately reproduced XTest
+client-lifetime issue in projectile-heat01/02; corrected one-process input in
+heat03 produces a full20s firing interval. Board04 uses that corrected helper;
+no earlier boarding result is upgraded.
+
+Walking follow-up04 (24 October08:30CEST; sourcecca3301): correct single-client
+held keys allow longer normal movement around the parked ship. The bounded
+fixture ends without an aboard readback; full boarding remains NOT ACCEPTED.
+5,734 attached native reads retain exact pose/assigned bay/one occupant. Raw
+f501c285313e3667574fd1b5f605c13b22aed02a6049a230b26ebc476a562a2a.
+.local/evidence-019-withheld verifies70 production files+2 probes, exact
+UI registration,37-file restoration and7 actual-save bytes/timestamps. Late
+interaction commands were refused by the owned-PID guard after fixture exit;
+no successful interaction is inferred. This is walking/occupancy evidence only.
+
+Walking05 sourcef4f4280 uses integration03's new7.4 pristine seed. The player walks
+past the lowered boundary and around both sides of the ship, with normal F-key
+interaction attempts. No aboard/container transition is recorded. This remains
+INCONCLUSIVE for boarding, not proof that the correct entrance was activated.
+5,646 attached readbacks keep one exact pose/bay/occupant. Raw
+c43cf90e53372f85c49808dab1060112e091f6e3df38d9c67760066d709a3041.
+70 production files+4 probes, exact UI registration,37 restored files and7 actual
+normal-save bytes/timestamps verified. No further repeated UI walking is planned
+without a concrete entrance/interaction finding; human B02 remains required.
+
+STATION TRANSPORTER MENU — 24 OCTOBER 2026, INCONCLUSIVE
+.local/evidence-024-withheld uses production a7deb49 and four owned dev
+probes. After remote native attachment and leaving the seat, fixture-only native
+transport places the player on the station platform (onplatform1, aboard0).
+Opening the unmodified TransporterMenu at that actual platform slot lists the
+docked LAN Player1 as the current docking location. Physical pointer attempts
+do not produce a confirmed cockpit selection/entry before the bounded deadline.
+No forced transport into the ship is used; this is NOT boarding acceptance and
+does not identify a production defect. Retain human B02. No further repeated
+GUI attempts without a concrete input/entrance finding.
+Raw load.log SHA256:
+a9d897fe6b983cac3df4d4a25994c8313331a5c67b47793d7f7c61555e3e2e35
+Audit verifies70 production files,4 probes/UI registration,3,320 stable exact-bay
+readbacks,37 restored files and seven actual normal-save bytes/timestamps. Owned
+game, relay and controller closed; screenshots and inputs retained.

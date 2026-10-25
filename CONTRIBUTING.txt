@@ -1,26 +1,30 @@
 X4 MULTIPLAYER - CONTRIBUTOR AND AGENT HANDOFF
-19 October 2026 | INTERNAL DEVELOPMENT
+Updated 25 October 2026 | INTERNAL DEVELOPMENT
 
 START HERE
+
+New contributors: use onboarding/00-START-HERE.txt for the pinned current code,
+starter prompt, source map and candidate scopes. Current7.4 development is on
+contrib/astra-7-4-integration, draft PR37, not necessarily main. Follow the onboarding
+baseline/PR-base instructions for this work; generic origin/main examples below
+apply only when main is the agreed task baseline.
 
 Humans using Claude Code, Codex or another coding agent can contribute through
 the same private Git repository. Git shares committed files and history, not
 agent conversations, private memory, credentials, installed games or virtual
 environments. The shared documents are the portable handoff.
 
-Read these files in order:
+Use this entry path; load additional documents for the assigned task:
 1. AGENTS.md: common project instructions. CLAUDE.md imports this file for Claude.
 2. CONTINUE-HERE.txt: current state, measured evidence and outstanding work.
-3. DEVELOPMENT.txt: local setup, commands and machine-specific boundaries.
-4. WORLD-SYNC-REQUIREMENTS.txt and ARCHITECTURE.md: required gameplay and actual
-   implementation. Also read distribution/WORLD-SYNC-TEST.txt before a playtest.
+3. DEVELOPMENT.txt for setup, commands, packaging or machine changes.
+4. WORLD-SYNC-REQUIREMENTS.txt and relevant ARCHITECTURE.md sections before
+   gameplay/authority changes. Use distribution/NEXT-TEST.txt for the current test.
 5. INTERNET-HOSTING-ANALYSIS.txt when working on transport or dedicated hosting.
 
-Mod 7.0.0 is an internal NPC scene milestone. The real Windows/Linux playtest is
-complete, with findings in reports/PLAYTEST-7.0-FOLLOWUP.txt. The follow-up
-adds native cargo/magnet transactions, motion and identity updates; its current
-acceptance status is in CONTINUE-HERE.txt. Shared general NPC combat, the economy
-and arbitrary missions remain unfinished. This remains internal development. Do not start by assuming the universe is already synchronized.
+The shared-start implementation transfers one native starting save; acceptance and pending work are
+in CONTINUE-HERE.txt. Shared ongoing universe authority and persistence remain
+unfinished. Earlier playtest reports are historical evidence, read when relevant.
 The user has chosen to keep primary native X4 testing on their current PC.
 
 GET ACCESS AND CREATE A DEVELOPMENT ENVIRONMENT
@@ -52,7 +56,7 @@ portable Python bootstrap alone does not prove cross-platform test coverage.
 
 For Claude Code, start it in the repository root. CLAUDE.md imports @AGENTS.md
 using the documented import mechanism; the rules are not duplicated. Verify the
-loaded instructions in Claude Code's /context view. Read CONTRIBUTING.txt and
+loaded instructions in Claude Code's /context view. Read AGENTS.md and
 CONTINUE-HERE.txt explicitly if the client does not load project instructions.
 No Claude installation/session has been tested on this PC for this handoff.
 
@@ -157,7 +161,7 @@ installation. Existing direct maintenance sync is not a license for concurrent
 agents to push gameplay changes to main. This document does not install GitHub
 branch protection, CI or automatic review; those are separate repository settings.
 
-Preserve the pending 7.0 package pair for the current playtest. Once integration
+Preserve all sealed package pairs, including the current human-test pair. Once integration
 is ready for a new test build, the integrator chooses its version, records its
 source commit and creates one matched pair for both platforms. Do not mix ZIPs
 from different builds. Public packages need an explicit owner request for that
@@ -171,15 +175,18 @@ changed interface or durable decision. Update CONTINUE-HERE.txt when integrated
 project state changes; keep branch-specific progress in its task/PR so several
 agents do not continuously overwrite one global status file. The receiving agent
 must read the relevant diff and evidence rather than treat the summary as proof.
+Keep the current handoff short; archive superseded narrative instead of repeatedly
+appending it. Do not reload the whole archive for routine work. Reuse verified
+results within their revision/scope and expand checks when changes require them.
 
 STARTER PROMPT FOR A NEW AGENT
 
-  Read AGENTS.md, CONTRIBUTING.txt, CONTINUE-HERE.txt, DEVELOPMENT.txt,
-  WORLD-SYNC-REQUIREMENTS.txt and ARCHITECTURE.md. Work on the assigned task:
+  Read AGENTS.md and CONTINUE-HERE.txt, then the references relevant to this task:
   <insert task, acceptance criteria and agreed file/interface scope here>.
   Inspect the current Git state and use a separate working directory/branch from
-  other active agents. Keep changes internal and write original code. The real
-  7.0 playtest is pending; preserve its packages and installed candidate. Run the
+  other active agents. Follow CONTRIBUTING.txt for concurrent work and delivery.
+  Keep changes internal and write original code. Preserve sealed packages and
+  the prepared human-test installation. Inspect affected source/evidence; run the
   appropriate checks and deliver a commit/PR with evidence and remaining limits.
   Speak German with us; keep documentation and interfaces in English.
 

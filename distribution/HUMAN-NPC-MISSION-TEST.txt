@@ -1,0 +1,78 @@
+X4 Multiplayer {{VERSION}} — NPC DAMAGE AND FACTION MISSION TEST
+25 October 2026 | INTERNAL | Two human games required
+
+PREPARATION
+Use the same newly configured 7.5.0 pair and fresh host world/invitation.
+Keep the supplied Xperimental Shuttle weapons unchanged. Qualified alternatives
+are uniform unmodified stock Pulse Mk1/Mk2; mixed weapons, beams, missiles,
+turrets and modified weapons are outside this candidate's supported path.
+Targets: free-flying S/M NPC ships; not player Shuttles, docked/stored ships,
+stations, L/XL ships or surface elements. Compare PERCENTAGES, not raw capacity:
+exact NPC equipment/shield-capacity replication is not implemented.
+Use a short burst, stop firing and compare both views at matching times. Normal
+weapon spread/aiming misses are not a synchronization error. Allow two seconds
+for a short burst to settle and one displayed percentage point for rounding;
+account for shield recharge and other attackers. Sustained disagreement fails.
+Record unavailable readings as INCONCLUSIVE, never assume success from motion.
+
+N01 — HOST -> NPC, SAME SECTOR
+Identify the same NPC by code/name and position on both screens. Record shields
+and hull. Host fires a short burst, guest observes. Check damage on both games.
+N02 — GUEST -> NPC, SAME SECTOR
+Repeat with the guest firing. The real host NPC must lose health; the guest's
+health must converge instead of repeatedly jumping back. Avoid killing it yet.
+If practical, compare modest hull damage once shields are down. Stop on divergence.
+N03 — GUEST -> NPC, DIFFERENT SECTOR (PRIMARY ACCEPTANCE)
+Keep host in the original sector. Guest travels to another sector and identifies
+a suitable S/M NPC. Host locates that actual NPC on the map without teleporting
+there. Record both sectors and target code, then guest fires. Host map and guest
+must reflect damage. Missing host readback is INCONCLUSIVE, not a pass.
+N04 — NATIVE NPC DEATH
+After N03 passes, guest destroys that NPC. It must be destroyed on the host too,
+not merely vanish from a radar view. Note wreck/destruction and object information.
+Do not infer synchronized loot, reputation or boarding from this result.
+N05 — SECTOR RETURN
+Guest leaves and returns while host remains connected. The destroyed ship must
+not be recreated by a later world update. This checks live-session continuity,
+not persistence after stopping/restarting either game or the relay.
+
+M01 — FIND AN ELIGIBLE ORDINARY CONTRACT
+Host browses normal mission offers while playing. This adapter supports native
+GM_Destroy_RarelyOnSight: contracts to destroy a number of matching enemy ships.
+Only standalone visible offers without inventory-item rewards are admitted.
+The guest's replicated offers are prefixed [Shared]. Use one of those; do not
+accept an unrelated guest-local offer. Record title, target requirements, count
+and credit reward. Prefer a contract satisfiable with supported S/M targets.
+Offer generation remains native and host-side. If none appears, record
+INCONCLUSIVE / NO ELIGIBLE OFFER; do not use Trial as proof of normal sharing.
+
+M02 — GUEST ACCEPTS; BOTH CONTRIBUTE
+Guest accepts the [Shared] offer. Host must have the actual active mission and
+both players must see the same objective. Where the quota allows, host destroys
+one matching target and guest destroys another in a DIFFERENT sector. Observe
+both objective counts. Only matching targets count; use N03's weapon/target scope.
+A quota of one can test guest completion, but cannot prove both contributed.
+For host acceptance, use a second eligible offer if available; guest should see
+it become active without separately accepting a local copy.
+
+M03 — COMPLETION / ONE CREDIT REWARD
+Record shared credits just before the final qualifying kill; avoid trades or
+other payouts at that time. Complete the quota and wait for both mission lists
+to resolve. The advertised credit reward must be paid ONCE to the shared balance,
+not once per player. If other rewards interfere, record INCONCLUSIVE and retain
+logs. Guest reputation display, inventory rewards and countdown presentation
+are not shared in this first adapter. The real deadline still runs on the host.
+
+M04 — ABORT / DEADLINE (SEPARATE OFFER)
+If another eligible offer is available, accept and let the guest abort it through
+the normal mission interface. Both active lists should remove it, with no reward.
+An optional natural deadline can check failure; do not change system clocks or
+accelerate time. Missing opportunities are NOT RUN, not a failure.
+
+STOP / EVIDENCE
+At the first sustained mismatch stop firing and record the exact case, time,
+sectors, shared target code and both screenshots. Run 06-DIAGNOSTICS on both PCs
+before restarting; preserve the host logs. Complete HUMAN-TEST-RESULT.txt.
+These cases test bounded NPC combat and one normal mission family. Capture/fleet
+orders, all weapons/classes, all mission types, full economy and campaign resume
+are not supported by inference from a successful run.

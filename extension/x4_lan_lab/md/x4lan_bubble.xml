@@ -25,9 +25,12 @@
  </do_all>
  <add_to_group groupname="$weapons1" list="$ships.{1}.weapons.operational.list" />
  <add_to_group groupname="$weapons2" list="$ships.{2}.weapons.operational.list" />
- <create_station name="$station" macro="macro.station_gen_factory_base_01_macro" sector="$local.sector" owner="faction.player" state="componentstate.operational" constructionplan="'x4lan_market'" rawname="'LAN Test Station'">
+ <do_if value="md.X4LAN_SeedDocks.State.$testStation?">
+  <set_value name="$station" exact="md.X4LAN_SeedDocks.State.$testStation" />
+ </do_if>
+ <do_else><create_station name="$station" macro="macro.station_gen_factory_base_01_macro" sector="$local.sector" owner="faction.player" state="componentstate.operational" constructionplan="'x4lan_market'" rawname="'LAN Test Station'">
   <position x="0m" y="10km" z="5km" />
- </create_station>
+ </create_station></do_else>
  <do_if value="$host"><add_cargo object="$station" ware="ware.energycells" exact="200" /></do_if>
  <create_ship name="$donor" macro="macro.ship_arg_m_trans_container_01_a_macro" sector="$local.sector">
   <owner exact="faction.player" /><pilot><select race="race.argon" /></pilot><position x="0m" y="11km" z="0m" />
@@ -61,8 +64,8 @@
   </do_if>
   <do_if value="$coop"><do_if value="player.occupiedship == $ships.{2}"><raise_lua_event name="'X4LAN_Coop.Shot'" param="'2|%s'.[if $ships.{2}.primaryweapons.{$ships.{2}.activeweapongroup.primary}.list.indexof.{event.object} gt 0 then 'p' else 's']" /></do_if></do_if><do_elseif value="$localSlot == 2"><raise_lua_event name="'X4LAN_Bubble.Fire'" /></do_elseif>
  </actions></cue>
- <cue name="FireOn" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOn'" /></conditions><actions><shoot object="$proxy" /></actions></cue>
- <cue name="FireOff" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOff'" /></conditions><actions><stop_shooting object="$proxy" /></actions></cue>
+ <cue name="FireOn" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOn'" /></conditions><actions><do_if value="not @$projectileVisualEnabled"><shoot object="$proxy" /></do_if></actions></cue>
+ <cue name="FireOff" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'FireOff'" /></conditions><actions><do_if value="not @$projectileVisualEnabled or player.controlled != $proxy"><stop_shooting object="$proxy" /></do_if></actions></cue>
  <cue name="Publish" instantiate="true" checkinterval="0.2s">
   <conditions><check_value value="$host" /></conditions>
   <actions>
@@ -70,7 +73,7 @@
    <do_if value="$targets.{1}.exists"><set_value name="$t1h" exact="$targets.{1}.hullpercentage" /><set_value name="$t1s" exact="$targets.{1}.shieldpercentage" /></do_if>
    <do_if value="$targets.{2}.exists"><set_value name="$t2h" exact="$targets.{2}.hullpercentage" /><set_value name="$t2s" exact="$targets.{2}.shieldpercentage" /></do_if>
    <set_value name="$d1" exact="if $ships.{1}.isoperational and $ships.{1}.dock or $docking.{1} then 1 else 0" /><set_value name="$d2" exact="if $ships.{2}.isoperational and $ships.{2}.dock or $docking.{2} then 1 else 0" />
-   <raise_lua_event name="'X4LAN_Bubble.World'" param="'%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s'.[(if $ships.{1}.isoperational and not $dead.{1} then $ships.{1}.hullpercentage else 0),(if $ships.{1}.isoperational and not $dead.{1} then $ships.{1}.shieldpercentage else 0),(if $ships.{1}.isoperational and not $dead.{1} then $ships.{1}.cargo.{ware.energycells}.count else 0),(if $ships.{2}.isoperational and not $dead.{2} then $ships.{2}.hullpercentage else 0),(if $ships.{2}.isoperational and not $dead.{2} then $ships.{2}.shieldpercentage else 0),(if $ships.{2}.isoperational and not $dead.{2} then $ships.{2}.cargo.{ware.energycells}.count else 0),$t1h,$t1s,$t2h,$t2s,$station.cargo.{ware.energycells}.count,if $drops.{1}.exists then 1 else 0,if $drops.{2}.exists then 1 else 0,$d1,$d2,$shots.{1},$shots.{2}]" />
+   <raise_lua_event name="'X4LAN_Bubble.World'" param="'%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s|%s'.[(if $ships.{1}.isoperational and not $dead.{1} then (if @$healthLive.{1} then $healthValue.{1}.{1} else $ships.{1}.hullpercentage) else 0),(if $ships.{1}.isoperational and not $dead.{1} then (if @$healthLive.{1} then $healthValue.{1}.{2} else $ships.{1}.shieldpercentage) else 0),(if $ships.{1}.isoperational and not $dead.{1} then $ships.{1}.cargo.{ware.energycells}.count else 0),(if $ships.{2}.isoperational and not $dead.{2} then (if @$healthLive.{2} then $healthValue.{2}.{1} else $ships.{2}.hullpercentage) else 0),(if $ships.{2}.isoperational and not $dead.{2} then (if @$healthLive.{2} then $healthValue.{2}.{2} else $ships.{2}.shieldpercentage) else 0),(if $ships.{2}.isoperational and not $dead.{2} then $ships.{2}.cargo.{ware.energycells}.count else 0),$t1h,$t1s,$t2h,$t2s,$station.cargo.{ware.energycells}.count,if $drops.{1}.exists then 1 else 0,if $drops.{2}.exists then 1 else 0,$d1,$d2,$shots.{1},$shots.{2}]" />
   </actions>
  </cue>
  <cue name="Command" instantiate="true" namespace="this">
@@ -108,7 +111,7 @@
    <set_value name="$v" exact="event.param3.$values" />
    <do_all exact="2" counter="$i">
     <set_value name="$ship" exact="Arena.$ships.{$i}" />
-    <do_if value="$v.{($i - 1) * 3 + 1} le 1.01"><set_value name="Arena.$dead.{$i}" exact="true" /></do_if><do_if value="$ship.isoperational and not Arena.$dead.{$i}"><set_object_hull object="$ship" exact="$v.{($i - 1) * 3 + 1}" /><set_object_shield object="$ship" exact="$v.{($i - 1) * 3 + 2}" />
+    <do_if value="$v.{($i - 1) * 3 + 1} le (if @Arena.$healthOwn.{$i} then 0 else 1.01)"><set_value name="Arena.$dead.{$i}" exact="true" /></do_if><do_if value="$ship.isoperational and not Arena.$dead.{$i}"><do_if value="not @Arena.$healthOwn.{$i}"><set_object_hull object="$ship" exact="$v.{($i - 1) * 3 + 1}" /><set_object_shield object="$ship" exact="$v.{($i - 1) * 3 + 2}" /></do_if>
     <do_if value="not Arena.$economy"><set_value name="$delta" exact="$v.{$i * 3} - $ship.cargo.{ware.energycells}.count" />
     <do_if value="$delta gt 0"><add_cargo object="$ship" ware="ware.energycells" exact="$delta" /></do_if>
     <do_elseif value="$delta lt 0"><remove_cargo object="$ship" ware="ware.energycells" exact="-$delta" /></do_elseif>
@@ -167,6 +170,12 @@
   <raise_lua_event name="'X4LAN_Bubble.ShipsRefused'" param="$refusal" />
  </do_if>
  <do_else>
+  <!-- Full personal teleportation research for internal exploration. Only after admitted ship setup. -->
+  <do_if value="not ware.research_teleportation.research.unlocked"><add_research ware="ware.research_teleportation" /></do_if>
+  <do_if value="not ware.research_teleportation_range_01.research.unlocked"><add_research ware="ware.research_teleportation_range_01" /></do_if>
+  <do_if value="not ware.research_teleportation_range_02.research.unlocked"><add_research ware="ware.research_teleportation_range_02" /></do_if>
+  <do_if value="not ware.research_teleportation_range_03.research.unlocked"><add_research ware="ware.research_teleportation_range_03" /></do_if>
+  <debug_text text="'[X4LAN] TELEPORT_RESEARCH base=%s range1=%s range2=%s range3=%s'.[ware.research_teleportation.research.unlocked,ware.research_teleportation_range_01.research.unlocked,ware.research_teleportation_range_02.research.unlocked,ware.research_teleportation_range_03.research.unlocked]" />
   <set_value name="$own" exact="$candidate" />
   <raise_lua_event name="'X4LAN_Bubble.PreparedOwn'" param="$candidate" />
   <raise_lua_event name="'X4LAN_Bubble.PreparedProxy'" param="$peer" />

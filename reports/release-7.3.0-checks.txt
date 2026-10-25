@@ -1,0 +1,44 @@
+X4 Multiplayer7.3.0 — INTERNAL HUMAN-TEST CANDIDATE
+23 October2026 | Windows/Linux host or guest | Two players
+
+INCLUDED
+- Shared native host starting-save capture, authenticated TCP45844 transfer,
+  checksum/content/session verification, reserved profile45841 staging and
+  native load/role admission before multiplayer fixtures are created.
+- Server and portable runtime in BOTH Windows/Linux packages; UDP45841 remains.
+- Personal graphics/audio/input settings import and visible Linux server console.
+- Accepted7.2 radar, ordinary cargo, ship motion and Cooperative Trial code.
+- No Workshop selection/subscription writes; withdrawn isolation helper excluded.
+
+ACTUAL PRE-PACKAGE ENGINE EVIDENCE
+Separate native Linux host/guest with synthetic counterparts load the same save.
+All1359 observed station identities match after load, maximum difference0.031m.
+Both native ships/role flags and unpaused-load readbacks pass. Host emits2 NPC
+baselines of153/154 objects.7 actual normal saves unchanged;33 original installed
+files restored after the instrumented experiment; test selection bytes unchanged.
+The first stale-log guest harness result is rejected and retained; the corrected
+fresh guest capture passes. This is not a simultaneous two-native test.
+
+CODE CHECKS
+375 integration tests PASS/no skips;83 affected checks after later guards PASS;
+final16 launcher checks PASS. PowerShell fixtures pass on Linux with2 explicit
+Windows drive-root omissions. MD schema/UI registration checks pass.
+
+DELIVERY CHECKS
+The archive checker verifies complete file/hash inventories, matching platforms,
+portable runtimes, both server packages, required world-preparation launchers,
+inert source configuration and absence of probes/session secrets. Actual archive
+results and any final clean packaged Linux startup are recorded alongside the
+sealed delivery; they must not be inferred from this pre-package report.
+
+LIMITS / TEST FOCUS
+Ordinary station layout now starts from one snapshot. Station construction,
+destruction, production/economy and general NPC decisions are NOT continuously
+host-authoritative. Persistent campaign save/resume and absent-player catchup
+are not implemented. A retry resets BOTH games and the relay to the starting
+world. Do not load/save a normal campaign with this internal mod.
+
+Native Windows/Windows-host behavior and simultaneous Windows/Linux play remain
+for the human test. Weapons/damage have no new fix. Full attachment/native-original
+experiments, normal shared missions, ingame chat and PiP artifacts remain open.
+Follow README.txt and NEXT-TEST.txt. Do not distribute as a public release.

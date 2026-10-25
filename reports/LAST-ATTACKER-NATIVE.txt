@@ -1,0 +1,195 @@
+LAST-ATTACKER NATIVE OBSERVATIONS — 24 OCTOBER 2026
+
+The installed game's libraries/scriptproperties.xml documents object.lastattacker
+and lastattacktime, separate from the throttled attack events used by withdrawn
+HIT2. This investigation has not enabled damage claims or qualified multiplayer.
+
+last-attacker-01: one real Linux player victim, two native NPC stock pulse Mk1
+shooters, starts offset80ms.22 real hits (11 per shooter), each shield callback's
+lastattacker/time matches the canonical player_ship_hit attacker/time. Shortest
+observed attacker switch65.6ms. Raw SHA256
+9c0240823e9504519d55c3a26c59d63b91c8ec6b9dd8eed95a2e94477d03f4fb.
+
+last-attacker-02: both shooters start in one action block.34 real hits all have
+correct getter identity, including8 pairs of DIFFERENT attackers at identical
+game age.12 full-shield callbacks match corresponding canonical hits. This
+supports reading identity inside each callback, not once per frame.
+BUT8 hit callbacks retain an OLDER lastattacktime, despite correct identity:
+e.g age20.0919,lasttime19.9282; age24.924,lasttime24.2334. Repeated same-source hits
+can retain the registration timestamp. Its exact update rule is unproven.
+lastattacktime==player.age is therefore NOT a valid universal freshness gate;
+relaxing it risks attributing environmental/collision damage to a stale shooter.
+The first alternating experiment did not expose this. This audit correction was
+sent to Claude before implementation. Do not report per-hit timestamp acceptance.
+
+The same run disproves full damage at the protected hull floor. At2.01% of4580
+HP,min hull2%, the next stock36-damage pulse yields one hull event: amount0.458,
+new91.6 HP.22 real hits occur in the floor phase but only that one hull event;
+later hits still emit player_ship_hit, with no further hull-damaged callback.
+Observed HP loss is clipped, not raw projectile damage. Do not revive HIT2
+unchanged or infer full damage from these getters. Overall02 remains PARTIAL,
+with timestamp freshness and full-damage assumptions explicitly FAILED.
+Raw SHA256eee141aea3618df6a5ccabda596e535c14dccfef95e487c70055523ff67bbe2d.
+
+Both runs retain complete raw logs, probe/source inventories, save manifests and
+restored37-file installation inventories under their .local paths. Owned game/
+helpers closed; preferences/actual normal saves restored. Baseline engine warnings
+remain; no error-free engine claim.
+
+Still unqualified: non-player victims, collisions/environment/repair/area damage,
+missiles, destroyed attackers, same-frame native/scripted damage, shield state
+disagreement, floor/death semantics, and end-to-end no-double-counting.
+Last-attacker-npc-03 compares stock pulse Mk1/Mk2 (native36/46) on a non-player
+victim's full shield/hull. No custom weapon stats or spread.
+
+NPC FOLLOW-UP
+last-attacker-npc-03:36 native damage callbacks (13shield,23hull) on a non-player
+victim. Stock pulse Mk1=36 and Mk2=46 independently label the shooter; every
+callback's lastattacker matches that label. No custom weapon stats.19 callbacks
+retain old timestamps, confirming that timestamp equality would reject valid
+NPC hits too. No damage callbacks from the scheduled shield/hull setters.
+Raw SHA25673d545828d5e9f437c2dae7203d4b8cbf0dc31bbd18394ae38c1c8b14b833f21.
+Native mixed-04 next applies labelled7 hull-only damage without an attacker and3
+with explicit B inside a native shield-hit callback. It checks getter behaviour
+for mixed native/scripted sources, not a general environmental-damage proof.
+
+MIXED SCRIPTED DAMAGE
+last-attacker-mixed-04: during a real shield-hit callback, apply_attackstrength
+without attacker (7 hull-only points) synchronously emits a hull callback whose
+lastattacker is null. A following3-point application with explicit B resolves B.
+Both callbacks occur at the same game age as the preceding native hit. The getter
+does not retain the preceding shooter for this labelled no-attacker path.
+Raw SHA25659f277178bd51cdbc10385d6975b7822c8853fa0315b1650c5a2293c1ee34885.
+Bounded PASS only; physical collision, environmental area effects and repairs
+remain separate cases. Original source/cleanup inventories are retained.
+
+NATIVE PER-SHOT DATA INTERFACE FOUND (not yet qualified as a damage adapter)
+Stock menu_encyclopedia.lua/helper.lua use GetLibraryEntry(infolibrary, macro),
+where GetMacroData(macro, 'infolibrary') supplies the library. The native table
+includes hullshielddpshot, hullonlydpshot, shieldonlydpshot and hullnoshielddpshot,
+plus area variants. These are native macro/library data, not inferred DPS/rate.
+Installed weapon modifiers, projectile-to-weapon identity and safe claim semantics
+still require work; do not guess them or use macro-only data for modded weapons.
+
+SYNCHRONOUS DAMAGE RESTORE AND CHANNELS
+damage-undo-01 FAIL: native parser requires all four damage channels when strength
+is omitted. The fixture never ran. Retained raw failure and verified cleanup;
+corrected fixture is a separate run, not a replacement of the failed evidence.
+damage-undo-02 bounded PASS: two real stock pulse shooters hit the player34 times.
+Each shot emits shield damage10 then clipped hull damage0.458. Both callbacks
+restore their own delta synchronously. All34 following canonical PlayerShipHit
+events see the original92.058 hull/10 shield and correct attacker.68 restores,
+no recursive damage or lethal event. The shield and hull events are ONE hit;
+counting both would double damage. This run uses min hull2%, baseline2.01%.
+Raw SHA256118ea860054dcdf6eaa0927f4450db8535b114843701067c413fa158dea70f81.
+Native GetLibraryEntry per-shot hullshield fields are40 for the installed
+X-Shuttle plasma,36 for pulse Mk1,46 for pulse Mk2; other/area damage channels
+are zero. This qualifies stock macro reads, not installed equipment modifiers.
+
+damage-channel-03 repeats only the unresolved life-boundary case: min hull1%,
+baseline1.02% =46.716 HP.34 actual hits/68 synchronous restores retain that hull
+and10 shield; no premature lethal event. Eleven labelled apply_attackstrength
+cases then match direct channel semantics on this visible-attention X-Shuttle:
+ordinary36/40 damage subtracts shield first and overflows to hull; hullonly,
+shieldonly and hullnoshield have their respective bounded expected effects.
+Example:1000 hull/10 shield +36 ordinary ->974 hull/0 shield. At46.716 hull,
+min1%,36 damage clamps45.8. After the channel checks restore a healthy baseline,
+one later intentional lethal application reaches45.8 and the existing LifeTick
+emits exactly one SHIP_LETHAL. No remote shot/replay or two-native claim.
+ZERO-RESET HYPOTHESIS FAILS: an attacker-less all-zero application leaves the
+previous lastattacker unchanged, causes no damage/callback. Do not implement
+identity consumption on that assumption. Overall03 remains PARTIAL with this
+explicit failed hypothesis, despite the passing restore/channel gates.
+Raw SHA25616484b2734a127029edbb2f84ceaf26e76be2c0377892ec06e14d37ce991c03b.
+Each run's installed/restored37-file inventories and normal-save hashes/actual
+save timestamps independently match. Sources/probes and full logs retained in
+.local/evidence-030-withheld, .local/evidence-032-withheld, .local/evidence-026-withheld
+Claude may implement an inert source-only uniform-stock-bullet SHOT transport
+and execution fences. Capture/undo remain disarmed pending collision attribution,
+shield/hull dedup and integration qualification. No new package/activation.
+
+COLLISION AND ORDINARY-BULLET COUNTING FOLLOW-UP
+damage-collision-04 INCONCLUSIVE for damage attribution: constant-velocity NPC
+ram produces two collision callbacks, no target damage, and an old lastattacker.
+Raw SHA256bb9e766c7d7c1ad2578b8bfe54671b054902d79a17246a773a9d1819350eab90.
+damage-dedup-05 PARTIAL:17 pulse hits count once across overflow/zero/full shield.
+X-Shuttle multigun coverage FAILS because the fixture omitted quotes around its
+loadout string; native lookup errors are retained. A moving physical-player ram
+then causes two277.3-point shield damage callbacks. Their lastattacker is the
+actual collider, not the preceding shooter. Therefore identity alone also cannot
+distinguish a player ram from that player's projectile. Before the damage,
+event_object_collided reports the same target/collider and native game age.
+Raw SHA256ddc2d83ce909fc3ee6983bddc1bd402f0dcba3b6b2f1d8971301784e1ed6c0bc.
+
+damage-dedup-06 bounded PASS after separately correcting the fixture:
+- Actual X-Shuttle has six stock plasma weapons; other shooter has stock pulse.
+  332 projectile births,273 canonical PlayerShipHit events (256plasma,17pulse).
+- Candidate counts each canonical hit exactly once, same attacker and event order:
+  64 at10-point shield/overflow;93 atzero shield;116 fully shield-absorbed.
+- Rule for these ORDINARY hullshield-only bullets: count Shield callback then
+  restore its exact delta. Hull callback counts only if the current, already
+  restored shield is zero; restore its hull delta too. No timestamp correlation.
+- All hit readbacks retain1.02% hull across the1% protection floor. No death.
+- A subsequent ram uses the previously firing pulse ship as collider, with undo
+  still armed. Record target/collider/game age from event_object_collided; exclude
+  matching damage from claim AND undo. Both286-point collision shield callbacks
+  are excluded; actual collision damage remains, no fabricated projectile claim.
+Raw SHA25676c84319e52fce792edd4d5aa66e44acded6934333cd8b0810d7c59464d1ed24.
+The retained analyzer checks strict claim/hit interleaving, distinct projectile
+identities, both sources/all three phases, real six-weapon installation, collision
+exclusion, zero death and restoration/save inventories.37 files restored.
+
+Limits: simultaneous same-victim/same-attacker collision AND projectile in one
+native frame remain conservatively ambiguous. A production collision map needs
+ALL pairs in that frame, not a single last collider that another contact could
+overwrite. These tests do not qualify beams, area damage, missiles, weapon mods,
+surface-element targeting or old-generation in-flight projectiles. Source-only
+inert capture/undo is now authorized for the bounded uniform unmodified stock
+ordinary-bullet path, with explicit unsupported-loadout refusal. Claude owns it;
+transport/application integration and health-floor/death fences still pending.
+No production flag/package activation or two-native acceptance.
+
+RECHARGE SIDE EFFECT — UNDO IS NOT A COMPLETE REPLAY SOLUTION
+damage-recharge-07 FAILS before world startup with SIGSEGV. Its original dev zero
+weapon and dependent bullet shared one indexed macro file; split files in08 remove
+this observed crash. Recursive dependency is a hypothesis, not a proven engine
+root cause. Failure retained; raw SHA256
+328e6e33d88807ef18f39555e6de1a15d39d361454c9f8e76d5263d5155a8a2d.
+
+damage-recharge-08 is an OBSERVATION, not projectile/visual acceptance. A labelled
+one-point prime damage starts a recharge delay, then baseline is set to10 shield.
+Control first recharge is9.0214s after baseline.17 real stock pulse hits whose HP
+losses are synchronously undone delay recharge to14.7183s. Thus HP restoration
+alone still lets false local replay hits suppress canonical shield regeneration.
+An original dev zero-damage pulse produces36 births, no canonical hit/damage
+callbacks, and recharge at9.0386s. However physical intersections are unproven:
+150ms trajectory samples do not establish actual impacts, and zero damage removes
+the canonical hit callback. Its continuous6Hz cadence is deliberately a primitive,
+not stock weapon fidelity. Separate weapon/bullet macro files are retained locally.
+No production substitution, damage capture or replay activation follows this run.
+Raw SHA256da3cbaf0f9ec9ce656065ff6866fba431abc5519ba248156c31cf6581a9213ac.
+Retained after-cleanup inventories independently match all37 original mod files;
+actual normal saves and owned test save retain bytes/timestamps; steam_autocloud
+bytes unchanged. Owned game/helpers closed and settings restored by controller.
+
+CONFIRMED ZERO-DAMAGE IMPACTS AND RECHARGE
+zero-impact-01 FAILS its alignment prerequisite: all9 stock bullets miss, as do
+all zero bullets. A line through the ship origin is not proof of a hull collision.
+zero-impact-02 uses native shoot_at only as a controlled diagnostic. Stock pulse
+and zero clone each fire9 bullets, score8 canonical player_ship_hit events, and
+have8 bullet lifetimes around0.16-0.18s at impact. Their first shots miss while the
+weapon aligns, surviving about0.7s. Deliberately offset zero fire has9 births,
+zero hits, lifetimes~0.7s. Stock8hits cost288 shield; all8 zero impacts retain
+4580 hull/4800shield. Native callbacks establish actual zero impacts here.
+Raw SHA2563396815582adad187951b9f73c1816f0e339297bc21e7e8c768dc702f98330f4.
+This original dev clone adds native effect references and the stock3-round/.7s
+reload pattern; no game assets or third-party code are shipped. No production
+selected-victim autoaim or faithful free-aim replay is inferred from the fixture.
+
+damage-recharge-09 repeats the unresolved recharge case with actual zero impacts:
+17 stock hits undone ->14.7577s; control ->9.0461s;17 zero canonical hits with no
+shield/hull damage callbacks ->9.0589s. Bounded zero-impact/recharge primitive PASS,
+not shadow handover, projectile replay fidelity or multiplayer acceptance.
+Raw SHA25627d75f8b923e31641fa04f76f0b40f8ca26a1df12df3f87805e303b8fc914c8d.
+All completed runs have retained source/probe inventories,37-file restoration and
+unchanged actual save bytes/timestamps. Earlier alignment/startup failures remain.

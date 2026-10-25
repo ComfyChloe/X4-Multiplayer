@@ -16,10 +16,14 @@ xml='''<?xml version="1.0" encoding="utf-8"?>
  <set_value name="$bids" exact="[[12Cr,16Cr,52Cr,167Cr,118Cr,239Cr],[17Cr,23Cr,72Cr,229Cr,162Cr,328Cr]]"/><set_value name="$asks" exact="[[14Cr,18Cr,59Cr,188Cr,133Cr,269Cr],[19Cr,25Cr,79Cr,250Cr,177Cr,358Cr]]"/>
  <set_owner object="$markets.{1}" faction="faction.argon"/>
  <set_object_name object="$markets.{1}" name="'LAN Trading Station Alpha'"/>
- <create_station name="$station2" macro="macro.station_gen_factory_base_01_macro" sector="player.ship.sector" owner="faction.player" state="componentstate.operational" constructionplan="'x4lan_market'" rawname="'LAN Trading Station Beta'">
+ <do_if value="md.X4LAN_SeedDocks.State.$testStation2?">
+  <set_value name="$station2" exact="md.X4LAN_SeedDocks.State.$testStation2"/>
+ </do_if>
+ <do_else><create_station name="$station2" macro="macro.station_gen_factory_base_01_macro" sector="player.ship.sector" owner="faction.player" state="componentstate.operational" constructionplan="'x4lan_market'" rawname="'LAN Trading Station Beta'">
   <position x="8km" y="10km" z="5km"/>
- </create_station>
+ </create_station></do_else>
  <set_owner object="$station2" faction="faction.argon"/>
+ <set_object_name object="$station2" name="'LAN Trading Station Beta'"/>
  <append_to_list name="$markets" exact="$station2"/>
  <set_object_account object="$arena.$proxy"/>
  <reward_player money="2200000Cr - player.money"/>

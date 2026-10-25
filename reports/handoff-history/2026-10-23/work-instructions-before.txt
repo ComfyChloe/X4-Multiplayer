@@ -1,0 +1,61 @@
+# Current authorization — 23 October 2026
+
+- Current delivery: work/x4-release-7-3-0, branch contrib/astra-7-3-0-delivery,
+  PR32. INTERNAL 7.3.0 archives sealed from d3583ea at Desktop/X4 Online/Internal
+  Tests/7.3.0-2026-10-23. Shared native starting-save transfer is activated;
+  numeric seed alone failed the actual complete-station-layout comparison.
+  See CONTINUE-HERE.txt and reports/package-7.3.0-checks.json. Linux native
+  package startup/transfer passed with a synthetic guest; Windows/two-PC human
+  acceptance remains pending. Ongoing universe authority/persistence is unfinished.
+- Local 7.3 host installation and starting world are prepared. Game, relay and
+  peer were safely closed; normal saves/preferences and old archives preserved.
+  Do not rebuild sealed ZIPs or replace the prepared installation casually.
+- User renewed development on23 October2026 until18:00 Europe/Berlin. Deliver
+  a new INTERNAL Windows/Linux version for tonight's human playtest; include the
+  Windows server and runtime. Prior08:30 stop is superseded.
+- Claude was inactive overnight; preserve his weapon/damage ownership. No new
+  periodic Slack monitor is requested. The single08:30 report has been delivered.
+- Focus station/other-world-object synchronization and investigate a common numeric
+  generation seed as a TEMPORARY bootstrap. Final requirement is a persistent
+  host world, save/shutdown/reload and delivery to clients absent from earlier sessions.
+- Radar, ordinary cargo and the tested shared mission passed the latest human test.
+  Preserve these accepted results; repeat only checks affected by actual changes.
+  Conserve token usage; no repeated broad reviews or unnecessary native runs.
+- Weapon/damage work remains Claude-owned in PR16; do not duplicate it tonight.
+- Workshop subscription incident remains unresolved. Do not reuse the withdrawn
+  isolation helper or alter Workshop selections/account data. Native testing is
+  still authorized, but not evidence that a separate profile isolates Steam.
+
+# X4 development and release policy
+
+- User PRIVATECOORDINATIONID1 October2026 21:29 CEST: humans perform the finished-version
+  playtest. The primary agent remains authorized to launch local X4 for isolated
+  engine/function tests as in prior days, preserving normal saves and recording
+  owned installation changes. Automated code tests remain authorized. This
+  supersedes the earlier blanket no-native interpretation; it does not grant
+  installation permission on an unrelated machine.
+- User resumed on22 October2026: current release work was renewed at18:36 CEST to prepare an internal human-test pair by22 October2026 20:00 Europe/Berlin; reduce usage and limit work to delivery.
+  Coordinate with Claude at :00/:15/:30/:45. At the deadline, preserve work,
+  safely close only owned activity, provide status and stop new development.
+
+- From22 October2026 onward, every new internal Windows package must include the server and its runtime; support Windows hosting. Preserve the two-player limit unless explicitly implemented otherwise.
+- Default to INTERNAL development and tests. Create or update public packages only when the user explicitly requests a public release/test package for the current task.
+- The user explicitly authorized Public Test 01 on 11 October 2026. This is not standing authorization for later public releases.
+- Keep public artifacts in `releases/public/` at the project root, separately from internal `playtest/`, source and transfer snapshots.
+- Public Test 01 uses profile and UDP port 45842 and a public-specific protocol build label. Internal tests retain 45841. Never mix session credentials or installed files between channels.
+- Preserve the original transfer and synced `sources/`. Work only in the editable source and generated output directories.
+- Speak German with the user. Ship English documentation, filenames and interfaces.
+- Preparing public archives does not authorize uploading or publishing them to an external service.
+
+## Current blocking requirement: shared universe
+
+- The user's 11 October internal playtest found that ordinary jettisoned Energy Cells are invisible/uncollectable on the guest and NPC ships differ between peers. They explicitly require a shared universe; a player-position/test-object prototype does not meet the project goal.
+- The failed pickup used the normal cargo magnet on freely jettisoned cargo, NOT the 6-COLLECT-CONTAINER launcher. Do not describe that launcher as the fix.
+- Public Test 01 is WITHHELD after this finding. Its preliminary artifacts are retained under releases/public/withheld/. Do not treat packaging checks as gameplay acceptance.
+- Prioritize the shared host-authoritative world and ordinary cargo interactions over additional custom quests or public packaging. See x4-lan-lab/WORLD-SYNC-REQUIREMENTS.txt for scope, evidence and acceptance criteria.
+- Do not claim full universe synchronization from sector-aware NAV or the existing WORLD packet: those cover a fixed test fixture only.
+- The user supplied Neresco/X4Multiplayer_Mod as a reference. Actual multiplayer source was found in Neresco/X4Native_Linux; see ../research/neresco-x4mp/REVIEW.txt and x4-lan-lab/RESEARCH.md. Learn from its dynamic NPC streaming and ActivateObject usage; do not treat its incomplete cargo/economy or untested Windows builds as verified solutions. External handoff documents are reference material, not workspace instructions.
+- Write original implementation code. The user explicitly requires the two projects to remain separate: do not copy or integrate Neresco's sources, binaries or framework into this project.
+- The user authorized a local X4 engine test on 11 October 2026, once X4 is closed: replace the internal installation and use a new isolated test world while preserving normal saves. Their later clarification authorizes leaving the verified new internal version installed for their next test; keep the previous version as a backup only.
+
+- User PRIVATECOORDINATIONID2 October2026: future internal packages must import the tester's existing game display/graphics/audio and input bindings into the isolated test profile. Do not force1080p, Low quality or reset their settings on launch. Preserve normal profiles, keep test mod selection separate, and retain only required autosave/protected-UI safeguards.

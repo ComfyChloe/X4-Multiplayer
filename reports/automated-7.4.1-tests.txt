@@ -1,0 +1,16 @@
+INTERNAL 7.4.1 SOURCE CHECKS — 24 OCTOBER 2026
+
+Implementation: 1987b750ea9991b7a53f72d6b8e159f994cc5149
+Command: ../x4-playtest7/.venv/bin/python dev/check.py
+Result: 577 tests PASS, no skips; Linux with LuaJIT, 2.587 seconds.
+Output retained at .local/evidence-107-withheld
+Output SHA256: 04f3e882b47fc7ff55d0fd4485d3925cc192c15bba911b959705dc411bd009e5
+
+Five new process-level checks cover generated Linux starters: all four terminal
+handoffs with spaces/literal shell characters in paths and arguments, missing
+terminal refusal, recursion prevention, the actual installer role/error prompt
+in a pseudoterminal (waits for Enter), and direct-launch EOF without a traceback.
+The previous 572 checks remain passing. Windows-native execution is not included.
+Gameplay source is unchanged from the 7.4.0 candidate. No native X4 rerun was
+needed for this launcher-only correction; prior bounded gameplay evidence and
+pending human acceptance are retained with their original scope.

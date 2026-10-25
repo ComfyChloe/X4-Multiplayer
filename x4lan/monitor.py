@@ -85,6 +85,41 @@ def enable_terminal():
                 kernel.SetConsoleMode(handle, mode.value | 0x0004))
 
 
+MAX_SHOT_ROWS = 32
+
+
+def combat(session, now):
+    """Read-only combat state of a co-op relay for human combat checks (D01/D02).
+
+    Sanitized: ship numbers, generations, sequence numbers, percentages, counts and the validated
+    weapon digest only; never a lease, nonce or token. Purely observational: it reads the stored
+    generation instead of calling health_generation(), which would advance it on a key change.
+    """
+    health = []
+    for i in (1, 2):
+        live = session.health_live[i]
+        row = {'ship': i, 'generation': session.health_gen[i],
+               'current': session.health_key[i] == (session.owners[i], session.epochs[i], session.pilot(i)),
+               'live': live > 0 and live == session.health_gen[i],
+               'last_seen_age': round(now - session.health_seen[i], 2) if live else None, 'frame': None}
+        frame = session.health.get(i)
+        if frame:
+            hull, shield = (float(v) for v in frame['fields'][3:5])
+            row['frame'] = {'seq': frame['seq'], 'hull_percent': round(hull, 3), 'shield_percent': round(shield, 3),
+                            'age': round(now - frame['at'], 2)}
+        health.append(row)
+    newest = sorted(session.shots.items(), key=lambda kv: -kv[1]['at'])[:MAX_SHOT_ROWS]
+    shots = sorted(({'shooter': k[0], 'shooter_gen': k[1], 'victim': k[2], 'victim_gen': k[3], 'hits': v['hits'],
+                     'seq': v['seq'], 'weapon': v['fields'][-1], 'age': round(now - v['at'], 2)} for k, v in newest),
+                   key=lambda r: (r['shooter'], r['victim'], r['shooter_gen'], r['victim_gen']))
+    result = {'health': health, 'shots': shots, 'shot_rows': len(session.shots)}
+    projectiles = getattr(session, 'projectiles', None)
+    if projectiles is not None:
+        result['projectiles'] = [{'ship': e, 'live': len(s.live()), 'latest_id': s.latest}
+                                 for e, s in sorted(projectiles.streams.items())]
+    return result
+
+
 class Monitor:
     def __init__(self, relay, now, version='unversioned'):
         self.relay = relay
@@ -182,6 +217,7 @@ class Monitor:
         if isinstance(session, CoopSession):
             snapshot['fleet'] = [{'ship': i, 'owner': session.owners[i], 'pilot': session.pilot(i),
                                   'epoch': session.epochs[i]} for i in (1, 2)]
+            snapshot['combat'] = combat(session, now)
             if session.quest.progress and session.quest.owner == getattr(session.peers.get('p1'), 'lease', None):
                 rev, stage, delivery, destroyed, paid = session.quest.progress
                 snapshot['quest'] = dict(revision=rev, stage=stage, delivered=delivery, destroyed=destroyed, paid=bool(paid))

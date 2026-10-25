@@ -1,0 +1,160 @@
+{
+  "origin": {
+    "game_guid": "9e401581-d67f-40d3-8edb-970a6c35c61e",
+    "generation_seed": 3416042533,
+    "gamestart": "custom_creative",
+    "game_version": "900",
+    "game_build": "611726"
+  },
+  "stations": {
+    "p1": {
+      "station_layout_matches": true,
+      "host_count": 1359,
+      "guest_count": 1359,
+      "max_position_error_m": 0.030999999959021807,
+      "max_angle_error_rad": 1.6713604500395718e-06,
+      "identity_key": [
+        "code",
+        "macro",
+        "owner",
+        "sector"
+      ],
+      "ongoing_world_authority": false,
+      "save_resume_acceptance": false,
+      "role_readback": [
+        "[Scripts] 14.29 *** Context:md.X4LAN_SeedPlayProbe.Read: [X4LAN] SEED_PLAY_NATIVE seed=ab5b7174d149b715e825ec9b2e0aef92 slot=1 host=1 tradeHost=1 cargoHost=1 questHost=1 shuttles=2 markets=2 player=0x211fc28 p1=0x211fc28 p2=0x2122860"
+      ],
+      "paused_readbacks": [
+        "[=ERROR=] 0.03 [X4LAN] SEED_PLAY_STATE value=|1|0 paused=false",
+        "[=ERROR=] 4.04 [X4LAN] SEED_PLAY_STATE value=ab5b7174d149b715e825ec9b2e0aef92|1|0 paused=false",
+        "[=ERROR=] 5.06 [X4LAN] SEED_PLAY_STATE value=ab5b7174d149b715e825ec9b2e0aef92|1|1 paused=false"
+      ]
+    },
+    "p2": {
+      "station_layout_matches": true,
+      "host_count": 1359,
+      "guest_count": 1359,
+      "max_position_error_m": 0.030999999959021807,
+      "max_angle_error_rad": 1.6713604500395718e-06,
+      "identity_key": [
+        "code",
+        "macro",
+        "owner",
+        "sector"
+      ],
+      "ongoing_world_authority": false,
+      "save_resume_acceptance": false,
+      "role_readback": [
+        "[Scripts] 296.31 *** Context:md.X4LAN_SeedPlayProbe.Read: [X4LAN] SEED_PLAY_NATIVE seed=ab5b7174d149b715e825ec9b2e0aef92 slot=2 host=0 tradeHost=0 cargoHost=0 questHost=0 shuttles=2 markets=2 player=0x203d3d4 p1=0x203dc87 p2=0x203d3d4"
+      ],
+      "paused_readbacks": [
+        "[=ERROR=] 0.03 [X4LAN] SEED_PLAY_STATE value=|1|0 paused=false",
+        "[=ERROR=] 4.04 [X4LAN] SEED_PLAY_STATE value=ab5b7174d149b715e825ec9b2e0aef92|1|0 paused=false",
+        "[=ERROR=] 5.07 [X4LAN] SEED_PLAY_STATE value=ab5b7174d149b715e825ec9b2e0aef92|1|1 paused=false"
+      ]
+    }
+  },
+  "actual_saves_unchanged": 7,
+  "restored_files": 33,
+  "test_selection_bytes_unchanged": true,
+  "evidence_root": ".local/native-bootstrap-20261023",
+  "two_native_playtest": false,
+  "artifacts": {
+    "result.json": {
+      "sha256": "1e9cc9f0c28536062f792ef8924a64aea45311a7f0ed562ed53b0124e356dc80",
+      "bytes": 2307
+    },
+    "installed-hashes.json": {
+      "sha256": "d9005e75f11aa0cfbc04139e22289158930a966fd918b388e3a64876554e9c5d",
+      "bytes": 3693
+    },
+    "package-hashes.json": {
+      "sha256": "03b0c135b9c8696b928bf60feb0af60b2bee9d696325bcb2cf9d88d72e36d792",
+      "bytes": 3602
+    },
+    "saves-before.json": {
+      "sha256": "876ae2bf11fcbf6080fb59db87e38c868bf6c183c11645606d43d27e97b4bd91",
+      "bytes": 1560
+    },
+    "saves-after-capture.json": {
+      "sha256": "b74651eb7b31acb1963164dbd340d7b375f854f0972c82728d87ffb6eab25cd9",
+      "bytes": 1750
+    },
+    "saves-after-cleanup.json": {
+      "sha256": "78acc84c5677fda410960fca9bede6bfab7bc17173dfb24e23d7d5eaf64b007c",
+      "bytes": 1560
+    },
+    "restored-hashes.json": {
+      "sha256": "4c84bb5e0e2ff72437c95934c7099e1c0a49876235544b72f024f1c17ad31e64",
+      "bytes": 3039
+    },
+    "before-content.xml": {
+      "sha256": "d9c1bda8710f8221ae9014b1488bd40ab00785c1a4d41eca44c510a34d71d9d2",
+      "bytes": 732
+    },
+    "stations-p1.json": {
+      "sha256": "6d2bd029b8696026e7e35f4b58c1aa30e66b57ea304753c42b8783d76340a975",
+      "bytes": 31624
+    },
+    "stations-p2.json": {
+      "sha256": "9bcbc0bca37d28ebc6e1f241badff3f0dfcf9059878ddcf58ad6b20a5ba585bc",
+      "bytes": 31624
+    },
+    "play-p1/native.log": {
+      "sha256": "894d4064e186c6c10380cfb4a6f07a745ea8f7096d51c44ba987c610cc4afb40",
+      "bytes": 448093
+    },
+    "play-p1/installed-hashes.json": {
+      "sha256": "8bdd4e6ac25fac81b0b3ee64a237f3b66cbf350011eb53163ea26ff9822bd493",
+      "bytes": 3693
+    },
+    "play-p1/native-host-result.json": {
+      "sha256": "b93160fa59feae94c7278eeb9197c4592d631337398fc46f322cee3faa3a7462",
+      "bytes": 45335
+    },
+    "play-p2/native.log": {
+      "sha256": "894d4064e186c6c10380cfb4a6f07a745ea8f7096d51c44ba987c610cc4afb40",
+      "bytes": 448093
+    },
+    "play-p2/harness-error.json": {
+      "sha256": "710b95fcb00fa6b2e3ff1c829d7b86e0ef518df1b30cef34160354ae67624c8e",
+      "bytes": 159
+    },
+    "play-p2-live/native.log": {
+      "sha256": "73f7a2e9f5c50b9f65b1526a05301888ba23243e41b9730f3eb7c972c48a5681",
+      "bytes": 479978
+    },
+    "play-p2-live/installed-hashes.json": {
+      "sha256": "3a50d4dcc9b2e6e8ec8db8aa913bf30dd3302e45946f1040caf0ab008ba8126e",
+      "bytes": 3693
+    },
+    "play-p2-live/loopback-forwarder.json": {
+      "sha256": "bc0afa4a4b89a24cad45cbc1aa90b898e3639612a880408a0a8a00e3db0f46c8",
+      "bytes": 180
+    },
+    "play-p2-live/result.json": {
+      "sha256": "630c7e91988221a9ec6408ff557d1b188990903392bea186e3e982638b98cf6a",
+      "bytes": 77
+    },
+    "candidate/X4-LAN-7.3.0-Linux/world/capture/native.log": {
+      "sha256": "bccbcbbc6151fac79a3dcb4e916caf9b937e844a3c2f62449c08b9d9e04e8b9c",
+      "bytes": 437635
+    },
+    "candidate/X4-LAN-7.3.0-Linux/world/bundle/manifest.json": {
+      "sha256": "53abd42e04b4a359845c831d636c0bc21f1a49db2d810a1a85ffd4d95ad99e4d",
+      "bytes": 634
+    },
+    "candidate/X4-LAN-7.3.0-Linux/world/bundle/seed.bin": {
+      "sha256": "1079ea2e2388da407caa05cddd2b658362a1f90a7efe7e49f253511a8ad4996a",
+      "bytes": 25293749
+    },
+    "guest/world/bundle/manifest.json": {
+      "sha256": "53abd42e04b4a359845c831d636c0bc21f1a49db2d810a1a85ffd4d95ad99e4d",
+      "bytes": 634
+    },
+    "guest/world/bundle/seed.bin": {
+      "sha256": "1079ea2e2388da407caa05cddd2b658362a1f90a7efe7e49f253511a8ad4996a",
+      "bytes": 25293749
+    }
+  }
+}

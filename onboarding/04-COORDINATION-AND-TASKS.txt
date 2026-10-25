@@ -1,0 +1,72 @@
+TEAM COORDINATION AND CANDIDATE TASKS
+
+OWNERSHIP
+Primary agent: integration, release assembly, this Linux PC's native sessions.
+Claude: existing player-weapons/damage work; verify current availability/scope
+before overlap. Neither completion nor ownership transfer follows from silence.
+Incoming agent: no implementation assignment yet. Use its own branch/worktree.
+The project owner or integrator agrees the task and shared interface before edits.
+
+Communications use the existing Slack channel private-coordination-channel
+(channel PRIVATECOORDINATIONID; existing threadPRIVATE-THREAD-ID) when access is provided and
+posting is authorized. Do not create a replacement chat or polling timer. There
+is no active automatic schedule in this handoff. Historical15-minute deadlines
+do not grant a new night shift. GitHub task/PR records hold durable scope/evidence;
+Slack is for short coordination. Git does not share either agent's private chat.
+
+FIRST READINESS MESSAGE (one compact message, no repeated polling)
+  Agent/contributor; repository/branch/HEAD; OS and test capabilities;
+  proposed task and affected files/interfaces; existing overlap identified;
+  missing evidence/access; next concrete step.
+
+SUGGESTED FIRST TASK — INDEPENDENT INSTALLER REVIEW
+Bounded, useful entry without changing combat or the running game:
+- Independently inspect7c6ec19's tasklist decoding fix, ownership-checked session
+  recovery, settings reselection and cancellation path.
+- Use existing temporary fixtures first. Record exact commit, commands and scope.
+  Examine interruption/rollback and foreign-marker refusal; avoid tests that
+  merely duplicate every implementation branch.
+- If a real Windows machine is available, propose an explicit narrow launcher
+  check with that machine's owner. Native dialog/OneDrive/game checks are not
+  implicitly authorized by this packet or a passing filesystem fixture.
+Deliverable: concrete findings or a bounded fix with evidence; no package rebuild.
+This is a recommendation, not a task already assigned to the incoming agent.
+
+OTHER CANDIDATES, IF AGREED
+1. Guest target-selection diagnosis. Scope identity/sensor/HUD observation around
+   the24October failure. Request sanitized guest06-DIAGNOSTICS capture if available;
+   source review/diagnostic design can proceed without inventing absent evidence.
+   Acceptance: identify or narrow the failure with a reproducible case; preserve
+   native selection/identity and known-good movement. Do not start by increasing
+   radar ranges or moving objects more frequently without evidence.
+2. Host-authoritative faction-fleet orders. First propose the end-to-end contract:
+   stable identity/generation, authenticated guest intent, host native validation,
+   execution ACK/result, retries/dedup, ownership/sector changes and cancellation.
+   Then agree which Python/Lua/MD files one task owns. The rejected map experiment
+   is not a working implementation. Native UI/command semantics need focused proof.
+3. Capture/ownership lifecycle design. Define how a HOST-confirmed acquisition
+   changes the shared entity without duplicate ships, stale commands or arbitrary
+   native-handle reuse. Guest boarding needs a host transaction, not local set_owner.
+4. Persistence/late join: a later, larger task. Inventory missing authoritative
+   state before designing progressed-world save/shutdown/load and absent-client
+   catchup. Do not present the pristine starting snapshot as campaign persistence.
+
+NEVER CLAIM MULTIPLE BROAD GAMEPLAY AREAS TO FILL IDLE TIME
+Claim one bounded task; shared Python/Lua/MD protocols have one agreed interface
+owner. Separate filenames alone do not isolate authority or object lifetime.
+Keep branch-specific progress in the task/PR; only integration updates the global
+CONTINUE-HERE.txt. Share a short milestone when evidence, scope or blockers change.
+
+NATIVE TEST OWNERSHIP
+Humans test finished releases. Authorized developers may run isolated primitive
+checks on their owner's machine, using recorded owned changes/backups and clear
+cleanup. Check live X4/relay/profile ownership first. Never run another native
+harness concurrently against the primary installation; worktrees do not isolate it.
+Do not kill unrelated processes, load normal saves, replace user settings or edit
+Workshop selection. Treat current .local/ paths/IPs/PIDs in old reports as historical.
+
+SUCCESSFUL DELIVERY
+Focused branch/PR against the agreed integration base, exact tested commit, concise
+behavior explanation, meaningful automated evidence, pending native steps and
+retained failures. No unsolicited merges, public releases, matched package builds,
+source-mirror updates, version changes or credential transfer. Use05-HANDOFF-TEMPLATE.

@@ -1,94 +1,94 @@
-X4 LAN Lab {{VERSION}} — two-player co-op, Linux host + Windows 11 guest
-20 October 2026 | X4 9.00 (611726), Steam build 23660954
+X4 Multiplayer {{VERSION}} — INTERNAL TEST
+25 October 2026 | Windows/Linux host or guest | Two players per session
+X4 9.00, Steam build 23660954 | Matching official DLC including Timelines
 
-Open INSTALL.html for installation, ZeroTier and the complete playtest sequence.
-Read RELEASE-CHECKS.txt for verified results and remaining limitations.
+Both packages include the server and a private Python runtime. No Python install
+or download is needed. Open 00-START-HERE.html for detailed instructions.
+Extract Linux's .tar.xz (or equivalent Small.7z) or Windows' .zip completely before running any action.
 
-UPGRADE BOTH COMPUTERS
-Use the two matching archives from this release folder. Extract the complete ZIPs
-before running anything. Close both games, stop the old server, remove each old
-mod with its original package's numbered 5 command, then install the new pair.
-Use this exact release on both computers, including its new relay. Do not mix
-with the original 7.0 or 7.1.0 pairs. Start two new creative test worlds.
-Disable other third-party mods for testing. Keep matching official DLC, including
-X4: Timelines for the shared Xperimental Shuttles.
+WHAT CHANGED IN 7.5.0
+- Enable host-authoritative NPC shield/hull damage and death for free-flying S/M
+  targets, including when the guest is in a different sector from the host.
+- Enable shared native matching-ship kill contracts: either role can accept,
+  qualifying faction kills count, the shared objective resolves and host pays once.
+- Include reviewed Windows installer fixes: localized process output, missing
+  Steam drives, manual X4.exe selection, profile reselection and owned recovery.
+- Retain the 7.4.1 Linux terminal starters, player damage/projectile work, saved
+  dock handling, completed-story preset and personal teleportation research.
 
-Linux: open a terminal in this folder.
-  bash 1-INSTALL.sh
-  bash 2-START-SERVER.sh        Keep this console on your second monitor.
-  bash 3-START-X4-TEST.sh       Use another terminal; keep the server running.
-Windows: double-click 1-INSTALL.cmd, 2-TEST-CONNECTION.cmd, 3-START-X4-TEST.cmd.
-Enter the LINUX HOST's LAN or ZeroTier IPv4, not the guest's address.
+NPC scope: uniform, unmodified stock Shuttle plasma or generic Pulse Mk1/Mk2;
+free-flying S/M main hull/shields. No L/XL surfaces, beams, missiles, turrets,
+mixed/modified weapons, captured-fleet orders or synchronized NPC AI claims.
+Mission scope: standalone visible native GM_Destroy_RarelyOnSight offers without
+inventory rewards. Guest copies use [Shared]. Other ordinary missions and plots
+are not shared; host reputation is not mirrored in the guest UI. Host generates
+offers normally, so an eligible offer is not guaranteed immediately.
+Local Linux engine tests used one real game and a synthetic peer. The combined
+Windows/Linux human pair still needs HUMAN-NPC-MISSION-TEST.txt / NEXT-TEST.txt.
+These are new candidate features, not completed full-universe multiplayer.
 
-This INTERNAL follow-up mirrors host NPC sector scenes, adds ordinary co-op ship
-cargo/magnet transactions, shared names/display codes/radar contacts and smoother
-source-clock movement. Read WORLD-SYNC-TEST.txt for the focused playtest and
-RELEASE-CHECKS.txt for actual acceptance evidence. Public Test 01 remains withheld.
+One combined startup check refused the second ship's weapon loadout; later runs
+did not reproduce it. If damage is unavailable after connection, collect both
+diagnostics before restarting. The refusal log now includes a specific reason.
 
-This patch also corrects native drift when a remote pose stays unchanged and
-keeps the two cooperative ships' native linear velocity consistent with their
-rendered motion. Packet-loss prediction freezes with zero velocity; lifecycle
-guards release overrides on docking, control or connection changes. Initial
-physical-velocity support is limited to free ships in aligned zone/sector/cluster
-spaces. A separate projectile experiment failed an orientation control; precise
-projectile/aim/hit equivalence and simultaneous two-native gameplay remain open.
+Normal profiles stay read-only. Personal resolution, quality, sound and bindings
+are imported into the isolated test profile, which uses borderless mode.
+Existing radar, ordinary cargo, movement, station/asteroid alignment, Alt+Tab and
+Cooperative Trial human results remain valid unless a new regression appears.
+A shared starting save does not make ongoing station economy or all NPC decisions
+host-authoritative. Saving/resuming a played multiplayer campaign is not ready.
 
-The console shows connections, received updates, game callback timing, relay CPU
-and RAM, ship pilots, economy and shared mission progress. Callback/update rates
-are diagnostics, not measured game FPS or ping. Ctrl+C stops the original server;
-in an attached viewer it closes only that viewer.
-The timeout is 30 seconds; network interruptions reconnect automatically while
-the same relay and both games remain running. Restarting either game or the
-relay requires fresh worlds on both computers. Uncertain trades are not replayed
-into a new world.
+HOST
+1. Close X4 and the old server. Remove the previous mod using its ORIGINAL
+   package's REMOVE-MOD action (09 in 7.3.1–7.4.1; 5 in 7.3.0). Extract into a new folder.
+2. Run 01-INSTALL, choose H, enter your reachable LAN/ZeroTier IPv4 address.
+   Choose your normal settings profile if asked.
+3. Run 02-PREPARE-WORLD-HOST once. X4 opens, creates the shared world, saves and closes
+   automatically. Wait for "Shared world ready" in the launcher. Do not play or
+   load a different save during preparation.
+4. Send JOIN-SESSION.json privately to your guest. Run 03-START-SERVER-HOST and keep
+   its console open. The host runs BOTH this server and X4.
+5. Run 05-START-X4. The saved world loads automatically; wait for your Shuttle.
 
-TRUE CO-OP FLEET
-Both players receive the same Xperimental Shuttle with six guns, a shield,
-two engines, combat thrusters and installed software including Docking Computer
-Mk2. The unused missile connection has no missile storage. Both players share
-a faction and one 200,000-credit treasury. Either player can
-control either surviving shared ship, once the other pilot leaves the controls.
-Only one pilot can control a ship at a time. Cargo stays with the ship. Friendly
-fire stays enabled. Passengers and player figures on foot remain experimental;
-walking avatars are disabled. Spacesuit replicas remain enabled.
+GUEST
+1. Remove the previous mod using its original package and extract the complete
+   new archive. Receive the host's JOIN-SESSION.json and keep it in this folder.
+2. Run 01-INSTALL, choose G, select that invitation in the file dialog if it is not already beside the starter.
+3. Run 04-TEST-CONNECTION, then 05-START-X4. The launcher downloads and checks
+   the shared world, then X4 loads it automatically. Do not choose another save.
 
-The former +/-50 km movement cube is removed. Shared ships carry their sector
-identity and absolute position and remain the same ships across sector changes.
-NPC ship visibility, owner, macro, position and scene lifecycle now follow the
-host in the guest sector. This does not synchronize the whole universe: NPC
-interactions, other stations, story state and background economics remain local. Only Alpha/Beta
-are shared markets. Avoid SETA; travel-drive/highway fidelity needs further testing.
+The numbers identify actions; guests skip HOST-only actions 02 and 03.
+Windows: double-click the numbered .cmd files. Linux: execute the matching .sh
+files; they open a terminal automatically. If your file manager opens an editor
+instead, use its Run/Execute option or run bash 01-INSTALL.sh in a terminal. Allow UDP 45841 and TCP 45844 to the
+host on your test network. A successful UDP check alone does not test the save
+transfer. No router forwarding is needed with a working ZeroTier connection.
 
-Trade through X4's ordinary menu at LAN Trading Station Alpha or Beta, using the
-shared ship you currently pilot. Six wares, mixed baskets and variable quantities
-are supported. The Linux game checks and executes each transfer.
-6-COLLECT-CONTAINER remains the pickup action for the two original fixture
-containers within 250 m. Separately, cargo freely jettisoned from either shared
-ship is replicated and collected with the normal magnet. The host commits the
-inventory change once and reconciles guest prediction. Arbitrary NPC loot,
-multi-ware crates and unrestricted cargo categories are not accepted yet.
+BACKGROUND / TELEPORTATION
+Use Alt+Tab to another application while X4 stays open in borderless mode. Keep
+the server console running. Do not explicitly pause X4 or minimize it with the
+Windows desktop button; true minimization can suspend native rendering/UI ticks.
+The launcher includes -nocputhrottle. Alt+Tab passed the previous host/guest human test. Personal teleportation is unlocked after Shuttle setup;
+use the normal map/context menu and normal destination/ownership requirements.
+The technical story preset is fixed for this release; there is no choice menu yet.
 
-COOPERATIVE TRIAL
-The mission appears automatically after market setup. Sell a combined total of
-20 Energy Cells at Beta using either shared ship; then destroy both LAN Targets.
-Both players see the same progress. The shared treasury receives 25,000 credits
-once. Buying/selling and combat use the normal mechanisms described above.
-This first custom co-op quest does not make every vanilla mission cooperative.
+RESTART / STOP
+Every retry requires BOTH games AND the relay to stop first. Restart the relay
+and both games. They reload the same STARTING world; previous gameplay progress
+is not resumed. To create a different world/session, use a fresh extracted pair
+and a new invitation. 02-PREPARE-WORLD-HOST never regenerates an existing world.
 
-Ship destruction ejects its occupants into suits. Suit death returns the player
-to the nearest accessible, non-hostile station in the current sector. Destroyed
-ships and cargo are not replaced. Spacesuit weapons are not replicated. Complete
-trading and the mission before testing friendly-fire destruction.
+ONLY the reserved, recorded save_010 belongs to the launcher. Other or changed
+saves are preserved and cause a refusal. Never save a normal campaign in profile 45841.
+09-REMOVE-MOD removes its byte-matching reserved copy and archives the owned mod;
+the package keeps the immutable world bundle. Close X4 and the relay first.
 
-TEST PROFILE AND GRAPHICS
-Use only new creative sandboxes in profile 45841. Do not load existing saves,
-quicksave or manually save. Autosave is disabled. Launchers apply 1920x1080
-exclusive fullscreen, Low graphics and a 60 FPS cap only to this profile, with
-configuration backups. Linux uses High textures as a measured workaround for
-startup shader failures; Windows retains its previously tested Low textures.
-Both retain shaderquality 2. Higher textures can use more graphics memory; this
-is not a general performance or NPC PiP fix. Windows OneDrive Documents support
-remains included.
-4-DIAGNOSTICS collects logs; 5-REMOVE-MOD archives this installed mod.
-General performance and real cross-platform endurance still need playtesting.
-Do not publicly share session.json or ui/config.lua; they contain the session key.
+The setup does not change Workshop selections or subscribe/unsubscribe to mods.
+The withdrawn 7.2 Fix-1 helper is not included. A separate profile does not by
+itself isolate the Steam account. If content differs, stop and compare the two
+setups; no automatic mod-selection rewrite is performed.
+
+NEXT-TEST.txt describes the focused NPC/mission and affected regression tests. Run 06-DIAGNOSTICS on BOTH PCs before
+restarting after a failure. Keep logs, role/OS, object code and approximate time.
+Do not share JOIN-SESSION.json, session.json or ui/config.lua publicly.
+This remains an INTERNAL test, with two simultaneous players per session.

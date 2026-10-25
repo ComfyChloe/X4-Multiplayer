@@ -1,0 +1,34 @@
+7.3.1 background/teleportation function evidence —23October2026
+
+Source40e0e69; exact production-file hashes independently compared with installed
+probe inventory (except the inert/local config, probe registration and probe file).
+Raw run:.local/evidence-006-withheld; machine-readable summary and hashes:
+reports/background-teleport-20261023.json.
+
+PASS, bounded native Linux function check with a synthetic UDP peer:
+- KWin confirmed our game window focused during startup, then a different owned
+  dialog focused for25.338seconds. X4 remained open and not explicitly minimized.
+-44unpaused samples, largest sample interval1.017630seconds. Across the capture,
+  3715UIframes and772NAV updates advanced; sample coverage spans the whole focus
+  interval. Readback fullscreen=false,borderless=true; -nocputhrottle active.
+- Actual MD reports all four personal teleportation research wares unlocked.
+  This is research-state evidence, not a completed cross-sector human teleport.
+- Owned game/runtime/helpers stopped;37original installed files restored exactly;
+  seven normal saves and the recorded test save retain bytes/timestamps. The test
+  content selection was not changed. Normal profile settings were never written.
+
+Retained failures:
+1).local/evidence-007-withheld never reached gameplay before its deadline. Initial
+  focus was not established. Main-process termination left an owned runtime
+  worker; that exact isolated Steam process group was subsequently stopped, then
+  the recorded37-file installation/configuration restored and saves verified.
+  No gameplay/teleport/background acceptance is inferred from this run.
+2).local/evidence-008-withheld reached gameplay and unlocked all research,
+  but the controller could not find its Konsole window by caption. Background
+  phase is FAIL/unmeasured; full restoration/save manifests are retained.
+3)Final run selects the owned kdialog by process ID and records actual focus at
+  entry and exit through a temporary private DBus observer. It passes above.
+
+Windows background behavior, explicit minimize-to-desktop, real two-native
+latency and human teleport destinations remain outside this acceptance. No damage
+acceptance is implied. No station/asteroid/cargo/radar regression suite was repeated.

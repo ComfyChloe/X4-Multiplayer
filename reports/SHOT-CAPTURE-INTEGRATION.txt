@@ -1,0 +1,106 @@
+SHOT CAPTURE INTEGRATION — 24 OCTOBER 2026 — INTERNAL / FLAGS OFF
+
+PR39 exact75e61e2 was independently reviewed and merged at ae2603e. The original
+source-identity, admission-quarantine and false death on local proxy loss findings
+are corrected. Follow-up symmetric HEALTH closure checks and player.controlled
+witness now precede capture/restoration. Lost proxy health metadata remains
+canonical; the local loss is latched and never becomes a delayed player death.
+No silent proxy resurrection is introduced.
+
+Native capture requires fresh original-projectile proof from shot_visual.lua;
+remote FIRE2 uses harmless stock-referencing projectiles. Diagnostic HP undo
+remains OFF because it resets native shield recharge. Three supported uniform,
+unmodified stock guns: X Shuttle plasma, generic pulse Mk1/Mk2. This does not
+qualify other weapons, missiles, surface elements or every universe NPC.
+
+SOURCE CHECKS
+9adf2eb:78 independent affected Linux/LuaJIT checks PASS/no skips.
+75e61e2:22 changed capture checks PASS/no skips; all3 capture/health/life MD schemas
+VALID. Integrated ae2603e:57 SHOT/capture/visual checks PASS/no skips. The only
+merge conflict was ui.xml registration; order is SHOT, visual, capture.
+
+PHYSICAL HOST SHOOTER / SYNTHETIC GUEST AUTHORITY
+.local/evidence-245-withheld uses actual native local player ship1 guns and remote
+ship2 geometry, real UDP relay, and a labelled synthetic victim authority that
+returns the canonical shield value through HEALTH. Native capture counts feed
+the unchanged cumulative transport; no manual hit injection in this run.
+162 actual plasma bullets during the on-axis phase produce28 counted native
+shield callbacks (40 each), sequential Count1..28 and relay totals28. Native
+shield returns to3680/4800, a1120 loss. Thirty-nine settled readbacks preserve
+that result. Another162 bullets after moving the target off-axis produce no new
+capture/count. Hull stays4580. The player remains natively in control. The
+admission lifetime2.55s is obtained from native range/library speed; no first-hit
+quarantine reset. This run has no separate per-damage observer; the inverse-role
+run adds that independent callback witness.
+
+Bounded chain PASS, NOT two native games. Source ae2603e00facc7f8fcbdf357172bb8baec21d1cf.
+Raw SHA256 aa26f8ca41a87c1db2cd10ea84e3ceb69296ba928bdbac19525ea4c51cb3aee5.
+56 installed production files and both probes match pinned source/hashes.37-file
+installation and seven actual normal-save bytes/timestamps restored/verified;
+owned game/peer/helpers closed. Engine FSR3/signature/job warnings and harmless
+macro zero-damage warning are retained; no parser/API/adapter failure observed.
+Strict analyzer, full raw log, manifests and inventories stay in the local run.
+
+PHYSICAL GUEST SHOOTER / SYNTHETIC HOST AUTHORITY
+.local/evidence-246-withheld FAILS its fixture gate: after two intended victim1
+hits a stray plasma bullet legitimately hits fixture target4. The peer expected
+only victim1 and aborts. Raw10a14f32318fe78bd5ba7ac4118823287c22ad3ae7bba1a3cd37d30b39d54983
+retained;37-file restoration/save bytes/timestamps audited. No acceptance.
+
+Run02 moves both fixture NPC targets out of the firing corridor. Native guest2
+fires162 original plasma bullets toward host proxy1: eight independent native
+shield-damage events (actual expected attacker/victim,40 each), eight capture
+counts and relay totals8. The synthetic host returns WORLD shield93.33333%; the
+native proxy reads4480/4800, loss320. Another162 off-axis shots produce no damage
+observer event or count. All capture keys/generations match. Bounded chain PASS.
+Source af195a7 (production identical to ae2603e, documentation/config comment only).
+Raw be7c634e38c4d23ba61e3ca1341287d928367ced9f6060640735cc03acfa0131.56 installed production/probe hashes checked;37 restored files
+and seven actual normal saves verified. Game/helpers closed. This separately
+checks native guest capture and WORLD readback; the earlier shot-function02
+checks native host claim application. It is still NOT two native games.
+
+LETHAL HULL / CLIPPED CALLBACK / SURVIVING SHIP
+3ce8d22 changes dead/inoperative ship proof to revoke that entity instead of
+permanently stopping SHOT while querying its dead guns. Nine affected visual
+checks and changed MD schema PASS. New identities still require fresh proof.
+Native hull01 starts target1 at5%/0shield (229HP). Eight independent40HP hull
+callbacks produce Count1..8; the host accepts cumulative7 before ending the
+victim's generation (2->3). Its canonical hull reaches0 and the native guest
+destroys ship1 once. The eighth late old-generation count is not applied to the
+new generation. The surviving player's proof stays ready, all modules unfailed,
+and162 further original bullets fire. This run did NOT exercise floor clipping.
+Its fixture also sets an unused cargo field at death; economy mode does not apply
+that field. Raw c561f1df4a6da0428c0303fd19411a554906b77e98d2b22ac5123f574c376e46.
+
+Clipped01 removes that unused fixture assignment and starts target1 at1.02% hull
+(46.716HP),0shield. One independent native hull callback reports0.915999HP because
+of the1% proxy floor. Capture emits ONE hit at admitted strength40, not the small
+physical delta. The synthetic host computes0.1466375546% canonical hull, below
+the1.01% death threshold; native ship1 is destroyed once. The survivor's original
+proof remains ready and no SHOT/visual/capture module fails. Strict bounded PASS.
+Raw 15be522ed106bb05b7fac3e0f3a359eefa0613e97f4b3741a34ce24eba7431d3.
+Both runs source3ce8d22:56 installed production files/probes,37-file restoration
+and seven actual normal-save bytes/timestamps verified. No parser/API failure;
+raw baseline warnings preserved. These are still separate one-native/synthetic
+peer cases, not a joined Windows/Linux gameplay session.
+
+NATIVE GUEST RECEIVES CLAIMS / HARMLESS REPLAY / EJECTION
+shot-receive-guest-01, source3ce8d22: synthetic host sends3 admitted claims and6
+FIRE2 visual shots. Native guest applies120shield once (23stable4680 readbacks),
+while all6 actual replay bullets use the harmless macro. No capture feedback.
+A labelled fixture then sets own hull1.02%/shield0. One further claimed40-point
+hit yields native1% hull at the floor; native HEALTH reaches the synthetic host,
+its WORLD echo marks canonical death. The guest emergency-ejects BEFORE ship2
+is destroyed. Native final readback confirms an operational spacesuit, and remote
+ship1 still has valid replay proof; no combat module has failed. Strict bounded
+PASS, manual source counts (physical source capture qualified in separate runs).
+Raw 06e5c7049996dc57ab5940b51d2cd9c583b4a6f18f1fe8388017e25240061f2c.56source/probe hashes,37-file
+restoration and seven actual normal-save bytes/timestamps verified. Owned game
+and helpers closed. No matched two-native or Windows acceptance follows.
+
+PENDING
+Matched native Windows/Linux, arbitrary free-aim VISUAL replay, in-flight authority
+transitions, overheat/burst continuity and human docking/boarding/crash acceptance
+remain open. Windows native launch is unavailable under the collaborator's current
+profile restriction; he prepares source/export/harness readiness only. All default
+flags and sealed7.3.1 packages remain unchanged.
