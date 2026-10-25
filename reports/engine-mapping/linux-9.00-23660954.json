@@ -1,0 +1,270 @@
+{
+  "schema": 1,
+  "scope": "Static address research only; no address is approved for runtime hooks. H/M/L denotes confidence in static identification, not native acceptance.",
+  "binary_sha256": "113f73d74570084f6ce18a659b365009eccf579fb66dbabb5dad2b1718045f20",
+  "image_base": "0x400000",
+  "functions": [
+    {
+      "va": "0xc0e1c0",
+      "rva": "0x80e1c0",
+      "file_offset": "0x80e1c0",
+      "first_bytes": "415731c9ba0400000041564155415449",
+      "name": "SetObjectSectorPos",
+      "confidence": "H",
+      "method": "Exact dynamic export.",
+      "signature_occurrences_in_file": 4,
+      "build_signature": {
+        "bytes": 24,
+        "hex": "415731c9ba040000004156415541544989f44889fe554889",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x189efa0",
+      "rva": "0x149efa0",
+      "file_offset": "0x149efa0",
+      "first_bytes": "415541545589f5534889fb4883ec1883",
+      "name": "Component::SetAttention",
+      "confidence": "H",
+      "method": "Reads/writes +0x1ec and constructs RTTI-confirmed ChangedAttentionEvent; calls same-object transition virtual at0x1630.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "415541545589f5534889fb4883ec1883",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x1892960",
+      "rva": "0x1492960",
+      "file_offset": "0x1492960",
+      "first_bytes": "53488b5f704885db7438660f1f440000",
+      "name": "Component::ComputeAttention",
+      "confidence": "M",
+      "method": "RTTI Component primary slot712; walks parent+0x70, returns ancestor+0x1ec or1.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "53488b5f704885db7438660f1f440000",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x1296640",
+      "rva": "0xe96640",
+      "file_offset": "0xe96640",
+      "first_bytes": "55534889fb4883ec08488bbfe0030000",
+      "name": "Ship::ComputeAttention override",
+      "confidence": "M",
+      "method": "RTTI Ship primary slot712; dispatches special attached-controller case, otherwise tail-calls0x1863570.",
+      "signature_occurrences_in_file": 7,
+      "build_signature": {
+        "bytes": 24,
+        "hex": "55534889fb4883ec08488bbfe00300004885ff7446488b07",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x1863570",
+      "rva": "0x1463570",
+      "file_offset": "0x1463570",
+      "first_bytes": "53488b074889fbff90e01f000084c075",
+      "name": "Ship attention force9 ancestor path",
+      "confidence": "M",
+      "method": "Called by Ship slot712 fallback; compares controlled-player ancestor chain, returns9; native semantics unverified.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "53488b074889fbff90e01f000084c075",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x114e940",
+      "rva": "0xd4e940",
+      "file_offset": "0xd4e940",
+      "first_bytes": "415731d2be0f0000004989ff41564155",
+      "name": "Zone attention computation",
+      "confidence": "M",
+      "method": "RTTI Zone primary slot712; samples player/camera contexts, combines attention candidates.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "415731d2be0f0000004989ff41564155",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x115af80",
+      "rva": "0xd5af80",
+      "file_offset": "0xd5af80",
+      "first_bytes": "4155415455534889fb4883ec1883bfec",
+      "name": "Zone::Move candidate",
+      "confidence": "M",
+      "method": "RTTI Zone slot683; attention refresh and recursive component-update relationship, no named Linux method symbol.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "4155415455534889fb4883ec1883bfec",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x12b81d0",
+      "rva": "0xeb81d0",
+      "file_offset": "0xeb81d0",
+      "first_bytes": "415741564155415455534889fb4881ec",
+      "name": "Ship::Move override candidate",
+      "confidence": "M",
+      "method": "RTTI Ship slot683; attention8 branch, tail-calls0x1849520; no named Linux method symbol.",
+      "signature_occurrences_in_file": 174,
+      "build_signature": {
+        "bytes": 24,
+        "hex": "415741564155415455534889fb4881ec38020000488b0595",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x1849520",
+      "rva": "0x1449520",
+      "file_offset": "0x1449520",
+      "first_bytes": "4157415641554154554889fd534883ec",
+      "name": "Ship::Move base candidate",
+      "confidence": "M",
+      "method": "Shared attention-dependent movement/update fallback; calls SetAttention; exact Windows mapping unverified.",
+      "signature_occurrences_in_file": 197,
+      "build_signature": {
+        "bytes": 24,
+        "hex": "4157415641554154554889fd534883ec788bb7ec01000083",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x141fe50",
+      "rva": "0x101fe50",
+      "file_offset": "0x101fe50",
+      "first_bytes": "415455534889fb4881ec900000008b05",
+      "name": "NavigationController::SetVelocity",
+      "confidence": "H",
+      "method": "RTTI NavigationController primary slot15 constructs RTTI-confirmed U::Path::SetVelocityOrder vtable0x3b69750 and writes current slot velocity fields.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "415455534889fb4881ec900000008b05",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x13e3560",
+      "rva": "0xfe3560",
+      "file_offset": "0xfe3560",
+      "first_bytes": "80bf98010000007407c3660f1f440000",
+      "name": "PathingManager::WaitAndSwapBuffers candidate",
+      "confidence": "M",
+      "method": "Wait helper then toggles current pathing slot indexes3e4fea8/3d8e254; same manager global3e0ced0 as velocity-order queue. Named method equivalence not runtime verified.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "80bf98010000007407c3660f1f440000",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0xfeaff0",
+      "rva": "0xbeaff0",
+      "file_offset": "0xbeaff0",
+      "first_bytes": "554889e54157415641554154534889fb",
+      "name": "GameClient::Move",
+      "confidence": "H",
+      "method": "RTTI X4::GameClient primary slot2 and seven named GameClient::Move diagnostic-string xrefs.",
+      "signature_occurrences_in_file": 100,
+      "build_signature": {
+        "bytes": 24,
+        "hex": "554889e54157415641554154534889fb4881ec98010000e8",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0xa6b980",
+      "rva": "0x66b980",
+      "file_offset": "0x66b980",
+      "first_bytes": "4155415455488d6f78534889fb4889ef",
+      "name": "UI::CUIController Linux slot6",
+      "confidence": "L",
+      "method": "RTTI establishes slot identity only. Do NOT treat as proven equivalent of Windows slot6.",
+      "signature_occurrences_in_file": 8,
+      "build_signature": {
+        "bytes": 24,
+        "hex": "4155415455488d6f78534889fb4889ef4883ec28e8b77cfb",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0xa64f00",
+      "rva": "0x664f00",
+      "file_offset": "0x664f00",
+      "first_bytes": "55488d6f78534889fb4889ef4883ec08",
+      "name": "UI::CUIController Linux slot7",
+      "confidence": "L",
+      "method": "Adjacent Linux slot retained for ABI comparison; onUpdate/Windows-slot6 equivalence unresolved.",
+      "signature_occurrences_in_file": 16,
+      "build_signature": {
+        "bytes": 24,
+        "hex": "55488d6f78534889fb4889ef4883ec08e83be7fb00488b7b",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    }
+  ],
+  "fields": {
+    "component_attention": {
+      "offset": "0x1ec",
+      "confidence": "H",
+      "witness_function": "0x18b85c0",
+      "rtti": "U::ComponentFilterByAttentionLevel",
+      "setter": "0x189efa0"
+    },
+    "navigation_state_pointer": {
+      "offset": "0x28",
+      "confidence": "H",
+      "witness_function": "0x141fe50",
+      "windows_reported": "0x30"
+    },
+    "navigation_slot_stride": {
+      "bytes": 416,
+      "hex": "0x1a0",
+      "confidence": "H",
+      "witness_functions": [
+        "0x141fe50",
+        "0x141d2c0"
+      ]
+    },
+    "navigation_slot_index_global": {
+      "va": "0x3e4fea8",
+      "confidence": "H"
+    }
+  },
+  "unresolved": [
+    "Exact physics-body create/destroy pair matching Windows RVAs0x51bb90/0x51bc80",
+    "UniverseFrameUpdate matching Windows RVA0x9fdef0",
+    "VBI handler table and registration helper",
+    "UI::CUIController Windows slot6 semantics/equivalence"
+  ],
+  "rejected_hypotheses": [
+    "Uniform Windows-to-Linux vtable index delta; observed Component+9 versus NavigationController+7, so offsets must be matched individually.",
+    "0x1dba740 is not claimed as UniverseFrameUpdate: named NotifyGameReset/notification-reset diagnostics indicate a reset/cleanup path."
+  ]
+}

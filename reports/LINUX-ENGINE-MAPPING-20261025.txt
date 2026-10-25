@@ -1,0 +1,78 @@
+L1: BOUNDED LINUX ENGINE ADDRESS RESEARCH
+25 October 2026 | Astra | partial delivery for Ferrite
+
+SCOPE
+Static, read-only inspection of the user's installed Linux executable. No engine
+patches, injection, native calls or modified binaries. The associated JSON holds
+addresses, small identification signatures and evidence descriptions, not engine
+source or decompiled code. Ferrite owns hook design, ABI review and activation.
+H/M/L is confidence in STATIC identification, never native acceptance. Even H
+entries require an exact-build check and appropriate ABI/thread/lifetime review.
+
+BUILD / ADDRESS CONVENTIONS
+X4 9.00(611726), Steam23660954, ELF64 x86-64 ET_EXEC,60,459,280B.
+SHA256: 113f73d74570084f6ce18a659b365009eccf579fb66dbabb5dad2b1718045f20
+GNU build ID: 77cf7ac0ff32d88ffd3db7eb6ea2e025aecb711d
+Image base0x400000. RVA means VA minus that base. File offsets were resolved
+through PT_LOAD segments, not assumed from RVAs. They happen to equal RVAs for
+the text addresses below; that equality does not hold for every data address.
+28,644 defined dynamic symbols; stripped .symtab. Engine C++ names below are
+inferences except the exact C export. Ignore objdump's nearest unrelated exported
+symbol labels on stripped internal functions. Function starts were cross-checked
+against the99,494-entry .eh_frame_hdr index; a next entry can bound a fragment,
+not necessarily a complete source-level method. No native instance vptr sampled.
+
+USEFUL MATCHES (FULL SIGNATURES / OFFSETS IN JSON)
+SetObjectSectorPos: VA0xc0e1c0, H, exact dynamic export.
+Component attention: offset0x1ec, H. RTTI-confirmed
+U::ComponentFilterByAttentionLevel predicate0x18b85c0 compares that field.
+Component::SetAttention: VA0x189efa0, H. Reads/writes the same field, invokes
+transition callbacks and constructs the RTTI-linked ChangedAttentionEvent at
+vtable0x3b86238 with old/new levels. This is more than a coincidental field match.
+Component::ComputeAttention candidate: VA0x1892960, M. Component primary slot712
+walks parent+0x70 and returns ancestor attention or1. Reported Windows slot703
+must not be applied directly on Linux.
+Ship primary slot712: VA0x1296640, M. Special attached-controller case, then
+fallback0x1863570. That fallback has the controlled-player ancestor comparison
+and return9 branch. The Ship RTTI table begins with null destructor entries;
+it may be abstract/construction metadata rather than an instantiated vptr.
+Zone primary slot712: VA0x114e940, M; player/camera-context attention calculation.
+Zone slot683 VA0x115af80 and Ship slot683 VA0x12b81d0 are Move candidates, M.
+Component slot6830x18cbbb0 recursively invokes that slot; the zone variant
+refreshes attention, and the ship variant checks attention8 before falling back
+to0x1849520. Exact Windows method equivalence still needs Ferrite's comparison.
+NavigationController::SetVelocity: VA0x141fe50, H. Primary slot15 constructs
+RTTI-confirmed U::Path::SetVelocityOrder (vtable0x3b69750) and updates velocity
+fields. Linux navigation-state pointer is+0x28, compared with reported Windows
++0x30; slot stride is0x1a0. This is a queued pathing order, not a proven universal
+safe setter from an arbitrary thread. No attempt to call it was made.
+WaitAndSwapBuffers candidate: VA0x13e3560, M. Waits on a helper, then toggles
+current/alternate slot globals0x3e4fea8 and0x3d8e254. Uses the same manager
+global0x3e0ced0 as the velocity-order queue. Native scheduling remains unmeasured.
+GameClient::Move: VA0xfeaff0, H. X4::GameClient RTTI primary slot2 and seven
+references to diagnostics explicitly naming GameClient::Move identify it.
+
+UNRESOLVED / NOT APPROVED FOR HOOKING
+Physics-body create/destroy pair corresponding to Windows0x51bb90/0x51bc80;
+UniverseFrameUpdate corresponding to Windows0x9fdef0; VBI table/register helper;
+UI::CUIController Windows slot6 equivalence. Linux RTTI slot6 is0xa6b980 and
+slot7 is0xa64f00, but neither is claimed as the onUpdate/render hook. They are
+low-confidence comparison aids only. There is no universal vtable-index delta.
+Do not use guessed Windows+9 physics slots: the Linux entries are trivial stubs.
+Candidate0x1dba740 was rejected as a frame-update identification: it contains
+NotifyGameReset/notification-reset diagnostics, consistent with reset/cleanup.
+
+VERIFICATION AND RETAINED EVIDENCE
+reports/engine-mapping/linux-9.00-23660954.json includes14 function/anchor rows.
+Each contains first16 bytes plus a unique exact-build16/24-byte signature.
+Some first16-byte prologues occur up to197 times; those are NOT safe standalone
+search patterns. Uniqueness does not establish instruction boundaries, detour
+safety, ABI equivalence, or validity on another build. No runtime acceptance.
+Primary RTTI address points: Component0x3b2a8b8; Ship0x3c74908;
+Zone0x3c6ca30; NavigationController0x3b697e8 (also alternate0x3b94bb0);
+GameClient0x3ab12a0; UI::CUIController0x3ab4600. Counts and provenance retained
+privately in .local/evidence-108-withheld,vtables.json,mapping.json}.
+Private selected disassembly is retained for local audit, not added to Git.
+Byte/address/signature checks against the pinned ELF PASS; no production source
+changed, no unchanged gameplay suite rerun. Outstanding targets remain explicit;
+this report does not claim the complete L1 list or a dedicated server is ready.
