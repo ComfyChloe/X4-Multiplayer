@@ -50,7 +50,7 @@ class UniverseAdapterTests(unittest.TestCase):
           api.SetObjectSectorPos=function(id,sector,p) positions[id]=p;writes[#writes+1]={id=id,sector=sector,pose=p} end
           api.ActivateObject=function(id,on) activated[#activated+1]={id=id,on=on} end
         ''')
-        for name in ('bubble_game.lua','motion.lua','coop_game.lua','universe_protocol.lua','universe_game.lua'):
+        for name in ('bubble_game.lua','motion.lua','coop_game.lua','universe_protocol.lua','universe_game.lua','resync_game.lua'):
             l.execute((UI/name).read_text())
         l.execute('''
           events['X4LAN.Loaded']();now=10;frames.onUpdate()
@@ -75,6 +75,14 @@ class UniverseAdapterTests(unittest.TestCase):
           assert(U.sender.baseline.rows[1]:find(',101,200,300,',1,true))
           assert(U.sender.baseline.rows[2]:find(',102,200,300,',1,true))
           assert(not U.failed and #removed==0)
+        ''')
+
+    def test_resync_request_forces_fresh_capture_through_normal_sender(self):
+        l=self.make();l.execute('''
+          U.receive({'UINTEREST','1',client.lease,'1','cluster_14_sector001_macro'},now)
+          tick(20);local revision=U.revision;U.sender.done=true;U.nextScan=1000
+          U.receive({'URESYNC','1',client.lease,client.lease,'1',U.wanted,tostring(revision),'pose'},now)
+          tick(20);assert(U.revision>revision and U.sender.baseline.revision==U.revision and not U.resync)
         ''')
 
     def test_partial_baseline_never_spawns_or_suppresses_npcs(self):

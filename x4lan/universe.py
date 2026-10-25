@@ -15,6 +15,7 @@ from .host import ATOM, HEX, MAX_PACKET, sequence
 from .cargo import CargoTransactions
 from .identity import Identities
 from .npc_combat import NpcCombat
+from .resync import BUCKETS, HashReconciler
 
 MAX_OBJECTS = 4096
 MAX_RECORD = 512
@@ -218,6 +219,7 @@ class UniverseSession(DockSession):
         self.cargo = CargoTransactions(self)
         self.identities = Identities(self)
         self.npc_combat = NpcCombat(self)
+        self.resync = HashReconciler()
 
     def busy(self, entity):
         return super().busy(entity) or self.cargo.busy(entity)
@@ -229,7 +231,7 @@ class UniverseSession(DockSession):
             return self.identities.receive(raw, address, now)
         if raw.startswith((b'CARGOREQ|', b'CARGODONE|', b'CINV|')):
             return self.cargo.receive(raw, address, now)
-        if not raw.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|', b'UACK|', b'UINTEREST|', b'UPOS|', b'UMOVE|')):
+        if not raw.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|', b'UACK|', b'UINTEREST|', b'UPOS|', b'UMOVE|', b'UHASH|')):
             return super().receive(raw, address, now)
         self.expire(now)
         if len(raw) > MAX_PACKET:
@@ -240,6 +242,34 @@ class UniverseSession(DockSession):
                 return []
             slot, peer = self._peer(f[2], address)
             if not peer:
+                return []
+            if f[0] == 'UHASH' and len(f) == 11:
+                host = self.peers.get('p1')
+                if not host or f[3] != host.lease or (slot == 'p1' and f[3] != peer.lease):
+                    return []
+                if self.universe_epoch and self.universe_epoch != f[3]:
+                    return []
+                frame = sequence(f[4])
+                if not frame:
+                    return []
+                sector = f[5] if f[5] == 'global' else atom(f[5], True)
+                hashes = dict(zip(BUCKETS, f[6:11]))
+                for name, digest in hashes.items():
+                    present = name in ('rng', 'time') if sector == 'global' else name in ('identity', 'pose', 'health')
+                    if present:
+                        if len(digest) != 16 or any(c not in '0123456789abcdef' for c in digest):
+                            return []
+                    elif digest != '-':
+                        return []
+                mismatches = self.resync.observe(slot, f[3], frame, sector, hashes, now)
+                if mismatches is None:
+                    return []
+                for reported, buckets in mismatches:
+                    guest = self.peers.get('p2')
+                    affected = self.interest[2] if reported == 'global' and self.interest else reported
+                    if (guest and self.interest and self.interest[0] == guest.lease and affected == self.interest[2]):
+                        latest = self.sectors.get(affected)
+                        self.resync.request_repair(f[3], affected, latest.revision if latest else 0, buckets, now)
                 return []
             if f[0] == 'UINTEREST' and slot == 'p2' and len(f) == 5:
                 seq = sequence(f[3]); sector = atom(f[4], True)
@@ -304,6 +334,8 @@ class UniverseSession(DockSession):
                 self.entity_ids = {k: {record(row) for row in b.rows} for k, b in self.sectors.items()}
                 live = set().union(*self.entity_ids.values())
                 self.positions = {k: v for k, v in self.positions.items() if k in live}
+                if self.resync.committed(committed):
+                    self.delivered = None
             return [f'UACK|1|{peer.lease}|{f[3]}|{f[4]}|{ack}'.encode('ascii')]
         except (ValueError, OverflowError, UnicodeError):
             return []
@@ -314,6 +346,8 @@ class UniverseSession(DockSession):
         result.extend(self.identities.snapshots(now))
         result.extend(self.npc_combat.snapshots(now))
         host, guest = self.peers.get('p1'), self.peers.get('p2')
+        if host and guest:
+            result.extend(self.resync.packets(host, guest, self.interest, now))
         if not host or not guest or not self.interest or self.interest[0] != guest.lease:
             return result
         _, seq, sector = self.interest

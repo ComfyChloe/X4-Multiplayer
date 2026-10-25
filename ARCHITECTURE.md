@@ -35,6 +35,20 @@ repeat engine effects. The host lease is the session epoch. A fresh host require
 a fresh relay and guest world. Relays cache at most eight sectors; each baseline
 is limited to 4096 objects. An overflowing enumeration never publishes a prefix.
 
+Complete STATEHASH captures additionally expose per-sector identity/pose/health
+and global RNG/time buckets to the resync adapter. The adapter queues captures
+from the observer and sends at most one sector plus one global `UHASH` report
+per 250 ms from its ordinary UI frame. Reports carry the current host lease as
+epoch; incomplete captures and failed hook/signature admission produce none.
+The relay compares equal frame/epoch/scope samples, deduplicates mismatches and
+rate-limits `URESYNC` requests for the guest's interested sector. A request names
+the differing buckets and last committed revision, retries every 250 ms for at
+most 15 seconds, and asks only for a fresh host capture. A newer committed
+baseline satisfies that request and is delivered through the ordinary reliable
+atomic baseline path. Global RNG/time mismatches select the same bounded sector
+fallback; they do not write or claim to repair RNG/time. There is no direct
+hull, object, RNG or clock repair message and no save-transfer fallback.
+
 `UMOVE` carries host epoch, object ID, sequence, sector, source time, pose and
 linear/angular velocity for known committed IDs. Units are seconds, metres and
 radians. Legacy `UPOS` remains readable. Host and relay each budget 32 motion

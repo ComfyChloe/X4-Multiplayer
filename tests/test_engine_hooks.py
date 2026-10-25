@@ -168,6 +168,20 @@ class EngineHookTests(unittest.TestCase):
         lua.eval("events['X4LAN.Loaded']")()
         self.assertIn("HOOKS_DISABLED reason=bad%20build", self.logs(lua)[-1])
 
+    def test_complete_capture_publishes_sector_buckets_without_worker_transport(self):
+        lua = self.runtime("captures={};X4LAN_STATEHASH={capture=function(sample) captures[#captures+1]=sample end}")
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.eval("callback")(1, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+        lua.execute('''
+         assert(#captures==1 and captures[1].complete and captures[1].frame==1)
+         local hashes=captures[1].sectors['cluster_14_sector001_macro']
+         assert(hashes and #hashes.identity==16 and #hashes.pose==16 and #hashes.health==16)
+         assert(captures[1].rng=='0123456789abcdef' and #captures[1].time==16)
+        ''')
+        lua = self.runtime("captures={};X4LAN_STATEHASH={capture=function(sample) captures[#captures+1]=sample end};native.start=function() return false,'bad signature' end")
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertEqual(lua.eval("#captures"), 0)
+
     def test_lua_has_no_gameplay_writes_or_transport(self):
         text = SOURCE.read_text()
         for forbidden in ("SetObjectSectorPos", "RemoveComponent", "SpawnObject", "ActivateObject",
