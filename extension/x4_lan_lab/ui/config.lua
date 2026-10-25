@@ -12,6 +12,7 @@ X4LAN_CONFIG = {
     shot_undo = false, -- Diagnostic only, needs shot_capture: replayed-hit undo (delays shield recharge).
     faction_missions = false, -- INTERNAL opt-in: native shared faction mission journal.
     npc_combat = false, -- INTERNAL opt-in: host NPC health and acknowledged guest stock-gun hits.
+    frame_probe = false, -- Diagnostic only: logs onUpdate rate vs real/game time (frame_probe.lua).
     interaction_test = false, -- Destructive fixtures ONLY in the disposable test world.
     test_profile = "45841",
     host = "127.0.0.1",
