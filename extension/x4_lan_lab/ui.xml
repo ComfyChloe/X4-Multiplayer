@@ -5,6 +5,7 @@
     <file name="ui/config.lua" />
     <file name="ui/transport.lua" />
     <file name="ui/client.lua" />
+    <file name="ui/simtick.lua" />
     <file name="ui/game.lua" />
     <file name="ui/seed_content.lua" />
     <file name="ui/seed_capture.lua" />

@@ -1,6 +1,7 @@
 -- Generated client copies override this file. The source extension is inert.
 X4LAN_CONFIG = {
     enabled = false,
+    engine_simtick = false, -- Experimental Windows slot-7 driver; DLL is built separately.
     bubble_actions = false,
     trading = false,
     fire2 = false, -- Matched internal packages select FIRE2 before any shot is played.

@@ -251,7 +251,11 @@ local ok,e=pcall(function()
    log('action result '..request..' '..result)
   end
  end)
- SetScript('onUpdate',safeFrame)
+ if cfg.engine_simtick==true then
+  assert(X4LAN_SIMTICK,'simtick driver unavailable').register(safeFrame,cfg)
+ else
+  SetScript('onUpdate',safeFrame)
+ end
  log('authoritative bubble adapter armed; slot='..cfg.slot)
 end)
 if not ok then log('bubble initialisation failed: '..tostring(e)) end

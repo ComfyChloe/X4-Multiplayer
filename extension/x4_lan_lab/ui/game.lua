@@ -203,7 +203,11 @@ local ok, err = pcall(function()
         reset(true)
         state.ready, state.nextTry = true, GetCurRealTime()
     end)
-    SetScript("onUpdate", safeFrame)
+    if cfg.engine_simtick == true then
+        assert(X4LAN_SIMTICK, "simtick driver unavailable").register(safeFrame, cfg)
+    else
+        SetScript("onUpdate", safeFrame)
+    end
     log("adapter armed in isolated profile " .. profile .. "; awaiting world readiness")
 end)
 if not ok then log("initialisation failed: " .. tostring(err)) end
