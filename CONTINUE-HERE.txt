@@ -13,6 +13,9 @@ earlier onboarding claims that Astra leads. Existing human test sessions remain
 untouched. No new agent/chat/timer/Slack polling or unattended schedule.
 Owner reports Ferrite is investigating X4 through decompilation/reverse engineering;
 no findings, source access or engine capability from that work verified here yet.
+Next assignment: design/test a dedicated-server setup tonight under Ferrite.
+His user will provide the server and task prompt; scope/access are pending.
+No remote deployment, new schedule or independent implementation started here.
 
 DELIVERY / CURRENT HUMAN RESULTS
 Desktop/X4 Online/Internal Tests/7.5.0-2026-10-25
@@ -71,7 +74,7 @@ still missing. The authorized20s packet capture was symptom-free, not a reproduc
 712 forwarded NAV2 rows matched inputs. No task-owned capture process remains.
 Restart currently returns to pristine starting save. User favors future dedicated
 4–6-player host, pause/save/transfer/load/resume joins and shutdown when empty.
-Architecture/Story-Koop/leader-or-vote dialogue discussions were analysis only.
+Earlier architecture/story/leader-or-vote discussions were analysis only.
 Headless static findings: .local/evidence-044-withheld;
 internal disable_rendering string is NOT a proven GPU-free mode. Network uses UI
 Lua onUpdate. No native headless experiment, engine patch or purchase was performed. See preparation/ATTENTION-ARCHITECTURE-NOTE.txt

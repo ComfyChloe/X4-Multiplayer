@@ -16,6 +16,15 @@ contrib/astra-7-5-delivery / PR46. Historical candidate tasks below are unassign
 The owner requested continuous host/guest logging tools for the next version but
 explicitly deferred development while human testing continues.
 
+NEXT SHARED ASSIGNMENT (owner update, 25 October 2026)
+Design and test a dedicated-server setup tonight, led by Ferrite. His user will
+provide a server and prepare the task prompt. Wait for that coordinated scope
+before starting overlapping implementation or remote setup. Server availability,
+OS/hardware, access, task split and acceptance criteria are not established here.
+Use current handoff/playtest evidence and existing attention/headless analysis;
+GPU-free execution, persistent worlds and more than two players remain unproven.
+No new autonomous schedule or polling was created by this assignment record.
+
 Communications use the existing Slack channel private-coordination-channel
 (channel PRIVATECOORDINATIONID; existing threadPRIVATE-THREAD-ID) when access is provided and
 posting is authorized. Do not create a replacement chat or polling timer. There
