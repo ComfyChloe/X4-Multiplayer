@@ -16,7 +16,7 @@ Privacy
   The session key never reaches the recording. Lease/nonce-like ids are replaced by stable
   pseudonyms (the same on host and guest of one session). World seeds stay readable.
   The recording stays on your PC. For sharing, use the export step below, which also hides
-  IPv4 addresses and the user name in local paths. Still look through the export before sending.
+  IPv4 addresses and the account name in local paths. Still look through the export before sending.
 
 Use (package folder, until starters are added to the package)
   1. Copy playtest_recorder.py into the package folder (next to launcher.py).
@@ -28,14 +28,18 @@ Use (package folder, until starters are added to the package)
        recordings\<UTC start>-<host|guest>-<pid>\
   4. To share: runtime\python.exe -I -B playtest_recorder.py export recordings\<run folder>
      This creates <run folder>.zip. Send it privately; never post it publicly.
+     Inside, export-manifest.json lists the SHA-256 of every exported (masked) file;
+     original-manifest.json and original_sha256 describe the unmasked run (provenance only).
 
-  Options: --max-mb N (default 1024; copying stops, events continue), --interval S (default 0.5),
+  Options: --max-mb N (default 1024; copying stops for the rest of the run, events continue and
+           each source reports the exact byte range it omitted), --interval S (default 0.5),
   --duration S (stop automatically), --profile DIR (override), --out DIR (other parent folder).
 
 What is in a run folder
   events.jsonl   one line per event with UTC time, monotonic time and sequence number:
                  start, present/missing, truncated/replaced (X4 restarted or the log was
-                 rewritten), snapshot, server_status, heartbeat (every 10 s), storage_limit, stop
+                 rewritten or replaced), snapshot, server_status, heartbeat (every 10 s),
+                 storage_limit, omitted (source/segment byte range not copied), read_error, stop
   sources/       engine.<n>.log and relay-<start>.<n>.log; a new <n> after each truncation
   snapshots/     launcher capture copies, named by modification time
   manifest.json  package version/build/role, platform, start/stop and SHA-256 of every file.
@@ -51,6 +55,7 @@ Times and coverage
   lines (for example MOTION_DIAG is off), motion is UNAVAILABLE for that run, not symptom-free.
 
 Limits
-  Only complete lines are copied; a final line without a newline is added at stop.
+  Only complete lines are copied; a final line without a newline is added at stop. A line longer
+  than 1 MiB is copied in pieces. Files are read 1 MiB at a time.
   Text written and then deleted between two polls (0.5 s) cannot be seen.
   It records what files say; it is not a packet capture and does not prove gameplay results.

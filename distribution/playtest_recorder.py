@@ -13,12 +13,15 @@ streams (logs/server-*.jsonl) and the launcher's capture copies into a run folde
     snapshots/...           copies of launcher capture files (world/capture, logs/before-*)
     manifest.json           written at the end: run info and SHA-256 of every output file
 
-Only complete lines are copied. The session key (session.json token and bubble) never reaches
-disk. Other 32-hex values (leases, nonces) become stable pseudonyms keyed by the session key, so
-a host and a guest recording of the same session use the same pseudonyms. World seeds stay
-readable. Recording stops copying content (events continue) at --max-mb.
+Lines are copied whole (an unfinished line longer than LINE_MAX is copied in pieces). Files are
+read in CHUNK steps, so memory stays bounded. The session key (session.json token and bubble)
+never reaches disk. Other 32-hex values (leases, nonces) become stable pseudonyms keyed by the
+session key, so a host and a guest recording of the same session use the same pseudonyms. World
+seeds stay readable. At --max-mb copying stops for the rest of the run; each source records the
+exact byte range it omitted.
 
-'export' zips one run and also masks IPv4 addresses and home-folder user names, for sharing.
+'export' zips one run and masks IPv4 addresses and home-folder account names. Its
+export-manifest.json hashes the exported bytes; the run's own manifest is kept as provenance.
 """
 import argparse
 from datetime import datetime, timezone
@@ -32,11 +35,15 @@ import sys
 import time
 import zipfile
 
-VERSION = 1
+VERSION = 2
 HEX32 = re.compile(rb'(?<![0-9A-Fa-f])(?<!seed=)[0-9A-Fa-f]{32}(?![0-9A-Fa-f])')
+HEXCHARS = frozenset(b'0123456789abcdefABCDEF')
 IPV4 = re.compile(r'(?<![\d.])(?:\d{1,3}\.){3}\d{1,3}(?![\d.])')
-HOME = re.compile(r'(?i)((?:[A-Z]:)?[\\/]+(?:Users|home)[\\/]+)[^\\/\s"\']+')
-HEADER = 256            # bytes compared to detect a file replaced without shrinking
+# The whole account component, spaces included, also in JSON-escaped paths (C:\\Users\\A B\\x).
+HOME = re.compile(r'(?i)((?:[A-Z]:)?[\\/]+(?:Users|home)[\\/]+)[^\\/"\'\r\n]+')
+HEADER = 256            # bytes compared to detect a file rewritten without shrinking
+CHUNK = 1 << 20         # bytes read per step
+LINE_MAX = 1 << 20      # an unfinished line longer than this is copied in pieces
 HEARTBEAT = 10.0        # seconds between progress events
 STALE = 5.0             # server-status.json older than this while running is reported once
 
@@ -50,6 +57,13 @@ def read_json(path):
     except (OSError, ValueError): return None
 
 
+def sha256_file(path):
+    digest = hashlib.sha256()
+    with open(path, 'rb') as f:
+        for chunk in iter(lambda: f.read(CHUNK), b''): digest.update(chunk)
+    return digest.hexdigest()
+
+
 class Redactor:
     def __init__(self, secrets):
         self.secrets = sorted({s.encode() for s in secrets if s}, key=len, reverse=True)
@@ -61,49 +75,90 @@ class Redactor:
         return HEX32.sub(lambda m: b'<id:' + hashlib.sha256(self.key + m.group(0).lower()).hexdigest()[:10].encode() + b'>', data)
 
 
+class Sink:
+    """Redacted, line-aligned, storage-bounded copy into one file; remembers what it omitted."""
+    def __init__(self, recorder, target):
+        self.r, self.target = recorder, Path(target)
+        self.pending, self.done, self.omitted = b'', 0, None   # done: input bytes handed on
+
+    def feed(self, chunk, final=False):
+        data = self.pending + chunk
+        cut = len(data) if final else data.rfind(b'\n') + 1
+        if not cut and len(data) > LINE_MAX:
+            # Keep a short tail, and never cut inside a hex run, so no id is split in two.
+            cut = len(data) - 64
+            while cut > 0 and data[cut - 1] in HEXCHARS: cut -= 1
+            cut = cut or len(data) - 64
+        self.pending = data[cut:]
+        self.emit(data[:cut])
+
+    def emit(self, data):
+        if not data: return
+        start = self.done
+        self.done += len(data)
+        if self.r.allow(len(data)):
+            self.target.parent.mkdir(parents=True, exist_ok=True)
+            with open(self.target, 'ab') as f: f.write(self.r.redact(data))
+        elif self.omitted: self.omitted[1] = self.done
+        else: self.omitted = [start, self.done]
+
+    def close(self, **where):
+        self.feed(b'', final=True)
+        if self.omitted:
+            start, end = self.omitted
+            self.r.event('omitted', start=start, end=end, bytes=end - start, **where)
+            self.omitted = None
+
+
 class Tail:
     """Append-only copy of one growing text file; survives truncation, replacement and absence."""
     def __init__(self, recorder, name, path):
         self.r, self.name, self.path = recorder, name, Path(path)
-        self.offset, self.segment, self.head, self.pending, self.present, self.bytes = 0, 0, b'', b'', None, 0
+        self.offset, self.segment, self.ident, self.head = 0, 0, None, b''
+        self.sink, self.present, self.error = None, None, None
 
     def poll(self):
-        try: st = self.path.stat()
-        except OSError: st = None
-        if st is None:
+        try: f = open(self.path, 'rb')                    # opened per poll; no handle is kept
+        except FileNotFoundError:
             if self.present is not False: self.r.event('missing', source=self.name, path=str(self.path))
             self.present = False
             return
-        if self.present is not True: self.r.event('present', source=self.name, path=str(self.path), size=st.st_size)
-        self.present = True
-        try:
-            with open(self.path, 'rb') as f:              # opened per poll; no handle is kept
-                head = f.read(HEADER)
-                if self.segment and (st.st_size < self.offset or head[:len(self.head)] != self.head[:len(head)]):
-                    self.r.event('truncated' if st.st_size < self.offset else 'replaced', source=self.name,
-                                 old_size=self.offset, size=st.st_size)
-                    self.flush(); self.offset = 0; self.segment += 1
-                if not self.segment: self.segment = 1
-                self.head = head
-                f.seek(self.offset)
-                data = f.read(max(0, st.st_size - self.offset))
         except OSError as exc:
-            self.r.event('read_error', source=self.name, error=type(exc).__name__)
-            return
-        self.offset += len(data)
-        data = self.pending + data
-        cut = data.rfind(b'\n') + 1
-        self.pending = data[cut:]
-        self.write(data[:cut])
+            return self.fail(exc)
+        with f:
+            try:
+                st = os.fstat(f.fileno())                     # identity of the file actually opened
+                if self.present is not True: self.r.event('present', source=self.name, path=str(self.path), size=st.st_size)
+                self.present, self.error = True, None
+                ident, head = (st.st_dev, st.st_ino), f.read(HEADER)
+                if self.segment:
+                    rewritten = ident != self.ident or head[:len(self.head)] != self.head[:len(head)]
+                    if rewritten or st.st_size < self.offset:
+                        self.r.event('truncated' if st.st_size < self.offset else 'replaced', source=self.name,
+                                     old_size=self.offset, size=st.st_size)
+                        self.new_segment()
+                if not self.segment: self.new_segment()
+                self.ident, self.head = ident, head
+                f.seek(self.offset)
+                while self.offset < st.st_size:
+                    chunk = f.read(min(CHUNK, st.st_size - self.offset))
+                    if not chunk: break
+                    self.offset += len(chunk)
+                    self.sink.feed(chunk)
+            except OSError as exc:
+                self.fail(exc)
 
-    def write(self, data):
-        if data and self.r.allow(len(data)):
-            with open(self.r.out / 'sources' / f'{self.name}.{self.segment}.log', 'ab') as f:
-                f.write(self.r.redact(data))
-            self.bytes += len(data)
+    def fail(self, exc):
+        if self.error != type(exc).__name__: self.r.event('read_error', source=self.name, error=type(exc).__name__)
+        self.error = type(exc).__name__
 
-    def flush(self):
-        self.write(self.pending); self.pending = b''
+    def new_segment(self):
+        self.close()
+        self.segment, self.offset = self.segment + 1, 0
+        self.sink = Sink(self.r, self.r.out / 'sources' / f'{self.name}.{self.segment}.log')
+
+    def close(self):
+        if self.sink: self.sink.close(source=self.name, segment=self.segment)
 
 
 class Recorder:
@@ -137,7 +192,8 @@ class Recorder:
         self.events.write(json.dumps(row, ensure_ascii=True, sort_keys=False) + '\n')
 
     def allow(self, size):
-        if self.used + size > self.limit:
+        # Once the cap is reached nothing more is copied, so every omission is one contiguous range.
+        if self.limited or self.used + size > self.limit:
             if not self.limited: self.event('storage_limit', limit_mb=self.limit >> 20)
             self.limited = True
             return False
@@ -159,25 +215,29 @@ class Recorder:
         for name, path in self.sources().items():
             if name not in self.tails: self.tails[name] = Tail(self, name, path)
         for tail in self.tails.values(): tail.poll()
-        for path in self.snapshot_paths():
-            try: st = path.stat()
-            except OSError: continue
-            key = (st.st_size, st.st_mtime_ns)
-            if self.snaps.get(path) == key: continue
-            self.snaps[path] = key
-            rel = path.relative_to(self.package)
-            try: data = path.read_bytes()
-            except OSError: continue
-            self.event('snapshot', path=rel.as_posix(), size=st.st_size, sha256=hashlib.sha256(data).hexdigest())
-            if self.allow(len(data)):
-                target = self.out / 'snapshots' / rel.parent / f'{st.st_mtime_ns}-{rel.name}'
-                target.parent.mkdir(parents=True, exist_ok=True)
-                target.write_bytes(self.redact(data))
+        for path in self.snapshot_paths(): self.snapshot(path)
         self.poll_status()
         if self.clock() - self.beat >= HEARTBEAT:
             self.beat = self.clock()
             self.event('heartbeat', used_bytes=self.used, sources={n: dict(present=t.present, offset=t.offset,
                        segment=t.segment) for n, t in self.tails.items()})
+
+    def snapshot(self, path):
+        try: st = path.stat()
+        except OSError: return
+        key = (st.st_size, st.st_mtime_ns)
+        if self.snaps.get(path) == key: return
+        self.snaps[path] = key
+        rel = path.relative_to(self.package)
+        sink, digest, size = Sink(self, self.out / 'snapshots' / rel.parent / f'{st.st_mtime_ns}-{rel.name}'), hashlib.sha256(), 0
+        try:
+            with open(path, 'rb') as f:
+                for chunk in iter(lambda: f.read(CHUNK), b''):
+                    digest.update(chunk); size += len(chunk); sink.feed(chunk)
+        except OSError as exc:
+            self.event('read_error', path=rel.as_posix(), error=type(exc).__name__)
+        self.event('snapshot', path=rel.as_posix(), size=size, sha256=digest.hexdigest())
+        sink.close(snapshot=rel.as_posix())
 
     def poll_status(self):
         path = self.package / 'logs/server-status.json'
@@ -191,11 +251,10 @@ class Recorder:
             self.status = now
 
     def close(self, reason='stopped'):
-        for tail in self.tails.values(): tail.flush()
+        for tail in self.tails.values(): tail.close()
         self.event('stop', reason=reason, used_bytes=self.used)
         self.events.close()
-        files = {p.relative_to(self.out).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-                 for p in sorted(self.out.rglob('*')) if p.is_file()}
+        files = {p.relative_to(self.out).as_posix(): sha256_file(p) for p in sorted(self.out.rglob('*')) if p.is_file()}
         manifest = dict(self.info, started=self.started, stopped=utc_now(), reason=reason, files=files)
         (self.out / 'manifest.json').write_text(json.dumps(manifest, indent=1) + '\n', encoding='utf-8')
         return self.out
@@ -209,11 +268,24 @@ def export(run, out=None, keep_network=False):
     run = Path(run).resolve()
     if not (run / 'events.jsonl').is_file(): raise RuntimeError('Not a recorder run folder: ' + str(run))
     target = Path(out) if out else run.with_suffix('.zip')
+    exported, original = {}, {}
     with zipfile.ZipFile(target, 'x', zipfile.ZIP_DEFLATED) as z:
         for path in sorted(run.rglob('*')):
-            if path.is_file():
-                text = path.read_text(encoding='utf-8', errors='replace')
-                z.writestr(run.name + '/' + path.relative_to(run).as_posix(), text if keep_network else mask(text))
+            if not path.is_file(): continue
+            rel = path.relative_to(run).as_posix()
+            name = 'original-manifest.json' if rel == 'manifest.json' else rel
+            source, result, size = hashlib.sha256(), hashlib.sha256(), 0
+            with open(path, 'rb') as f, z.open(run.name + '/' + name, 'w') as w:
+                for line in iter(lambda: f.readline(LINE_MAX), b''):
+                    source.update(line)
+                    data = line if keep_network else mask(line.decode('utf-8', 'replace')).encode('utf-8')
+                    result.update(data); w.write(data); size += len(data)
+            original[rel] = source.hexdigest()
+            exported[name] = dict(sha256=result.hexdigest(), size=size)
+        info = dict(format=1, run=run.name, masked=not keep_network, files=exported, original_sha256=original,
+                    note='files: SHA-256 of the exported bytes in this zip. original_sha256 and '
+                         'original-manifest.json describe the unmasked run files (provenance only).')
+        z.writestr(run.name + '/export-manifest.json', json.dumps(info, indent=1) + '\n')
     return target
 
 
@@ -227,7 +299,7 @@ def main(argv=None):
     rec.add_argument('--interval', type=float, default=.5)
     rec.add_argument('--max-mb', type=int, default=1024)
     rec.add_argument('--duration', type=float, help='stop after this many seconds')
-    exp = sub.add_parser('export', help='zip one run for sharing (masks IPv4 and user names)')
+    exp = sub.add_parser('export', help='zip one run for sharing (masks IPv4 and account names)')
     exp.add_argument('run'); exp.add_argument('--out'); exp.add_argument('--keep-network', action='store_true')
     args = parser.parse_args(argv)
     if args.action == 'export':

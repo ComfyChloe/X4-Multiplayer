@@ -139,6 +139,65 @@ class RecorderTests(unittest.TestCase):
         kinds = [e['kind'] for e in self.events(r)]
         self.assertIn('no_profile', kinds); self.assertTrue((r.out / 'sources/relay-2.1.log').is_file())
 
+    def test_atomic_equal_size_replacement_with_same_header_starts_a_new_segment(self):
+        head = b'H' * rec.HEADER
+        self.log.write_bytes(head + b'old\n')
+        r = self.recorder(); r.poll()
+        swap = self.profile / 'swap.tmp'; swap.write_bytes(head + b'new\n'); os.replace(swap, self.log)
+        r.poll()
+        self.assertEqual(self.text(r, 'engine.2.log'), (head + b'new\n').decode())
+        self.assertIn('replaced', [e['kind'] for e in self.events(r)])
+
+    def test_export_manifest_hashes_the_exported_bytes_and_keeps_provenance(self):
+        self.log.write_text('peer 10.0.0.7\n')
+        r = self.recorder(); r.poll(); out = r.close()
+        with zipfile.ZipFile(rec.export(out)) as z:
+            info = json.loads(z.read(out.name + '/export-manifest.json'))
+            for name, row in info['files'].items():
+                data = z.read(out.name + '/' + name)
+                self.assertEqual((hashlib.sha256(data).hexdigest(), len(data)), (row['sha256'], row['size']), name)
+            self.assertIn(out.name + '/original-manifest.json', z.namelist())
+        self.assertTrue(info['masked'])
+        self.assertEqual(info['original_sha256']['sources/engine.1.log'],
+                         hashlib.sha256((out / 'sources/engine.1.log').read_bytes()).hexdigest())
+
+    def test_account_names_with_spaces_and_escaped_json_paths_are_masked_whole(self):
+        for raw, masked in (('C:\\Users\\Alice Smith\\X4', 'C:\\Users\\<user>\\X4'),
+                            ('"C:\\\\Users\\\\Alice Smith\\\\X4"', '"C:\\\\Users\\\\<user>\\\\X4"'),
+                            ('/home/bob smith/x', '/home/<user>/x')):
+            self.assertEqual(rec.mask(raw), masked)
+            self.assertNotIn('Smith', rec.mask(raw)); self.assertNotIn('smith', rec.mask(raw))
+
+    def test_storage_cap_streams_in_chunks_and_records_the_omitted_range(self):
+        old = rec.CHUNK, rec.LINE_MAX
+        self.addCleanup(lambda: (setattr(rec, 'CHUNK', old[0]), setattr(rec, 'LINE_MAX', old[1])))
+        rec.CHUNK, rec.LINE_MAX = 4096, 4096
+        line = b'y' * 99 + b'\n'
+        self.log.write_bytes(line * 40000 + b'z' * 50000)                          # ~4 MB, unfinished tail
+        r = self.recorder(max_mb=1)
+        reads = []
+        real = rec.Sink.feed
+        def spy(sink, chunk, final=False): reads.append(len(chunk)); return real(sink, chunk, final)
+        rec.Sink.feed = spy; self.addCleanup(setattr, rec.Sink, 'feed', real)
+        r.poll()
+        tail = r.tails['engine']
+        self.assertLessEqual(max(reads), 4096); self.assertLessEqual(len(tail.sink.pending), 4096 + 4096)
+        r.close()
+        copied = (r.out / 'sources/engine.1.log').stat().st_size
+        omitted = [e for e in self.events(r) if e['kind'] == 'omitted']
+        self.assertEqual(len(omitted), 1)
+        self.assertLessEqual(copied, 1 << 20)
+        self.assertEqual((omitted[0]['start'], omitted[0]['end']), (copied, self.log.stat().st_size))
+
+    def test_unfinished_line_is_bounded_without_splitting_an_id(self):
+        old = rec.LINE_MAX; self.addCleanup(setattr, rec, 'LINE_MAX', old); rec.LINE_MAX = 1000
+        self.log.write_bytes(b'q' * 990 + LEASE.encode() + b'q' * 100)                # no newline at all
+        r = self.recorder(); r.poll()
+        self.assertLessEqual(len(r.tails['engine'].sink.pending), 1000)
+        r.close()
+        text = self.text(r, 'engine.1.log')
+        self.assertNotIn(LEASE, text); self.assertEqual(text.count('<id:'), 1)
+
     def test_recorder_stays_standalone_and_read_only(self):
         source = (ROOT / 'distribution/playtest_recorder.py').read_text()
         self.assertNotIn('diagnostics', source.replace('the launcher\'s diagnostics', ''))
