@@ -9,6 +9,11 @@
 - Speak German with the user. Keep shipped documentation and interfaces English.
 - Write original code. Neresco projects are research references only; do not copy
   or embed their multiplayer sources, binaries or framework.
+- Engine instrumentation (runtime hooks, game-memory offsets, patched engine
+  functions such as RNG or timestep) is permitted as opt-in work under
+  `ENGINE-INSTRUMENTATION.txt`. Never modify or redistribute X4 or Egosoft files;
+  verify the exact build before patching and fail closed on any mismatch. Keep the
+  `x4lan_net` transport free of hooks.
 - A visual NPC replica is not proof of shared combat, inventory or economy. State
   measured limits and distinguish native X4 tests from mocks/synthetic peers.
 - Keep source `extension/x4_lan_lab/ui/config.lua` inert and free of credentials.
