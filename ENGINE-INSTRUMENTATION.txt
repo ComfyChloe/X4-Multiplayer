@@ -5,7 +5,10 @@ SCOPE
 
 Until now the project used only supported extension surfaces: Lua UI, Mission
 Director, AI scripts and a hook-free native UDP module. Engine instrumentation is
-now permitted as opt-in work, following discussion with the project owner. It
+now permitted, following discussion with the project owner. The owner rejected
+the opt-in switch for game-loop networking: its supported, validated driver belongs
+in the normal runtime and packages. Exact-build checks and native acceptance testing remain
+required; unsupported builds must not be patched. It
 covers runtime function hooks, game-memory offsets/signatures and patched engine
 behavior, for example seeding or replacing RNG state, fixing the simulation
 timestep or exposing engine state that the Lua/MD APIs do not provide.

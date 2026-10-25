@@ -251,7 +251,7 @@ local ok,e=pcall(function()
    log('action result '..request..' '..result)
   end
  end)
- if cfg.engine_simtick==true then
+ if package.config:sub(1,1)=='\\' then
   assert(X4LAN_SIMTICK,'simtick driver unavailable').register(safeFrame,cfg)
  else
   SetScript('onUpdate',safeFrame)

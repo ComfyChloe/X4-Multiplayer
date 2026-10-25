@@ -1,7 +1,8 @@
 # Experimental Windows simulation callback
 
 Task owner: Codex, `contrib/codex-engine-patches`, based on `be94436`.
-Internal, opt-in instrumentation; not part of a release or the UDP transport.
+Internal instrumentation; default Windows driver in this branch, separate from
+the UDP transport. Not released or installed in the current playtest.
 
 `simtick.c` registers a callback in empty MoveWorker VBI slot 7. It runs after
 pathing/physics and the UI update, before render preparation. It changes one data
@@ -21,7 +22,11 @@ The slot dispatches once per MoveWorker frame, including frames whose game time 
 paused. Existing adapter pause checks still guard simulation writes; transport
 heartbeats may continue. A frame callback is not a fixed simulation timestep.
 
-Build using Zig (output stays under ignored `.local/`):
+The internal packager compiles this module and includes it in the Windows package.
+No runtime switch or manual DLL installation is required. Release builders supply
+Zig 0.15.2 using `--zig`, `X4LAN_ZIG` or PATH; a build failure stops packaging before
+creating the destination. The DLL is never committed. For standalone development
+checks (output stays under ignored `.local/`):
 
 ```
 python native/engine/build.py --zig /path/to/zig --test
@@ -34,12 +39,12 @@ whether it is armed, `handle:stop()` disarms it, `handle:frames()` counts succes
 callbacks. Only one owner may be active per process. Do not register the same work
 through both this API and UI `onUpdate`.
 
-The adapters select this driver only with `engine_simtick = true` in a private
-profile-45841 configuration, and the separately built DLL installed in the test
-extension's `native/` directory. `X4LAN_SIMTICK_PATH` can supply an explicit path.
-Ordinary packages do not enable it or include the DLL. UI `onUpdate` bootstraps
+The Windows adapters always select this driver in the supported profile-45841
+configuration. Linux retains its existing UI driver until its native scheduling
+ABI is implemented. `X4LAN_SIMTICK_PATH` can supply a development path.
+UI `onUpdate` bootstraps
 registration and watches its status; only the native slot calls the network frame.
-Loading retries at most once a second. Other refusals stop this opt-in adapter;
+Loading retries at most once a second. Other refusals stop the Windows adapter;
 they do not silently revert to UI networking.
 
 Native lifecycle checks remain required: register after world startup; count callbacks; pause/unpause; load a
@@ -61,7 +66,7 @@ unfocused and minimized behavior. No normal saves or live playtest installations
    ForcedFlightControlModel is a candidate, but target reference/time semantics,
    competing target writers and takeover restoration are not yet validated.
    Preserve the separate `contrib/ferrite-proxy-motion` mitigation for review.
-3. **Networking:** opt-in adapter migration is implemented but unvalidated in X4;
+3. **Networking:** default Windows adapter migration is implemented but unvalidated in X4;
    an independent headless bootstrap remains to be implemented.
 4. **H2:** rendering suppression and the minimized main-message-loop gate are
    separate. Neither is solved by skipping UI or a render callback blindly.
@@ -81,8 +86,10 @@ attention-agent static observations. They are analyses, not gameplay test result
   real Lua ABI, invalid arguments, coroutine rejection and non-X4 process
   rejection pass. This is a separate Python process, not an injected game test.
 - Six new LuaJIT tests pass on Windows and Linux: native ownership without UI
-  ticks, no duplicate dispatch, loading retry, terminal refusal/disarm, default UI
-  path and profile/platform guards.
+  ticks, no duplicate dispatch, loading retry, terminal refusal/disarm, Linux UI
+  path and profile guards. A Windows adapter test also verifies that networking
+  selects native dispatch without a configuration flag. Package assembly checks
+  Windows inclusion, Linux exclusion and aborting on compiler failure.
 - WSL Ubuntu 24.04, Python 3.12, Lupa 2.8: `dev/check.py` ran 642 tests,
   **641 pass, one failure, no skips**. Failure:
   `test_failed_native_capture_is_reported_and_retry_retains_evidence` expects

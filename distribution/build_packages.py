@@ -1,12 +1,20 @@
 """Build INTERNAL Windows/Linux host-or-guest packages without session secrets."""
 from pathlib import Path
 import argparse, hashlib, json, re, secrets, shutil, tarfile, tempfile, zipfile
+import importlib.util
 SOURCE = Path(__file__).resolve().parents[1]
 DIST = SOURCE / 'distribution'
 BUILD = '23660954'
 SHIP_MACRO = 'ship_ter_s_xperimental_01_a_macro'
 SHIP_LOADOUT = 'x4lan_coop_xperimental'
 SHIP_WEAPONS = 6
+
+
+def build_engine(zig=None):
+    spec = importlib.util.spec_from_file_location('x4lan_engine_builder', SOURCE / 'native/engine/build.py')
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.build_module(SOURCE, zig)
 
 def version():
     value = (SOURCE / 'VERSION.txt').read_text().strip()
@@ -31,7 +39,7 @@ def copy_server_runtime(root):
                  'universe', 'cargo', 'identity', 'npc_combat', 'seed', 'docking', 'projectile_protocol', 'projectile_relay'):
         shutil.copy2(SOURCE / 'x4lan' / (name + '.py'), root / 'x4lan' / (name + '.py'))
 
-def build(destination: Path, runtime_cache: Path | None = None):
+def build(destination: Path, runtime_cache: Path | None = None, zig: Path | None = None):
     release = version()
     reports = [SOURCE / f'reports/{name}-{release}-{suffix}.txt'
                for name, suffix in [('automated', 'tests'), ('release', 'checks')]]
@@ -45,6 +53,9 @@ def build(destination: Path, runtime_cache: Path | None = None):
             if hashlib.sha256((runtime_cache / record['file']).read_bytes()).hexdigest() != record['sha256']:
                 raise ValueError('Runtime checksum mismatch: ' + platform)
         if not (runtime_cache / 'licenses').is_dir(): raise ValueError('Runtime licenses are required.')
+    if destination.exists():
+        raise FileExistsError(destination)
+    engine_module = build_engine(zig)
     destination.mkdir(parents=True, exist_ok=False)
     pair_id = 'internal-dist-' + secrets.token_hex(8)
     folders, archives = [], []
@@ -65,6 +76,10 @@ def build(destination: Path, runtime_cache: Path | None = None):
         for name in ('aiscripts/x4lan.interaction.fire.xml', 'aiscripts/x4lan.interaction.trade.xml', 'md/x4lan_interactions.xml'):
             (extension / name).unlink()
         (extension / 'native' / ('x4lan_net_64.dll' if platform == 'Linux' else 'x4lan_net.so')).unlink()
+        if platform == 'Windows11':
+            shutil.copy2(engine_module, extension / 'native/x4lan_simtick_64.dll')
+        else:
+            (extension / 'native/x4lan_simtick_64.dll').unlink(missing_ok=True)
         write(extension / 'ui/config.lua', '-- Run 01-INSTALL before using this package.\nX4LAN_CONFIG = {\n'
               '    enabled = false,\n' + f'    ship_macro = "{SHIP_MACRO}",\n'
               + f'    ship_loadout = "{SHIP_LOADOUT}",\n    ship_weapons = {SHIP_WEAPONS},\n' + '}\n')
@@ -144,5 +159,6 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('destination', type=Path)
     parser.add_argument('--runtime-cache', type=Path, required=True)
+    parser.add_argument('--zig', type=Path, help='Zig 0.15.2 (or set X4LAN_ZIG / put zig on PATH)')
     args = parser.parse_args()
-    build(args.destination, args.runtime_cache)
+    build(args.destination, args.runtime_cache, args.zig)

@@ -1,4 +1,4 @@
-/* Original, opt-in X4 9.00 / Steam 23660954 instrumentation.
+/* Original, build-verified X4 9.00 / Steam 23660954 instrumentation.
  * No disk patches, injection, transport changes, or foreign-thread engine calls.
  * ABI observations: local x4-re/coord/reports/simtick.md.
  */

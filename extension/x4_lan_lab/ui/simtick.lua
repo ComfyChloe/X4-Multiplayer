@@ -1,5 +1,5 @@
--- Opt-in native frame driver. Default configurations retain the existing UI path.
--- The DLL is built separately and is never included in ordinary packages.
+-- Native frame driver for supported Windows builds, bundled by the packager.
+-- Linux retains the UI driver until its native scheduling ABI is implemented.
 local M={}
 X4LAN_SIMTICK=M
 local owner,native,registered,stopped,reported
@@ -11,9 +11,8 @@ end
 function M.register(callback,cfg)
  assert(not registered,'simtick driver already registered')
  registered=true
- if cfg.engine_simtick~=true then SetScript('onUpdate',callback);return end
+ if package.config:sub(1,1)~='\\' then SetScript('onUpdate',callback);return end
  assert(cfg.test_profile=='45841','simtick requires disposable profile 45841')
- assert(package.config:sub(1,1)=='\\','simtick supports the pinned Windows build only')
  assert(package.loadlib,'native Lua modules unavailable')
  if GetUISafeModeOption then assert(GetUISafeModeOption()==false,'disable Protected UI mode') end
  local initialise,message=package.loadlib(X4LAN_SIMTICK_PATH or

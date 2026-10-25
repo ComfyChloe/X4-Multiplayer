@@ -16,7 +16,7 @@ class SimtickLuaTests(unittest.TestCase):
           function DebugError(s) logs[#logs+1]=s end
           function SetScript(event,fn) assert(event=='onUpdate'); ui=fn end
           function work() runs=runs+1 end
-          cfg={engine_simtick=true,test_profile='45841'}
+          cfg={test_profile='45841'}
           package.config=string.char(92)
           handle={armed=true,active=function(self) return self.armed end,
             stop=function(self) self.armed=false;stops=stops+1 end}
@@ -42,9 +42,9 @@ class SimtickLuaTests(unittest.TestCase):
           ui();assert(attempts==1 and runs==2)
         ''')
 
-    def test_default_retains_ui_without_loading_dll(self):
+    def test_linux_retains_ui_without_loading_windows_dll(self):
         self.runtime().execute('''
-          cfg.engine_simtick=false
+          package.config='/'
           package.loadlib=function() error('unexpected native load') end
           X4LAN_SIMTICK.register(work,cfg);ui();assert(runs==1)
         ''')
@@ -69,10 +69,8 @@ class SimtickLuaTests(unittest.TestCase):
           ui();now=20;ui();assert(stops==1 and attempts==1 and runs==0)
         ''')
 
-    def test_rejects_profile_platform_duplicate_registration(self):
-        for setup in ("cfg.test_profile='70000001'", "package.config='/'"):
-            lua = self.runtime()
-            lua.execute(setup + ";assert(not pcall(X4LAN_SIMTICK.register,work,cfg))")
+    def test_rejects_profile_and_duplicate_registration(self):
+        self.runtime().execute("cfg.test_profile='70000001';assert(not pcall(X4LAN_SIMTICK.register,work,cfg))")
         self.runtime().execute('''
           X4LAN_SIMTICK.register(work,cfg)
           assert(not pcall(X4LAN_SIMTICK.register,work,cfg))

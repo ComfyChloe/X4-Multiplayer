@@ -96,8 +96,12 @@ class ShipSpecContractTests(unittest.TestCase):
             for name, suffix in (('automated', 'tests'), ('release', 'checks')):
                 (source / 'reports' / f'{name}-{release}-{suffix}.txt').write_text(
                     'Unit-test fixture only; no release acceptance.\n')
-            with patch.object(build_packages, 'SOURCE', source):
+            engine = Path(temp) / 'engine-fixture.dll'
+            engine.write_bytes(b'package assembly fixture, not a game module')
+            with patch.object(build_packages, 'SOURCE', source), patch.object(
+                    build_packages, 'build_engine', return_value=engine) as compile_engine:
                 folders = build_packages.build(Path(temp) / 'pair')
+            compile_engine.assert_called_once_with(None)
             configs = [(f / 'extension/x4_lan_lab/ui/config.lua').read_text() for f in folders]
             for config in configs:
                 self.assertIn('ship_macro = "%s",' % build_packages.SHIP_MACRO, config)
@@ -105,6 +109,16 @@ class ShipSpecContractTests(unittest.TestCase):
                 self.assertIn('ship_weapons = %d,' % build_packages.SHIP_WEAPONS, config)
             for folder in folders:
                 self.assertTrue((folder / 'extension/x4_lan_lab/libraries/loadouts.xml').is_file())
+                module = folder / 'extension/x4_lan_lab/native/x4lan_simtick_64.dll'
+                if folder.name.endswith('Windows11'):
+                    self.assertEqual(module.read_bytes(), engine.read_bytes())
+                else:
+                    self.assertFalse(module.exists())
+            with patch.object(build_packages, 'SOURCE', source), patch.object(
+                    build_packages, 'build_engine', side_effect=RuntimeError('compiler failed')):
+                with self.assertRaisesRegex(RuntimeError, 'compiler failed'):
+                    build_packages.build(Path(temp) / 'incomplete')
+            self.assertFalse((Path(temp) / 'incomplete').exists())
 
     def test_md_prepares_both_ships_and_refuses_without_substitute(self):
         root = ET.parse(EXT / 'md/x4lan_bubble.xml').getroot()

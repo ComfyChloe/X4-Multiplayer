@@ -27,6 +27,9 @@ class BubbleAdapterTests(unittest.TestCase):
   lua=LuaRuntime(unpack_returned_tuples=True);lua.execute(MOCK+EXTRA+setup);lua.execute(SCRIPT.read_text())
   if ready:lua.execute("events['X4LAN.Loaded'](); now=10;frames.onUpdate(); events['X4LAN_Bubble.Ready'](); frames.onUpdate()")
   return lua
+ def test_windows_network_frame_uses_native_driver_without_configuration_flag(self):
+  l=self.make("package.config=string.char(92);X4LAN_SIMTICK={register=function(fn,cfg) nativeFrame=fn end}",False)
+  l.execute("assert(nativeFrame and not frames.onUpdate);events['X4LAN.Loaded']();now=10;nativeFrame();events['X4LAN_Bubble.Ready']();nativeFrame();assert(updates==1)")
  def test_setup_waits_and_original_profile_is_inactive(self):
   l=self.make(ready=False);l.execute("frames.onUpdate(); assert(countRequest('SetupHost')==0); events['X4LAN.Loaded'](); now=10;frames.onUpdate(); assert(countRequest('SetupHost')==1)")
   l=self.make("api.GetSaveFolderPath=function() return '/X4/original/save' end",False);self.assertIsNone(l.eval('frames.onUpdate'))

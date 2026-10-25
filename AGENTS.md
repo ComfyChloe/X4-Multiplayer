@@ -17,7 +17,7 @@
 - Write original code. Neresco projects are research references only; do not copy
   or embed their multiplayer sources, binaries or framework.
 - Engine instrumentation (runtime hooks, game-memory offsets, patched engine
-  functions such as RNG or timestep) is permitted as opt-in work under
+  functions such as RNG or timestep) is permitted under
   `ENGINE-INSTRUMENTATION.txt`. Never modify or redistribute X4 or Egosoft files;
   verify the exact build before patching and fail closed on any mismatch. Keep the
   `x4lan_net` transport free of hooks.
