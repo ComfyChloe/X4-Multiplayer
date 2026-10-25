@@ -88,3 +88,82 @@ class MotionTests(unittest.TestCase):
           M.push(t,2,{20100,0,0,0,0,0},{100,0,0,0,0,0},102)
           p,v=M.render(t,102);assert(p[1]==20100 and v[1]==0)
         ''')
+
+    def test_render_clock_slews_mode_delay_without_backward_jump(self):
+        self.lua.execute('''
+          local M=X4LAN_MOTION;local t={};local k=0
+          local previous,delay=nil,.15
+          for i=0,180 do
+           local now=100.5+i/60;if i==30 then delay=.3 end
+           while 100+k*.05<=now do assert(M.push(t,k*.05,{k*.05*10000,0,0,0,0,0},{10000,0,0,0,0,0},100+k*.05));k=k+1 end
+           local target=M.clock(t,now,delay);local p=M.renderAt(t,target,.6)
+           if previous then
+            local step=p[1]-previous
+            -- 10 km/s at 60 FPS is 166.7 m per frame; a raw .15 s delay change would hop 1.5 km back.
+            assert(step>0 and math.abs(step-10000/60)<=10000/60*M.slew+.001, step)
+           end
+           previous=p[1]
+          end
+          assert(math.abs((t.lag-t.offset)-.3)<1e-9)
+          assert(math.abs(M.clock(t,103.5,5)-(103.5-t.offset-5))<1e-9) -- an implausible step snaps
+        ''')
+
+    def test_retained_clock_survives_stale_reset_but_default_rebaselines(self):
+        self.lua.execute('''
+          local M=X4LAN_MOTION;local z={0,0,0,0,0,0}
+          for _,keep in ipairs({true,false}) do
+           local t={retainClock=keep}
+           M.push(t,1,z,z,10)           -- offset 9 (fast packet)
+           M.push(t,5,{100,0,0,0,0,0},z,14.2) -- stale gap; this packet was .2 s slower
+           assert(#t.samples==1 and t.resets==1)
+           assert(math.abs(t.offset-(keep and 9 or 9.2))<1e-9)
+          end
+        ''')
+
+    def test_offset_leak_tracks_faster_observer_clock_and_fast_samples_pull_back(self):
+        self.lua.execute('''
+          local M=X4LAN_MOTION;local z={0,0,0,0,0,0}
+          local t={leak=M.leak};local plain={}
+          -- The observer clock runs 500 ppm fast: arrival-time grows by .5 ms/s.
+          for i=0,600 do
+           local time=i*.1;local arrival=100+time*1.0005
+           M.push(t,time,z,z,arrival);M.push(plain,time,z,z,arrival)
+          end
+          assert(plain.offset==100)
+          local true_offset=100+60*.0005
+          assert(t.offset<=true_offset+1e-9 and t.offset>true_offset-.005, t.offset)
+          M.push(t,60.1,z,z,100+60.1)   -- an unusually fast packet still lowers the estimate
+          assert(math.abs(t.offset-100)<1e-9)
+        ''')
+
+    def test_declared_high_speed_mode_extends_discontinuity_rule_only_with_consistent_velocity(self):
+        self.lua.execute('''
+          local M=X4LAN_MOTION;local z={0,0,0,0,0,0}
+          local function run(mode,vnew,d)
+           local t={mode=mode}
+           M.push(t,0,z,{300,0,0,0,0,0},0)
+           M.push(t,.7,{d,0,0,0,0,0},{vnew,0,0,0,0,0},.7)
+           return t.resets or 0
+          end
+          -- Highway entry during a .7 s hitch: 25 km at a sampled 30 km/s.
+          assert(run('highway',30000,25000)==0)
+          assert(run(nil,30000,25000)==1)        -- normal mode keeps the original rule
+          assert(run('travel',30000,25000)==1)   -- above the 20 km/s travel allowance
+          -- A real teleport has no consistent sampled velocity (the sender zeroes > 100 km/s).
+          assert(run('highway',0,40000)==1)
+        ''')
+
+    def test_mode_classification_infers_fast_legacy_streams_with_hysteresis(self):
+        self.lua.execute('''
+          local M=X4LAN_MOTION;local s={}
+          assert(M.classify(s,nil,300,0)=='normal')
+          assert(M.classify(s,nil,5000,1)=='fast')
+          assert(M.classify(s,nil,1000,2)=='fast')       -- above exit threshold
+          assert(M.classify(s,nil,100,2.5)=='fast')      -- held
+          assert(M.classify(s,nil,100,3.1)=='normal')
+          assert(M.classify(s,'highway',100,4)=='highway')
+          assert(M.classify(s,'normal',100,4.5)=='highway')
+          local mode,profile=M.classify(s,'normal',100,5.1)
+          assert(mode=='normal' and profile.delay==M.delay and profile.horizon==M.horizon)
+          assert(M.classify({},'warp',100,0)=='normal')
+        ''')

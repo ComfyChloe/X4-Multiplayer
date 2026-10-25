@@ -13,6 +13,7 @@ X4LAN_CONFIG = {
     faction_missions = false, -- INTERNAL opt-in: native shared faction mission journal.
     npc_combat = false, -- INTERNAL opt-in: host NPC health and acknowledged guest stock-gun hits.
     interaction_test = false, -- Destructive fixtures ONLY in the disposable test world.
+    motion_diagnostics = false, -- Diagnostic only: rate-limited MOTION_DIAG rows (seconds, or true = 0.5 s) for remote co-op ships.
     test_profile = "45841",
     host = "127.0.0.1",
     port = 45841,
