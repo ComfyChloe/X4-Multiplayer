@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_Divergence" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <!-- LOG-ONLY divergence recorder scheduler (DIVERGENCE-PROBE.txt). It reads ships and
+      raises Lua events; it creates, moves or changes nothing. Without the opt-in
+      ui/divergence_probe.lua (divergence_probe=true) nobody answers Hello: it then
+      raises at most 120 unanswered Hello events (10 minutes) and stays idle. -->
+ <cues>
+  <cue name="Boot" namespace="this">
+   <conditions><check_value value="player.age gt 2s"/></conditions>
+   <actions>
+    <set_value name="Boot.$configured" exact="false"/><set_value name="Boot.$hellos" exact="0"/>
+    <set_value name="Boot.$sectors" exact="[]"/><set_value name="Boot.$tick" exact="0"/>
+    <set_value name="Boot.$interval" exact="30s"/><set_value name="Boot.$nextAt" exact="0s"/><set_value name="Boot.$maxShips" exact="400"/>
+   </actions>
+   <cues>
+    <cue name="Hello" instantiate="true" checkinterval="5s">
+     <conditions><check_value value="not Boot.$configured and Boot.$hellos lt 120"/></conditions>
+     <actions>
+      <set_value name="Boot.$hellos" operation="add" exact="1"/>
+      <raise_lua_event name="'X4LAN_Divergence.Hello'" param="'%s'.[player.age / 1s]"/>
+     </actions>
+    </cue>
+    <cue name="Sector" instantiate="true" namespace="this">
+     <conditions><event_ui_triggered screen="'X4LAN_Divergence'" control="'Sector'"/><check_value value="not Boot.$configured"/></conditions>
+     <actions>
+      <find_sector name="$found" macro="macro.{event.param3}" required="false"/>
+      <do_if value="not @$found">
+       <raise_lua_event name="'X4LAN_Divergence.Missing'" param="event.param3"/>
+      </do_if>
+      <do_elseif value="Boot.$sectors.indexof.{$found} == 0 and Boot.$sectors.count lt 16">
+       <append_to_list name="Boot.$sectors" exact="$found"/>
+      </do_elseif>
+     </actions>
+    </cue>
+    <cue name="Start" instantiate="true" namespace="this">
+     <conditions><event_ui_triggered screen="'X4LAN_Divergence'" control="'Start'"/><check_value value="not Boot.$configured"/></conditions>
+     <actions>
+      <do_if value="event.param3.$interval ge 5 and event.param3.$interval le 3600 and event.param3.$maxships ge 1 and event.param3.$maxships le 2000 and event.param3.$first ge 0">
+       <set_value name="Boot.$interval" exact="event.param3.$interval * 1s"/>
+       <set_value name="Boot.$nextAt" exact="event.param3.$first * 1s"/>
+       <set_value name="Boot.$maxShips" exact="event.param3.$maxships"/>
+       <set_value name="Boot.$configured" exact="true"/>
+       <debug_text text="'[X4LAN] DIV1 MDCFG interval=%s first=%s maxships=%s sectors=%s'.[Boot.$interval, Boot.$nextAt, Boot.$maxShips, Boot.$sectors.count]"/>
+      </do_if>
+     </actions>
+    </cue>
+    <!-- Samples on the saved game clock; 0.1 s polling bounds the scheduling skew. -->
+    <cue name="Sample" instantiate="true" checkinterval="0.1s" namespace="this">
+     <conditions><check_value value="Boot.$configured and player.age ge Boot.$nextAt"/></conditions>
+     <actions>
+      <set_value name="Boot.$tick" operation="add" exact="1"/>
+      <set_value name="$scheduled" exact="Boot.$nextAt"/>
+      <do_while value="Boot.$nextAt le player.age"><set_value name="Boot.$nextAt" operation="add" exact="Boot.$interval"/></do_while>
+      <set_value name="$list" exact="[]"/>
+      <do_if value="@player.sector"><append_to_list name="$list" exact="player.sector"/></do_if>
+      <do_all exact="Boot.$sectors.count" counter="$i">
+       <do_if value="$list.indexof.{Boot.$sectors.{$i}} == 0"><append_to_list name="$list" exact="Boot.$sectors.{$i}"/></do_if>
+      </do_all>
+      <raise_lua_event name="'X4LAN_Divergence.Tick'" param="'%s|%s|%s|%s|%s'.[Boot.$tick, $scheduled / 1s, player.age / 1s, player.systemtime.{'%Y-%m-%dT%H:%M:%S'}, @player.sector.macro.id]"/>
+      <do_all exact="$list.count" counter="$i">
+       <set_value name="$sector" exact="$list.{$i}"/>
+       <find_ship name="$ships" space="$sector" multiple="true" recursive="true"/>
+       <set_value name="$n" exact="$ships.count"/>
+       <do_if value="$n gt Boot.$maxShips"><set_value name="$n" exact="Boot.$maxShips"/></do_if>
+       <raise_lua_event name="'X4LAN_Divergence.Sector'" param="'%s|%s|%s|%s|%s'.[Boot.$tick, $sector.macro.id, $ships.count, $n, if $sector == player.sector then 1 else 0]"/>
+       <do_all exact="$n" counter="$j"><raise_lua_event name="'X4LAN_Divergence.Ship'" param="$ships.{$j}"/></do_all>
+      </do_all>
+      <raise_lua_event name="'X4LAN_Divergence.End'" param="'%s|%s'.[Boot.$tick, $list.count]"/>
+     </actions>
+    </cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>

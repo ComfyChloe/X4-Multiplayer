@@ -1,0 +1,163 @@
+DIVERGENCE PROBE: HOW FAST DO TWO UNSYNCHRONIZED X4 GAMES DRIFT APART (dev only)
+Branch contrib/ferrite-divergence-probe, 25 October 2026 | INTERNAL | UNEXERCISED IN-GAME
+
+STATUS
+Nothing in this document has run in X4. The recorder, its MD scheduler and the comparator
+are covered only by engine doubles and synthetic logs (tests/test_divergence_probe.py).
+The first native run must first confirm the recorder works at all (see FIRST NATIVE CHECKS).
+This is the hook-free baseline for ENGINE-INSTRUMENTATION.txt research: no engine hooks,
+no RNG seeding, no fixed timestep. Measure this before claiming any hook reduces drift.
+
+QUESTION
+Two games load the SAME starting save and run with NO synchronization. How quickly do
+their NPC ships disagree on existence, sector, position, hull and orders, in a sector
+with a player and in sectors without one? The answer decides between full NPC replication
+(host owns every relevant ship) and a hybrid (both simulate locally; hash-checked
+per-sector resync corrects drift).
+
+COMPONENTS
+extension/x4_lan_lab/ui/divergence_probe.lua   Lua recorder, gated by divergence_probe.
+extension/x4_lan_lab/md/x4lan_divergence.xml   MD scheduler and sector enumeration.
+dev/compare_divergence.py                     Offline host/guest log comparison.
+Log only: no object writes, no orders, no packets, no relay channel, no authority change,
+no wire-protocol change. Safe with enabled=false (pure experiment) and in host or guest
+role of a running session. Adding the two files changes the extension content digest:
+both games need the same extension build (it already must match).
+
+CONFIGURATION (installed client config.lua only; the source config stays inert)
+  divergence_probe = true,                 -- required; default false
+  divergence_interval = 30,                -- game seconds between samples, 5..3600
+  divergence_sectors = {'cluster_14_sector001_macro','cluster_01_sector001_macro'},
+                                           -- extra sectors, max 16 (default: Argon Prime =
+                                           -- shared start, Grand Exchange I). Player's sector
+                                           -- is always added. Unknown macros log MISSING.
+  divergence_max_ships = 400,              -- per sector per sample (MD bound), 1..2000
+  divergence_max_lines = 2000,             -- SHIP lines per sample (Lua bound), 1..10000
+  divergence_label = 'A',                  -- optional; default cfg.slot
+Use identical values in both games. Requires test_profile "45841" and the isolated
+save folder; otherwise the recorder logs STOPPED and registers nothing.
+
+HOW IT SAMPLES
+MD waits until player.age > 2 s and raises Hello every 5 s (max 120 if nobody answers).
+Lua answers with the sector list and the first sample time, rounded UP to a multiple of
+the interval on the SAVED game clock (player.age). Both games therefore sample at the
+same scheduled game times regardless of when each was started. MD polls every 0.1 s, so
+each actual sample may trail its schedule by about 0.1 s plus one frame; TICK records
+both (gt scheduled, age actual) and the comparator reports this skew.
+Per sample: find_ship (recursive, so docked ships too) in the player's sector plus the
+configured ones; one Lua event per ship; Lua reads the ship through the stock UI API.
+
+LOG LINES (in -logfile x4lan-debug.txt, prefix "[X4LAN] DIV1 ", key=value, %-escaped)
+CFG    label slot enabled world_mode interval maxships maxlines sectors orders lgt rt os
+START  age first
+TICK   n gt(scheduled) age(actual MD) lgt(Lua game time) rt(real time) wall psector
+SHIP   n s(sampled sector) id(native component ID) macro owner code(idcode) name(<=64 B)
+       cls(xl/l/m/s/xs) sector(actual) x y z yaw pitch roll (sector frame, m/rad)
+       hull shield (%) order ostate (first queued order and its state) dorder (default
+       order) docked stored dock(container idcode/macro) first(sample n of first sight)
+SECTOR n sector player(0/1) found requested written gone dropped errors lgt
+END    n ships dropped gone errors lgt rt
+MISSING, ERROR, STOPPED, FIRSTSEEN_FULL: diagnostics. 20 handler errors stop the probe.
+"first" is the spawn hint: a ship first seen after sample 1 of a sector that was already
+sampled was created after load (or arrived). No engine creation time is available.
+
+COST AND BOUNDS (estimates; not measured in X4)
+At most divergence_max_lines SHIP lines (~300-400 bytes each) per sample, so the worst
+case at defaults is about 0.8 MB per sample. Typical expectation: 100-400 ships in the
+default sectors, about 40-150 KB per 30 s, 5-20 MB per hour. Lua work per ship: about ten
+GetComponentData fields and six FFI reads; the first-seen table is capped at 50000 IDs.
+The whole sample runs in one MD action and its Lua events, i.e. a burst in one or two
+frames every interval. That burst can itself shift frame timing (both games pay it).
+Measure the frame-time spike in the first native run before longer runs.
+
+FIRST NATIVE CHECKS (before trusting any result)
+1. CFG, START and MDCFG appear; TICK gt values are multiples of the interval.
+2. SHIP id values are decimal component IDs; macro/owner/code/hull look plausible;
+   orders=1 in CFG and order/dorder non-empty for typical NPC traders.
+3. SECTOR written+gone == requested and dropped=0 at defaults.
+4. No MD script errors for X4LAN_Divergence in the log (find_ship, player.sector,
+   do_while and raise_lua_event with a component are used here without native proof).
+5. Note the frame-time spike at each sample; run a short V0 pair (10 min) and check the
+   comparator shows near-complete id matches at the first common sample.
+If 1-5 fail, record the failure; do not tune the comparator to hide it.
+
+EXPERIMENT (X4 closed first, profile 45841, autosave off, disposable world only)
+Prepare one shared starting world with the normal launchers (02-PREPARE-WORLD-HOST; the
+guest receives the identical bundle). Verify the save SHA-256 from world/bundle/
+manifest.json on both sides. Then, for the pure no-sync runs, write the installed config
+with enabled=false plus the probe settings (keep a backup of the original), launch X4 with
+  -personalfolderid 45841 -skipintro -debug scripts -logfile x4lan-debug.txt
+       -nocputhrottle -noworkshopsync
+and load save_010 from Load Game. Same FPS cap, graphics and DLC/mod set on both. Do NOT
+use SETA/time acceleration, do not save, do not change sectors unless the variant says so.
+Pausing is harmless (game time stops) but avoid it. Run at least 65 game minutes so every
+bucket (1, 5, 15, 60 min) fills. Restore the original config afterwards.
+
+Variants (one log pair each; record which in the notes):
+V0 Sequential self-check, same PC: load save_010, run 65 min, quit; copy the log; repeat.
+   Same OS, same binary, no two-instance contention. Lowest-noise baseline.
+V1 Same PC, two simultaneous instances. The second instance needs its own isolated
+   profile container (e.g. a Sandboxie box). The primary PC's existing box "X4Guest" and
+   x4lan-test installation belong to the live playtest setup: coordinate before use.
+V2 Windows host PC, Linux guest PC: cross-OS / cross-compiler floating point.
+Player placement, each variant:
+P  Player present: both players stay docked at the same station in Argon Prime (the
+   start sector) without input. Argon Prime = player category; Grand Exchange I = none.
+N  No player: both players fly to and dock in a remote sector not in divergence_sectors,
+   then wait. Argon Prime and Grand Exchange I are then both no-player sectors. The
+   flight itself differs between the games; note that the first minutes are affected.
+In-session option: the probe also runs inside a normal session (enabled=true), but in
+world_mode=replica the guest's own sector is host replicas, not its own simulation; the
+comparator warns. Use observe mode or enabled=false for this measurement.
+
+COLLECT (store under .local/divergence-YYYYMMDD/ or outside Git; never commit logs)
+Both x4lan-debug.txt copies after X4 has closed, OS/PC, game build, DLCs, FPS cap,
+variant, start real times, any player input, the save SHA-256 and this branch commit.
+Then:
+  python dev/compare_divergence.py host.log guest.log --report report.txt
+         --csv ticks.csv --summary-csv summary.csv
+
+MATCHING (dev/compare_divergence.py)
+Samples align on scheduled game time. Only sectors completely sampled in BOTH logs at a
+time are compared (truncated, dropped or errored sector samples are skipped and counted).
+1 id: equal component ID with equal macro and equal idcode (if both have one).
+   Same ID with another macro/code = id_conflict, never matched.
+2 code: unique (macro, owner, idcode). Preloaded ships keep their saved idcode.
+3 pose: same sector and (macro, owner), greedy nearest within --pose-tolerance (1000 m).
+Within one log an ID whose macro/code changes becomes a new generation (ID reuse).
+Player-owned ships are excluded unless --include-player-owned.
+Known weaknesses: component IDs are runtime handles; equal IDs across games are evidence,
+not proof, and post-load allocation order differs. Ships spawned after load normally get
+different codes, so they can only be pose-matched, which is a guess and can pair two
+different ships of one type; pose matches are therefore excluded from the identity error
+statistics. find_ship order is arbitrary, so a truncated sector sample is unusable and is
+skipped. A ship that moved to an unsampled sector appears as one-sided. Mass traffic
+and objects that are not ships are not recorded. Order state compares only the first
+queued and default order definitions, not their parameters or targets. Hull compares
+percentages; equipment, cargo and crew are not recorded.
+
+REPORT COLUMNS
+exist% matched/(matched + host-only + guest-only), all methods. ident% id+code share.
+pos_med/p90/max position error (m) over identity matches in the same sector.
+floor50 median estimated speed x sampling skew: error expected from sampling alone.
+hull%/order% share of identity matches with hull difference > tolerance / differing
+orders. Buckets are elapsed game time since the first common sample.
+
+INTERPRETATION (starting points, not established thresholds)
+Look at the "none" category first: that is where a hybrid would rely on local simulation.
+- Hybrid is plausible if, in no-player sectors, ident% stays high (for example >= 95%
+  at 15 min), host-only/guest-only appear slowly, and position/order drift grows slowly
+  enough that a per-sector hash plus correction every few minutes is cheaper than
+  streaming those ships. A resync interval must then be shorter than the time to the
+  first existence divergence that matters (spawned/destroyed ships).
+- Full replication is indicated if existence diverges within the first minutes
+  (independent spawns, trades or fights), if orders disagree early, or if V2 (cross-OS)
+  diverges much faster than V0/V1: then local simulation cannot be trusted between
+  resyncs and resync would amount to replication anyway.
+- Player-present sectors are expected to diverge fastest (high-attention physics, player
+  influence); they would be replicated under either model. Their numbers bound how much a
+  resync must correct when a player arrives.
+- V0 is the noise floor. If V0 already diverges quickly, the engine is not repeatable
+  even on one PC; instrumentation (RNG/timestep) is then the research question, measured
+  against this baseline.
+Report the measured numbers with variant, OS pair and build; do not generalize one run.
