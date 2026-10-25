@@ -51,6 +51,13 @@ current/alternate slot globals0x3e4fea8 and0x3d8e254. Uses the same manager
 global0x3e0ced0 as the velocity-order queue. Native scheduling remains unmeasured.
 GameClient::Move: VA0xfeaff0, H. X4::GameClient RTTI primary slot2 and seven
 references to diagnostics explicitly naming GameClient::Move identify it.
+Additional frame candidate: VA0x1193120, M, directly called from GameClient::Move
+at0xfeb298. It processes timed state and invokes recursive Component slot683 on
+the root at this+0x230. Exact Windows UniverseFrameUpdate equivalence is unproven.
+UI::XAnark::AnarkLuaEngine slot6 VA0xa7e1c0 calls Anark::CLuaEngine slot6
+VA0x231b030. The latter loads the onUpdate name via0x3d90880 at0x231b1dc.
+RTTI plus that named dispatch identify these two Linux anchors with H confidence;
+they do NOT identify the requested Windows UI::CUIController slot6 counterpart.
 
 UNRESOLVED / NOT APPROVED FOR HOOKING
 Physics-body create/destroy pair corresponding to Windows0x51bb90/0x51bc80;
@@ -63,7 +70,7 @@ Candidate0x1dba740 was rejected as a frame-update identification: it contains
 NotifyGameReset/notification-reset diagnostics, consistent with reset/cleanup.
 
 VERIFICATION AND RETAINED EVIDENCE
-reports/engine-mapping/linux-9.00-23660954.json includes14 function/anchor rows.
+reports/engine-mapping/linux-9.00-23660954.json includes17 function/anchor rows.
 Each contains first16 bytes plus a unique exact-build16/24-byte signature.
 Some first16-byte prologues occur up to197 times; those are NOT safe standalone
 search patterns. Uniqueness does not establish instruction boundaries, detour

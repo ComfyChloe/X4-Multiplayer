@@ -227,6 +227,54 @@
         "occurrences_in_file": 1,
         "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
       }
+    },
+    {
+      "va": "0x1193120",
+      "rva": "0xd93120",
+      "file_offset": "0xd93120",
+      "first_bytes": "415741564155415455534889fb4883ec",
+      "name": "Universe per-frame update candidate",
+      "confidence": "M",
+      "method": "Called from confirmed GameClient::Move at0xfeb298; processes timed state and invokes recursive Component update slot683 on root at this+0x230. Exact Windows UniverseFrameUpdate equivalence unresolved.",
+      "signature_occurrences_in_file": 523,
+      "build_signature": {
+        "bytes": 24,
+        "hex": "415741564155415455534889fb4883ec7848833def8cbf02",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0xa7e1c0",
+      "rva": "0x67e1c0",
+      "file_offset": "0x67e1c0",
+      "first_bytes": "415455534889fb4883ec20e860ce8901",
+      "name": "UI::XAnark::AnarkLuaEngine update",
+      "confidence": "H",
+      "method": "RTTI-confirmed AnarkLuaEngine primary slot6 at0x3c503f0; direct call to0x231b030.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "415455534889fb4883ec20e860ce8901",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
+    },
+    {
+      "va": "0x231b030",
+      "rva": "0x1f1b030",
+      "file_offset": "0x1f1b030",
+      "first_bytes": "415641554989fd41545553488d5f2048",
+      "name": "Anark::CLuaEngine onUpdate dispatch",
+      "confidence": "H",
+      "method": "RTTI-confirmed CLuaEngine primary slot6 at0x3baf3c0; loads onUpdate string via0x3d90880 at0x231b1dc. Does not establish UI::CUIController Windows-slot6 equivalence.",
+      "signature_occurrences_in_file": 1,
+      "build_signature": {
+        "bytes": 16,
+        "hex": "415641554989fd41545553488d5f2048",
+        "occurrences_in_file": 1,
+        "limit": "Exact-build identification only; not a trampoline instruction-length or ABI proof."
+      }
     }
   ],
   "fields": {
