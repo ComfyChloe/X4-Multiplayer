@@ -7,7 +7,12 @@ User supplied7.5.0 feedback; human testing continues. Next-version host/guest
 logging tools must record the whole playtest; user explicitly deferred development.
 Delivery draftPR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
 Delivered7.5.0 from4078f44; report: reports/INTERNAL-7-5-DELIVERY.txt.
-Primary works alone. No agent/chat/timer/Slack polling or new unattended schedule.
+Project lead: Ferrite, assigned by the owner25Oct. Astra / A:primary is now a
+contributor; agree new tasks/interfaces/integration with Ferrite. This supersedes
+earlier onboarding claims that Astra leads. Existing human test sessions remain
+untouched. No new agent/chat/timer/Slack polling or unattended schedule.
+Owner reports Ferrite is investigating X4 through decompilation/reverse engineering;
+no findings, source access or engine capability from that work verified here yet.
 
 DELIVERY / CURRENT HUMAN RESULTS
 Desktop/X4 Online/Internal Tests/7.5.0-2026-10-25
