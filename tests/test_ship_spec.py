@@ -96,7 +96,8 @@ class ShipSpecContractTests(unittest.TestCase):
             for name, suffix in (('automated', 'tests'), ('release', 'checks')):
                 (source / 'reports' / f'{name}-{release}-{suffix}.txt').write_text(
                     'Unit-test fixture only; no release acceptance.\n')
-            with patch.object(build_packages, 'SOURCE', source):
+            with patch.object(build_packages, 'SOURCE', source), \
+                    patch.object(build_packages, 'build_engine_module', return_value=ROOT / 'VERSION.txt'):
                 folders = build_packages.build(Path(temp) / 'pair')
             configs = [(f / 'extension/x4_lan_lab/ui/config.lua').read_text() for f in folders]
             for config in configs:
@@ -105,6 +106,11 @@ class ShipSpecContractTests(unittest.TestCase):
                 self.assertIn('ship_weapons = %d,' % build_packages.SHIP_WEAPONS, config)
             for folder in folders:
                 self.assertTrue((folder / 'extension/x4_lan_lab/libraries/loadouts.xml').is_file())
+            windows, linux = folders[1], folders[0]
+            self.assertTrue((windows / 'extension/x4_lan_lab/native/x4lan_hooks_64.dll').is_file())
+            self.assertFalse((linux / 'extension/x4_lan_lab/native/x4lan_hooks_64.dll').exists())
+            self.assertIn('engine_hooks = true', configs[1])
+            self.assertNotIn('engine_hooks = true', configs[0])
 
     def test_md_prepares_both_ships_and_refuses_without_substitute(self):
         root = ET.parse(EXT / 'md/x4lan_bubble.xml').getroot()

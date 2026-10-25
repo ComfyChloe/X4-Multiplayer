@@ -3,9 +3,11 @@
 Usage:
   python dev/compare_divergence.py HOST.log GUEST.log [--csv ticks.csv]
          [--summary-csv summary.csv] [--report report.txt] [options]
+  python dev/compare_divergence.py HOST.log GUEST.log --statehash [--report report.txt]
 
-The logs are X4 -logfile outputs written by extension/x4_lan_lab/ui/divergence_probe.lua
-(see DIVERGENCE-PROBE.txt). Samples are aligned by the SCHEDULED saved-game time.
+DIV1 logs come from extension/x4_lan_lab/ui/divergence_probe.lua and align by
+SCHEDULED saved-game time. With --statehash, observer frames from engine_hooks.lua
+are aligned instead and the first differing bucket is reported.
 
 Ship matching, per aligned sample and only over sectors completely sampled in both logs:
  1. id:   equal native component ID AND equal macro AND (equal idcode when both have one).
@@ -401,6 +403,136 @@ def report(result):
     return '\n'.join(lines) + '\n'
 
 
+STATEHASH_MARKER = '[X4LAN] STATEHASH '
+HASH_BUCKETS = ('identity', 'pose', 'health', 'rng', 'time')
+HASH16 = re.compile(r'[0-9a-f]{16}\Z')
+
+
+def parse_statehash_line(line):
+    at = line.find(STATEHASH_MARKER)
+    if at < 0:
+        return None
+    if len(line) > MAX_LINE:
+        raise ProbeLogError('STATEHASH line exceeds limit')
+    fields = {}
+    for token in line[at + len(STATEHASH_MARKER):].strip().split():
+        key, separator, value = token.partition('=')
+        if not separator or not re.fullmatch(r'[a-z_]+', key) or key in fields:
+            raise ProbeLogError('invalid STATEHASH field')
+        fields[key] = value
+    required = {'run', 'session', 'frame', 'complete', 'gt', 'dt'}
+    if not required <= fields.keys() or not fields['frame'].isdigit() or int(fields['frame']) < 1:
+        raise ProbeLogError('incomplete STATEHASH record')
+    if not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', fields['run']) or not re.fullmatch(r'[A-Za-z0-9_.:-]{1,128}', fields['session']):
+        raise ProbeLogError('invalid STATEHASH run/session')
+    if 'seed' in fields and not HASH16.fullmatch(fields['seed']):
+        raise ProbeLogError('invalid STATEHASH session seed')
+    for key in ('gt', 'dt'):
+        fields[key] = _number(fields[key])
+        if fields[key] is None:
+            raise ProbeLogError('invalid STATEHASH time')
+    fields['frame'] = int(fields['frame'])
+    if fields['complete'] == '1':
+        if not {'h', 'ships', 'weak', *HASH_BUCKETS} <= fields.keys() or 'reason' in fields:
+            raise ProbeLogError('incomplete STATEHASH payload')
+        if any(not HASH16.fullmatch(fields[key]) for key in ('h', *HASH_BUCKETS)):
+            raise ProbeLogError('invalid STATEHASH digest')
+        for key in ('ships', 'weak'):
+            if not fields[key].isdigit():
+                raise ProbeLogError('invalid STATEHASH count')
+            fields[key] = int(fields[key])
+    elif fields['complete'] == '0':
+        if not fields.get('reason') or {'h', *HASH_BUCKETS} & fields.keys():
+            raise ProbeLogError('invalid incomplete STATEHASH record')
+    else:
+        raise ProbeLogError('invalid STATEHASH completeness')
+    return fields
+
+
+def read_statehash(path):
+    samples = []
+    identity = None
+    previous = 0
+    with open(path, encoding='utf-8', errors='replace') as stream:
+        for line in stream:
+            if STATEHASH_MARKER not in line:
+                continue
+            sample = parse_statehash_line(line)
+            current = (sample['run'], sample['session'], sample.get('seed', ''))
+            if identity is None:
+                identity = current
+            elif current != identity:
+                raise ProbeLogError('mixed run, session or seed in STATEHASH log')
+            if sample['frame'] <= previous:
+                raise ProbeLogError('duplicate or regressing STATEHASH frame')
+            previous = sample['frame']
+            samples.append(sample)
+    if not samples:
+        raise ProbeLogError('a log contains no STATEHASH samples')
+    return samples
+
+
+def compare_statehash(host, guest):
+    if (host[0]['run'], host[0]['session'], host[0].get('seed', '')) != (guest[0]['run'], guest[0]['session'], guest[0].get('seed', '')):
+        raise ProbeLogError('STATEHASH run, session or seed differs')
+    host_by_frame = {sample['frame']: sample for sample in host}
+    guest_by_frame = {sample['frame']: sample for sample in guest}
+    events = []
+    first = None
+    compared = 0
+    baseline = None
+    bucket_stats = {key: dict(first=None, differences=0) for key in HASH_BUCKETS}
+    for frame in sorted(host_by_frame.keys() | guest_by_frame.keys()):
+        h, g = host_by_frame.get(frame), guest_by_frame.get(frame)
+        if not h or not g:
+            events.append((frame, 'missing', 'host' if not h else 'guest'))
+            continue
+        if h['complete'] != '1' or g['complete'] != '1':
+            events.append((frame, 'incomplete', h.get('reason', '') if h['complete'] == '0' else g.get('reason', '')))
+            continue
+        compared += 1
+        if baseline is None:
+            baseline = h['gt']
+        differing = [key for key in HASH_BUCKETS if h[key] != g[key]]
+        for key in differing:
+            bucket_stats[key]['differences'] += 1
+            if bucket_stats[key]['first'] is None:
+                bucket_stats[key]['first'] = dict(frame=frame, gt=h['gt'], elapsed_s=h['gt'] - baseline)
+        if differing and first is None:
+            first = dict(frame=frame, buckets=differing, gt=h['gt'], elapsed_s=h['gt'] - baseline,
+                         host=h['h'], guest=g['h'])
+        if bool(differing) != (h['h'] != g['h']):
+            raise ProbeLogError(f'inconsistent combined STATEHASH at frame {frame}')
+    return dict(first=first, events=events, compared=compared, frames=len(host_by_frame.keys() | guest_by_frame.keys()),
+                missing=sum(event[1] == 'missing' for event in events),
+                incomplete=sum(event[1] == 'incomplete' for event in events),
+                weak=max((sample.get('weak', 0) for sample in host + guest), default=0),
+                bucket_stats=bucket_stats, run=host[0]['run'], session=host[0]['session'])
+
+
+def statehash_report(result):
+    lines = ['X4 STATEHASH COMPARISON (offline; observer frames, not save-persistent engine frames)',
+             f"Run {result['run']} session {result['session']}: {result['compared']} complete comparisons over {result['frames']} frames"]
+    first = result['first']
+    if first:
+        lines.append('FIRST DIVERGENCE frame=%d game_time=%.9f elapsed=%.9f buckets=%s' %
+                     (first['frame'], first['gt'], first['elapsed_s'], ','.join(first['buckets'])))
+    else:
+        lines.append('No hash divergence in complete shared frames')
+    for key, stats in result['bucket_stats'].items():
+        initial = stats['first']
+        lines.append('BUCKET %s first=%s differences=%d/%d' %
+                     (key, initial['frame'] if initial else 'none', stats['differences'], result['compared']))
+    if result['missing'] or result['incomplete']:
+        lines.append('WARNING missing frames=%d incomplete frames=%d; these are not equality evidence' %
+                     (result['missing'], result['incomplete']))
+    if result['weak']:
+        lines.append('WARNING weak local identities present in at least one capture: max count=%d' % result['weak'])
+    if result['events']:
+        lines.append('First alignment events: ' + '; '.join('%d %s %s' % event for event in result['events'][:10]))
+    return '\n'.join(lines) + '\n'
+
+
 TICK_COLUMNS = ('gt', 'elapsed_s', 'bucket', 'sector', 'category', 'player', 'host_ships', 'guest_ships', 'matched_id',
                 'matched_code', 'matched_pose', 'host_only', 'guest_only', 'id_conflicts', 'skew_s', 'pos_median', 'pos_p90',
                 'pos_max', 'pose_match_median', 'skew_floor_median', 'hull_mismatch', 'hull_max', 'shield_mismatch',
@@ -438,15 +570,22 @@ def main(argv=None):
     parser.add_argument('--hull-tolerance', type=float, default=0.5, help='hull/shield percentage points (default 0.5)')
     parser.add_argument('--include-player-owned', action='store_true', help='also compare player-owned ships')
     parser.add_argument('--run', type=int, default=-1, help='run index when a log restarted its game clock (default last)')
+    parser.add_argument('--statehash', action='store_true', help='compare STATEHASH frames/buckets instead of DIV1 samples')
     args = parser.parse_args(argv)
     if not (0 < args.pose_tolerance <= 100000) or not (0 <= args.hull_tolerance <= 100):
         parser.error('tolerance outside bounds')
+    if args.statehash and (args.csv or args.summary_csv):
+        parser.error('DIV1 CSV outputs are unavailable with --statehash')
     try:
-        result = compare(read_log(args.host), read_log(args.guest), args.pose_tolerance, args.hull_tolerance,
-                         args.include_player_owned, args.run)
+        if args.statehash:
+            result = compare_statehash(read_statehash(args.host), read_statehash(args.guest))
+            text = statehash_report(result)
+        else:
+            result = compare(read_log(args.host), read_log(args.guest), args.pose_tolerance, args.hull_tolerance,
+                             args.include_player_owned, args.run)
+            text = report(result)
     except (ProbeLogError, IndexError) as error:
         print('compare_divergence: ' + str(error), file=sys.stderr); return 2
-    text = report(result)
     sys.stdout.write(text)
     if args.report:
         Path(args.report).write_text(text, encoding='utf-8')

@@ -1,0 +1,28 @@
+{
+  "format": 1,
+  "target": {
+    "platform": "windows-x64",
+    "game_version": "9.00",
+    "steam_build": 23660954,
+    "size": 55412768,
+    "sha256": "19750a6563889a970f434b5566eb396c6b2dc29ff814bd3e336f838176ad6891",
+    "image_size": 117084160,
+    "timestamp": 1780395501
+  },
+  "sites": [
+    {"name": "move_worker_run", "rva": 15680512, "length": 25, "sha256": "4449b89ae08c1ebc42ad4bb0ad61acd1c63d68de52c6ae63c74e639390f85e91"},
+    {"name": "move_worker_iteration", "rva": 15681153, "length": 64, "sha256": "161234434ac6f861075f55a3b7b5e4643a45c7b72045b225e4c6a3cdbc78cd6d"},
+    {"name": "game_client_move", "rva": 19051360, "length": 24, "sha256": "8e123f79687ad689c48d2eaf879253c42d1359f129ddebd2c2d51ea6658a46d0"},
+    {"name": "pathing_join", "rva": 15384944, "length": 24, "sha256": "718b690e9f3d2779d2f91c812253fb26bfa1f4ce4cd73accae7229675e261f12"},
+    {"name": "ui_move", "rva": 11778768, "length": 28, "sha256": "893307c89a256e16553b164d9d16ec4f0c3187060ebd86513b8f55694f1378e4"},
+    {"name": "vbi_register", "rva": 21800320, "length": 42, "sha256": "896bc70922e9954e08c838c449f51dbcdc428842a4c25dd6a80bdea2c4cc6a26"},
+    {"name": "seed_thread_state", "rva": 21877008, "length": 32, "sha256": "c3b011f86c6f481ec3b6fda61f936b3655b877f68b0f86b4914be297099d76c6"},
+    {"name": "thread_start_hook", "rva": 615248, "length": 32, "sha256": "a47138b202ba1574f1071f2b794644d07278a7a9c53e5f24b3807c8f5a999922"},
+    {"name": "frame_tick_dt", "rva": 16397008, "length": 96, "sha256": "a8c17a7c4630ea80df70466732b321646ae7caa0ee094fb3a7ad32aff110f25a"},
+    {"name": "component_registry_find", "rva": 847216, "length": 64, "sha256": "99aa931616db6c9f92574b2408563aa3b9f09a452bc5456ce0ec25fa8a9bb9cf"},
+    {"name": "sync_thread_game_time", "rva": 21728800, "length": 32, "sha256": "47607eb1de710e125f0bc5ea084b067f798f48fd75b9e74ebe396990eea6ab2e"},
+    {"name": "get_current_game_time", "rva": 11521472, "length": 32, "sha256": "16eb923df8d37ae6b7daefbccf3398925b0e3ee360d688410ba1d7571cf1e169"},
+    {"name": "get_shield_percent", "rva": 5371312, "length": 32, "sha256": "a2b4364ca7de1e4d30388ad9e5f9432dbf97a2faaa272084693b0008bcd0090a"},
+    {"name": "get_transform_relative", "rva": 4044960, "length": 32, "sha256": "2964d204251dcce8a745407fe85cfe69106ba70a2507937577c7fe220422c6b2"}
+  ]
+}

@@ -1,0 +1,19 @@
+[package]
+name = "x4lan-hooks"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.82"
+publish = false
+
+[lib]
+name = "x4lan_hooks"
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+
+[profile.release]
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+panic = "abort"

@@ -1,6 +1,6 @@
 """Build INTERNAL Windows/Linux host-or-guest packages without session secrets."""
 from pathlib import Path
-import argparse, hashlib, json, re, secrets, shutil, tarfile, tempfile, zipfile
+import argparse, hashlib, importlib.util, json, re, secrets, shutil, tarfile, tempfile, zipfile
 SOURCE = Path(__file__).resolve().parents[1]
 DIST = SOURCE / 'distribution'
 BUILD = '23660954'
@@ -30,6 +30,12 @@ def copy_server_runtime(root):
     for name in ('__init__', 'host', 'bubble', 'economy', 'coop', 'quests', 'missions', 'monitor',
                  'universe', 'cargo', 'identity', 'npc_combat', 'seed', 'docking', 'projectile_protocol', 'projectile_relay'):
         shutil.copy2(SOURCE / 'x4lan' / (name + '.py'), root / 'x4lan' / (name + '.py'))
+
+def build_engine_module():
+    spec = importlib.util.spec_from_file_location('x4lan_hook_builder', SOURCE / 'native/hooks/build.py')
+    builder = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(builder)
+    return builder.build_module(SOURCE)
 
 def build(destination: Path, runtime_cache: Path | None = None):
     release = version()
@@ -65,8 +71,11 @@ def build(destination: Path, runtime_cache: Path | None = None):
         for name in ('aiscripts/x4lan.interaction.fire.xml', 'aiscripts/x4lan.interaction.trade.xml', 'md/x4lan_interactions.xml'):
             (extension / name).unlink()
         (extension / 'native' / ('x4lan_net_64.dll' if platform == 'Linux' else 'x4lan_net.so')).unlink()
+        if platform == 'Windows11':
+            shutil.copy2(build_engine_module(), extension / 'native/x4lan_hooks_64.dll')
         write(extension / 'ui/config.lua', '-- Run 01-INSTALL before using this package.\nX4LAN_CONFIG = {\n'
-              '    enabled = false,\n' + f'    ship_macro = "{SHIP_MACRO}",\n'
+              '    enabled = false,\n' + ('    engine_hooks = true,\n' if platform == 'Windows11' else '')
+              + f'    ship_macro = "{SHIP_MACRO}",\n'
               + f'    ship_loadout = "{SHIP_LOADOUT}",\n    ship_weapons = {SHIP_WEAPONS},\n' + '}\n')
         for name in ('INSTALL.html', 'README.txt', 'CHANGELOG.txt', 'NEXT-TEST.txt'):
             document(DIST / name, root / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)

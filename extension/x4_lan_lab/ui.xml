@@ -34,5 +34,6 @@
     <file name="ui/cargo_game.lua" />
     <file name="ui/identity_game.lua" />
     <file name="ui/divergence_probe.lua" />
+    <file name="ui/engine_hooks.lua" />
   </environment>
 </addon>
