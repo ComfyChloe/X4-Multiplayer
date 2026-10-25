@@ -28,7 +28,7 @@ def copy_server_runtime(root):
     """Copy the same platform-neutral server implementation into either package."""
     (root / 'x4lan').mkdir()
     for name in ('__init__', 'host', 'bubble', 'economy', 'coop', 'quests', 'missions', 'monitor',
-                 'universe', 'cargo', 'identity', 'npc_combat', 'seed', 'docking', 'projectile_protocol', 'projectile_relay'):
+                 'universe', 'cargo', 'identity', 'npc_combat', 'resync', 'seed', 'docking', 'projectile_protocol', 'projectile_relay'):
         shutil.copy2(SOURCE / 'x4lan' / (name + '.py'), root / 'x4lan' / (name + '.py'))
 
 def build_engine_module():

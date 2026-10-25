@@ -114,12 +114,16 @@ local function sample(frame,gameTime,dt,rng,sessionSeed)
   if a.id~=b.id then return a.id<b.id end
   return a.macro<b.macro
  end)
- local identities,poses,health={},{},{}
+ local identities,poses,health={},{},{};local sectorRows={}
+ for sector in pairs(settings.wanted)do sectorRows[sector]={identity={},pose={},health={}}end
  for _,row in ipairs(rows)do
   local prefix=row.sector..'|'..row.id
-  identities[#identities+1]=prefix..'|'..esc(row.macro)..'|'..esc(row.owner)
-  poses[#poses+1]=prefix..'|'..row.pose
-  health[#health+1]=prefix..'|'..row.hull..'|'..row.shield
+  local identityRow=prefix..'|'..esc(row.macro)..'|'..esc(row.owner)
+  local poseRow=prefix..'|'..row.pose;local healthRow=prefix..'|'..row.hull..'|'..row.shield
+  identities[#identities+1]=identityRow;poses[#poses+1]=poseRow;health[#health+1]=healthRow
+  local sector=sectorRows[row.sector]
+  if not sector then sector={identity={},pose={},health={}};sectorRows[row.sector]=sector end
+  sector.identity[#sector.identity+1]=identityRow;sector.pose[#sector.pose+1]=poseRow;sector.health[#sector.health+1]=healthRow
  end
  stats.ships=#rows;stats.captureMs=elapsed()
  if stats.captureMs>settings.budgetMs then return nil,'capture budget exceeded',stats end
@@ -127,8 +131,12 @@ local function sample(frame,gameTime,dt,rng,sessionSeed)
  local identityHash,poseHash,healthHash=native.hash(identities),native.hash(poses),native.hash(health)
  local timeHash=native.hash({string.format('%.9f',gameTime)})
  local combined=native.hash({identityHash,poseHash,healthHash,rng,timeHash})
+ local sectorHashes={}
+ for sector,values in pairs(sectorRows)do sectorHashes[sector]={identity=native.hash(values.identity),pose=native.hash(values.pose),health=native.hash(values.health)}end
  stats.hashMs=(native.walltime()-hashStarted)*1000
  if stats.captureMs+stats.hashMs>settings.budgetMs then return nil,'hash budget exceeded',stats end
+ local integration=rawget(_G,'X4LAN_STATEHASH')
+ if integration and integration.capture then pcall(integration.capture,{complete=true,frame=frame,sectors=sectorHashes,rng=rng,time=timeHash})end
  if not M.observed and M.firstInspect then
   local seen=M.firstInspect;M.observed=true
   out('HOOKS_OBSERVE',string.format('id=%s attention=%d hull=%.6f shield=%.6f ownerptr=%s generation=%d rng=%s seed=%s gt=%.9f dt=%.9f',

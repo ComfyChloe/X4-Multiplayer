@@ -29,7 +29,7 @@ class CargoAdapterTests(unittest.TestCase):
           universe={revision=4,replicas={},replicaKeys={},nextId=0,latest={epoch=string.rep('a',32),revision=4},receive=function() return false end,frame=function() end}}
         ''')
         l.globals().X4LAN_CONFIG.slot=slot
-        l.execute((UI/'universe_protocol.lua').read_text());l.execute((UI/'cargo_game.lua').read_text())
+        l.execute((UI/'universe_protocol.lua').read_text());l.execute((UI/'cargo_game.lua').read_text());l.execute((UI/'resync_game.lua').read_text())
         l.execute("A=X4LAN_BUBBLE_API;G=A.cargo;U=A.universe;U.frame(now);events['X4LAN_Cargo.Ready']()")
         return l
 
