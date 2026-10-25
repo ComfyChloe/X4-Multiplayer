@@ -46,8 +46,10 @@ def internal_ip(value):
 def validate_invite(value):
     keys = {'format', 'channel', 'version', 'test_id', 'steam_build', 'build',
             'bubble', 'port', 'coop', 'token', 'server', 'fire2', 'world_sync', 'world_mode'}
-    if not isinstance(value, dict) or set(value) != keys:
+    if not isinstance(value, dict) or set(value) not in (keys, keys | {'dedicated'}):
         raise ValueError('Not an internal session file.')
+    if 'dedicated' in value and value['dedicated'] is not True:
+        raise ValueError('Invalid dedicated-session marker.')
     expected = dict(format=1, channel='internal', version=VERSION, test_id=TEST_ID,
                     steam_build='23660954', build=BUILD, port=PORT, coop=True, fire2=True, world_sync=True, world_mode='replica')
     if any(type(value[k]) is not type(v) or value[k] != v for k, v in expected.items()):
@@ -114,10 +116,14 @@ def configured():
     package = read_json(ROOT / 'package.json')
     if package.get('channel') != 'internal' or package.get('version') != VERSION:
         raise RuntimeError('This launcher requires a Internal Test package.')
-    if package.get('slot') not in ('p1', 'p2') or not (ROOT / 'session.json').is_file():
+    if package.get('slot') not in ('p1', 'p2', 'p3') or not (ROOT / 'session.json').is_file():
         raise RuntimeError('Run 01-INSTALL first to create or join a session.')
+    if package['slot'] == 'p3' and not package.get('dedicated'):
+        raise RuntimeError('Guest p3 requires a dedicated-server package.')
     session = read_json(ROOT / 'session.json')
     validate_invite({k: v for k, v in session.items() if k != 'host'})
+    if session.get('dedicated', False) != package.get('dedicated', False):
+        raise RuntimeError('Session and package dedicated modes differ.')
     expected_host = '127.0.0.1' if package['slot'] == 'p1' else session['server']
     if session.get('host') != expected_host:
         raise RuntimeError('Session role/address mismatch. Remove the mod and run setup again.')
@@ -130,7 +136,7 @@ def session_package_id(session, slot):
     return 'lan-' + hashlib.sha256(session['token'].encode()).hexdigest()[:16] + '-' + slot
 
 
-def session_config(session, slot, host):
+def session_config(session, slot, host, dedicated=False, control_path=None):
     cfg = dict(enabled=True, interaction_test=False, bubble_actions=True, trading=True,
                walking_avatars=False, test_profile=PROFILE, host=host, port=PORT,
                token=session['token'], build=BUILD, bubble=session['bubble'], coop=True, fire2=True,
@@ -141,6 +147,13 @@ def session_config(session, slot, host):
                npc_combat=True, faction_missions=True,
                projectile_visuals=True, shot_undo=False,
                slot=slot, mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
+    if dedicated:
+        cfg.update(dedicated_session=True, local_ship=1 if slot in ('p1', 'p3') else 2,
+                   dedicated=slot == 'p1')
+        if slot == 'p1':
+            if control_path is None: raise ValueError('Dedicated authority needs a local control path.')
+            cfg['dedicated_control_path'] = str(control_path)
+            cfg['dedicated_heartbeat_interval'] = 5
     return ('-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
             + ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n')
 
@@ -161,7 +174,10 @@ def recover_session_metadata():
         if not isinstance(saved, dict) or 'host' not in saved:
             raise RuntimeError('Incomplete session.json; no files were changed.')
         invitation = validate_invite({k: v for k, v in saved.items() if k != 'host'})
-        if saved['host'] == '127.0.0.1':
+        if package.get('dedicated'):
+            slot = {'host': 'p1', 'guest': 'p2', 'guest2': 'p3'}.get(package.get('role'))
+            if slot is None: raise RuntimeError('Unknown dedicated package role.')
+        elif saved['host'] == '127.0.0.1':
             slot = 'p1'
         elif saved['host'] == saved['server']:
             slot = 'p2'
@@ -175,7 +191,8 @@ def recover_session_metadata():
         if invite_path.exists() and read_json(invite_path) != invitation:
             raise RuntimeError('Existing invitation conflicts with session.json; no files were changed.')
         config_path = ROOT / 'extension/x4_lan_lab/ui/config.lua'
-        updates = {config_path: session_config(saved, slot, saved['host']).encode('utf-8')}
+        updates = {config_path: session_config(saved, slot, saved['host'], package.get('dedicated', False),
+                                               ROOT / '.local/dedicated/control.txt').encode('utf-8')}
         if slot == 'p1' and not invite_path.exists():
             updates[invite_path] = (json.dumps(invitation, indent=2) + '\n').encode('utf-8')
         updates[ROOT / 'package.json'] = (json.dumps(package, indent=2) + '\n').encode('utf-8')
@@ -231,10 +248,17 @@ def configure(role, server=None, invite=None):
         package = read_json(ROOT / 'package.json')
         if package.get('channel') != 'internal' or package.get('version') != VERSION:
             raise RuntimeError('Not a matching internal package.')
-        package['slot'] = 'p1' if role == 'host' else 'p2'
+        dedicated = package.get('dedicated', False)
+        if dedicated:
+            package['slot'] = {'host': 'p1', 'guest': 'p2', 'guest2': 'p3'}.get(package.get('role'))
+            if package['slot'] is None: raise RuntimeError('Unknown dedicated package role.')
+            session['dedicated'] = True
+        else:
+            package['slot'] = 'p1' if role == 'host' else 'p2'
         package['package_id'] = session_package_id(session, package['slot'])
         host = '127.0.0.1' if role == 'host' else session['server']
-        (ROOT / 'extension/x4_lan_lab/ui/config.lua').write_text(session_config(session, package['slot'], host), encoding='utf-8')
+        (ROOT / 'extension/x4_lan_lab/ui/config.lua').write_text(
+            session_config(session, package['slot'], host, dedicated, ROOT / '.local/dedicated/control.txt'), encoding='utf-8')
         write_json(ROOT / 'package.json', package)
         if role == 'host': write_json(ROOT / 'JOIN-SESSION.json', session)
         write_json(ROOT / 'session.json', {**session, 'host': host})
@@ -308,6 +332,17 @@ def server(console=False):
         raise RuntimeError('No supported terminal found. Open a terminal in this folder and run: bash 03-START-SERVER-HOST.sh --console')
     package, cfg = configured()
     if package['slot'] != 'p1': raise RuntimeError('Only the HOST starts the server. The GUEST uses 04-TEST-CONNECTION.')
+    if package.get('dedicated'):
+        backend_module('world_launcher').prepare_play(ROOT, package, cfg, ensure_closed)
+        state = read_json(ROOT / 'installation.json')
+        work = ROOT / '.local/dedicated'
+        work.mkdir(parents=True, exist_ok=True)
+        write_json(work / 'config.json', dict(
+            game=str(Path(state['game']) / 'X4'), profile=state['profile'], package=str(ROOT),
+            session=str(ROOT / 'session.json'), work=str(work), display=os.environ.get('DISPLAY', ':0')))
+        with session_lock(), backend_module('world_launcher').WorldServer(ROOT, cfg):
+            subprocess.run([str(ROOT / 'x4lan-dedicated'), '--config', str(work / 'config.json'), 'run'], check=True)
+        return
     from x4lan.monitor import attach, probe, run
     if probe(cfg):
         # A read-only viewer must not acquire the running server's setup lock.

@@ -154,6 +154,63 @@ fn coop_pilot_handoff_bumps_epoch_and_denies_occupied_ship() {
 }
 
 #[test]
+fn dedicated_admits_second_guest_and_hands_it_ship_one() {
+    let mut s = Session::new_dedicated(Level::Coop, TOKEN, "test", "bubble", LeaseSource::Os).unwrap();
+    join(&mut s, "p1", p1(), '1', 0.0);
+    join(&mut s, "p2", p2(), '2', 0.0);
+    let guest = join(&mut s, "p3", foreign(), '3', 0.0);
+    assert!(s.receive(format!("CREW|1|{guest}|1|1|1").as_bytes(), foreign(), 0.1).is_empty());
+    assert_eq!(s.owner(x4lan_relay::wire::Ship::One), Slot::P3);
+    for address in [p1(), p2(), foreign()] {
+        let auth = text(&s.snapshots(0.2), address).into_iter().find(|p| p.starts_with("AUTH|")).unwrap();
+        assert!(auth.contains("|p3|2|p3|"), "{auth}");
+    }
+}
+
+#[test]
+fn dedicated_universe_keeps_guest_baselines_independent() {
+    let mut s = Session::new_dedicated(Level::Universe, TOKEN, "world1-test", "bubble", LeaseSource::Os).unwrap();
+    let join_world = |s: &mut Session, slot: &str, address, nonce: char| {
+        let packet = format!("HELLO|1|{TOKEN}|world1-test|sector_macro|bubble|{slot}|{}", nonce.to_string().repeat(32));
+        let reply = s.receive(packet.as_bytes(), address, 0.0);
+        String::from_utf8(reply[0].clone()).unwrap().split('|').nth(3).unwrap().to_owned()
+    };
+    let host = join_world(&mut s, "p1", p1(), '1');
+    let guest2 = join_world(&mut s, "p2", p2(), '2');
+    let guest3 = join_world(&mut s, "p3", foreign(), '3');
+    for (lease, address, sector) in [(&guest2, p2(), "a_macro"), (&guest3, foreign(), "b_macro")] {
+        let packet = format!("UINTEREST|1|{lease}|1|{sector}");
+        assert!(s.receive(packet.as_bytes(), address, 0.1).is_empty());
+    }
+    assert_eq!(s.universe.views.len(), 2);
+    assert!(s.universe.views.values().all(|view| view.interest.is_some()));
+    for (revision, sector) in [(1, "a_macro"), (2, "b_macro")] {
+        for packet in
+            [format!("UBEGIN|1|{host}|{host}|{revision}|{sector}|0|1"), format!("UCOMMIT|1|{host}|{host}|{revision}")]
+        {
+            assert!(!s.receive(packet.as_bytes(), p1(), 0.2).is_empty());
+        }
+    }
+    assert_eq!(s.universe.entity_ids.len(), 2);
+    let first = s.snapshots(0.3);
+    assert!(
+        text(&first, p2()).iter().any(|p| p.starts_with("UBEGIN|") && p.contains("|a_macro|")),
+        "{:?}",
+        text(&first, p2())
+    );
+    assert!(text(&first, foreign()).iter().any(|p| p.starts_with("UBEGIN|") && p.contains("|b_macro|")));
+    assert!(!text(&first, p2()).iter().any(|p| p.starts_with("UBEGIN|") && p.contains("|b_macro|")));
+    for packet in text(&first, p2()).into_iter().filter(|p| p.starts_with("UBEGIN|")) {
+        let f: Vec<&str> = packet.split('|').collect();
+        let ack = format!("UACK|1|{guest2}|{}|{}|0", f[3], f[4]);
+        s.receive(ack.as_bytes(), p2(), 0.4);
+    }
+    let second = s.snapshots(0.6);
+    assert!(text(&second, p2()).iter().any(|p| p.starts_with("UCOMMIT|")));
+    assert!(text(&second, foreign()).iter().any(|p| p.starts_with("UBEGIN|")));
+}
+
+#[test]
 fn real_udp_round_trip() {
     let mut relay = Relay::bind("127.0.0.1", 0, session(Level::Base)).unwrap();
     let port = relay.socket.local_addr().unwrap().port();

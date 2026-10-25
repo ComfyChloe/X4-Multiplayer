@@ -306,16 +306,15 @@ def prepare(root, package, session, ensure_closed, timeout=600):
     logfile = Path(state['profile']) / 'x4lan-debug.txt'
     if logfile.exists():
         shutil.copy2(logfile, run / 'previous.log')
+        logfile.unlink()
     replace_bytes(config, new)
     print('Creating the shared starting world. X4 will save it and close automatically. Do not play or load another save.', flush=True)
-    launched_ns = time.time_ns()
     launch(state)
     deadline = time.monotonic() + timeout; observed = False
     while time.monotonic() < deadline:
         closed = game_closed(ensure_closed)
         if not closed: observed = True
-        if (observed and not closed and logfile.exists()
-                and logfile.stat().st_mtime_ns >= launched_ns and logfile.stat().st_size <= 32 * 1024 * 1024):
+        if (observed and not closed and logfile.exists() and logfile.stat().st_size <= 32 * 1024 * 1024):
             text = logfile.read_text(errors='replace')
             begin = 'WORLD_CAPTURE BEGIN id=' + identity['seed_id']
             if begin in text and 'WORLD_CAPTURE STOPPED' in text[text.index(begin):]:
@@ -339,7 +338,7 @@ def install_play_config(root, target, identity):
     replace_bytes(target / 'ui/config.lua', ready.encode('utf-8'))
 
 
-def start(root, package, session, ensure_closed):
+def prepare_play(root, package, session, ensure_closed):
     ensure_closed(); state, target, identity = context(root, package, session)
     folder = Path(root) / 'world'; folder.mkdir(mode=0o700, exist_ok=True); bundle = folder / 'bundle'
     if package['slot'] == 'p1':
@@ -353,9 +352,14 @@ def start(root, package, session, ensure_closed):
         if bundle.exists():
             raise RuntimeError('An incomplete world bundle exists; preserved for review.')
         incoming.rename(bundle)
-    manifest = verify_bundle(bundle, identity)
+    verify_bundle(bundle, identity)
     stage(root, state['profile'], bundle)
     install_play_config(root, target, identity)
+    return state
+
+
+def start(root, package, session, ensure_closed):
+    state = prepare_play(root, package, session, ensure_closed)
     logfile = Path(state['profile']) / 'x4lan-debug.txt'
     if logfile.exists():
         logs = Path(root) / 'logs'; logs.mkdir(exist_ok=True)

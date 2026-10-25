@@ -94,10 +94,10 @@ impl NpcCombat {
 }
 
 impl Session {
-    /// The guest pilots `ship` under live health generation `gen`.
-    fn npc_pilot(&mut self, ship: u32, gen: u32) -> bool {
+    /// This guest pilots `ship` under live health generation `gen`.
+    fn npc_pilot(&mut self, ship: u32, gen: u32, slot: Slot) -> bool {
         let Some(ship) = Ship::from_number(i128::from(ship)) else { return false };
-        if self.owner(ship) != Slot::P2 || self.pilot(ship) != Some(Slot::P2) {
+        if slot == Slot::P1 || self.owner(ship) != slot || self.pilot(ship) != Some(slot) {
             return false;
         }
         let generation = self.health_generation(ship);
@@ -165,22 +165,16 @@ impl Session {
                 };
                 npc.states.insert(entity, state);
             }
-            ("NCLAIM", 11, Slot::P2) => {
+            ("NCLAIM", 11, _) if slot != Slot::P1 => {
                 let (entity, gen, shooter, sg, sequence, hits) =
                     (seq(f[4])?, seq(f[5])?, seq(f[6])?, seq(f[7])?, seq(f[8])?, seq(f[9])?);
                 let ok = sequence != 0
                     && (1..=1_000_000).contains(&hits)
                     && self.universe.npc.current(entity, gen, now)
-                    && self.npc_pilot(shooter, sg)
+                    && self.npc_pilot(shooter, sg, slot)
                     && is_shot_digest(f[10])
-                    && self.universe.interest.as_ref().is_some_and(|i| {
-                        i.lease == lease
-                            && self
-                                .universe
-                                .npc
-                                .states
-                                .get(&entity)
-                                .is_some_and(|s| s.descriptor.0 == i.sector.as_str())
+                    && self.universe.interest(lease).is_some_and(|i| {
+                        self.universe.npc.states.get(&entity).is_some_and(|s| s.descriptor.0 == i.sector.as_str())
                     });
                 if !ok {
                     return Err(Reject);
@@ -223,41 +217,93 @@ impl Session {
             return;
         }
         self.universe.npc.next_send = now + 0.1;
-        let host = self.core.peers.get(&Slot::P1).map(|p| (p.lease, p.address));
-        let guest = self.core.peers.get(&Slot::P2).map(|p| (p.lease, p.address));
-        let (Some((host_lease, host_address)), Some((guest_lease, guest_address))) = (host, guest) else { return };
+        if !self.core.dedicated {
+            let host = self.core.peers.get(&Slot::P1).map(|p| (p.lease, p.address));
+            let guest = self.core.peers.get(&Slot::P2).map(|p| (p.lease, p.address));
+            let (Some((host_lease, host_address)), Some((guest_lease, guest_address))) = (host, guest) else { return };
+            if self.universe.epoch != Some(host_lease) {
+                return;
+            }
+            let interest_sector = self.universe.interest(guest_lease).map(|i| i.sector.to_string());
+            let npc = &mut self.universe.npc;
+            let states: Vec<&NpcState> = npc
+                .states
+                .values()
+                .filter(|r| now - r.at < FRESH && interest_sector.as_deref() == Some(r.descriptor.0.as_str()))
+                .collect();
+            let budget = states.len().min(states.len().div_ceil(10).clamp(32, 256));
+            for i in 0..budget {
+                let fields = &states[(npc.cursor + i) % states.len()].fields;
+                out.push((guest_address, format!("NHP|1|{guest_lease}|{}", fields.join("|")).into_bytes()));
+            }
+            npc.cursor += budget;
+            let keys: Vec<ClaimKey> = self.universe.npc.claims.keys().copied().collect();
+            for key in keys {
+                let (lease, entity, gen, shooter, sg) = key;
+                if lease != guest_lease || !self.npc_pilot(shooter, sg, Slot::P2) {
+                    self.universe.npc.claims.remove(&key);
+                    continue;
+                }
+                if !self.universe.npc.current(entity, gen, now) {
+                    continue;
+                }
+                let claim = self.universe.npc.claims.get(&key).expect("present");
+                let nack =
+                    format!("NACK|1|{guest_lease}|{host_lease}|{lease}|{entity}|{gen}|{shooter}|{sg}|{}", claim.ack);
+                out.push((guest_address, nack.into_bytes()));
+                if claim.ack < claim.hits {
+                    let packet = format!("NCLAIM|1|{host_lease}|{lease}|{}", claim.fields.join("|"));
+                    out.push((host_address, packet.into_bytes()));
+                }
+            }
+            return;
+        }
+        let Some((host_lease, host_address)) = self.core.peers.get(&Slot::P1).map(|p| (p.lease, p.address)) else {
+            return;
+        };
         if self.universe.epoch != Some(host_lease) {
             return;
         }
-        let interest_sector =
-            self.universe.interest.as_ref().filter(|i| i.lease == guest_lease).map(|i| i.sector.to_string());
-        let npc = &mut self.universe.npc;
-        let states: Vec<&NpcState> = npc
-            .states
-            .values()
-            .filter(|r| now - r.at < FRESH && interest_sector.as_deref() == Some(r.descriptor.0.as_str()))
+        let guests: Vec<(Slot, Hex32, SocketAddr)> = self
+            .core
+            .peers
+            .iter()
+            .filter(|(slot, _)| **slot != Slot::P1)
+            .map(|(slot, peer)| (*slot, peer.lease, peer.address))
             .collect();
-        // The modulo is applied before indexing, including after a fleet shrinks.
-        let budget = states.len().min(states.len().div_ceil(10).clamp(32, 256));
-        for i in 0..budget {
-            let fields = &states[(npc.cursor + i) % states.len()].fields;
-            out.push((guest_address, format!("NHP|1|{guest_lease}|{}", fields.join("|")).into_bytes()));
+        let interests: Vec<Option<String>> =
+            guests.iter().map(|(_, lease, _)| self.universe.interest(*lease).map(|i| i.sector.to_string())).collect();
+        let npc = &mut self.universe.npc;
+        for (index, (_, guest_lease, guest_address)) in guests.iter().enumerate() {
+            let interest_sector = &interests[index];
+            let states: Vec<&NpcState> = npc
+                .states
+                .values()
+                .filter(|r| now - r.at < FRESH && interest_sector.as_deref() == Some(r.descriptor.0.as_str()))
+                .collect();
+            let budget = states.len().min(states.len().div_ceil(10).clamp(32, 256));
+            for i in 0..budget {
+                let fields = &states[(npc.cursor + i) % states.len()].fields;
+                out.push((*guest_address, format!("NHP|1|{guest_lease}|{}", fields.join("|")).into_bytes()));
+            }
+            npc.cursor += budget;
         }
-        npc.cursor += budget;
         let keys: Vec<ClaimKey> = self.universe.npc.claims.keys().copied().collect();
         for key in keys {
             let (lease, entity, gen, shooter, sg) = key;
-            if lease != guest_lease || !self.npc_pilot(shooter, sg) {
-                // The closed pilot generation can never be re-admitted.
+            let claimant = guests.iter().find(|(_, guest_lease, _)| *guest_lease == lease);
+            let valid = claimant.is_some_and(|(slot, _, _)| self.npc_pilot(shooter, sg, *slot));
+            if !valid {
                 self.universe.npc.claims.remove(&key);
                 continue;
             }
             if !self.universe.npc.current(entity, gen, now) {
                 continue;
             }
+            let (_, _, guest_address) = claimant.expect("checked");
             let claim = self.universe.npc.claims.get(&key).expect("present");
-            let nack = format!("NACK|1|{guest_lease}|{host_lease}|{lease}|{entity}|{gen}|{shooter}|{sg}|{}", claim.ack);
-            out.push((guest_address, nack.into_bytes()));
+            let nack = format!("NACK|1|{lease}|{host_lease}|{lease}|{entity}|{gen}|{shooter}|{sg}|{}", claim.ack);
+            out.push((*guest_address, nack.into_bytes()));
             if claim.ack < claim.hits {
                 let packet = format!("NCLAIM|1|{host_lease}|{lease}|{}", claim.fields.join("|"));
                 out.push((host_address, packet.into_bytes()));

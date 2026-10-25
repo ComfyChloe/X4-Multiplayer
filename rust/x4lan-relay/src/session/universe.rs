@@ -285,22 +285,32 @@ struct Position {
 }
 
 #[derive(Default)]
+pub struct GuestView {
+    pub interest: Option<Interest>,
+    interest_after_revision: u32,
+    delivery: Option<Sender>,
+    delivered: Option<u32>,
+    position_cursor: usize,
+}
+
+#[derive(Default)]
 pub struct Universe {
     pub receiver: Receiver,
     /// The host lease that owns the world epoch for the whole relay life.
     pub epoch: Option<Hex32>,
     sectors: OrderedMap<Atom, Baseline>,
     pub entity_ids: OrderedMap<Atom, BTreeSet<u32>>,
-    pub interest: Option<Interest>,
-    interest_after_revision: u32,
-    delivery: Option<Sender>,
-    delivery_lease: Option<Hex32>,
-    delivered: Option<u32>,
+    pub views: OrderedMap<Hex32, GuestView>,
     positions: OrderedMap<u32, Position>,
-    position_cursor: usize,
     pub cargo: CargoTransactions,
     pub identities: Identities,
     pub npc: NpcCombat,
+}
+
+impl Universe {
+    pub fn interest(&self, lease: Hex32) -> Option<&Interest> {
+        self.views.get(&lease).and_then(|view| view.interest.as_ref())
+    }
 }
 
 const UNIVERSE_PREFIXES: [&[u8]; 7] =
@@ -341,33 +351,38 @@ impl Session {
         let (slot, lease) = self.authenticated(f[2], address).ok_or(Reject)?;
         let u = &mut self.universe;
         match (f[0], slot, f.len()) {
-            ("UINTEREST", Slot::P2, 5) => {
+            ("UINTEREST", _, 5) if slot != Slot::P1 => {
                 let (sequence, sector) = (seq(f[3])?, Atom::parse_macro(f[4])?);
-                let same_guest = u.interest.as_ref().is_some_and(|i| i.lease == lease);
-                if u.interest.as_ref().is_some_and(|i| i.lease == lease && sequence <= i.seq) {
+                if !u.views.contains_key(&lease) {
+                    u.views.insert(lease, GuestView::default());
+                }
+                let view = u.views.get_mut(&lease).expect("inserted");
+                let same_guest = view.interest.is_some();
+                if view.interest.as_ref().is_some_and(|i| sequence <= i.seq) {
                     return Err(Reject);
                 }
-                let changed = u.interest.as_ref().is_none_or(|i| i.lease != lease || i.sector != sector);
-                u.interest = Some(Interest { lease, seq: sequence, sector });
+                let changed = view.interest.as_ref().is_none_or(|i| i.sector != sector);
+                view.interest = Some(Interest { lease, seq: sequence, sector });
                 if changed {
-                    u.delivery = None;
-                    u.delivered = None;
-                    // The guest's receiver has a global monotonic revision: on a sector
-                    // return, require a capture newer than any baseline already sent.
-                    u.interest_after_revision = match (&u.receiver.latest, same_guest) {
+                    view.delivery = None;
+                    view.delivered = None;
+                    // On sector return, require a capture newer than the last one sent.
+                    view.interest_after_revision = match (&u.receiver.latest, same_guest) {
                         (Some(latest), true) => latest.revision,
                         _ => 0,
                     };
                 }
                 return Ok(vec![]);
             }
-            ("UACK", Slot::P2, 6) => {
+            ("UACK", _, 6) if slot != Slot::P1 => {
                 let rev = seq(f[4])?;
                 let index = if f[5] == "-1" { -1 } else { i64::from(seq(f[5])?) };
-                if let Some(delivery) = u.delivery.as_mut().filter(|_| u.delivery_lease == Some(lease)) {
-                    delivery.acknowledge(f[3], rev, index);
-                    if delivery.done {
-                        u.delivered = Some(delivery.baseline.revision);
+                if let Some(view) = u.views.get_mut(&lease) {
+                    if let Some(delivery) = view.delivery.as_mut() {
+                        delivery.acknowledge(f[3], rev, index);
+                        if delivery.done {
+                            view.delivered = Some(delivery.baseline.revision);
+                        }
                     }
                 }
                 return Ok(vec![]);
@@ -443,38 +458,53 @@ impl Session {
         self.snapshots_cargo(now, out);
         self.snapshots_identity(now, out);
         self.snapshots_npc(now, out);
-        let host = self.core.peers.get(&Slot::P1).map(|p| (p.lease, p.address));
-        let guest = self.core.peers.get(&Slot::P2).map(|p| (p.lease, p.address));
-        let (Some((host_lease, host_address)), Some((guest_lease, guest_address))) = (host, guest) else { return };
+        let Some((host_lease, host_address)) = self.core.peers.get(&Slot::P1).map(|p| (p.lease, p.address)) else {
+            return;
+        };
+        let guests: Vec<(Hex32, SocketAddr)> = self
+            .core
+            .peers
+            .iter()
+            .filter(|(slot, _)| **slot != Slot::P1)
+            .map(|(_, peer)| (peer.lease, peer.address))
+            .collect();
+        let retained = self.retained_leases();
         let u = &mut self.universe;
-        let Some(interest) = u.interest.as_ref().filter(|i| i.lease == guest_lease) else { return };
-        let sector = interest.sector.clone();
-        out.push((host_address, format!("UINTEREST|1|{host_lease}|{}|{sector}", interest.seq).into_bytes()));
-        if u.delivery_lease != Some(guest_lease) {
-            u.delivery = None;
-            u.delivered = None;
-            u.delivery_lease = Some(guest_lease);
-        }
-        if let Some(latest) = u.sectors.get(&sector) {
-            if latest.revision > u.interest_after_revision
-                && u.delivery.as_ref().is_none_or(|d| d.done)
-                && Some(latest.revision) != u.delivered
-            {
-                u.delivery = Some(Sender::new(latest.clone()));
+        u.views.retain(|lease, _| retained.contains(lease));
+        for (guest_lease, guest_address) in guests {
+            let Some(view) = u.views.get_mut(&guest_lease) else { continue };
+            let Some(interest) = view.interest.as_ref() else { continue };
+            let sector = interest.sector.clone();
+            let claimant = if self.core.dedicated { format!("|{guest_lease}") } else { String::new() };
+            out.push((
+                host_address,
+                format!("UINTEREST|1|{host_lease}|{}|{sector}{claimant}", interest.seq).into_bytes(),
+            ));
+            if let Some(latest) = u.sectors.get(&sector) {
+                if latest.revision > view.interest_after_revision
+                    && view.delivery.as_ref().is_none_or(|d| d.done)
+                    && Some(latest.revision) != view.delivered
+                {
+                    view.delivery = Some(Sender::new(latest.clone()));
+                }
             }
-        }
-        if let Some(delivery) = u.delivery.as_mut() {
-            out.extend(delivery.packets(guest_lease, now).into_iter().map(|p| (guest_address, p)));
-        }
-        // Independent, lossy motion cannot create entities or commit a baseline.
-        let live: Vec<&Position> = u.positions.values().filter(|p| p.sector == sector && now - p.at < 0.75).collect();
-        if !live.is_empty() {
-            for i in 0..MOTION_BUDGET.min(live.len()) {
-                let entry = live[(u.position_cursor + i) % live.len()];
-                let kind = if entry.kind == MotionKind::Upos { "UPOS" } else { "UMOVE" };
-                out.push((guest_address, format!("{kind}|1|{guest_lease}|{}", entry.fields.join("|")).into_bytes()));
+            if let Some(delivery) = view.delivery.as_mut() {
+                out.extend(delivery.packets(guest_lease, now).into_iter().map(|p| (guest_address, p)));
             }
-            u.position_cursor = (u.position_cursor + MOTION_BUDGET) % live.len();
+            // Independent, lossy motion cannot create entities or commit a baseline.
+            let live: Vec<&Position> =
+                u.positions.values().filter(|p| p.sector == sector && now - p.at < 0.75).collect();
+            if !live.is_empty() {
+                for i in 0..MOTION_BUDGET.min(live.len()) {
+                    let entry = live[(view.position_cursor + i) % live.len()];
+                    let kind = if entry.kind == MotionKind::Upos { "UPOS" } else { "UMOVE" };
+                    out.push((
+                        guest_address,
+                        format!("{kind}|1|{guest_lease}|{}", entry.fields.join("|")).into_bytes(),
+                    ));
+                }
+                view.position_cursor = (view.position_cursor + MOTION_BUDGET) % live.len();
+            }
         }
     }
 }

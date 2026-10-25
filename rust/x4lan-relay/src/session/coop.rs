@@ -692,7 +692,7 @@ impl Session {
                     out.push((address, format!("SHOT|1|{lease}|{shot_lease}|{fields}").into_bytes()));
                 }
             }
-            if let Some(other) = self.core.peers.get(&slot.other()) {
+            for (_, other) in self.core.peers.iter().filter(|(other_slot, _)| **other_slot != slot) {
                 if let (Some(body), Some(sector)) =
                     (self.bubble.bodies.get(&other.lease), self.coop.body_sectors.get(&other.lease))
                 {

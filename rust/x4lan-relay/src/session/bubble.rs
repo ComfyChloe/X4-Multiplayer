@@ -208,7 +208,7 @@ impl Session {
             return None;
         }
         let request = Hex32::parse(request).ok()?;
-        let slot = Slot::parse(slot).ok()?;
+        let slot = Slot::parse(slot).ok().filter(|slot| *slot != Slot::P3 || self.core.dedicated)?;
         let verb = Verb::parse(verb)?;
         if target != "energycells" {
             return None;

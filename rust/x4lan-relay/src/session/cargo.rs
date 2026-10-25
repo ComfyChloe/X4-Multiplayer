@@ -198,10 +198,64 @@ impl Session {
     }
 
     pub(super) fn snapshots_cargo(&mut self, now: f64, out: &mut Vec<Packet>) {
+        if !self.core.dedicated {
+            let host = self.core.peers.get(&Slot::P1).map(|p| (p.lease, p.address));
+            let guest = self.core.peers.get(&Slot::P2).map(|p| (p.lease, p.address));
+            let cargo = &mut self.universe.cargo;
+            if let (Some((host_lease, _)), Some((guest_lease, guest_address))) = (host, guest) {
+                if now >= cargo.next_inventory {
+                    cargo.next_inventory = now + 0.2;
+                    let values: Vec<&(u32, f64, Vec<String>)> = cargo.inventory.values().collect();
+                    let count = values.len().min(32);
+                    for i in 0..count {
+                        let (_, at, fields) = values[(cargo.inventory_cursor + i) % values.len()];
+                        if fields[0] == host_lease.as_str() && now - at < 2.0 {
+                            out.push((
+                                guest_address,
+                                format!("CINV|1|{guest_lease}|{}", fields.join("|")).into_bytes(),
+                            ));
+                        }
+                    }
+                    cargo.inventory_cursor += count;
+                }
+            }
+            for (request, item) in cargo.requests.iter_mut() {
+                if item.result != CargoResult::Pending {
+                    continue;
+                }
+                let Some((host_lease, host_address)) = host.filter(|(l, _)| *l == item.signature.host) else {
+                    item.result = CargoResult::Uncertain;
+                    continue;
+                };
+                if now < item.next_send {
+                    continue;
+                }
+                item.next_send = now + 0.25;
+                let s = &item.signature;
+                let packet = format!(
+                    "CARGOEXEC|1|{host_lease}|{request}|{}|{}|{}|{}|{}|{}|{}",
+                    s.ship,
+                    s.epoch,
+                    s.verb.name(),
+                    s.verb.object(),
+                    s.ware,
+                    s.amount,
+                    s.slot.as_str()
+                );
+                out.push((host_address, packet.into_bytes()));
+            }
+            return;
+        }
         let host = self.core.peers.get(&Slot::P1).map(|p| (p.lease, p.address));
-        let guest = self.core.peers.get(&Slot::P2).map(|p| (p.lease, p.address));
+        let guests: Vec<(Hex32, SocketAddr)> = self
+            .core
+            .peers
+            .iter()
+            .filter(|(slot, _)| **slot != Slot::P1)
+            .map(|(_, peer)| (peer.lease, peer.address))
+            .collect();
         let cargo = &mut self.universe.cargo;
-        if let (Some((host_lease, _)), Some((guest_lease, guest_address))) = (host, guest) {
+        if let Some((host_lease, _)) = host {
             if now >= cargo.next_inventory {
                 cargo.next_inventory = now + 0.2;
                 let values: Vec<&(u32, f64, Vec<String>)> = cargo.inventory.values().collect();
@@ -209,8 +263,10 @@ impl Session {
                 for i in 0..count {
                     let (_, at, fields) = values[(cargo.inventory_cursor + i) % values.len()];
                     if fields[0] == host_lease.as_str() && now - at < 2.0 {
-                        let packet = format!("CINV|1|{guest_lease}|{}", fields.join("|"));
-                        out.push((guest_address, packet.into_bytes()));
+                        for (guest_lease, guest_address) in &guests {
+                            let packet = format!("CINV|1|{guest_lease}|{}", fields.join("|"));
+                            out.push((*guest_address, packet.into_bytes()));
+                        }
                     }
                 }
                 cargo.inventory_cursor += count;

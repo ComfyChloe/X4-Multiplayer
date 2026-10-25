@@ -1,14 +1,14 @@
 # Rust port of the X4 LAN relay and native UDP module (experimental)
 
-Status: **proof of concept on branch `contrib/silver-rust-relay`**, based on
-`contrib/astra-7-5-delivery` @ 8a56415 (7.5.0). Nothing here is wired into the
-packages, launchers or the installed mod. The Python relay and `native/net.c` are
-unchanged and remain the shipped implementation.
+Status: **experimental relay/native port plus a dedicated-server prototype**.
+The original proof of concept was based on `contrib/astra-7-5-delivery` @ 8a56415
+(7.5.0). The `contrib/kimi-dedicated-server` branch adds a supervised Linux authority
+and two human guest roles; see `DEDICATED-SERVER.md`. Ordinary packages retain the
+Python relay and existing transport unless the dedicated build is selected.
 
-**Nothing in this directory has been tested in X4.** All evidence below comes from
-synthetic peers on one Windows 11 PC (localhost UDP), a self-built LuaJIT 2.1 and the
-existing Python test suite. Linux builds and the Linux-only `tests/test_lua.py` were not
-run (see "Not exercised").
+**No native X4 acceptance is claimed by the Rust code alone.** The original evidence
+came from synthetic peers on Windows 11. This branch also builds and tests on Linux,
+but native game evidence is tracked separately in `reports/dedicated-server-wsl.md`.
 
 ## What is here
 
@@ -16,7 +16,9 @@ run (see "Not exercised").
 | --- | --- |
 | `x4lan-net/` | cdylib, Rust equivalent of `native/net.c` (`luaopen_x4lan_net`) |
 | `x4lan-relay/` | library + `x4lan-relay` binary: `host.py` and every session layer |
-| `x4lan-relay/src/bin/x4lan-replay.rs` | deterministic replay driver used by the parity harness |
+| `x4lan-relay/src/dedicated.rs` | Linux process preflight, supervision, native heartbeat and local lifecycle control |
+| `x4lan-relay/src/bin/x4lan-dedicated.rs` | unattended authority CLI (`run/status/pause/resume/stop`) |
+| `x4lan-replay.rs` | deterministic replay driver used by the parity harness |
 | `parity/` | differential harnesses (Python) comparing Python and Rust |
 
 The workspace has **no third-party crates**. Like the Python relay (standard library

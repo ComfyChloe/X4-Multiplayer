@@ -15,7 +15,7 @@ end
 -- X4 menus retain ffi.C itself, not individual GetObjectIDCode functions. A narrow
 -- lookup override reaches those callers while preserving all unrelated C lookups.
 -- Each char array remains owned by I.bound for its full native component lifetime.
-if cfg.slot=='p2' then
+if cfg.slot~='p1' then
  local mt=getmetatable(C);local lookup=type(mt)=='table' and mt.__index
  if type(lookup)=='function' then
   mt.__index=function(lib,name)
@@ -64,7 +64,7 @@ end
 local receive=U.receive
 function U.receive(f,now)
  if f[1]~='IDENT' then return receive(f,now) end
- if cfg.slot~='p2' or #f~=11 or not U.latest or f[4]~=U.latest.epoch then return true end
+ if cfg.slot=='p1' or #f~=11 or not U.latest or f[4]~=U.latest.epoch then return true end
  local seq,id=P.integer(f[5]),P.integer(f[7]);local scope=f[6]
  if not seq or not id or id==0 or (scope~='P' and scope~='N' and scope~='F') or (scope=='P' and id>2) or (scope=='F' and id>4) or
    not f[8]:match('^[A-Z0-9-]+$') or #f[8]>32 or (f[10]~='0' and f[10]~='1') or (f[11]~='0' and f[11]~='1') then return true end

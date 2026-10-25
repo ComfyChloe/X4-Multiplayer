@@ -92,6 +92,7 @@ pub struct Core {
     pub token: Hex32,
     pub build: Atom,
     pub bubble: Atom,
+    pub dedicated: bool,
     pub sector: Option<Atom>,
     pub peers: OrderedMap<Slot, Peer>,
     pub tick: u64,
@@ -157,6 +158,27 @@ impl<'a> Fields<'a> {
 
 impl Session {
     pub fn new(level: Level, token: &str, build: &str, bubble: &str, leases: LeaseSource) -> Result<Self, String> {
+        Self::with_mode(level, token, build, bubble, leases, false)
+    }
+
+    pub fn new_dedicated(
+        level: Level,
+        token: &str,
+        build: &str,
+        bubble: &str,
+        leases: LeaseSource,
+    ) -> Result<Self, String> {
+        Self::with_mode(level, token, build, bubble, leases, true)
+    }
+
+    fn with_mode(
+        level: Level,
+        token: &str,
+        build: &str,
+        bubble: &str,
+        leases: LeaseSource,
+        dedicated: bool,
+    ) -> Result<Self, String> {
         let token = Hex32::parse(token).map_err(|_| "token must be 32 lowercase hexadecimal characters".to_string())?;
         let (Ok(build), Ok(bubble)) = (Atom::parse(build), Atom::parse(bubble)) else {
             return Err("build/bubble must be simple identifiers".into());
@@ -170,6 +192,7 @@ impl Session {
                 token,
                 build,
                 bubble,
+                dedicated,
                 sector: None,
                 peers: OrderedMap::new(),
                 tick: 0,
@@ -192,7 +215,12 @@ impl Session {
 
     /// bubble.py `_peer`: the slot whose lease and source address both match.
     pub fn authenticated(&self, lease: &str, address: SocketAddr) -> Option<(Slot, Hex32)> {
-        self.core.peers.iter().find(|(_, p)| p.address == address && p.lease.matches(lease)).map(|(s, p)| (*s, p.lease))
+        self.core
+            .peers
+            .iter()
+            .filter(|(slot, _)| **slot != Slot::P3 || self.core.dedicated)
+            .find(|(_, p)| p.address == address && p.lease.matches(lease))
+            .map(|(s, p)| (*s, p.lease))
     }
 
     pub fn live_leases(&self) -> Vec<Hex32> {
@@ -287,7 +315,7 @@ impl Session {
         if !core.token.matches(token) || build != core.build.as_str() || bubble != core.bubble.as_str() {
             return None;
         }
-        let slot = Slot::parse(slot).ok()?;
+        let slot = Slot::parse(slot).ok().filter(|slot| *slot != Slot::P3 || core.dedicated)?;
         let (previous, lease, nonce) = (Hex32::parse(f[7]).ok()?, Hex32::parse(f[8]).ok()?, Hex32::parse(f[9]).ok()?);
         let sector = Atom::parse(sector).ok()?;
         let live = core.peers.get(&slot).is_some();
@@ -332,7 +360,7 @@ impl Session {
         if !self.core.token.matches(token) || build != self.core.build.as_str() || bubble != self.core.bubble.as_str() {
             return None;
         }
-        let slot = Slot::parse(slot).ok()?;
+        let slot = Slot::parse(slot).ok().filter(|slot| *slot != Slot::P3 || self.core.dedicated)?;
         let nonce = Hex32::parse(nonce).ok()?;
         let sector = Atom::parse(sector).ok()?;
         if self.core.sector.as_ref().is_some_and(|s| *s != sector) {

@@ -114,11 +114,12 @@ pub fn is_ware(text: &str) -> bool {
         && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
 }
 
-/// One of the two player slots. The relay has exactly two; there is no third value.
+/// Authority p1, human guest p2, and a second human guest p3 in dedicated sessions.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
 pub enum Slot {
     P1,
     P2,
+    P3,
 }
 
 impl Slot {
@@ -126,6 +127,7 @@ impl Slot {
         match text {
             "p1" => Ok(Slot::P1),
             "p2" => Ok(Slot::P2),
+            "p3" => Ok(Slot::P3),
             _ => Err(Reject),
         }
     }
@@ -134,13 +136,14 @@ impl Slot {
         match self {
             Slot::P1 => "p1",
             Slot::P2 => "p2",
+            Slot::P3 => "p3",
         }
     }
 
     pub fn other(self) -> Self {
         match self {
             Slot::P1 => Slot::P2,
-            Slot::P2 => Slot::P1,
+            Slot::P2 | Slot::P3 => Slot::P1,
         }
     }
 }

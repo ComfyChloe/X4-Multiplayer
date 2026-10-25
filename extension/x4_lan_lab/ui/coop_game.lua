@@ -131,7 +131,10 @@ function c.sectorId(name)
 end
 function c.prepare(now)
  if not c.setup then
-  c.setup=true;local own=cfg.slot=='p1' and 1 or 2;c.ships[own]=s.ship;c.ships[3-own]=s.proxy
+  local own=tonumber(cfg.local_ship) or 0
+  if own==0 then own=cfg.slot=='p1' and 1 or 2 end
+  assert((own==1 or own==2) and (cfg.slot~='p3' or cfg.dedicated_session and own==1),'invalid dedicated local ship mapping')
+  c.setup=true;c.ships[own]=s.ship;c.ships[3-own]=s.proxy
   AddUITriggeredEvent('X4LAN_Coop','Setup')
  end
  local m=c.metrics
@@ -146,8 +149,8 @@ function c.receive(f,now)
   local owners,epochs,pilots={},{},{}
   for i=1,2 do
    local index=2+i*3;owners[i],epochs[i],pilots[i]=f[index],integer(f[index+1]),f[index+2]
-   if (owners[i]~='p1' and owners[i]~='p2') or not epochs[i] or epochs[i]<1 or
-      (pilots[i]~='0' and pilots[i]~=owners[i]) then return true end
+   if (owners[i]~='p1' and owners[i]~='p2' and (owners[i]~='p3' or not cfg.dedicated_session)) or
+      not epochs[i] or epochs[i]<1 or (pilots[i]~='0' and pilots[i]~=owners[i]) then return true end
   end
   for i=1,2 do
    if c.epochs[i]~=epochs[i] or c.owners[i]~=owners[i] then

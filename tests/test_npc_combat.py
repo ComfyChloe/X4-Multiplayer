@@ -173,7 +173,7 @@ class NpcAdapterTests(unittest.TestCase):
 
     def test_host_uses_new_id_after_native_handle_reuse(self):
         self.make('p1').execute('''
-         U.wanted='cluster_14_sector001_macro';for i=1,30 do step() end
+         U.wanted={cluster_14_sector001_macro=now};for i=1,30 do step() end
          local first=U.publish[1].id;U.sender.done=true;U.nextScan=0
          codes[200]='NEW-200';codes[101]='NEW-101';codes[102]='NEW-102'
          for i=1,30 do step() end
@@ -182,7 +182,7 @@ class NpcAdapterTests(unittest.TestCase):
 
     def test_native_retirement_stops_old_readbacks_and_renews_the_world_identity(self):
         self.make('p1').execute('''
-         U.wanted='cluster_14_sector001_macro';for i=1,30 do step() end
+         U.wanted={cluster_14_sector001_macro=now};for i=1,30 do step() end
          local id=U.publish[1].id;local r=N.records[id]
          N.retired(id..'|1|'..r.serial);local seq=N.seq
          N.read(id..'|1|'..r.serial..'|100|100|1');assert(N.seq==seq)

@@ -15,7 +15,7 @@ void ActivateObject(UniverseID,bool);
 void RemoveComponent(UniverseID);
 ]]
 local u={receiver=P.receiver(),excluded={},identities={},nextId=0,revision=0,interestSeq=0,
- replicas={},replicaKeys={},motionSeq=0,publish={},motionCursor=1}
+ replicas={},replicaKeys={},motionSeq=0,publish={},publishes={},lastScans={},wanted={},motionCursor=1}
 A.universe=u
 local function log(v) DebugError('[X4LAN] UNIVERSE '..v) end
 local function key(object) return tostring(object):gsub('ULL$','') end
@@ -102,10 +102,11 @@ local function captured(scan)
  end
  if A.cargo then for _,row in ipairs(A.cargo.rows(scan.sector)) do rows[#rows+1]=row end end
  assert(#rows<=P.limit,'combined sector object limit exceeded')
- u.lastScan=scan;u.cargoDirty=false
+ u.lastScan=scan;u.lastScans[scan.name]=scan;u.cargoDirty=false
  table.sort(rows,function(a,b) return a.id<b.id end)
  local ordered={};for i,r in ipairs(rows) do ordered[i]=r.row end
- u.revision=u.revision+1;u.publish=objects;u.motionCursor=1
+ u.revision=u.revision+1;u.publishes[scan.name]=objects;u.publish={};u.motionCursor=1
+ for _,entries in pairs(u.publishes) do for _,entry in ipairs(entries) do u.publish[#u.publish+1]=entry end end
  u.sender=P.sender(P.baseline(s.client.lease,u.revision,scan.name,ordered))
  log('CAPTURE revision='..u.revision..' sector='..scan.name..' objects='..#ordered)
 end
@@ -148,7 +149,7 @@ local function accept(b,now)
 end
 function u.receive(f,now)
  if f[1]=='UINTEREST' then
-  if cfg.slot=='p1' and #f==5 and P.integer(f[4]) and P.atom(f[5],true) then u.wanted=f[5] end
+  if cfg.slot=='p1' and (#f==5 or #f==6) and P.integer(f[4]) and P.atom(f[5],true) then u.wanted[f[5]]=now end
   return true
  elseif f[1]=='UACK' then
   local rev=P.integer(f[5]);local index=f[6]=='-1' and -1 or P.integer(f[6])
@@ -156,7 +157,7 @@ function u.receive(f,now)
   return true
  elseif f[1]=='UPOS' or f[1]=='UMOVE' then
   local modern=f[1]=='UMOVE'
-  if cfg.slot~='p2' or #f~=(modern and 20 or 13) or not u.latest or f[4]~=u.latest.epoch then return true end
+  if cfg.slot=='p1' or #f~=(modern and 20 or 13) or not u.latest or f[4]~=u.latest.epoch then return true end
   local id,seq=P.integer(f[5]),P.integer(f[6]);local r=id and u.replicas[id]
   if not r or not seq or seq<=r.seq or f[7]~=r.sector then return true end
   local start=modern and 9 or 8
@@ -172,7 +173,7 @@ function u.receive(f,now)
   r.track=track;r.target=parsed.pose;r.at=now;r.seq=seq;r.modern=modern
   return true
  elseif f[1]=='UBEGIN' or f[1]=='UOBJECT' or f[1]=='UCOMMIT' then
-  if cfg.slot~='p2' or u.failed then return true end
+  if cfg.slot=='p1' or u.failed then return true end
   local ack,b=u.receiver:receive(f,now)
   if b then u.incoming=b end -- Engine changes belong to an unpaused frame.
   if ack then send('UACK|1|'..s.client.lease..'|'..f[4]..'|'..f[5]..'|'..ack) end
@@ -211,7 +212,7 @@ local function frame(now)
  if not u.setup then u.setup=true;AddUITriggeredEvent('X4LAN_Universe','Setup');return end
  if not u.ready or A.paused() then return end
  local name,sector=currentSector();if not name then return end
- if cfg.slot=='p2' then
+ if cfg.slot~='p1' then
   if u.interest~=name then
    u.interest=name;u.scan=nil;u.receiver.pending=nil;u.latest=nil;u.nextScan=0
    for _,r in pairs(u.replicas) do removeReplica(r) end;u.replicas={}
@@ -237,12 +238,19 @@ local function frame(now)
   end
   return
  end
- if u.cargoDirty and u.lastScan and u.lastScan.name==u.wanted and (not u.sender or u.sender.done) then captured(u.lastScan) end
+ for name,at in pairs(u.wanted) do if now-at>5 then u.wanted[name]=nil end end
+ if u.cargoDirty and (not u.sender or u.sender.done) then
+  for name,scan in pairs(u.lastScans) do if u.wanted[name] then captured(scan);break end end
+ end
  if u.sender and not u.sender.done then
   for _,p in ipairs(u.sender:packets(s.client.lease,now)) do send(p) end
- elseif u.wanted and not u.scan and now>=(u.nextScan or 0) then
-  local target=A.coop.sectorId(u.wanted)
-  if target then u.scan=beginScan(u.wanted,target) end
+ elseif not u.scan and now>=(u.nextScan or 0) then
+  local names={};for name in pairs(u.wanted) do names[#names+1]=name end;table.sort(names)
+  if #names>0 then
+   u.scanChoice=(u.scanChoice or 0)%#names+1
+   local name=names[u.scanChoice];local target=A.coop.sectorId(name)
+   if target then u.scan=beginScan(name,target) end
+  end
  end
  if u.scan and scanStep(u.scan) then
   if not u.scan.retry then captured(u.scan) end

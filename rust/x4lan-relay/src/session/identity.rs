@@ -73,19 +73,38 @@ impl Session {
             return;
         }
         ids.next_send = now + 0.1;
-        let (Some(host), Some(guest)) = (self.core.peers.get(&Slot::P1), self.core.peers.get(&Slot::P2)) else {
+        if !self.core.dedicated {
+            let (Some(host), Some(guest)) = (self.core.peers.get(&Slot::P1), self.core.peers.get(&Slot::P2)) else {
+                return;
+            };
+            let entity_ids = &self.universe.entity_ids;
+            ids.rows.retain(|(scope, entity), _| {
+                *scope != Scope::Npc || entity_ids.values().any(|set| set.contains(entity))
+            });
+            let rows: Vec<&Vec<String>> =
+                ids.rows.values().filter(|v| v.2[0] == host.lease.as_str() && now - v.1 < 2.0).map(|v| &v.2).collect();
+            let budget = rows.len().min(rows.len().div_ceil(10).clamp(32, 256));
+            for i in 0..budget {
+                let fields = rows[(ids.cursor + i) % rows.len()];
+                out.push((guest.address, format!("IDENT|1|{}|{}", guest.lease, fields.join("|")).into_bytes()));
+            }
+            ids.cursor += budget;
             return;
-        };
+        }
+        let Some(host) = self.core.peers.get(&Slot::P1) else { return };
+        let guests: Vec<_> = self.core.peers.iter().filter(|(slot, _)| **slot != Slot::P1).collect();
         let entity_ids = &self.universe.entity_ids;
         ids.rows
             .retain(|(scope, entity), _| *scope != Scope::Npc || entity_ids.values().any(|set| set.contains(entity)));
-        // Only forward fresh observations; the guest expires forced visibility.
+        // Only forward fresh observations; each guest expires forced visibility.
         let rows: Vec<&Vec<String>> =
             ids.rows.values().filter(|v| v.2[0] == host.lease.as_str() && now - v.1 < 2.0).map(|v| &v.2).collect();
         let budget = rows.len().min(rows.len().div_ceil(10).clamp(32, 256));
         for i in 0..budget {
             let fields = rows[(ids.cursor + i) % rows.len()];
-            out.push((guest.address, format!("IDENT|1|{}|{}", guest.lease, fields.join("|")).into_bytes()));
+            for (_, guest) in &guests {
+                out.push((guest.address, format!("IDENT|1|{}|{}", guest.lease, fields.join("|")).into_bytes()));
+            }
         }
         ids.cursor += budget;
     }

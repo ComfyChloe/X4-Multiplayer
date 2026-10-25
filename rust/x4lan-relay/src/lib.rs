@@ -5,6 +5,7 @@
 //! differential harness in `rust/parity/` replays identical traffic into this crate
 //! and the Python relay and requires byte-identical replies and snapshots.
 
+pub mod dedicated;
 pub mod json;
 pub mod ordmap;
 pub mod pynum;

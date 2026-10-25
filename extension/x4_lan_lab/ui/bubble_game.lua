@@ -55,9 +55,9 @@ local function receiveExtension(client,f,now)
   if s.worldOwner==f[4] and rev<=(s.remoteRevision or -1) then return true end
   local v={}
   for i=1,17 do local n=tonumber(f[i+5]);if not n or n~=n or n<0 or n>1000000 then return true end;v[i]=n end
-  if cfg.slot=='p2' and cfg.trading and (not X4LAN_BUBBLE_API.trade or not X4LAN_BUBBLE_API.trade.state.ready) then return true end
+  if cfg.slot~='p1' and cfg.trading and (not X4LAN_BUBBLE_API.trade or not X4LAN_BUBBLE_API.trade.state.ready) then return true end
   s.worldOwner,s.remoteRevision=f[4],rev
-  if cfg.slot=='p2' and s.ready then
+  if cfg.slot~='p1' and s.ready then
    s.dock={v[14],v[15]}
    local key=table.concat(v,'|')
    if not cfg.coop or key~=s.appliedWorld or now>=(s.nextWorldApply or 0) then
@@ -117,13 +117,16 @@ local function frame()
  local sector=operational and C.GetContextByClass(ship,'sector',false) or s.sector
  if sector==0 then if cfg.coop and s.sector then sector=s.sector else return end end
  if not s.ship then
-  local x=cfg.slot=='p1' and 1000 or -1000
+  local own=tonumber(cfg.local_ship) or 0
+  if own==0 then own=cfg.slot=='p1' and 1 or 2 end
+  assert((own==1 or own==2) and (cfg.slot~='p3' or cfg.dedicated_session and own==1),'invalid dedicated local ship mapping')
+  local x=own==1 and 1000 or -1000
   if cfg.ship_macro then
    -- MD also registers the ships as native sensor sources. SpawnObjectAtPos2
    -- objects report radar range but fail discovery away from the starter ship.
    if not s.shipRequest then
     s.shipRequest={sector=sector,original=ship}
-    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{sector=id(sector),localX=-x,macro=cfg.ship_macro,loadout=cfg.ship_loadout or '',weapons=cfg.ship_weapons or -1})
+    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{sector=id(sector),localX=-x,macro=cfg.ship_macro,loadout=cfg.ship_loadout or '',weapons=cfg.ship_weapons or -1,teleport=not cfg.dedicated})
     log('shared ship requested: '..cfg.ship_macro..' loadout='..tostring(cfg.ship_loadout))
    end
    if not s.shipsReady then return end

@@ -34,7 +34,7 @@ function life.receive(client,f,now)
   return true
  elseif f[1]=='SUITKILL' then
   local gen=#f==5 and number(f[5],2147483647) or nil
-  if cfg.slot=='p2' and gen and gen==life.generation and life.mode=='suit' then
+  if cfg.slot~='p1' and gen and gen==life.generation and life.mode=='suit' then
    AddUITriggeredEvent('X4LAN_Life','SuitDeath',gen)
   end
   return true

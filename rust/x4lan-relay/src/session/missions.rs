@@ -175,7 +175,7 @@ impl Session {
         }
         let m = &mut self.coop.missions;
         match (f[0], f.len(), slot) {
-            ("MREQ", 7, Slot::P2) => {
+            ("MREQ", 7, _) if slot != Slot::P1 => {
                 if let Some(old) = m.records.get(&ident) {
                     let allowed = matches!(
                         (old.row.state, f[6]),
@@ -248,7 +248,38 @@ impl Session {
             return;
         }
         m.next_send = now + 0.25;
-        let Some(guest) = self.core.peers.get(&Slot::P2) else { return };
+        if !self.core.dedicated {
+            let Some(guest) = self.core.peers.get(&Slot::P2) else { return };
+            let host_address = self.core.peers.get(&Slot::P1).expect("host").address;
+            if !m.records.is_empty() {
+                let ids: Vec<u32> = m.records.keys().copied().collect();
+                m.cursor %= ids.len();
+                let ident = if m.changed.is_empty() { ids[m.cursor] } else { m.changed.remove(0) };
+                m.cursor += 1;
+                let r = &m.records[&ident];
+                let parts: Vec<&str> =
+                    r.payload.as_bytes().chunks(PART_SIZE).map(|c| std::str::from_utf8(c).expect("ascii")).collect();
+                for (i, part) in parts.iter().enumerate() {
+                    let packet = format!(
+                        "MSTATE|1|{}|{host}|{ident}|{}|{}|{}|{}|{part}",
+                        guest.lease,
+                        r.rev,
+                        i + 1,
+                        parts.len(),
+                        r.digest
+                    );
+                    out.push((guest.address, packet.into_bytes()));
+                }
+            }
+            let guest_lease = guest.lease;
+            m.requests.retain(|_, (lease, _, _)| *lease == guest_lease);
+            for (ident, (_, rev, action)) in m.requests.iter() {
+                out.push((host_address, format!("MREQ|1|{host}|{host}|{ident}|{rev}|{action}").into_bytes()));
+            }
+            return;
+        }
+        let guests: Vec<Hex32> =
+            self.core.peers.iter().filter(|(slot, _)| **slot != Slot::P1).map(|(_, peer)| peer.lease).collect();
         let host_address = self.core.peers.get(&Slot::P1).expect("host").address;
         // One record per tick, independent of either player's sector or attention.
         if !m.records.is_empty() {
@@ -259,20 +290,21 @@ impl Session {
             let r = &m.records[&ident];
             let parts: Vec<&str> =
                 r.payload.as_bytes().chunks(PART_SIZE).map(|c| std::str::from_utf8(c).expect("ascii")).collect();
-            for (i, part) in parts.iter().enumerate() {
-                let packet = format!(
-                    "MSTATE|1|{}|{host}|{ident}|{}|{}|{}|{}|{part}",
-                    guest.lease,
-                    r.rev,
-                    i + 1,
-                    parts.len(),
-                    r.digest
-                );
-                out.push((guest.address, packet.into_bytes()));
+            for guest_lease in &guests {
+                let guest = self.core.peers.values().find(|peer| peer.lease == *guest_lease).expect("listed");
+                for (i, part) in parts.iter().enumerate() {
+                    let packet = format!(
+                        "MSTATE|1|{guest_lease}|{host}|{ident}|{}|{}|{}|{}|{part}",
+                        r.rev,
+                        i + 1,
+                        parts.len(),
+                        r.digest
+                    );
+                    out.push((guest.address, packet.into_bytes()));
+                }
             }
         }
-        let guest_lease = guest.lease;
-        m.requests.retain(|_, (lease, _, _)| *lease == guest_lease);
+        m.requests.retain(|_, (lease, _, _)| guests.contains(lease));
         for (ident, (_, rev, action)) in m.requests.iter() {
             out.push((host_address, format!("MREQ|1|{host}|{host}|{ident}|{rev}|{action}").into_bytes()));
         }

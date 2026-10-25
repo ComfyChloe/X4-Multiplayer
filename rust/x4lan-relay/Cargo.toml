@@ -16,3 +16,7 @@ path = "src/bin/x4lan-relay.rs"
 [[bin]]
 name = "x4lan-replay"
 path = "src/bin/x4lan-replay.rs"
+
+[[bin]]
+name = "x4lan-dedicated"
+path = "src/bin/x4lan-dedicated.rs"

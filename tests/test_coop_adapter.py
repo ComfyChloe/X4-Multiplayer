@@ -7,9 +7,11 @@ UI=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui'
 
 @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')
 class CoopAdapterTests(unittest.TestCase):
- def make(self,slot='p1'):
+ def make(self,slot='p1',dedicated=False):
   l=LuaRuntime(unpack_returned_tuples=True);l.execute(MOCK+EXTRA)
   l.globals().X4LAN_CONFIG.slot=slot;l.globals().X4LAN_CONFIG.coop=True
+  l.globals().X4LAN_CONFIG.dedicated_session=dedicated
+  if slot=='p3':l.globals().X4LAN_CONFIG.local_ship=1
   l.execute('''
    sectors={[11]=22,[42]=22};ConvertIDTo64Bit=function(v) return tonumber(v) end
    api.GetContextByClass=function(object) return sectors[object] or 22 end
@@ -30,6 +32,17 @@ class CoopAdapterTests(unittest.TestCase):
    auth(1,'p1',1,'p1','p2',1,'p2')
   ''')
   return l
+ def test_dedicated_p3_uses_ship_one_and_accepts_its_authority(self):
+  l=self.make('p3',True);l.execute('''
+   local c=X4LAN_BUBBLE_API.coop
+   assert(c.ships[1]==X4LAN_BUBBLE_API.state.ship and c.ships[2]==X4LAN_BUBBLE_API.state.proxy)
+   auth(2,'p3',2,'p3','p2',1,'p2')
+   assert(c.owners[1]=='p3' and c.pilots[1]=='p3' and c.revision==2)
+  ''')
+  l=self.make('p2',False);l.execute('''
+   local c=X4LAN_BUBBLE_API.coop;auth(2,'p3',2,'p3','p2',1,'p2')
+   assert(c.owners[1]=='p1' and c.revision==1)
+  ''')
  def test_absolute_far_pose_and_sector_are_sent_without_old_bubble_limit(self):
   l=self.make();l.execute('''
    positions[11]={x=900000,y=20000,z=0,yaw=0,pitch=0,roll=0};sectors[11]=23
