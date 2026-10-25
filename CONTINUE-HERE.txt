@@ -3,7 +3,8 @@ X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
 CURRENT CHECKOUT / REQUEST
 work/x4-weapons-7-4, contrib/astra-7-5-delivery, stacked on019bff1 of
 contrib/astra-faction-missions / draftPR45 (NPC base3020f54 / draftPR44).
-User supplied consolidated7.5.0 human playtest feedback.
+User supplied7.5.0 feedback; human testing continues. Next-version host/guest
+logging tools must record the whole playtest; user explicitly deferred development.
 Delivery draftPR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
 Delivered7.5.0 from4078f44; report: reports/INTERNAL-7-5-DELIVERY.txt.
 Primary works alone. No agent/chat/timer/Slack polling or new unattended schedule.
@@ -52,7 +53,9 @@ path/profile reselection and owned recovery. Excluded fleet/mod-selection writer
 
 OPEN / ANALYSIS DIRECTION
 Priorities: unreliable NPC scene/native velocity/fire across sectors and player
-map jumps associated with high-speed/highway travel. UMOVE already carries velocity;
+map jumps associated with high-speed/highway travel. Flickering recurred in a
+second playtest with another player; user confirmed IN THE HIGHWAY. Cause unproven;
+no audited failure capture from that second test. UMOVE already carries velocity;
 NPC replica renderer applies pose but not native velocity. Guest temporarily saw
 NPC fire/speed, then lost fire again; not stable acceptance. Guest destruction
 despawns instead of matching host wreck/debris. Mines mission, player-fleet/Erlking

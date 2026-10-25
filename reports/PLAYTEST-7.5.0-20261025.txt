@@ -55,6 +55,13 @@ motion sampling, coordinate/parent transitions and native position/velocity
 application, without ruling out other causes. Relay status is not a coordinate
 trace or proof of guest reception/application.
 
+Follow-up human report: flickering recurred at high speed in another playtest with
+a different player. The user explicitly confirmed it happened IN THE HIGHWAY.
+This strengthens the highway association across participants; it does not prove
+that speed alone causes it or rule out timing/coordinate-frame transitions.
+No failed-state capture from that second playtest has been audited here, and the
+previous session's captures must not be presented as evidence of this recurrence.
+
 The authorized 20-second passive capture at 20:11:50–20:12:09 Europe/Berlin was
 SYMPTOM-FREE: the user confirmed the host was moving and jumps had stopped.
 All 712 captured forwarded NAV2 rows matched captured inputs; AUTH retained the
@@ -76,3 +83,8 @@ player motion across highway/high-speed transitions; death visuals and remaining
 fleet/mission-family limitations. Preserve the accepted human results and repeat
 only affected checks after a relevant change or a new symptom. No new package,
 native experiment, game/server restart or background schedule was started here.
+
+Requested for the next version: separately startable logging tools on host and
+guest, recording throughout the entire playtest. The user explicitly deferred
+development while human testing continues. Requirement recorded only; do not
+start implementing or installing these tools yet.
