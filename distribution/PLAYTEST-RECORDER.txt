@@ -42,6 +42,14 @@ What is in a run folder
                  It is missing if the window was closed instead of Ctrl+C; events.jsonl and the
                  copied logs are still complete up to the last poll.
 
+Times and coverage
+  utc/mono in events.jsonl are the RECORDER's receipt times (when a poll saw new bytes). They
+  are not X4 game time: game time is the number at the start of each engine log line, and it
+  differs between host and guest. Never align peers by game time.
+  Copied lines are verbatim except for the session key and the 32-hex id pseudonyms.
+  The recorder cannot add telemetry that the game or relay never wrote. If a log has no motion
+  lines (for example MOTION_DIAG is off), motion is UNAVAILABLE for that run, not symptom-free.
+
 Limits
   Only complete lines are copied; a final line without a newline is added at stop.
   Text written and then deleted between two polls (0.5 s) cannot be seen.
