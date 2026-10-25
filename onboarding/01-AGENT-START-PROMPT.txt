@@ -11,9 +11,11 @@ Conserve tokens by reading task-relevant source and evidence, not the historical
 conversation or every report. Keep quality and evidence accuracy first.
 
 Begin by checking Git status, remote, branch and exact HEAD. Use an independent
-clone/worktree and unique contrib/ branch. The onboarding code baseline is
+clone/worktree and unique contrib/ branch. The historical onboarding baseline is
 7c6ec19ec9ea26f9ee73b88e4816e0a85bb86253 on contrib/astra-7-4-integration, not
-necessarily main. Read onboarding/02-SETUP.txt for environment/platform limits.
+necessarily main. Current delivery work is on contrib/astra-7-5-delivery / PR46;
+read CONTINUE-HERE.txt and agree the actual task baseline with project lead Ferrite.
+Read onboarding/02-SETUP.txt for environment/platform limits.
 Preserve all existing local edits. Read the current coordination state before
 starting overlapping edits; historical Slack schedules do not restart themselves.
 
@@ -22,8 +24,11 @@ repository and test access, understood gameplay limits, and one proposed bounded
 task from onboarding/04-COORDINATION-AND-TASKS.txt. These are suggestions, not prior
 assignments. You may inspect source and prepare a review while scope is clarified.
 Do not launch X4, change installed profiles or alter another agent's checkout as
-part of onboarding. Primary owns integration/native PC use; coordinate weapon
-work with Claude before overlapping it. Do not spawn additional agents by default.
+part of onboarding. Ferrite is project lead and coordinates tasks/integration;
+Astra / A:primary is a contributor and retains coordination of native use on this
+Linux PC. Verify existing weapon assignments before overlap. Do not spawn
+additional agents by default. User deferred new logging-tool development while
+human testing continues; do not treat onboarding as permission to start it.
 
 After a scope is agreed, implement original code, add meaningful affected checks,
 and deliver a focused branch/PR with exact evidence and remaining limits using

@@ -1,11 +1,20 @@
 TEAM COORDINATION AND CANDIDATE TASKS
 
 OWNERSHIP
-Primary agent: integration, release assembly, this Linux PC's native sessions.
+Ferrite: project lead, as assigned by the owner on 25 October 2026; coordinates
+task ownership, shared interfaces and integration. This supersedes earlier
+messages naming Astra as project lead.
+Astra / A:primary: contributing agent; coordinates this Linux PC's native sessions
+within its owner's authorization. Coordinate new implementation/release scope
+with Ferrite. Existing test sessions and sealed packages stay unchanged.
 Claude: existing player-weapons/damage work; verify current availability/scope
 before overlap. Neither completion nor ownership transfer follows from silence.
 Incoming agent: no implementation assignment yet. Use its own branch/worktree.
 The project owner or integrator agrees the task and shared interface before edits.
+Current results: CONTINUE-HERE.txt and reports/PLAYTEST-7.5.0-20261025.txt on
+contrib/astra-7-5-delivery / PR46. Historical candidate tasks below are unassigned.
+The owner requested continuous host/guest logging tools for the next version but
+explicitly deferred development while human testing continues.
 
 Communications use the existing Slack channel private-coordination-channel
 (channel PRIVATECOORDINATIONID; existing threadPRIVATE-THREAD-ID) when access is provided and
