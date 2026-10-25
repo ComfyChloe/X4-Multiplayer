@@ -9,6 +9,7 @@ from .economy import EconomySession, integer, parse_lines
 from .host import ATOM, HEX, sequence
 from .projectile_relay import ProjectileRelay
 from .quests import QuestState
+from .missions import MissionJournal
 
 POSITION_LIMIT = 50_000_000
 HEALTH_STALE = .75   # seconds without a pilot frame before a live health generation ends
@@ -46,6 +47,7 @@ class CoopSession(EconomySession):
         self.authority_revision = 1
         self.order_ships = {}
         self.quest = QuestState()
+        self.missions = MissionJournal(self)
 
     def expire(self, now):
         super().expire(now)
@@ -106,6 +108,8 @@ class CoopSession(EconomySession):
         return self.health_gen[entity]
 
     def receive(self, raw, address, now):
+        if raw.startswith((b'MSTATE|', b'MREQ|')):
+            return self.missions.receive(raw, address, now)
         self.expire(now)
         if len(raw) > 768: return []
         try: f = raw.decode('ascii').split('|')
@@ -319,4 +323,5 @@ class CoopSession(EconomySession):
                 result.append((peer.address, ('BODY2|1|' + peer.lease + '|' + '|'.join(fields)).encode()))
         result.extend(self.projectiles.packets(self, now))
         result.extend(self.quest.snapshots(self.peers, now))
+        result.extend(self.missions.snapshots(now))
         return result

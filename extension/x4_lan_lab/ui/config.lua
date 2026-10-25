@@ -10,6 +10,7 @@ X4LAN_CONFIG = {
     shot_claims = false, -- Dev only, needs pilot_health: shooter-confirmed hit counts (shot_game.lua).
     shot_capture = false, -- Dev only, needs shot_claims/shot_visual: native capture of ordinary stock hits.
     shot_undo = false, -- Diagnostic only, needs shot_capture: replayed-hit undo (delays shield recharge).
+    faction_missions = false, -- INTERNAL opt-in: native shared faction mission journal.
     npc_combat = false, -- INTERNAL opt-in: host NPC health and acknowledged guest stock-gun hits.
     interaction_test = false, -- Destructive fixtures ONLY in the disposable test world.
     test_profile = "45841",

@@ -38,6 +38,12 @@ transfers host health and acknowledged guest hits across sectors. It is disabled
 in the delivered packages; current S/M stock-gun scope and retained native failures
 are documented separately from human multiplayer acceptance.
 
+An opt-in [ordinary faction mission adapter](reports/FACTION-MISSIONS-20261025.txt)
+now connects stock matching-ship kill contracts to a shared host-owned journal:
+acceptance, objective progress, completion, abort and failure. Separate native
+host/guest runs passed within the documented scope; other mission families and
+matched human multiplayer acceptance remain open. It is not in sealed packages.
+
 ## Acceptance and remaining work
 
 Human tests have confirmed ordinary cargo/magnet interaction, Cooperative Trial,

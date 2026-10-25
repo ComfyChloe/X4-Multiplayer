@@ -28,6 +28,8 @@
     <file name="ui/walk_game.lua" />
     <file name="ui/trade_protocol.lua" />
     <file name="ui/trade_game.lua" />
+    <file name="ui/mission_protocol.lua" />
+    <file name="ui/mission_game.lua" />
     <file name="ui/quest_game.lua" />
     <file name="ui/cargo_game.lua" />
     <file name="ui/identity_game.lua" />

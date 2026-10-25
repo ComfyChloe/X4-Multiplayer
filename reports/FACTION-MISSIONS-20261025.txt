@@ -1,0 +1,112 @@
+FACTION MISSIONS — FIRST NATIVE ORDINARY-MISSION ADAPTER — 25 OCTOBER 2026
+
+Status and scope
+Source-only INTERNAL work, stacked on NPC combat PR44. No new package, launcher
+activation or public release. Source faction_missions=false remains inert.
+The existing Cooperative Trial is unchanged. This is NOT universal mission sharing.
+
+The first adapter connects the stock GM_Destroy_RarelyOnSight mission family:
+ordinary contracts requiring a number of matching enemy ships to be destroyed.
+The host keeps the original GM/RML instance, matching rules, timers, completion,
+failure and reward actions. A guest can accept a shared host offer and abort the
+shared mission through its native mission interface. Both see the same objective
+count. The guest's admitted NPC hits execute on the real host NPC and the stock
+player-faction kill event advances the ordinary mission, even in another sector.
+No guest-supplied objective count or success claim is accepted.
+
+Only standalone, visible offers without inventory-item rewards are admitted.
+Mission threads, hidden offers, plots and other mission families are not admitted.
+The source host's ordinary offer generator remains responsible for generating
+contracts; this does not generate extra offers around a remote guest. Already
+running missions from loaded campaign saves are not imported by this adapter.
+Source NPC-combat restrictions still apply: supported stock guns, free-flying S/M
+main hull/shields, current identity/pilot generations. Boarding, capital surface
+components and unsupported weapons do not acquire acceptance through this work.
+Credits are paid once by stock host GM and use the existing treasury replication.
+Reputation remains authoritative on the host; guest reputation display and shared
+personal inventory are not implemented here. Timers execute on the host; this
+first guest presentation does not reproduce the native countdown or proximity
+voice hints. Other ordinary local guest missions are not made cooperative.
+
+Architecture and protocol
+x4lan/missions.py: authenticated host-only MSTATE records; guest MREQ ACCEPT/ABORT.
+ui/mission_protocol.lua: matching bounded ASCII envelope/UTF-8 text codec.
+ui/mission_game.lua: native publication, atomic receipt, command retries, MD ACKs.
+md/x4lan_missions.xml: native registry, execution-time authority/revision/clock
+checks, standard-offer acceptance and native guest mission/offer presentation.
+gm_destroy_rarelyonsight.xml and rml_destroy_rarelyonsight.xml: small original
+additive hooks, plus a guarded shared-abort event. Original mission/reward code
+stays in the installed game. Every applied XPath is unique after earlier changes.
+Both server package copy lists use the shared runtime copier, including missions.py.
+
+IDs are never reused within a host lease. Revisions, immutable contract metadata,
+monotonic progress and terminal states prevent rollback and duplicate completion.
+Checksummed multipart records tolerate loss/reordering; terminal records support
+late join. Changed records are prioritized over retained history. Limits: 256
+contracts per host session, 24 chunks of 500 bytes, 256/4096/512 UTF-8 bytes for
+name/description/objective. Rewards are bounded by the protocol integer limit.
+The relay stores facts, not executable cues, mission scripts or reward commands.
+Commands resolve only a registered native cue and repeat current-state checks
+when MD executes. Virtual stock giver actors legitimately have exists=false;
+acceptance uses the live native offer and its original actor/offer handler.
+
+Verification
+635 Linux/Python/LuaJIT tests PASS, no skips, including 21 new mission tests.
+All three complete MD documents (new script + both stock documents with patches
+applied) are valid against the locally installed X4 schema. Reassembly, stale
+leases/revisions, malformed UTF-8, altered metadata, missed intermediate states,
+completion retries, bounded IDs, dirty-record priority and queued native guards
+are covered. Existing Trial/cargo/radar gameplay was not needlessly replayed.
+
+Retained native runs, disposable profile45841 and UDP45843 only. Host probes
+instantiate the original stock GM library with fixed target/text/reward parameters;
+they do not exercise random mission-board generation or every native variation:
+- host01: FAIL. Invalid Aborted-cue reference and a virtual-actor exists check
+  blocked acceptance. Retained the offer/raw error; no claimed completion.
+- host02: FAIL before gameplay. Owned window disappeared and loading did not reach
+  mission setup. Cause unproven. Safely stopped; no mission acceptance inferred.
+- host03: Native stock offer accepted from synthetic guest. Host in cluster14;
+  two distinct NPCs in cluster01. Stock mission advanced 0/2 -> 1/2 -> 2/2, then
+  completed. Credits rose by exactly 2,500,000 cents (=25,000Cr), stable across
+  repeated requests and several later readbacks. An ambiguous abort-hook selector
+  was still skipped in this run: no abort/failure acceptance claimed for it.
+- guest01: FAIL in the harness: wrong GetMissionOfferDetails return index selected
+  a nil actor. Native offer presentation succeeded; acceptance did not.
+- guest02: Native offer found, original SignalObject accept path used, request
+  received by synthetic host, active objective read back as 0/2 then 1/2, completed
+  mission removed from the active list. Guest money delta stayed zero. This tests
+  the actual engine interface programmatically, not a human mouse click.
+- host04: Current production source repeated stock cross-sector completion and
+  single payment; two additional stock missions exercised guest-requested ABORT
+  (X) and native 3-second timeout (F). No new MD errors or skipped patch selectors.
+  Exact installed extension AND isolated relay-source inventory retained.
+
+Each run used one real X4 process and a synthetic counterpart. No matched two-game,
+Windows, human gameplay or full campaign-persistence acceptance. Guest02 predates
+only the host-publication priority change in mission_game.lua, covered separately
+by automated checks and host04. Earlier relay source was not independently sealed;
+do not reconstruct historical source proof from later live files.
+
+Evidence / cleanup
+.local/evidence-039-withheld,guest-01..02}/ retains raw logs, exact installed
+source, controllers, probes, requests, save manifests and restore inventories.
+.local/evidence-040-withheld independently checks causal ordering, native
+progress, cross-sector targets, one payment and guest readbacks. Six intentionally
+corrupted evidence variants are rejected. independent-audit.json records results.
+All six owned games/peers closed; all recorded 69-file installations restored.
+All eight actual save files retain bytes AND timestamps; steam_autocloud.vdf bytes
+also match (its timestamp is not claimed unchanged). Workshop selections match.
+One initial host03 launch was correctly refused while host02 cleanup still ran;
+no installation change occurred during that refused attempt. Raw logs retained.
+No normal save loaded, no Workshop selection write, no configured package shipped.
+
+Next acceptance / extensions
+Integrate with NPC combat, then prepare a matched INTERNAL candidate explicitly.
+Human test: accept the same supported ordinary contract first as host, then as
+guest in a separate run; compare lists/counts, contribute one valid kill each,
+place the guest in a different sector, check one shared credit payment, abort and
+allow another contract to time out. Record target codes and both logs.
+Next adapters must route authoritative native delivery/repair/scan/travel events;
+copying their UI or accepting independent local missions would not share progress.
+Personal conversations/passengers/inventory, mission-thread decisions, reputation
+presentation and progressed-save restoration need their own explicit treatment.
