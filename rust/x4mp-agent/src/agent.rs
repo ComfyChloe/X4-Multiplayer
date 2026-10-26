@@ -1,9 +1,11 @@
 //! In-process side of the agent (Linux only): the ELF constructor, the worker thread that
 //! verifies the build and defers registration, and the per-frame callback in VBI slot 13.
 //!
-//! The only engine write is one pointer into a verified-empty per-frame slot of the VBI
-//! table (compare-exchange from null), and clearing it again on disarm. No code bytes are
-//! patched. Everything else is read-only.
+//! The observer's only engine write is one pointer into a verified-empty per-frame slot of
+//! the VBI table (compare-exchange from null), and clearing it again on disarm. With
+//! `X4MP_SCHED=fixed60` the fixed-step scheduler (`sched_live.rs`) additionally patches
+//! two qwords of FrameTick's dt path and owns the FrameState render flag; both are
+//! restored on every disarm path.
 
 use std::cell::Cell;
 use std::fs::{self, File, OpenOptions};
@@ -17,6 +19,8 @@ use crate::config::{self, Config, Parsed};
 use crate::export::{self, FrameSample};
 use crate::logic::{cadence_line, ArmGate, Disarm, Gate, Observation, Snapshot};
 use crate::pinned::{self, Image};
+use crate::sched_live;
+use crate::scheduler::sched_line;
 use crate::sha256;
 
 #[used]
@@ -41,7 +45,7 @@ extern "C" fn constructor() {
 // Live process memory
 
 /// Readable `[start, end)` ranges from `/proc/self/maps`.
-fn readable_ranges() -> Vec<(u64, u64)> {
+pub(crate) fn readable_ranges() -> Vec<(u64, u64)> {
     let Ok(maps) = fs::read_to_string("/proc/self/maps") else { return Vec::new() };
     maps.lines()
         .filter_map(|line| {
@@ -57,14 +61,14 @@ fn readable_ranges() -> Vec<(u64, u64)> {
         .collect()
 }
 
-fn covered(ranges: &[(u64, u64)], va: u64, len: usize) -> bool {
+pub(crate) fn covered(ranges: &[(u64, u64)], va: u64, len: usize) -> bool {
     let Some(end) = va.checked_add(len as u64) else { return false };
     ranges.iter().any(|&(a, b)| a <= va && end <= b)
 }
 
 /// The running executable, read in place after checking `/proc/self/maps`.
-struct LiveImage {
-    ranges: Vec<(u64, u64)>,
+pub(crate) struct LiveImage {
+    pub(crate) ranges: Vec<(u64, u64)>,
 }
 
 impl Image for LiveImage {
@@ -77,13 +81,13 @@ impl Image for LiveImage {
     }
 }
 
-unsafe fn read_u64(va: u64) -> u64 {
+pub(crate) unsafe fn read_u64(va: u64) -> u64 {
     std::ptr::read_volatile(va as *const u64)
 }
-unsafe fn read_f64(va: u64) -> f64 {
+pub(crate) unsafe fn read_f64(va: u64) -> f64 {
     std::ptr::read_volatile(va as *const f64)
 }
-unsafe fn read_i32(va: u64) -> i32 {
+pub(crate) unsafe fn read_i32(va: u64) -> i32 {
     std::ptr::read_volatile(va as *const i32)
 }
 
@@ -159,14 +163,25 @@ fn epoch() -> &'static Instant {
     EPOCH.get_or_init(Instant::now)
 }
 
+/// Monotonic ns since the agent epoch.
+pub(crate) fn epoch_ns() -> u64 {
+    epoch().elapsed().as_nanos() as u64
+}
+
 fn handler_address() -> usize {
     // The address of the static is stable; its contents are initialised by `arm`.
     std::ptr::addr_of!(HANDLER_LIVE) as usize
 }
 
-/// Fail closed: record the first reason and withdraw the slot if it is still ours.
+/// Fail closed: record the first reason, restore the scheduler's engine writes and
+/// withdraw the slot if it is still ours.
 fn disarm(reason: Disarm) {
     let _ = DISARM.compare_exchange(0, reason as u32, Ordering::SeqCst, Ordering::SeqCst);
+    if IS_OWNER.with(Cell::get) {
+        sched_live::restore_in_slot(); // MoveWorker: safe window available here
+    } else {
+        sched_live::restore_from_worker(); // asks slot 13, falls back after 3 s
+    }
     if ARMED.swap(false, Ordering::SeqCst) {
         let table = TABLE.load(Ordering::SeqCst);
         // SAFETY: the table pointer was verified readable/writable at arm time and the
@@ -234,7 +249,7 @@ fn frame() -> Result<(), Disarm> {
     // SAFETY: loading flag is an int inside the verified table.
     if unsafe { read_i32(table + pinned::VBI_LOADING_FLAG as u64) } != 0 {
         LOADING_SKIPS.fetch_add(1, Ordering::Relaxed);
-        return Ok(());
+        return sched_live::on_frame(true).map_err(|_| Disarm::SchedulerGuard);
     }
     // SAFETY: TimerBase fields are fixed .bss doubles/ints of the pinned executable. The
     // engine writes them under its mutex on the main thread before releasing this frame.
@@ -261,7 +276,9 @@ fn frame() -> Result<(), Disarm> {
     TLS_DT.store(dt.to_bits(), Ordering::Relaxed);
     PAUSED.store(paused, Ordering::Relaxed);
     let sample = FrameSample { frame, game_time, real_time, speed, tls_dt: dt, paused, monotonic_ns: now };
-    export::on_frame(&sample).map_err(|_| Disarm::ExportFailed)
+    export::on_frame(&sample).map_err(|_| Disarm::ExportFailed)?;
+    // Last in the callback: it may wait for the main thread and pace (sleep).
+    sched_live::on_frame(false).map_err(|_| Disarm::SchedulerGuard)
 }
 
 fn snapshot() -> Snapshot {
@@ -397,6 +414,13 @@ fn worker(config: Config) {
     if !verify_build(&mut log) {
         return;
     }
+    if let Some(sched) = config.sched {
+        log.line(&format!(
+            "X4MP_AGENT SCHED CONFIG mode=fixed60 render={:?} max_catchup_steps={} max_lag_ms={} wait_ms={}",
+            sched.policy.render, sched.policy.max_catchup_steps, sched.policy.max_lag_ms, sched.wait_ms
+        ));
+        sched_live::init(sched);
+    }
     let start = Instant::now();
     let mut gate = ArmGate::new(config.settle_ms);
     let mut last_wait = "";
@@ -431,6 +455,8 @@ fn worker(config: Config) {
         std::thread::sleep(Duration::from_millis(250));
     }
     let mut prev = snapshot();
+    let mut prev_sched = sched_live::snapshot();
+    let mut last_phase = sched_live::phase();
     let mut prev_at = Instant::now();
     loop {
         std::thread::sleep(Duration::from_millis(config.cadence_ms));
@@ -438,15 +464,55 @@ fn worker(config: Config) {
             disarm(Disarm::DisarmFile);
         }
         let cur = snapshot();
+        let cur_sched = sched_live::snapshot();
         let wall_ms = prev_at.elapsed().as_millis() as u64;
         log.line(&cadence_line(&prev, &cur, wall_ms));
+        let phase = sched_live::phase();
+        if phase != last_phase {
+            log_phase(&mut log, phase);
+            last_phase = phase;
+        }
+        if config.sched.is_some() {
+            log.line(&sched_line(phase.name(), &prev_sched, &cur_sched, wall_ms));
+        }
         prev = cur;
+        prev_sched = cur_sched;
         prev_at = Instant::now();
         let code = DISARM.load(Ordering::SeqCst);
         if code != 0 {
-            log.line(&format!("X4MP_AGENT DISARMED reason={}", Disarm::from_code(code).reason()));
+            let phase = sched_live::phase();
+            if phase != last_phase {
+                log_phase(&mut log, phase);
+            }
+            log.line(&format!(
+                "X4MP_AGENT DISARMED reason={} sched={} sched_reason={} restore={}",
+                Disarm::from_code(code).reason(),
+                phase.name(),
+                sched_live::fault().reason(),
+                sched_live::restore_note()
+            ));
             return;
         }
+    }
+}
+
+fn log_phase(log: &mut Log, phase: sched_live::Phase) {
+    use sched_live::Phase;
+    match phase {
+        Phase::Active => log.line(&format!(
+            "X4MP_AGENT SCHED ARMED dt=1/60 patch=0x{:x},0x{:x} render_flag=FrameState+0x{:x}",
+            pinned::DT_LOAD_VA,
+            pinned::DT_MIN_VA,
+            pinned::FRAME_STATE_RENDER_FLAG
+        )),
+        Phase::Refused => {
+            log.line(&format!("X4MP_AGENT SCHED REFUSED reason={} restore={}", sched_live::fault().reason(), sched_live::restore_note()))
+        }
+        Phase::Faulted => {
+            log.line(&format!("X4MP_AGENT SCHED FAULT reason={} restore={}", sched_live::fault().reason(), sched_live::restore_note()))
+        }
+        Phase::Restored => log.line(&format!("X4MP_AGENT SCHED RESTORED restore={}", sched_live::restore_note())),
+        Phase::Pending | Phase::Off => {}
     }
 }
 

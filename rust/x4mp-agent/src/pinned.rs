@@ -86,7 +86,62 @@ pub const SITES: &[Site] = &[
     Site { name: "game_client_vtable_head", va: 0x3ab12a0, len: 0x18, sha256: "a4f00599507bf8d9dc0c3cd3e8684dcd3c64541c61882585f21466f497c8f70f" },
     Site { name: "ui_vbi_vtable", va: 0x3ab4978, len: 0x20, sha256: "53a305469a33eddf4bbb44ef521359d55d672b7753953df90aa88a424787f64f" },
     Site { name: "move_worker_vtable_head", va: 0x3b4cd58, len: 0x18, sha256: "268f9c510fedb221e11681efbbad4167f5d1f7cf2a55d2383431553297a9e34b" },
+    // --- Fixed-step scheduler (src/scheduler.rs); evidence in reports/SIM-DECOUPLE-SCHEDULER.txt ---
+    // FrameTick: dt from the clock, movie-capture override, publish, graphics state,
+    // semSimStart release, both `cmp byte [fs+0x200],0` render decisions.
+    Site { name: "frame_tick_dt_render_decision", va: 0x2025110, len: 0x150, sha256: "0ce60b4f123c4904b3c34de83e7ac4aeb73edf3cd2c78d76446c7f98613b9e1e" },
+    // FrameTick no-render branch: renderer frame advance (0x21e78d0) + view finalize (0x2022810).
+    Site { name: "frame_tick_no_render_path", va: 0x2025420, len: 0x30, sha256: "d882197f42e7cff821a016dc1cc0a5028352e5a28f9e6309f85f31c3552219b7" },
+    // Main loop: frame-in-flight test, 16 ms semSimDone wait + clear, FrameTick call + set.
+    Site { name: "main_loop_in_flight_check", va: 0x72f638, len: 0x1a, sha256: "c525558c3a509c9f81e553154c26796d821c557107303ac26485f377f112d7f9" },
+    Site { name: "main_loop_sim_done_wait", va: 0x72f745, len: 0x6c, sha256: "0db4aedf3402446323a03bfe2e8ad1ac494d73f78cbfd9cfbf2c11704ad2d74b" },
+    Site { name: "main_loop_frame_tick_call", va: 0x72faf0, len: 0x32, sha256: "d2dc7882f6f30bd1b9272eae441199355f71ee8c92367d7e3df48f6d13e4b285" },
+    // FrameState: 0x2f0-byte allocation, constructor call and store to the global.
+    Site { name: "frame_state_alloc", va: 0xfd10bc, len: 0x23, sha256: "08db467161b2dcb7be44606f78e1913efe5c7522f1f7eba3dfacb697fb453065" },
+    // FrameState constructor: render flag (+0x200) = 1, +0x210 = 0.
+    Site { name: "frame_state_ctor_render_flag", va: 0x201d8e2, len: 0xe, sha256: "d15a01cf3ad3c5ae5aa3a691629d543ee431b1486d739639d0c63686f5c8f2e0" },
+    // Read-only double 1/60 in .rodata (target of the patched dt load).
+    Site { name: "rodata_one_sixtieth", va: 0x2e24578, len: 8, sha256: "c6c9a57771f2313713756c05b0b8a1413e5ef99d747cabf716952b4f6137f34b" },
 ];
+
+// --- Fixed-step scheduler data (all inside the sites above) ---
+
+/// Global `FrameState*` (main-thread frame object, 0x2f0 bytes), set once by 0xfd10d8.
+pub const FRAME_STATE_GLOBAL: u64 = 0x3daaaf0;
+/// `bool` in FrameState: FrameTick renders and presents when non-zero, otherwise it takes
+/// the engine's no-render branch (0x2025430). Constructor sets 1; FrameTick (0x2025162,
+/// 0x2025208) is the only reader and nothing else writes it.
+pub const FRAME_STATE_RENDER_FLAG: u64 = 0x200;
+/// Main-loop `bool` (initial value 1 in .data, so the first wait consumes semSimDone's
+/// initial count): 1 from FrameTick's return (0x72fb1b) until the main thread acquires
+/// semSimDone (cleared at 0x72f7aa). Seen as 1 from VBI slot 13, the main thread is
+/// parked outside FrameTick and cannot enter it before this simulation frame ends.
+pub const MAIN_FRAME_IN_FLIGHT: u64 = 0x3d8d97b;
+/// Movie-capture flag and its frame time (FrameTick 0x2025126 / 0x202512d).
+pub const MOVIE_CAPTURE_FLAG: u64 = 0x4533d38;
+/// `double 1/60` in .rodata.
+pub const ONE_SIXTIETH_CONST: u64 = 0x2e24578;
+
+/// FrameTick's non-capture dt path at 0x2025260 (inside `frame_tick_time_advance`):
+/// `movsd xmm1,[rip+0xdff268]` (1.0) ; `minsd xmm1,xmm0` ; `pxor xmm0,xmm0`.
+/// Two naturally aligned qwords, each replaced with one atomic store:
+/// 1. the load's displacement is retargeted to [`ONE_SIXTIETH_CONST`] (dt = min(1/60, dt));
+/// 2. the `minsd` becomes a 4-byte NOP (dt = 1/60 exactly).
+///
+/// Every intermediate state is a valid dt (never 1.0); restore runs in reverse order.
+pub const DT_LOAD_VA: u64 = 0x2025260;
+pub const DT_MIN_VA: u64 = 0x2025268;
+pub const DT_PAGE: u64 = 0x2025000;
+pub const DT_LOAD_ORIGINAL: [u8; 8] = [0xf2, 0x0f, 0x10, 0x0d, 0x68, 0xf2, 0xdf, 0x00];
+pub const DT_MIN_ORIGINAL: [u8; 8] = [0xf2, 0x0f, 0x5d, 0xc8, 0x66, 0x0f, 0xef, 0xc0];
+pub const DT_MIN_PATCHED: [u8; 8] = [0x0f, 0x1f, 0x40, 0x00, 0x66, 0x0f, 0xef, 0xc0];
+
+/// The patched dt load: same instruction, displacement to [`ONE_SIXTIETH_CONST`].
+pub fn dt_load_patched() -> [u8; 8] {
+    let disp = (ONE_SIXTIETH_CONST as i64 - (DT_LOAD_VA as i64 + 8)) as i32;
+    let d = disp.to_le_bytes();
+    [0xf2, 0x0f, 0x10, 0x0d, d[0], d[1], d[2], d[3]]
+}
 
 /// Read access to the executable by virtual address: the live process in the agent,
 /// the ELF file on disk in the offline checker, or a fake in tests.
@@ -186,6 +241,26 @@ mod tests {
         }
         assert!(AGENT_SLOT < VBI_SLOTS && ![5, 7, 12, 1, 3, 4, 6, 8, 9, 10, 11, 14, 16].contains(&AGENT_SLOT));
         assert_eq!(VBI_LOADING_BANK, VBI_SLOTS * 8);
+    }
+
+    #[test]
+    fn dt_patch_is_well_formed() {
+        let site = SITES.iter().find(|s| s.name == "frame_tick_time_advance").unwrap();
+        // Both qwords are naturally aligned, adjacent, on one page and inside the pinned site.
+        assert_eq!((DT_LOAD_VA % 8, DT_MIN_VA % 8, DT_MIN_VA - DT_LOAD_VA), (0, 0, 8));
+        assert_eq!((DT_LOAD_VA & !0xfff, DT_MIN_VA & !0xfff), (DT_PAGE, DT_PAGE));
+        assert!(site.va <= DT_LOAD_VA && DT_MIN_VA + 8 <= site.va + site.len as u64);
+        // The original load reads the 1.0 clamp at 0x2e244d0; the patch reads 1/60.
+        let target = |q: [u8; 8]| DT_LOAD_VA as i64 + 8 + i32::from_le_bytes([q[4], q[5], q[6], q[7]]) as i64;
+        assert_eq!(target(DT_LOAD_ORIGINAL), 0x2e244d0);
+        assert_eq!(target(dt_load_patched()) as u64, ONE_SIXTIETH_CONST);
+        assert_eq!(dt_load_patched()[..4], DT_LOAD_ORIGINAL[..4]); // same movsd xmm1,[rip+d]
+        // minsd xmm1,xmm0 becomes a 4-byte NOP; the following pxor is unchanged.
+        assert_eq!(DT_MIN_PATCHED[..4], [0x0f, 0x1f, 0x40, 0x00]);
+        assert_eq!(DT_MIN_PATCHED[4..], DT_MIN_ORIGINAL[4..]);
+        let rodata = SITES.iter().find(|s| s.name == "rodata_one_sixtieth").unwrap();
+        assert_eq!(rodata.va, ONE_SIXTIETH_CONST);
+        assert_eq!(digest(&(1.0f64 / 60.0).to_le_bytes()), rodata.sha256);
     }
 
     #[test]
