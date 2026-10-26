@@ -6,12 +6,18 @@ per system, test in parallel"). Base branch: `contrib/ferrite-rewrite-base`. Lea
 overhaul session (Ferrite coordination). Local coordination folder (not in git):
 `C:\Users\developer\Documents\X4Mods\rewrite-coord\` (README.md there is the live protocol).
 
+## Terminology
+
+User decision (26 Oct 2026, design doc commit 7698736): the dedicated X4 is the **server** (not a
+player); players connect as **clients** (player 1 ... N, all equal). No "host"/"guest" in new code,
+docs or logs; old identifiers, profiles and paths stay until that code is touched anyway.
+
 ## Goal
 
 Progressively replace X4's single-threaded simulation, one system at a time, with our own code
 (Rust where it is new logic, C only for build-pinned engine glue). Each sector becomes its own
 small world run as a job on a worker thread; cross-sector effects go through ordered messages
-applied at a frame barrier. X4 stays the host (rendering, UI, input, content, and every system not
+applied at a frame barrier. X4 itself keeps running everything else (rendering, UI, input, content, and every system not
 yet replaced). The replaced systems must keep the game's behaviour: same decisions, same state,
 output identical where the data is discrete and bit-identical or within a documented bound where it
 is floating point.
