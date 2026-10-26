@@ -195,6 +195,9 @@ Lanes b3/b4, profiles45853/45854; both restored, all116 frozen hashes verified. 
 .local/lane/sessions/s-005-ordering/{result,acceptance}.json and corresponding input manifest.
 This proves normal native compatibility of the ordering fix. Reordering, duplicates and
 reconnect faults are injected by the cross-language regression tests, not this native probe.
+s-003 and s-004 (04:24-04:51, tree c8b5f5b, lanes b1/b2, relay with PFREL/PFREQ trace, driver
+logging every received PFREL) repeat it: both clients 16 valid samples, bilateral readbacks
+0.75 -> 0 -> -0.5 -> 0.75, strict validator success. Evidence .local/lane/sessions/s-003, s-004.
 
 PROPOSAL: MONEY PER PLAYER (goal 4) - DESIGN ONLY, NOT IMPLEMENTED
 Today (7.x co-op) there is ONE shared wallet: md/x4lan_trade.xml Order debits/credits faction.player
