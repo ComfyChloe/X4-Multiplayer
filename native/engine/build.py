@@ -68,7 +68,7 @@ def main():
         if os.name != 'nt':
             parser.error('--test executes a Windows binary and requires Windows')
         # The sampler test (simprof) unwinds against the test executable's own .pdata.
-        names = ['fixedtick', 'simprof', 'aidriver'] if args.fixedtick else ['simtick']
+        names = ['fixedtick', 'simprof', 'aidriver', 'aidriver_move'] if args.fixedtick else ['simtick']
         for name in names:
             test = out / f'test_{name}.exe'
             subprocess.run([

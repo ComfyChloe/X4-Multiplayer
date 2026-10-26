@@ -20,9 +20,12 @@ local profiling,reportEvery,foldLines=false,10,20
 local nextProfile=0
 local profileDisabled=false
 -- X4LAN_AIDRIVER='census' arms the AI phase census (aidriver.h) once the probe is armed and logs an
--- AIPROF line each second. Opt-in; absent = no AI hooks. Stage 1 'rounds' is not yet wired here.
+-- AIPROF line each second. 'normal' / 'rounds' / 'compare' run the stage-1 driver (our AIDirector::Move,
+-- aidriver_move.h) and add an AIDRIVE line; a refused or failed driver mode falls back to the census
+-- with a loud FEATURE aidriver DISABLED line. Opt-in; absent = no AI hooks.
 local aidriver=false
 local aiRefusedLogged=false
+local aiDriverRefusedLogged=false
 local function logStats(now)
  local s=owner:stats()
  DebugError(string.format('[X4LAN] FRAMEPROBE frames=%d wallDt=%.6f maxWallDt=%.6f gameDt=%.9f realDt=%.9f gameTime=%.6f realTime=%.6f speed=%.3f paused=%d loadingSkips=%d regressions=%d',
@@ -56,6 +59,19 @@ local function logStats(now)
     a.sectors or 0,a.sector_sum_ms or 0,a.sector_max_ms or 0,a.serial_ms or 0,a.speedup or 0,a.max_share or 0,a.fleets or 0,a.fleet_speedup or 0,a.dropped or 0))
    DebugError('[X4LAN] AIPROF scripts '..(a.scripts or ''))
    DebugError('[X4LAN] AIPROF sectors '..(a.top_sectors or ''))
+   if a.mode~='census' or (a.driver_frames or 0)>0 then
+    DebugError(string.format('[X4LAN] AIDRIVE mode=%s driverFrames=%d preflightRefusals=%d buckets=%.2f deferred=%.2f evbuf=%d cmpClean=%d cmpDirty=%d cmpEventPending=%.3f cmpEventRan=%.3f cmpNullLost=%.3f cmpWakeAbsorb=%.3f cmpPostCancel=%.3f cmpUnchecked=%d',
+     a.mode,a.driver_frames or 0,a.preflight_refusals or 0,a.buckets_run or 0,a.deferred or 0,a.evbuf or 0,
+     a.cmp_passes_clean or 0,a.cmp_passes_dirty or 0,a.cmp_event_pending or 0,a.cmp_event_ran or 0,
+     a.cmp_null_lost or 0,a.cmp_wake_absorb or 0,a.cmp_post_cancel or 0,a.cmp_unchecked or 0)..
+     string.format(' globalApplied=%.2f attentionRestarts=%.2f removed=%.2f badCaller=%d loopLogs=%d evPendingForeign=%.3f hash=%s',
+     a.global_applied or 0,a.attention_restarts or 0,a.removed or 0,a.bad_caller or 0,a.loop_logs or 0,
+     a.ev_pending_foreign or 0,tostring(a.state_hash or '-')))
+   end
+   if a.driver_reason and not aiDriverRefusedLogged then
+    aiDriverRefusedLogged=true
+    DebugError('[X4LAN] FEATURE aidriver DISABLED reason='..tostring(a.driver_reason)..' (census continues)')
+   end
   elseif (a.refused or 0)==1 and not aiRefusedLogged then
    aiRefusedLogged=true
    DebugError('[X4LAN] FEATURE aidriver DISABLED reason='..tostring(a.reason or 'unknown'))
@@ -116,12 +132,16 @@ SetScript('onUpdate',function()
  if result then
   owner=result;nextLog=0
   DebugError('[X4LAN] FRAMEPROBE armed in MoveWorker slot 5 mode='..(X4LAN_FIXEDTICK_MODE or 'probe'))
-  aidriver=false;aiRefusedLogged=false
+  aidriver=false;aiRefusedLogged=false;aiDriverRefusedLogged=false
   if X4LAN_AIDRIVER and owner.aidriver then
-   local okai,_,whyai=pcall(owner.aidriver,owner,X4LAN_AIDRIVER)
-   if okai and (owner:aistats().installed or 0)==1 then
+   local okai,res,whyai=pcall(owner.aidriver,owner,X4LAN_AIDRIVER)
+   local a=okai and owner:aistats() or {}
+   if okai and res and (a.installed or 0)==1 then
     aidriver=true
-    DebugError('[X4LAN] FEATURE aidriver ENABLED mode='..tostring(X4LAN_AIDRIVER))
+    DebugError('[X4LAN] FEATURE aidriver ENABLED mode='..tostring(a.mode))
+   elseif okai and (a.installed or 0)==1 then
+    aidriver=true;aiDriverRefusedLogged=true
+    DebugError('[X4LAN] FEATURE aidriver DISABLED reason='..tostring(whyai or 'unknown')..' (census continues)')
    else
     DebugError('[X4LAN] FEATURE aidriver DISABLED reason='..tostring(whyai or 'unknown'))
    end

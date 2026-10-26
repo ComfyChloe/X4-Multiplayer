@@ -69,8 +69,8 @@
 
 enum { AD_CALL_PHASE, AD_CALL_EXEC, AD_CALL_IRQ_GLOBAL, AD_CALL_IRQ_INT, AD_CALL_IRQ_ATT, AD_CALLS };
 enum { AD_V_CTX, AD_V_STACK, AD_V_CUE, AD_VSITES };
-enum { AD_OFF, AD_CENSUS };
-static const char *const ad_mode_names[] = {"off", "census"};
+enum { AD_OFF, AD_CENSUS, AD_NORMAL, AD_ROUNDS, AD_COMPARE };
+static const char *const ad_mode_names[] = {"off", "census", "normal", "rounds", "compare"};
 
 typedef void (*ad_move_fn)(void *dir);
 typedef void (*ad_exec_fn)(void *es);
@@ -109,11 +109,20 @@ typedef struct {
     double sec_sum_ms, sec_max_ms, serial_ms, fleet_sum_ms, fleet_max_ms;
     uint64_t sec_buckets, fleet_buckets;
     uint64_t dropped_keys, dropped_scripts;
+    uint64_t ev_pending_foreign;      /* census: event to a still-queued context of another sector */
+    /* stage 1 driver */
+    uint64_t driver_frames, preflight_refusals, loop_logs, global_applied, attention_restarts, removed;
+    uint64_t bad_caller, rounds_fallback, buckets_run, deferred;
+    uint64_t cmp_event_pending, cmp_event_ran, cmp_null_lost, cmp_unchecked, cmp_passes_clean, cmp_passes_dirty;
+    uint64_t cmp_post_cancel, cmp_wake_absorb;
+    uint64_t last_hash;
 } ad_window;
 
 typedef struct {
     int mode, installed, refused;
     const char *reason;
+    const char *driver_reason;           /* why a requested stage-1 mode fell back to the census */
+    int engine_ok;                       /* stage-1 helper signatures verified and resolved */
     ad_call_patch calls[AD_CALLS];
     void **ventry[AD_VSITES];
     void *vorig[AD_VSITES];
@@ -131,6 +140,7 @@ typedef struct {
     int64_t t0;
     uint32_t f_runs, f_irq, f_passes;
     ad_btable f_sec, f_fleet;
+    ad_btable f_scratch;                 /* rounds: sector -> bucket index for the current pass */
     ad_window win;
     ad_btable w_sec;                     /* window: per-sector totals (top list) */
     ad_script_acc scripts[AD_SCRIPT_SLOTS];
@@ -274,7 +284,10 @@ static void ad_wake_baseline(void) {
     void *dir = ad.director;
     if (!dir) return;
     uint32_t w = ad_widx(dir);
-    if (w != ad.last_widx) { ad.last_widx = w; ad.last_wsize = ad_vec_size(dir, w); ++ad.f_passes; }
+    if (w != ad.last_widx) {
+        ad.last_widx = w; ad.last_wsize = ad_vec_size(dir, w);
+        if (ad.mode == AD_CENSUS) ++ad.f_passes;   /* the stage-1 driver counts its passes exactly */
+    }
 }
 
 /* Run end: wakes appended to the write vector during this run are attributed to the running context's
@@ -396,6 +409,9 @@ static void ad_run_end(ad_run_frame *f, void *es) {
     ad.run_hazard = f->saved_hazard | ad.run_hazard;
 }
 
+#include <stdlib.h>
+#include "aidriver_move.h"   /* stage 1: our AIDirector::Move (normal / rounds / compare) */
+
 /* ---- hook wrappers ----------------------------------------------------------------------------- */
 
 static int ad_owner_ok(void) {
@@ -403,14 +419,33 @@ static int ad_owner_ok(void) {
     return o && o->armed && ad.installed && GetCurrentThreadId() == owner_thread;
 }
 
+/* Stage-1 driver refused (structural check failed): the original Move runs from now on and the
+   census continues on it; the reason is reported through aistats() as driver_reason. */
+static void ad_driver_refuse(const char *why) {
+    ++ad.win.preflight_refusals;
+    if (!ad.driver_reason) ad.driver_reason = why;
+    ad.mode = AD_CENSUS;
+}
+
 static void ad_phase(void *dir) {
     ad_move_fn original = (ad_move_fn)ad.calls[AD_CALL_PHASE].target;
-    if (!ad_owner_ok() || ad.in_phase || dir != ad_director_now() || ad.mode != AD_CENSUS) { original(dir); return; }
+    if (!ad_owner_ok() || ad.in_phase || dir != ad_director_now() || ad.mode == AD_OFF) { original(dir); return; }
+    int mode = ad.mode;
+    if (mode >= AD_NORMAL) {
+        const char *why = ad_preflight(dir);
+        if (why) { ad_driver_refuse(why); mode = AD_CENSUS; }
+    }
     ad_frame_begin(dir);
     ad.in_phase = 1;
-    original(dir);
+    if (mode >= AD_NORMAL) { ++ad.win.driver_frames; ad_move_impl(dir, mode); }
+    else original(dir);
     ad.in_phase = 0;
     ad_frame_end(dir);
+    if (mode >= AD_NORMAL) {
+        if (mode == AD_COMPARE) ad.win.last_hash = ad_state_hash(dir);
+        const char *why = ad_preflight(dir);   /* the next frame's first read vector must be sound */
+        if (why) ad_driver_refuse(why);
+    }
 }
 
 static void ad_saved_regs(int site, void **ctx, unsigned char **frame) {
@@ -444,20 +479,30 @@ static uintptr_t ad_irq_global(void *es, void *p, uintptr_t a3, uintptr_t a4, ui
 static uintptr_t ad_irq_interrupt(void *es, void *p, uintptr_t a3, uintptr_t a4, uintptr_t a5) { return ad_irq_common(AD_CALL_IRQ_INT, es, p, a3, a4, a5); }
 static uintptr_t ad_irq_attention(void *es, void *p, uintptr_t a3, uintptr_t a4, uintptr_t a5) { return ad_irq_common(AD_CALL_IRQ_ATT, es, p, a3, a4, a5); }
 
+static void ad_rounds_event(void *receiver);   /* aidriver_move.h */
+
 static void ad_event_note(int kind, void *self) {
     if (!ad.in_phase) return;
     if (!ad.in_run) { ++ad.win.ev_director; return; }
     if (kind == AD_V_CUE) { ++ad.win.ev_cue; ad.run_hazard = 1; return; }
     void *ctx = kind == AD_V_CTX ? self : *(void **)((unsigned char *)self + AD_S_CURRENT);
-    if (ad_ctx_sector(ctx) == ad.run_key) ++ad.win.ev_own;
-    else { ++ad.win.ev_foreign; ad.run_hazard = 1; }
+    if (ad_ctx_sector(ctx) == ad.run_key) { ++ad.win.ev_own; return; }
+    ++ad.win.ev_foreign;
+    ad.run_hazard = 1;
+    /* still queued in this pass's read vector (slot of the read buffer set): a rounds order could
+       run it before or after the poster, so the event is order-visible there */
+    if (ctx && ad.director) {
+        unsigned r = 1u - ad_widx(ad.director);
+        if (*(int64_t *)((unsigned char *)ctx + AD_C_SLOT + 8 * r) != -1) ++ad.win.ev_pending_foreign;
+    }
+    if (ad.mode >= AD_ROUNDS) ad_rounds_event(ctx);
 }
 
 static uintptr_t ad_event_common(int kind, void *self, uintptr_t a2, uintptr_t a3, uintptr_t a4) {
     ad_event_fn original = (ad_event_fn)ad.vorig[kind];
     if (!ad_owner_ok()) return original(self, a2, a3, a4);
-    if (ad.mode == AD_CENSUS) ad_event_note(kind, self);
-    else if (!ad.in_phase) ++ad.win.ev_outside;
+    if (ad.mode >= AD_CENSUS) ad_event_note(kind, self);
+    if (!ad.in_phase) ++ad.win.ev_outside;
     const ad_observer *obs = ad.observer;
     if (obs && obs->event_begin) obs->event_begin(self, kind, obs->user);
     uintptr_t result = original(self, a2, a3, a4);
@@ -572,12 +617,10 @@ static void ad_uninstall(void) {
 }
 
 /* Verify every site, then patch all or nothing. verify_code=0 skips the SHA-256 checks (tests). */
-static const char *ad_install(int mode, int verify_code) {
+static const char *ad_install_hooks(int verify_code) {
     static void *const call_wrappers[AD_CALLS] = {(void *)ad_phase, (void *)ad_exec_run, (void *)ad_irq_global,
                                                   (void *)ad_irq_interrupt, (void *)ad_irq_attention};
     void *vwrappers[AD_VSITES] = {(void *)ad_ctx_event, (void *)ad_stack_event, (void *)ad_cue_event};
-    if (ad.installed) return mode == ad.mode ? NULL : "aidriver already installed in another mode";
-    if (mode != AD_CENSUS) return "unsupported aidriver mode";
     if (sizeof(x4_ai_calls) / sizeof(x4_ai_calls[0]) != AD_CALLS ||
         sizeof(x4_ai_vsites) / sizeof(x4_ai_vsites[0]) != AD_VSITES) return "signature table mismatch";
     if (verify_code && !verify_checks(x4_aidriver_checks, sizeof(x4_aidriver_checks) / sizeof(x4_aidriver_checks[0])))
@@ -625,7 +668,7 @@ static const char *ad_install(int mode, int verify_code) {
     ad_btable_clear(&ad.w_sec);
     memset(ad.scripts, 0, sizeof(ad.scripts));
     ad.scripts_used = 0;
-    ad.mode = mode;
+    ad.mode = AD_CENSUS;
     ad.installed = 1;  /* wrappers pass through until every patch is in place */
     for (int k = 0; k < AD_VSITES; ++k) {
         if (!ad_write_entry(ad.ventry[k], ad.vorig[k], vwrappers[k])) { ad_uninstall(); return "AI event vtable patch failed"; }
@@ -637,6 +680,34 @@ static const char *ad_install(int mode, int verify_code) {
         if (!ad_write_rel(p->site, p->orig_rel, p->hook_rel)) { ad_uninstall(); return "AI call site patch failed"; }
         p->patched = 1;
     }
+    return NULL;
+}
+
+/* Install the census hooks once (all or nothing), then select the mode. A stage-1 mode (normal,
+   rounds, compare) additionally needs every engine helper the driver calls verified against its
+   pinned signature and resolved; on refusal the census stays installed in census mode. Switching
+   modes happens on the owner thread outside the AI phase (Lua runs in slot 6, Move in slot 3). */
+static const char *ad_install(int mode, int verify_code) {
+    if (mode < AD_CENSUS || mode > AD_COMPARE) return "unsupported aidriver mode";
+    if (!ad.installed) {
+        const char *why = ad_install_hooks(verify_code);
+        if (why) return why;
+    }
+    if (mode >= AD_NORMAL && !ad.engine_ok) {
+        if (verify_code && !verify_checks(x4_aidriver_helper_checks,
+                                          sizeof(x4_aidriver_helper_checks) / sizeof(x4_aidriver_helper_checks[0]))) {
+            ad.mode = AD_CENSUS;
+            return "AI driver helper signature mismatch";
+        }
+        if (!readable(image + AD_DATA_ABORT_TABLE, 8, 0) || !readable(image + AD_DATA_RESULT_KEY, 8, 0)) {
+            ad.mode = AD_CENSUS;
+            return "AI driver data unavailable";
+        }
+        ad_resolve_engine();
+        ad.engine_ok = 1;
+    }
+    ad.mode = mode;
+    ad.driver_reason = NULL;
     return NULL;
 }
 
@@ -669,10 +740,15 @@ static int ad_lua_start(lua_State *L) {
     if (o != current || !o->armed) return failure(L, "probe not armed");
     if (GetCurrentThreadId() != owner_thread) return failure(L, "owner thread required");
     if (!strcmp(mode, "off")) { ad_uninstall(); ad.mode = AD_OFF; p_lua_pushboolean(L, 1); return 1; }
-    int m = !strcmp(mode, "census") ? AD_CENSUS : -1;
+    int m = -1;
+    for (int k = AD_CENSUS; k <= AD_COMPARE; ++k) if (!strcmp(mode, ad_mode_names[k])) m = k;
     if (m < 0) return failure(L, "unsupported aidriver mode");
     const char *why = ad_install(m, 1);
-    if (why) { ad.refused = 1; ad.reason = why; return failure(L, why); }
+    if (why) {
+        if (!ad.installed) { ad.refused = 1; ad.reason = why; }
+        else ad.driver_reason = why;          /* a stage-1 mode was refused: census continues */
+        return failure(L, why);
+    }
     ad.refused = 0; ad.reason = NULL;
     p_lua_pushboolean(L, 1);
     return 1;
@@ -774,6 +850,34 @@ static int ad_lua_stats(lua_State *L) {
     number_field(L, "fleet_speedup", w->fleet_max_ms > 0.0 ? w->fleet_sum_ms / w->fleet_max_ms : 0.0);
     number_field(L, "fleet_max_share", w->fleet_sum_ms > 0.0 ? w->fleet_max_ms / w->fleet_sum_ms : 0.0);
     number_field(L, "dropped", (double)(w->dropped_keys + w->dropped_scripts));
+    number_field(L, "ev_pending_foreign", (double)w->ev_pending_foreign / frames);
+    /* stage-1 driver (zero in census mode) */
+    number_field(L, "engine_ok", ad.engine_ok);
+    number_field(L, "evbuf", ad_evbuf != NULL);
+    if (ad.driver_reason) string_field(L, "driver_reason", ad.driver_reason);
+    number_field(L, "driver_frames", (double)w->driver_frames);
+    number_field(L, "preflight_refusals", (double)w->preflight_refusals);
+    number_field(L, "loop_logs", (double)w->loop_logs);
+    number_field(L, "global_applied", (double)w->global_applied / frames);
+    number_field(L, "attention_restarts", (double)w->attention_restarts / frames);
+    number_field(L, "removed", (double)w->removed / frames);
+    number_field(L, "bad_caller", (double)w->bad_caller);
+    number_field(L, "rounds_fallback", (double)w->rounds_fallback);
+    number_field(L, "buckets_run", (double)w->buckets_run / frames);
+    number_field(L, "deferred", (double)w->deferred / frames);
+    number_field(L, "cmp_event_pending", (double)w->cmp_event_pending / frames);
+    number_field(L, "cmp_event_ran", (double)w->cmp_event_ran / frames);
+    number_field(L, "cmp_null_lost", (double)w->cmp_null_lost / frames);
+    number_field(L, "cmp_unchecked", (double)w->cmp_unchecked);
+    number_field(L, "cmp_passes_clean", (double)w->cmp_passes_clean);
+    number_field(L, "cmp_passes_dirty", (double)w->cmp_passes_dirty);
+    number_field(L, "cmp_post_cancel", (double)w->cmp_post_cancel / frames);
+    number_field(L, "cmp_wake_absorb", (double)w->cmp_wake_absorb / frames);
+    {
+        char hash[24];
+        snprintf(hash, sizeof(hash), "%016llx", (unsigned long long)w->last_hash);
+        string_field(L, "state_hash", hash);
+    }
     for (int b = 0; b < 9; ++b) {
         snprintf(key, sizeof(key), "ext_%s", bit_names[b]);
         number_field(L, key, (double)w->ext_bits[b] / frames);

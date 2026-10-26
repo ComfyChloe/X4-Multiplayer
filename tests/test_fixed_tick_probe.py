@@ -131,6 +131,57 @@ class FixedTickProbeTests(unittest.TestCase):
           assert(n==1)
         ''')
 
+    def test_aidriver_rounds_logs_driver_line(self):
+        self.runtime().execute('''
+          X4LAN_AIDRIVER='rounds'
+          handle.aidriver=function(self,mode) aimode=mode;return true end
+          handle.aistats=function(self)
+            return {installed=1,mode='rounds',frames=60,ms=1,max_ms=2,share=0.1,runs=40,irq_runs=2,passes=3,
+              max_passes=5,loop_frames=0,driver_frames=60,buckets_run=12.5,deferred=3.25,evbuf=1,
+              cmp_passes_clean=170,cmp_passes_dirty=10,cmp_wake_absorb=0.125,state_hash='00000000deadbeef'}
+          end
+          ui();assert(aimode=='rounds')
+          local en for _,l in ipairs(logs) do if l=='[X4LAN] FEATURE aidriver ENABLED mode=rounds' then en=true end end
+          assert(en)
+          ui()
+          local drv
+          for _,l in ipairs(logs) do
+            if l:find('AIDRIVE mode=rounds driverFrames=60',1,true) and l:find('cmpClean=170 cmpDirty=10',1,true)
+              and l:find('cmpWakeAbsorb=0.125',1,true) and l:find('hash=00000000deadbeef',1,true) then drv=true end
+          end
+          assert(drv)
+        ''')
+
+    def test_aidriver_driver_refusal_keeps_census_and_is_loud(self):
+        self.runtime().execute('''
+          X4LAN_AIDRIVER='normal'
+          handle.aidriver=function(self,mode) return nil,'AI driver helper signature mismatch' end
+          handle.aistats=function(self) return {installed=1,mode='census',driver_reason='AI driver helper signature mismatch'} end
+          ui();ui();ui()
+          local n,prof=0,false
+          for _,l in ipairs(logs) do
+            if l:find('FEATURE aidriver DISABLED reason=AI driver helper signature mismatch (census continues)',1,true) then n=n+1 end
+            if l:find('AIPROF mode=census',1,true) then prof=true end
+          end
+          assert(n==1 and prof)
+        ''')
+
+    def test_aidriver_midrun_fallback_is_loud_once(self):
+        self.runtime().execute('''
+          X4LAN_AIDRIVER='compare'
+          stats_mode='compare'
+          handle.aidriver=function(self,mode) return true end
+          handle.aistats=function(self)
+            local s={installed=1,mode=stats_mode,driver_frames=5}
+            if stats_mode=='census' then s.driver_reason='AI wake slot index inconsistent' end
+            return s
+          end
+          ui();ui();stats_mode='census';now=1;ui();now=2;ui()
+          local n=0
+          for _,l in ipairs(logs) do if l:find('FEATURE aidriver DISABLED reason=AI wake slot index inconsistent (census continues)',1,true) then n=n+1 end end
+          assert(n==1)
+        ''')
+
     def test_aidriver_absent_by_default(self):
         self.runtime().execute('''
           handle.aidriver=function() error('unexpected') end
