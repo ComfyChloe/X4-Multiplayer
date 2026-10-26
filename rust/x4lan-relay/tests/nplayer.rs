@@ -277,3 +277,18 @@ fn dedicated_universe_serves_three_guests_independently() {
         assert!(to.iter().all(|p| !p.starts_with("UBEGIN|") || p.contains(&format!("|{sector}|"))));
     }
 }
+
+#[test]
+fn identity_covers_every_shared_ship() {
+    let build = "world1-test";
+    let mut s = dedicated(Level::Universe, build, 4);
+    let host = join_build(&mut s, build, 1, 0.0).unwrap();
+    join_build(&mut s, build, 2, 0.0).unwrap();
+    for (seq, entity) in [(1, 3), (2, 4)] {
+        let packet = format!("IDENT|1|{host}|{host}|{seq}|P|{entity}|ABC-123|4c414e|1|0");
+        s.receive(packet.as_bytes(), addr(1), 0.1);
+    }
+    let rows: Vec<String> = text(&s.snapshots(0.2), addr(2)).into_iter().filter(|p| p.starts_with("IDENT|")).collect();
+    assert_eq!(rows.len(), 1, "{rows:?}");
+    assert!(rows[0].contains("|P|3|"), "ship 3 exists, ship 4 does not: {rows:?}");
+}

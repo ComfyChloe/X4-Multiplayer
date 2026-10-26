@@ -7,7 +7,7 @@ use super::{Fields, Packet, Session};
 use crate::ordmap::OrderedMap;
 use crate::wire::{hex_utf8, is_code, is_lower_hex_pairs, seq, Parsed, Reject, Slot};
 
-/// P: co-op ships 1/2; F: targets 1/2 and markets 3/4; N: committed universe IDs.
+/// P: co-op ships 1..=ship_count; F: targets 1/2 and markets 3/4; N: committed universe IDs.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Scope {
     Player,
@@ -45,7 +45,7 @@ impl Session {
         let (sequence, scope, entity, code, name, known, contact) =
             (seq(f[4])?, f[5], seq(f[6])?, f[7], f[8], f[9], f[10]);
         let scope = match scope {
-            "P" if matches!(entity, 1 | 2) => Scope::Player,
+            "P" if (1..=u32::from(self.core.ship_count)).contains(&entity) => Scope::Player,
             "F" if matches!(entity, 1..=4) => Scope::Fixture,
             "N" if self.universe.entity_ids.values().any(|ids| ids.contains(&entity)) => Scope::Npc,
             _ => return Err(Reject),
