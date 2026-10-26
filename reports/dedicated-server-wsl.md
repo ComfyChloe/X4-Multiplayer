@@ -42,3 +42,33 @@ was changed. No native readiness, two-client gameplay or performance claim is ma
 Still required: complete world capture, verify prepared save, run the supervisor to
 `ready`, connect synthetic p2/p3, test independent interests and p3 handoff, then
 graceful `stop`. Two real human clients and multi-sector gameplay remain separate gates.
+
+## Follow-up 25 October 2026 (Ferrite, Windows 11 PC, WSL Ubuntu 24.04)
+
+Branch `contrib/ferrite-linux-server` from `abf2c65`. Root cause of the native block
+on this PC identified; the game itself never started.
+
+- Local Linux installs `x4-linux` and `x4lan-test/dedicated-game` contain the pinned
+  executable (SHA-256 `113f73d7...5f20`, `version.dat` 900, appmanifest build 23660954).
+  No depot download was needed.
+- WSL: Rust 1.99.1 `cargo build --release`, `cargo test` (32 tests: 2 + 20 + 10) and
+  `cargo clippy --all-targets` pass. `dev/check.py` with Python 3.12 / Lupa 2.8:
+  657 tests OK, no skips (the six `test_rust_native` tests need
+  `rust/target/release/libx4lan_net.so` and skip without it).
+- Native start under Xvfb `:91` + lavapipe, isolated HOME, private `/tmp`, profile
+  45841, no extension (`dev/linux_x4_start_probe.sh`):
+  - without `SteamAppId`: X4 runs `$HOME/.steam/root/steam.sh` (`not found`), exit 1
+    after 0 s;
+  - with `SteamAppId=392160`: modal window "X4 - Startup error": "Steam client is
+    required, please start the Steam client and try again." X4 never exits (killed
+    after 40-90 s); no profile or debug log is written.
+- The binary links `libsteam_api.so` and calls `SteamAPI_RestartAppIfNecessary` /
+  `SteamInternal_SteamAPI_Init`. A running Linux Steam client logged in with an account
+  owning X4 is required. No Steam client was started or logged in for this report.
+- Supervisor preflight now fails closed with that reason when `$HOME/.steam/steam.pid`
+  is missing or dead, instead of waiting for the 240 s startup timeout. Before this
+  check it passed executable hash, version and profile config, then stopped at the
+  missing prepared world (`world/bundle/manifest.json`), which itself needs a native
+  world capture and therefore Steam.
+
+No native readiness, world capture, gameplay or performance claim is made.

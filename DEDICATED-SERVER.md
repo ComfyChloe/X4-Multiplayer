@@ -24,17 +24,28 @@ Requirements: Linux x86-64, Rust 1.82+, Cargo, Python 3.10+, and the pinned X4 9
 Linux installation (Steam build 23660954). Build an internal triple package:
 
 ```sh
-python3 distribution/build_packages.py /path/to/new-dedicated-pair --dedicated
+python3 distribution/build_packages.py /path/to/new-dedicated-pair --dedicated     --runtime-cache /path/to/internal-runtime-cache
 ```
 
-Add `--runtime-cache` with the normal internal runtime cache when producing bundled
-packages. The dedicated build compiles `x4lan-dedicated` and the Rust `x4lan-net`
+`--runtime-cache` (the normal internal runtime cache) is required by the CLI. The
+dedicated build compiles `x4lan-dedicated` and the Rust `x4lan-net`
 module. It does not use new C code. Existing launchers still include Python helpers
 for installation and world transfer.
 
 Configure the Linux package as host, the first Windows package as guest, and
 `X4-LAN-*-Windows11-Guest2` as the second guest. Send the same private
 `JOIN-SESSION.json` to both guests. Do not publish session files or configured Lua.
+
+## Steam client requirement
+
+The pinned build is the Steam build. Without a running, logged-in Linux Steam client
+for the same user it either tries to start `~/.steam/root/steam.sh` and exits 1, or
+(with `SteamAppId` set) blocks at a modal "X4 - Startup error" dialog: "Steam client is
+required, please start the Steam client and try again." `run` therefore fails closed
+when `$HOME/.steam/steam.pid` does not name a live process. A Steam login with an
+account that owns X4 is an operator step; the supervisor never automates it.
+`dev/linux_x4_start_probe.sh` reproduces one bounded start under Xvfb + lavapipe with
+an isolated HOME and reports this dialog.
 
 ## WSL2 / WSLg smoke test
 

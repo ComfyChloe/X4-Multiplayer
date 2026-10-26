@@ -113,6 +113,33 @@ fn sha256(path: &Path) -> Result<String, String> {
     Ok(digest.to_string())
 }
 
+/// The Steam build of X4 refuses to start without a running, logged-in Steam client for
+/// the same user: it shows a modal "X4 - Startup error" ("Steam client is required")
+/// and never exits, so the supervisor would only notice at the startup timeout. The
+/// client records its PID in `$HOME/.steam/steam.pid`; require that process to exist.
+/// This is a fast, fail-closed precondition, not proof of login or ownership.
+pub fn steam_client_running(home: &Path) -> Result<(), String> {
+    let pid_file = home.join(".steam/steam.pid");
+    let text = fs::read_to_string(&pid_file).map_err(|_| {
+        format!(
+            "Steam client is not running for this user ({} missing); the Steam build of X4 stops with \
+             'Steam client is required'. Start and log in the Linux Steam client first.",
+            pid_file.display()
+        )
+    })?;
+    let pid = text.trim();
+    if pid.is_empty() || !pid.bytes().all(|b| b.is_ascii_digit()) || pid.parse::<u32>().map_or(true, |v| v == 0) {
+        return Err(format!("invalid Steam client PID file {}", pid_file.display()));
+    }
+    if !Path::new("/proc").join(pid).is_dir() {
+        return Err(format!(
+            "Steam client PID {pid} from {} is not running; start and log in the Linux Steam client first",
+            pid_file.display()
+        ));
+    }
+    Ok(())
+}
+
 fn shared_files(root: &Path) -> Result<Vec<PathBuf>, String> {
     let mut files = Vec::new();
     let mut pending = vec![root.to_path_buf()];
@@ -179,6 +206,8 @@ pub fn preflight(config: &Config) -> Result<Prepared, String> {
     if version.trim() != "900" {
         return Err("dedicated server requires X4 9.00".into());
     }
+    let home = std::env::var_os("HOME").ok_or("HOME is not set; cannot locate the Steam client")?;
+    steam_client_running(Path::new(&home))?;
     let profile_config = config.profile.join("config.xml");
     regular_file(&profile_config)?;
     let xml = fs::read_to_string(&profile_config).map_err(|e| e.to_string())?;
@@ -656,6 +685,22 @@ mod tests {
         assert!(heartbeat("[X4LAN] DEDICATED HEARTBEAT game=nan real=1 paused=0 sector=a_macro").is_err());
         assert!(heartbeat("[X4LAN] DEDICATED HEARTBEAT game=1 real=1 paused=yes sector=a_macro").is_err());
         assert_eq!(heartbeat("unrelated").unwrap(), None);
+    }
+
+    #[test]
+    fn steam_client_must_be_running_before_launch() {
+        let home = scratch();
+        assert!(steam_client_running(&home).unwrap_err().contains("Steam client is not running"));
+        fs::create_dir(home.join(".steam")).unwrap();
+        for bad in ["", "abc", "0", "-1"] {
+            fs::write(home.join(".steam/steam.pid"), bad).unwrap();
+            assert!(steam_client_running(&home).unwrap_err().contains("invalid Steam client PID"));
+        }
+        fs::write(home.join(".steam/steam.pid"), "4294967295").unwrap();
+        assert!(steam_client_running(&home).is_err());
+        fs::write(home.join(".steam/steam.pid"), format!("{}\n", std::process::id())).unwrap();
+        steam_client_running(&home).unwrap();
+        fs::remove_dir_all(home).unwrap();
     }
 
     #[test]
