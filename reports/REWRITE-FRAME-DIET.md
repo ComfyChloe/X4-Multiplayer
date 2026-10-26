@@ -266,6 +266,21 @@ python native/engine/framediet_analyze.py audit [--phases] <collect>\x4lan-debug
 ```
 The framediet overlay holds `native/x4lan_framediet_64.dll`, `ui/framediet_probe.lua` and `ui.xml.files`.
 
+Timing (quiet window, `--timing`; probe + attention-load harness steps 0/8 for 240/360 s + phases every 30 s):
+```
+x4lane make-overlay attnload --attnload <X4-Multiplayer-attnload> --out <wt>\.local\lane\overlays\attnload --steps 0,8 --durations 240,360 --warmup 20
+x4lane run --agent frame-diet --label timing1 --timing --wait 7200 --overlay <probe> --overlay <attnload> --overlay <framediet> ^
+    --lua "X4LAN_FRAMEDIET_MODE='diet'" --lua "X4LAN_FRAMEDIET_SITES='all,ui_elements'" --lua "X4LAN_FRAMEDIET_DELAY_S=10" ^
+    --lua "X4LAN_FRAMEDIET_AB_S=30" --lua "X4LAN_FRAMEDIET_AB_CYCLE='pass;server;all;all,ui_elements'" ^
+    --until "\[X4LAN\] ATTNLOAD done" --timeout 1150 --fail-on "FEATURE framediet DISABLED|ATTNLOAD error|HOOKS_DISABLED" ^
+    --collect <wt>\.local\lane\runs\timing-001
+python native/engine/framediet_analyze.py phases <collect>\x4lan-debug.txt          # MoveWorker ms/frame and fps per phase and step
+python native/engine/framediet_analyze.py audit --phases <collect>\x4lan-debug.txt  # per-phase CPU shares (main thread, MoveWorker)
+```
+Equivalence of `ui_elements` and the RNG split (functional lane run): mode `audit`, sites
+`ui_scenes,ui_render,camera,ui_elements,rng_split`, cycle
+`audit:ui_scenes,ui_render,camera,ui_elements;audit:ui_scenes,ui_render,camera,ui_elements,rng_split` every 90 s.
+
 ## 10. Open questions and native steps
 
 - Q11 answered (transforms): attachment-pose refresh; open whether simulation code reads vc+0x30.
