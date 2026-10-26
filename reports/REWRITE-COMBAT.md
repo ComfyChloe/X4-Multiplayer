@@ -16,8 +16,8 @@ called offline in a test process, no game running), **static** (reading the bina
 | battle profile | preliminary (battle-001 cut short by quiet.lock; 80 s in window) | native, not timing-trustworthy |
 | Rust: turret joint step `ikjoint::rotate_toward` | done, bit-identical | oracle: 1.7 M steps incl. NaN inputs |
 | capture/replay format and replay tool | done (binary + text form) | oracle + synthetic |
-| in-game recorder + shadow (`x4mp_combat.dll`, code patch 0xe1f840) | built; offline-tested on the mapped image; native run pending | oracle (patch on mapped X4.exe) |
-| switch | designed (section 10) | - |
+| in-game recorder + shadow (`x4mp_combat.dll`, code patch 0xe1f840) | built; offline-tested on the mapped image; native run in progress | oracle (patch on mapped X4.exe) |
+| switch (Rust authoritative, verified) | built; offline-tested on the mapped image; native run pending | oracle (patch on mapped X4.exe) |
 
 ## 2. Cost picture
 
@@ -90,7 +90,14 @@ controller (+0x40), casts a line-of-sight ray through the zone's spatial query (
 result (+0x84 blocked by friend, +0x85 blocked). A fire decision stamps the controller (+0x28 = now).
 
 **Firing (0x817d20).** Salvo size = barrels (vfunc +0x1f20) x weapon defaults +0x8f8; each shot is the
-virtual +0x1f30 (creates a `U::Bullet` through the component factory: new UniverseID, effect spawns). Then
+virtual +0x1f30 = `U::Weapon::vfunc998` 0x8185b0 (`FireShot`): shot time = shot index x inter-shot delay
+(bullet properties +0x60) + the salvo time + a **thread-RNG** jitter (Random::FloatState TLS+0x318, up to
++0x68); the zone creates the bullet (zone vfunc +0x1d10 -> `Zone::vfunc930` 0x83b500 -> universe component
+creation: new UniverseID); start pose = launch-point transform at the shot time in the zone's space;
+bullet setup 0xd50f30; WeaponFiredEvent (immediate); muzzle effect (SpawnEffect, bullet defaults +0x4e0);
+heat 0x815f50; a timed kill at the range limit (bullet event 0xe through vfunc +0x1548, from range
+0xd50ce0 and the target distance); and, when bullet defaults +0x364 is set, three more thread-RNG draws
+for a random spin (bullet vfunc +0x1b98). Then
 last shot time +0x310, magazine counter +0x350 (reload: StartAmmunitionReloadEvent, immediate), cancels
 pending events 0x1ba/0x14f, heat (vfunc +0x2010) and OutOfAmmoEvent (deferred) when empty.
 `GetNextShotTime` = last shot + max(reload time, shot interval), shot interval (0x7c7470) = 1 / (rate x
@@ -276,10 +283,16 @@ lane runs only by `dev/combat_scenario/combat_capture.lua` through the overlay f
   arguments and clocks after the original returned, five outputs compared bitwise, mismatches counted and
   the first 16 kept (`COMBATCAP final ... mismatched=..`, `COMBATCAP first_mismatch ...`). The original
   stays authoritative.
-- **Switch (later):** the detour returns the Rust result instead of calling the trampoline, still writing the
-  joint through its value source (+0x678 vftable slot 3) so listeners see the same calls; behind
-  `X4MP_COMBAT_IKJOINT=1`, refusing on any pin mismatch or when the mode byte is not 0
-  (`FEATURE ikjoint DISABLED reason=...`).
+- **Switch (built):** `mode='switch'` in the lane overlay. The detour serves the call with `ikjoint::step` and
+  applies the result with the original's writes for that outcome (target; velocity; then SetValue through
+  the joint's value-source vftable slot 3 with the angle and the time, i.e. now or the joint's own time
+  after a snap; only the target when no game time passed). It passes through (original) for a foreign
+  value-source class and switches off for good when the mode byte is not 0. `verify=N` runs the original on
+  a scratch copy of the IKValue (header + vbase vptr) every N-th call first; any difference switches the
+  reimplementation off for good (`FEATURE ikjoint DISABLED reason=verification mismatch`) and the original
+  serves that and every later call. Offline on the mapped image: 4,000 calls with verify 1/7/0 equal the
+  original alone bitwise; an injected one-bit fault is caught on the first verified call and every call
+  still gets the original's result.
 - **Per sector:** the walk agent's per-sector jobs (rewrite-coord/interfaces.md) call the same function on
   each sector's turrets; joint steps are entity-local, aim events go into the sector's event buffer.
 
@@ -311,12 +324,22 @@ offline tests enforce all three rules.
 
 ## 12. Next pieces
 
-1. Native battle profile in a quiet window, with the recorder overlay: native capture + replay + shadow.
-2. Bullet flight/hit test 0xd4f240 phase 1 in Rust (segment, shield sphere, hit-time interpolation) with the
-   spatial query kept native first; needs the spatial structure layout (0xbc4d0/0xbc750).
-3. Shot timing (`GetNextShotTime`/`GetShotInterval`/catch-up loop): small, exact double arithmetic.
-4. Intercept solver with ecs-core snapshot poses.
-5. Damage: `ApplyDamage` + shield absorption 0x791760 + hull 0x51d570 (apply phase, serial).
+1. Joint step natively: capture + replay, shadow, then switch (verify 1) in a lane battle; quiet-window
+   battle profile for the final ranking.
+2. Combat inside the parallel walk (with the walk agent's deferred-event buffer): the combat-specific
+   hazards are bullet creation in `FireShot` (Weapon vtable slot 998: component factory, UniverseID, zone
+   add), effect spawns, the thread-RNG draws (shot jitter and spin in `FireShot`, next-check jitter and
+   ricochet in `UpdateFlight`) and the immediate events (StartedAiming/StoppedAiming, WeaponFired,
+   AttackedEvent and hit events). Plan: a per-sector shot buffer filled in walk order and applied at the
+   barrier, sized by a native census of shots, bullet checks and hits per frame.
+3. Fire decision 0x816d20 (2 % in the battle, entity-local apart from the 1-s LOS ray cast) as a Rust port
+   whose engine queries (launch transform, target, aim point) go through a pinned-callback interface,
+   verified by an in-game shadow like the joint step's; the launch transform itself waits for the
+   transforms agent (Q12).
+4. Intercept solver 0x7e7460 (0.7 %) with the same callback pattern (target pose at a future time).
+5. Bullet flight/hit test 0xd4f240 phase 1 (segment, shield sphere, hit time) once the physics agent knows
+   whether the XPhys ray cast 0xbc4d0 is safe for concurrent readers (Q12).
+6. Damage: `ApplyDamage` + shield absorption 0x791760 + hull 0x51d570 (apply phase, serial).
 
 ## Open questions
 
