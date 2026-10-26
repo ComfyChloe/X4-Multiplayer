@@ -755,16 +755,24 @@ class DirLock:
 
     @classmethod
     def adopt(cls, path, info, agent):
-        """Take over a held lock whose owner.txt names this agent in a ``handoff:`` line (quiet-window
-        handoff). owner.txt is rewritten to the new owner with a ``handed_from`` line."""
+        """Take over a held lock whose owner.txt names this agent first in its ``handoff:`` line
+        (quiet-window handoff; ``handoff: a, b, c`` is a chain). owner.txt is rewritten to the new
+        owner with ``handed_from``; the rest of the chain is kept as ``then:`` (not ``handoff:``,
+        so nobody can adopt it while this run holds it) and handed on by hand_on() at the end."""
         path = Path(path)
         owner = read_owner(path)
-        if not owner or owner.get('handoff') != agent:
+        chain = handoff_chain(owner)
+        if not owner or not chain or chain[0] != agent:
             raise LockBusy(path, owner)
         info = dict(info)
-        info['handed_from'] = owner.get('agent') or owner.get('owner') or '?'
+        info['handed_from'] = owner.get('handed_from') if owner.get('agent') == 'quiet-window' else None
+        info['handed_from'] = info['handed_from'] or owner.get('agent') or owner.get('owner') or '?'
         if owner.get('purpose') or owner.get('reason'):
             info['handed_from_purpose'] = owner.get('purpose') or owner.get('reason')
+        if chain[1:]:
+            info['then'] = ', '.join(chain[1:])
+        if owner.get('skipped'):
+            info['skipped'] = owner['skipped']
         if read_owner(path) != owner:                      # changed since we judged it
             raise LockBusy(path, read_owner(path))
         lock = cls(path, info)
@@ -789,6 +797,64 @@ class DirLock:
             return False                                  # taken over; leave the new owner alone
         _remove_lock_dir(self.path, 'released')
         return True
+
+
+HANDOFF_ADOPT_S = 600              # a handed-on chain member that does not adopt within 10 min is skipped
+
+
+def handoff_chain(owner) -> list:
+    return [name.strip() for name in (owner or {}).get('handoff', '').split(',') if name.strip()]
+
+
+def _write_owner(path, owner):
+    tmp = Path(path) / f'owner.txt.tmp{os.getpid()}'
+    tmp.write_text(owner_text(owner), encoding='utf-8')
+    os.replace(tmp, Path(path) / 'owner.txt')
+
+
+def hand_on(lock, agent, now=None) -> bool:
+    """End of an adopting run: give the quiet window to the next agent of the chain instead of
+    removing it. False when there is nobody left (the caller then releases the lock)."""
+    rest = [name.strip() for name in lock.info.get('then', '').split(',') if name.strip()]
+    if not rest or not lock.held:
+        return False
+    if read_owner(lock.path).get('run') != str(lock.info.get('run')):
+        lock.held = False
+        return True                                     # taken over meanwhile: leave it alone
+    now = time.time() if now is None else now
+    owner = {'agent': 'quiet-window', 'purpose': f'chained quiet window for {", ".join(rest)}',
+             'handoff': ', '.join(rest), 'handed_from': agent, 'handoff_since': f'{now:.0f}',
+             'start': now_iso(), 'release': 'the last agent of the handoff chain removes it; a listed agent '
+                                            'that does not adopt within 10 min is skipped'}
+    if lock.info.get('skipped'):
+        owner['skipped'] = lock.info['skipped']
+    _write_owner(lock.path, owner)
+    lock.held = False
+    return True
+
+
+def advance_handoff(path, now=None) -> str | None:
+    """Skip a handed-on chain member that did not adopt within HANDOFF_ADOPT_S; the lock is removed
+    when the chain runs out. The first member of a lead-made chain (no handoff_since) is never timed."""
+    path = Path(path)
+    owner = read_owner(path)
+    chain, since = handoff_chain(owner), owner.get('handoff_since')
+    now = time.time() if now is None else now
+    if not chain or not since:
+        return None
+    try:
+        if now - float(since) <= HANDOFF_ADOPT_S:
+            return None
+    except ValueError:
+        return None
+    skipped = (owner.get('skipped', '') + ' ' + chain[0]).strip()
+    if not chain[1:]:
+        _remove_lock_dir(path, f'handoff chain ended ({chain[0]} did not adopt in time)')
+        return f'removed (skipped {chain[0]})'
+    owner.update(handoff=', '.join(chain[1:]), handoff_since=f'{now:.0f}', skipped=skipped,
+                 purpose=f'chained quiet window for {", ".join(chain[1:])}')
+    _write_owner(path, owner)
+    return f'skipped {chain[0]}'
 
 
 def _remove_lock_dir(path, why):

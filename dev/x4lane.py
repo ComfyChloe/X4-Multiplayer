@@ -455,7 +455,19 @@ def handoff_for(paths, args) -> bool:
     """quiet.lock hands the quiet window to this agent's --timing run (it bypasses the queue)."""
     if not getattr(args, 'timing', False) or not paths.quiet_lock.exists():
         return False
-    return core.read_owner(paths.quiet_lock).get('handoff') == args.agent
+    chain = core.handoff_chain(core.read_owner(paths.quiet_lock))
+    return bool(chain) and chain[0] == args.agent
+
+
+def release_lock(lock, agent, warn):
+    """Release one lock; a quiet.lock adopted from a handoff chain is handed to the next agent."""
+    try:
+        if core.hand_on(lock, agent):
+            warn(f'{lock.path.name} handed on to the next agent of the handoff chain')
+        elif not lock.release():
+            warn(f'{lock.path.name} had been taken over; left in place')
+    except Exception as error:                                       # noqa: BLE001
+        warn(f'releasing {lock.path.name} failed: {error}')
 
 
 def wait_in_queue(runner, attempt, give_back, need, purpose):
@@ -745,8 +757,13 @@ class Run:
         """Checks before any lane is taken. Returns the quiet.lock owner (or None) and whether this
         run may adopt it (quiet-window handoff)."""
         paths, a = self.paths, self.args
+        if paths.quiet_lock.exists():
+            skipped = core.advance_handoff(paths.quiet_lock)
+            if skipped:
+                print(f'x4lane: quiet-window handoff chain: {skipped}', flush=True)
         quiet_owner = core.read_owner(paths.quiet_lock) if paths.quiet_lock.exists() else None
-        handoff = bool(quiet_owner is not None and a.timing and quiet_owner.get('handoff') == a.agent)
+        chain = core.handoff_chain(quiet_owner)
+        handoff = bool(quiet_owner is not None and a.timing and chain and chain[0] == a.agent)
         if quiet_owner is not None and not handoff:
             raise TransientRefusal('rewrite-coord/quiet.lock is held (' + core.owner_summary(quiet_owner)
                                    + (f", handoff to {quiet_owner['handoff']}" if quiet_owner.get('handoff') else '')
@@ -1309,11 +1326,7 @@ class Run:
         for attr in ('launch_lock', 'quiet', 'lock'):
             lock = getattr(self, attr)
             if lock is not None:
-                try:
-                    if not lock.release():
-                        self.warn(f'{lock.path.name} had been taken over; left in place')
-                except Exception as error:
-                    self.warn(f'releasing {lock.path.name} failed: {error}')
+                release_lock(lock, self.args.agent, self.warn)
                 setattr(self, attr, None)
         if self.job is not None:
             self.job.close()
@@ -1794,11 +1807,7 @@ class SessionRun:
         for attr in ('launch_lock', 'quiet'):
             lock = getattr(self, attr)
             if lock is not None:
-                try:
-                    if not lock.release():
-                        self.warn(f'{lock.path.name} had been taken over; left in place')
-                except Exception as error:                           # noqa: BLE001
-                    self.warn(f'releasing {lock.path.name} failed: {error}')
+                release_lock(lock, self.args.agent, self.warn)
                 setattr(self, attr, None)
         self.mark('closed_s')
 
@@ -1918,6 +1927,10 @@ def doctor(paths, fix=False, check_hash=True):
         out.append({'level': level, 'what': what, 'detail': str(detail)})
 
     alive = win().pid_alive
+    if paths.quiet_lock.exists() and fix:
+        advanced = core.advance_handoff(paths.quiet_lock)
+        if advanced:
+            note('fixed', 'quiet-window handoff chain', advanced)
     if paths.quiet_lock.exists():
         note('warn', 'quiet.lock held', core.owner_summary(core.read_owner(paths.quiet_lock)))
     if not win().steam_status()['running']:

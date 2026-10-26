@@ -380,6 +380,50 @@ class HandoffTests(Temp):
         self.assertEqual(core.read_owner(path)['handoff'], 'frame-diet')
 
 
+class HandoffChainTests(Temp):
+    def window(self, chain):
+        path = self.tmp / 'quiet.lock'
+        path.mkdir()
+        (path / 'owner.txt').write_text(''.join(line + chr(10) for line in (
+            'agent: overhaul-lead', 'purpose: batched timing window', f'handoff: {chain}')))
+        return path
+
+    def test_chain_is_handed_on_in_order_and_the_last_removes_it(self):
+        path = self.window('frame-diet, combat, ecs-core')
+        with self.assertRaises(core.LockBusy):
+            core.DirLock.adopt(path, {'agent': 'combat', 'run': 'c0'}, 'combat')       # not first
+        first = core.DirLock.adopt(path, {'agent': 'frame-diet', 'run': 'f1'}, 'frame-diet')
+        owner = core.read_owner(path)
+        self.assertEqual((owner['then'], owner['handed_from']), ('combat, ecs-core', 'overhaul-lead'))
+        self.assertNotIn('handoff', owner)                     # nobody can adopt while it runs
+        with self.assertRaises(core.LockBusy):
+            core.DirLock.adopt(path, {'agent': 'combat', 'run': 'c1'}, 'combat')
+        self.assertTrue(core.hand_on(first, 'frame-diet', now=5000))
+        owner = core.read_owner(path)
+        self.assertEqual((owner['handoff'], owner['handed_from'], owner['handoff_since']),
+                         ('combat, ecs-core', 'frame-diet', '5000'))
+        second = core.DirLock.adopt(path, {'agent': 'combat', 'run': 'c2'}, 'combat')
+        self.assertEqual(core.read_owner(path)['handed_from'], 'frame-diet')
+        self.assertTrue(core.hand_on(second, 'combat'))
+        third = core.DirLock.adopt(path, {'agent': 'ecs-core', 'run': 'e3'}, 'ecs-core')
+        self.assertFalse(core.hand_on(third, 'ecs-core'))       # nobody left: release as before
+        self.assertTrue(third.release())
+        self.assertFalse(path.exists())
+
+    def test_members_that_do_not_adopt_in_time_are_skipped(self):
+        path = self.window('frame-diet, combat, physics')
+        self.assertIsNone(core.advance_handoff(path, now=10 ** 10))   # the first member is never timed
+        first = core.DirLock.adopt(path, {'agent': 'frame-diet', 'run': 'f1'}, 'frame-diet')
+        core.hand_on(first, 'frame-diet', now=1000)
+        self.assertIsNone(core.advance_handoff(path, now=1000 + core.HANDOFF_ADOPT_S))
+        self.assertEqual(core.advance_handoff(path, now=1001 + core.HANDOFF_ADOPT_S), 'skipped combat')
+        owner = core.read_owner(path)
+        self.assertEqual((owner['handoff'], owner['skipped']), ('physics', 'combat'))
+        self.assertEqual(core.advance_handoff(path, now=1002 + 2 * core.HANDOFF_ADOPT_S),
+                         'removed (skipped physics)')
+        self.assertFalse(path.exists())
+
+
 class FakeWindows(Temp):
     """Fake Windows hooks (Steam, RAM, processes, locks) so the real preflight code runs anywhere."""
 
