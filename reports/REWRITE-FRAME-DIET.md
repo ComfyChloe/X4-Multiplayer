@@ -398,3 +398,12 @@ snapshot stays the original owner's data and no lifecycle lock is held across Lu
 Verification of this correction: C synthetic lifecycle suite (including 300 concurrent stop rounds),
 new unsafe-mode/sticky-stall tests and allocation-time replacement test; 17 real LuaJIT loader tests;
 standalone Lua 5.1 DLL ABI validation. These are synthetic/standalone checks, not new native gameplay proof.
+
+
+The offline `framediet_analyze.py stability LOG --check --min-duration 200 --max-gap 15` now returns
+nonzero on watchdog recovery (either marker or nonzero cumulative stalls), requested/actual mode drift,
+disabled features, insufficient report duration, missing frame progress, large report gaps or invalid/
+regressing counters. This checks only the reported interval; it is not a gameplay-equivalence gate.
+Historic bisect-001 fails this check for one watchdog stall and four mode-drift reports, even though its
+41 reports cover 303.2 seconds with a maximum gap of 10.1 seconds. Engine error-like lines are listed for
+review, not automatically equated with mod failures.

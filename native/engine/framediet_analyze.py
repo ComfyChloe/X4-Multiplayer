@@ -4,6 +4,8 @@
       MoveWorker cost per FRAMEDIET phase (and ATTNLOAD step) from the fixed-tick probe's FRAMEPROBE
       lines: slot-loop ms per frame (simFrames-weighted simMeanMs), frames per second, p95 of the
       per-second p95. The first --skip FRAMEPROBE lines after each phase/step change are dropped.
+  python native/engine/framediet_analyze.py stability LOG [--check --min-duration 60 --max-gap 15]
+      Check reported UI liveness; fail on watchdog recovery, mode drift, or insufficient evidence.
   python native/engine/framediet_analyze.py audit LOG
       The last FRAMEDIET_AUDIT row per region and the last FRAMEDIET line.
   python native/engine/framediet_analyze.py attribution LOG [--window LO:HI ...] [--x4re DIR]
@@ -13,6 +15,7 @@ Lines may carry the X4 debug-log prefix (`[=ERROR=] <time> `); <time> orders the
 """
 import argparse
 import collections
+import math
 import re
 import sys
 from pathlib import Path
@@ -155,6 +158,8 @@ def stability(path: Path) -> dict:
     FEATURE ... DISABLED lines and error lines that are not X4LAN/X4LANE output."""
     reports, phase, commit = [], 'start', collections.OrderedDict()
     features, errors, frames = [], collections.Counter(), []
+    stalls, invalid, mode_drift = [], [], []
+    max_stalls = 0
     with path.open(encoding='utf-8', errors='replace') as source:
         for raw in source:
             line = raw.rstrip('\n')
@@ -164,11 +169,26 @@ def stability(path: Path) -> dict:
                 phase = fields(body)['phase']
             elif m and body.startswith('FRAMEDIET mode='):
                 f = fields(body)
-                reports.append(number(f, 't'))
-                frames.append(number(f, 'frames'))
+                t, frame = number(f, 't', float('nan')), number(f, 'frames', float('nan'))
+                if not math.isfinite(t) or not math.isfinite(frame) or t < 0 or frame < 0:
+                    invalid.append(body)
+                    continue
+                reports.append(t)
+                frames.append(frame)
+                count = number(f, 'stalls', 0)
+                if not math.isfinite(count) or count < 0:
+                    invalid.append(body)
+                else:
+                    max_stalls = max(max_stalls, count)
+                requested = f.get('phase', phase).split(':', 1)[0]
+                expected = requested if requested in ('pass', 'diet', 'audit') else 'diet'
+                if f.get('mode') != expected:
+                    mode_drift.append(body)
                 if 'commitMb' in f:
                     lo, hi = commit.get(phase, (float('inf'), 0.0))
                     commit[phase] = (min(lo, number(f, 'commitMb')), max(hi, number(f, 'commitMb')))
+            elif m and body.startswith('FRAMEDIET stall '):
+                stalls.append(body)
             elif m and 'FEATURE' in body and 'DISABLED' in body:
                 features.append(body)
             elif '[X4LAN]' not in line and '[X4LANE]' not in line and ERROR_LINE.search(line):
@@ -177,7 +197,30 @@ def stability(path: Path) -> dict:
     return {'reports': len(reports), 'max_gap_s': max(gaps) if gaps else 0.0,
             'first_t': reports[0] if reports else 0.0, 'last_t': reports[-1] if reports else 0.0,
             'frames_first': frames[0] if frames else 0, 'frames_last': frames[-1] if frames else 0,
-            'commit_mb': dict(commit), 'features': features, 'errors': dict(errors)}
+            'commit_mb': dict(commit), 'features': features, 'errors': dict(errors),
+            'stalls': stalls, 'max_stalls': max_stalls, 'invalid': invalid, 'mode_drift': mode_drift,
+            'regressed': any(b < a for a, b in zip(reports, reports[1:])) or
+                         any(b < a for a, b in zip(frames, frames[1:]))}
+
+
+def stability_failures(r: dict, min_duration: float, max_gap: float) -> list:
+    """Bounded liveness acceptance for the reported interval, never gameplay equivalence."""
+    failures = []
+    if r['reports'] < 2 or r['last_t'] - r['first_t'] < min_duration:
+        failures.append('insufficient report duration')
+    if r['frames_last'] <= r['frames_first']:
+        failures.append('no frame progress')
+    if r['max_gap_s'] > max_gap:
+        failures.append('UI report gap exceeded')
+    if r['stalls'] or r['max_stalls']:
+        failures.append('UI stall watchdog fired')
+    if r['mode_drift']:
+        failures.append('actual mode differs from requested phase')
+    if r['features']:
+        failures.append('feature disabled')
+    if r['invalid'] or r['regressed']:
+        failures.append('invalid or regressing counters')
+    return failures
 
 
 def load_names(x4re: Path) -> dict:
@@ -245,9 +288,15 @@ def main(argv=None):
     a = sub.add_parser('audit'); a.add_argument('log', type=Path)
     a.add_argument('--phases', action='store_true', help='per-phase deltas of the cumulative counters')
     st = sub.add_parser('stability'); st.add_argument('log', type=Path)
+    st.add_argument('--check', action='store_true', help='nonzero exit on failed reported-interval liveness')
+    st.add_argument('--min-duration', type=float, default=60.0)
+    st.add_argument('--max-gap', type=float, default=15.0)
     t = sub.add_parser('attribution'); t.add_argument('log', type=Path)
     t.add_argument('--window', action='append', default=[], help='LO:HI log-time range of window ends')
     args = parser.parse_args(argv)
+    if args.cmd == 'stability' and (not math.isfinite(args.min_duration) or args.min_duration < 0 or
+                                    not math.isfinite(args.max_gap) or args.max_gap <= 0):
+        parser.error('stability requires finite min-duration >= 0 and max-gap > 0')
     if args.cmd == 'phases':
         print(f'{"phase":24s} {"step":>5s} {"samples":>7s} {"frames":>7s} {"fps":>6s} {"ms/frame":>9s} {"p95":>6s}')
         rows = phases(args.log, args.skip)
@@ -262,12 +311,17 @@ def main(argv=None):
               f"largest gap {r['max_gap_s']:.1f} s; frames {r['frames_first']:.0f} -> {r['frames_last']:.0f}")
         for ph, (lo, hi) in r['commit_mb'].items():
             print(f'  commit MB in {ph}: {lo:.1f} .. {hi:.1f}')
+        print(f"  watchdog stalls: {max(len(r['stalls']), r['max_stalls']):g}; mode drift reports: {len(r['mode_drift'])}")
         print(f"  FEATURE DISABLED lines: {len(r['features'])}")
         for line in r['features'][:5]:
             print('   ', line)
         print(f"  error-like lines outside X4LAN: {sum(r['errors'].values())}")
         for line, n in sorted(r['errors'].items(), key=lambda kv: -kv[1])[:10]:
             print(f'    {n:4d} {line}')
+        if args.check:
+            failures = stability_failures(r, args.min_duration, args.max_gap)
+            print('STABILITY ' + ('FAIL: ' + '; '.join(failures) if failures else 'PASS (reported interval only)'))
+            return 1 if failures else 0
     elif args.cmd == 'audit' and args.phases:
         for name, delta in audit_phases(args.log):
             print(f'== phase {name}')

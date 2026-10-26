@@ -1,5 +1,7 @@
 """Frame-diet log analysis (native/engine/framediet_analyze.py) on synthetic debug logs."""
 from pathlib import Path
+from contextlib import redirect_stdout
+from io import StringIO
 import sys
 import tempfile
 import unittest
@@ -96,6 +98,55 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(len(r['features']), 1)
         self.assertEqual(sum(r['errors'].values()), 2)
         self.assertEqual(len(r['errors']), 1)
+
+    def test_stability_check_rejects_recovered_watchdog_without_disabled_marker(self):
+        log = write([
+            '[=ERROR=] 0 [X4LAN] FRAMEDIET mode=diet phase=ui_elements t=0 frames=1 stalls=0',
+            '[=ERROR=] 3 [X4LAN] FRAMEDIET stall sites=ui_elements frame=180 stalls=1',
+            '[=ERROR=] 10 [X4LAN] FRAMEDIET mode=pass phase=ui_elements t=10 frames=600 stalls=1',
+        ])
+        failures = fa.stability_failures(fa.stability(log), 5, 15)
+        self.assertIn('UI stall watchdog fired', failures)
+        self.assertIn('actual mode differs from requested phase', failures)
+        with redirect_stdout(StringIO()) as out:
+            self.assertEqual(fa.main(['stability', str(log), '--check', '--min-duration', '5']), 1)
+        self.assertIn('STABILITY FAIL', out.getvalue())
+
+    def test_stability_check_catches_counter_only_stall_and_mode_drift_separately(self):
+        for mode, count, expected in [('diet', 1, 'UI stall watchdog fired'),
+                                      ('pass', 0, 'actual mode differs from requested phase')]:
+            with self.subTest(mode=mode, count=count):
+                log = write([
+                    '[=ERROR=] 0 [X4LAN] FRAMEDIET mode=diet phase=server t=0 frames=1 stalls=0',
+                    f'[=ERROR=] 10 [X4LAN] FRAMEDIET mode={mode} phase=server t=10 frames=600 stalls={count}',
+                ])
+                self.assertIn(expected, fa.stability_failures(fa.stability(log), 5, 15))
+
+    def test_stability_check_requires_valid_progress_and_report_coverage(self):
+        prefix = '[=ERROR=] 0 [X4LAN] FRAMEDIET mode=diet phase=server t=0 frames=10'
+        for tail, expected in [
+            ([], 'insufficient report duration'),
+            (['t=10 frames=10'], 'no frame progress'),
+            (['t=50 frames=20'], 'UI report gap exceeded'),
+            (['t=10 frames=5'], 'invalid or regressing counters'),
+            (['t=nan frames=20'], 'invalid or regressing counters'),
+            (['t=10 frames=inf'], 'invalid or regressing counters'),
+        ]:
+            with self.subTest(tail=tail):
+                log = write([prefix] + ['[=ERROR=] 10 [X4LAN] FRAMEDIET mode=diet phase=server ' + x for x in tail])
+                self.assertIn(expected, fa.stability_failures(fa.stability(log), 5, 15))
+
+    def test_stability_check_accepts_continuing_ui_reports_in_requested_modes(self):
+        log = write([
+            '[=ERROR=] 0 [X4LAN] FRAMEDIET mode=diet phase=server,rng_split t=0 frames=1 stalls=0',
+            '[=ERROR=] 10 [X4LAN] FRAMEDIET mode=diet phase=server,rng_split t=10 frames=600 stalls=0',
+            '[=ERROR=] 10 [X4LAN] FRAMEDIET mode=pass phase=pass t=10 frames=600 stalls=0',
+            '[=ERROR=] 20 [X4LAN] FRAMEDIET mode=pass phase=pass t=20 frames=1200 stalls=0',
+        ])
+        self.assertEqual(fa.stability_failures(fa.stability(log), 15, 15), [])
+        with redirect_stdout(StringIO()) as out:
+            self.assertEqual(fa.main(['stability', str(log), '--check', '--min-duration', '15']), 0)
+        self.assertIn('STABILITY PASS (reported interval only)', out.getvalue())
 
     def test_attribution_splits_lua_from_presentation(self):
         log = write([
