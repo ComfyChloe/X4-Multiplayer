@@ -193,6 +193,26 @@ stream relative to every client that renders (and IDs where welding traffic is i
 the server and on all clients the RNG streams stop depending on the view. In-session A/B of rng_split:
 audit-002 (pending, section 6).
 
+### rng_split design (determinism)
+
+Proposal of the multiplayer determinism owner (rng-streams 23c841f), implemented as the `rng_split` site:
+- Boundary: the whole VBI slot 10 callback (`GameRender::Move` 0x121c1f0, vtable entry 0x2c8ac10). Inside it the
+  MoveWorker's TLS+0x318 holds a private render stream (seed "RENDERV1" at arming, continued across frames);
+  the simulation value is restored right after. All slot-10 draws found statically go through TLS+0x318
+  (0x77b890, SpawnEffect 0xd73e00, 0xd717a0, 0xddd570 via `Random::FloatState` on the TLS block); the only
+  other RNG use there (Cluster render 0x3bb900) uses a stack-local state.
+- Effect objects spawned by the render walk: their later updates in slot 3 (`EffectObject::Move` 0xd78d40,
+  82 functions reachable by direct calls) draw no RNG and allocate no IDs; they post their own lifetime events
+  (FadeOutEffectEvent). So with the split, the simulation stream no longer depends on the view. Their
+  UniverseIDs still come from the shared allocator: a client that renders welding traffic allocates IDs a
+  server without that view does not. Treat such objects as client-local (not in the replicated ID space).
+- Parity needs the split on every participant (server and clients); with the split, `diet:all` and
+  `pass` give the same simulation stream (synthetic test; native measurement: audit-002).
+- Not covered: other camera couplings outside slot 10. Render cameras are attention sources (Universe+0x2c0
+  anchors read by ComputeAttention, slot 3; see the attention hooks), and UI Lua can create ICom message sources
+  that take UniverseIDs (`CMessageManager::CreateSource` 0xae9050). Linux: the same swap on `fs:[-0x2720]`
+  around GameRender::Move 0xfb0180 (rewrite-coord Q10).
+
 ## 6. Measurements
 
 Pending: the quiet-window timing run (Q9): attnload steps 0/8, phases `pass` / `diet:server` / `diet:all`
