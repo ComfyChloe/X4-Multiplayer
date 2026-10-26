@@ -368,6 +368,7 @@ def cmd_setup(args, paths):
 
 HEAD_POLL_S = 10
 QUEUE_POLL_S = 30
+RESERVE_MAX_S = 600
 
 
 def handoff_for(paths, args) -> bool:
@@ -1020,8 +1021,8 @@ class Run:
             now = time.monotonic()
             ended = self.poll(now)
             if ended:
-                if ended[0] == 'x4_exited' and settle_until is not None:
-                    return 'until_matched', 'X4 exited during --settle'
+                if ended[0] in ('x4_exited', 'stalled', 'stopped') and settle_until is not None:
+                    return 'until_matched', f'--until matched; then during --settle: {ended[1]}'
                 return ended
             if settle_until is None and self.watch.until_matched:
                 self.mark('until_s')
@@ -1084,6 +1085,8 @@ class Run:
         if self.engine_out is not None:
             self.engine_out.close()
             self.engine_out = None
+        if out is None:
+            return
         if self.watch is not None:
             self.watch.flush()
             self.result['log'] = {'lines': self.watch.lines, 'errors': self.watch.errors,
@@ -1368,6 +1371,7 @@ class SessionRun:
         self.clients, self.server, self.quiet, self.launch_lock, self.outdir = [], None, None, None, None
         self.session_id = None
         self.port = None
+        self.reserved_since = None
         self.result = {
             'tool': 'dev/x4lane.py', 'tool_version': TOOL_VERSION, 'kind': 'session', 'session_id': None,
             'agent': args.agent, 'label': args.label, 'machine': socket.gethostname(), 'started_at': core.now_iso(),
@@ -1443,9 +1447,24 @@ class SessionRun:
     def give_back_all(self):
         for client in self.clients:
             client.give_back_lane()
+        self.reserved_since = None
 
     def refresh_reserved(self):
-        for client in self.clients:
+        """While queued: keep reserved lanes alive, but give them back after RESERVE_MAX_S (the queue
+        head keeps its place, so no newer run can take lanes ahead of it anyway)."""
+        held = [c for c in self.clients if c.lock is not None]
+        if not held:
+            self.reserved_since = None
+            return
+        if self.reserved_since is None:
+            self.reserved_since = time.monotonic()
+        if time.monotonic() - self.reserved_since > RESERVE_MAX_S:
+            names = [c.lane.name for c in held]
+            self.give_back_all()
+            print(f'x4lane: gave back reserved lanes {names} after {RESERVE_MAX_S // 60} min; still first in the queue',
+                  flush=True)
+            return
+        for client in held:
             client.refresh_reserved()
 
     def preflight(self, keep=False):

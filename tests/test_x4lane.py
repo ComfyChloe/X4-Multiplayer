@@ -695,6 +695,13 @@ class StopAndReserveTests(FakeWindows):
         blockers[2].release()                                    # b4 frees up
         run.preflight(keep=True)
         self.assertEqual([c.lane.name for c in run.clients], ['b1', 'b4'])
+        run.refresh_reserved()
+        self.assertTrue(self.paths.lane('b1').lock.exists())
+        run.reserved_since -= x4lane.RESERVE_MAX_S + 1               # reserved too long while queued
+        run.refresh_reserved()
+        self.assertFalse(self.paths.lane('b1').lock.exists())
+        self.assertFalse(self.paths.lane('b4').lock.exists())
+        self.assertIsNone(run.reserved_since)
         run.give_back_all()
         for blocker in blockers[:2]:
             blocker.release()
