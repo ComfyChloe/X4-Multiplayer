@@ -985,46 +985,50 @@ class AdmissionTests(FakeWindows):
         x4lane.win().memory_status = lambda: (94 * 2**30, int(gb * 2**30))
 
     def test_every_x4_counts_towards_the_cap(self):
-        self.others = self.procs(7)
-        self.assertEqual(x4lane.admission(self.paths, 1, 0, 'test')[0], 7)
+        cap = core.MAX_X4_TOTAL
+        self.ram(core.MIN_FREE_PER_START * 3)
+        self.others = self.procs(cap - 1)
+        self.assertEqual(x4lane.admission(self.paths, 1, 0, 'test')[0], cap - 1)
         with self.assertRaises(x4lane.CapReached) as refused:
             x4lane.admission(self.paths, 2, 0, 'session')          # a session counts every client
-        self.assertIn('MAX_X4_TOTAL=8', str(refused.exception))
-        self.others = self.procs(8)
+        self.assertIn(f'MAX_X4_TOTAL={cap}', str(refused.exception))
+        self.others = self.procs(cap)
         with self.assertRaises(x4lane.CapReached):
             x4lane.admission(self.paths, 1, 0, 'test')
 
     def test_memory_per_start_and_no_lowering(self):
-        self.ram(9.0)
+        need = core.MIN_FREE_PER_START
+        self.ram(need + 1)
         x4lane.admission(self.paths, 1, 0, 'test')
         with self.assertRaises(x4lane.CapReached):
-            x4lane.admission(self.paths, 2, 0, 'session')          # 2 x 8 GB
+            x4lane.admission(self.paths, 2, 0, 'session')          # 2 x MIN_FREE_PER_START
         with self.assertRaises(x4lane.CapReached):
-            x4lane.admission(self.paths, 1, 12, 'test')           # --min-free-gb may raise it
-        self.ram(7.5)
+            x4lane.admission(self.paths, 1, need + 4, 'test')     # --min-free-gb may raise it
+        self.ram(need - 0.5)
         with self.assertRaises(x4lane.CapReached):
             x4lane.admission(self.paths, 1, 2, 'test')            # ... but never lower it
 
     def test_pressure_holds_back_starts_until_it_recovers(self):
         path = self.paths.pressure
+        low, ok = core.PRESSURE_LOW_GB, core.MIN_FREE_PER_START
         t = 1000.0
-        self.assertIsNone(core.observe_pressure(path, 3.0 + 6, 'a', now=t))
-        self.assertEqual(core.observe_pressure(path, 3.0, 'a', now=t)['state'], 'low')
-        self.assertIsNone(core.observe_pressure(path, 5.0, 'a', now=t + 30))   # short dip: forgotten
+        self.assertIsNone(core.observe_pressure(path, ok + 1, 'a', now=t))
+        self.assertEqual(core.observe_pressure(path, low - 1, 'a', now=t)['state'], 'low')
+        self.assertIsNone(core.observe_pressure(path, low + 1, 'a', now=t + 30))   # short dip: forgotten
         self.assertFalse(path.exists())
-        core.observe_pressure(path, 3.0, 'a', now=t + 40)
-        self.assertEqual(core.observe_pressure(path, 3.5, 'b', now=t + 101)['state'], 'pressure')
-        self.assertEqual(core.observe_pressure(path, 6.0, 'b', now=t + 120)['state'], 'pressure')  # not recovered
-        self.assertEqual(core.observe_pressure(path, 8.5, 'b', now=t + 130)['recover_since'], t + 130)
-        self.assertEqual(core.observe_pressure(path, 7.0, 'b', now=t + 150)['recover_since'], None)
-        core.observe_pressure(path, 9.0, 'b', now=t + 160)
-        self.assertIsNone(core.observe_pressure(path, 9.0, 'b', now=t + 221))  # 60 s at >= 8 GB
+        core.observe_pressure(path, low - 1, 'a', now=t + 40)
+        self.assertEqual(core.observe_pressure(path, low - 0.5, 'b', now=t + 101)['state'], 'pressure')
+        self.assertEqual(core.observe_pressure(path, ok - 1, 'b', now=t + 120)['state'], 'pressure')  # not yet
+        self.assertEqual(core.observe_pressure(path, ok + 0.5, 'b', now=t + 130)['recover_since'], t + 130)
+        self.assertEqual(core.observe_pressure(path, ok - 1, 'b', now=t + 150)['recover_since'], None)
+        core.observe_pressure(path, ok + 1, 'b', now=t + 160)
+        self.assertIsNone(core.observe_pressure(path, ok + 1, 'b', now=t + 221))  # 60 s at >= MIN_FREE_PER_START
         self.assertFalse(path.exists())
 
     def test_admission_refuses_during_pressure(self):
         core.write_json(self.paths.pressure, {'state': 'pressure', 'since': time.time() - 30, 'updated': time.time(),
                                               'low_since': time.time() - 100})
-        self.ram(10.0)
+        self.ram(core.MIN_FREE_PER_START + 2)
         with self.assertRaises(x4lane.CapReached) as refused:
             x4lane.admission(self.paths, 1, 0, 'test')
         self.assertIn('memory pressure', str(refused.exception))
@@ -1244,6 +1248,21 @@ class CommandLineTests(Temp):
         lab = make_lab(self.tmp / 'lane')
         core.apply_overlays(lab, [out], self.tmp / 'lane', {'@X4LANE_PROFILE@': '45851'})
         self.assertIn('attention_load_profile = "45851"', (lab / 'ui' / 'config.lua').read_text())
+
+    def test_old_attnload_overlays_are_widened_for_the_lane_in_use(self):
+        lab = make_lab(self.tmp / 'lane')
+        old = (" assert(cfg.attention_load_profile=='45841' or cfg.attention_load_profile=='45842' or "
+               "cfg.attention_load_profile=='45850' or cfg.attention_load_profile=='45851',"
+               "'unsupported attention load profile')\n")
+        (lab / 'ui' / 'engine_hooks.lua').write_text('local cfg\n' + old)
+        self.assertTrue(core.widen_attention_guard(lab, '45855', self.tmp / 'lane'))
+        text = (lab / 'ui' / 'engine_hooks.lua').read_text()
+        self.assertIn("=='45851' or cfg.attention_load_profile=='45855','unsupported attention load profile')", text)
+        self.assertFalse(core.widen_attention_guard(lab, '45855', self.tmp / 'lane'))   # already accepted
+        self.assertFalse(core.widen_attention_guard(lab, '45850', self.tmp / 'lane'))
+        self.assertIn("'45858'", x4lane.GUARD_NEW)                                     # new overlays: all lanes
+        (lab / 'ui' / 'engine_hooks.lua').unlink()
+        self.assertFalse(core.widen_attention_guard(lab, '45855', self.tmp / 'lane'))
 
     def test_attnload_overlay_refuses_unknown_guard(self):
         attn = self.fake_attnload(guard=False)

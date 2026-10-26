@@ -31,11 +31,12 @@ LAB_ID = 'x4_lan_lab'
 LOCK_STALE_S = 45 * 60            # rewrite-coord/README.md: stale after 45 min without update
 LOCK_MAX_HOLD_S = 30 * 60         # lane locks: max hold 30 min
 MAX_TIMEOUT_S = 1680              # leaves room for preparation, settle and close inside 30 min
-# Admission (user: "we can handle like 7 or 8 instances at once"): every X4.exe on the PC counts
-# (lanes, protected clients, other sessions). A lane X4 may start while fewer than MAX_X4_TOTAL run
-# and at least MIN_FREE_PER_START GB are available per X4 to be started.
-MAX_X4_TOTAL = 8
-MIN_FREE_PER_START = 8.0
+# Admission: every X4.exe on the PC counts (lanes, protected clients, other sessions). A lane X4 may
+# start while fewer than MAX_X4_TOTAL run and at least MIN_FREE_PER_START GB are available per X4 to
+# be started. Measured ramp (26 Oct, x4lane observe): 7 X4 left 0.8-2.7 GB available with 6k-16k hard
+# faults/s, 8 X4 0.6 GB and up to 43k pages/s; the lead set 6 and 14 GB (one X4 plus headroom).
+MAX_X4_TOTAL = 6
+MIN_FREE_PER_START = 14.0
 MIN_FREE_RAM_GB = MIN_FREE_PER_START          # old name, kept for the --min-free-gb default
 # Pressure back-off: available memory under PRESSURE_LOW_GB for more than PRESSURE_HOLD_S stops new
 # lane starts (rewrite-coord/lane-pressure.json) until it stayed at or above MIN_FREE_PER_START for
@@ -522,6 +523,27 @@ def repin_profile(lab, profile: str, root) -> dict:
             safe_write(item, new, root)
             changed[item.relative_to(lab).as_posix()] = count
     return changed
+
+
+ATTN_GUARD_RE = re.compile(r"assert\(((?:cfg\.attention_load_profile=='\d+'(?: or )?)+),"
+                           r"'unsupported attention load profile'\)")
+
+
+def widen_attention_guard(lab, profile: str, root) -> bool:
+    """The attention hooks' save-folder guard (ui/engine_hooks.lua, only in an attnload overlay) must
+    accept the lane the run uses; overlays built by older tool versions list fewer lanes."""
+    if profile not in LANE_PROFILES.values():
+        raise UnsafeError(f'{profile} is not a lane profile')
+    hooks = Path(lab) / 'ui' / 'engine_hooks.lua'
+    if not hooks.is_file():
+        return False
+    text = hooks.read_text(encoding='utf-8')
+    match = ATTN_GUARD_RE.search(text)
+    if not match or f"=='{profile}'" in match.group(1):
+        return False
+    safe_write(hooks, text[:match.end(1)] + f" or cfg.attention_load_profile=='{profile}'" + text[match.end(1):],
+               root)
+    return True
 
 
 def substitute_text(text: str, tokens: dict) -> str:

@@ -897,6 +897,8 @@ class Run:
         manifest = core.apply_overlays(lane.lab, self.overlays, lane.dir, tokens, a.ui_file, lua_lines)
         if self.repin:
             manifest['repinned'] = core.repin_profile(lane.lab, lane.profile, lane.dir)
+        if core.widen_attention_guard(lane.lab, lane.profile, lane.dir):
+            manifest['attention_guard_widened_for'] = lane.profile          # overlay built for fewer lanes
         config_text = (lane.lab / 'ui' / 'config.lua').read_text(encoding='utf-8')
         if self.network == 'loopback':
             core.check_loopback_config(config_text)
