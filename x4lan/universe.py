@@ -215,6 +215,9 @@ class UniverseSession(DockSession):
         self.delivered = None
         self.positions = {}
         self.position_cursor = 0
+        # entity -> seq last forwarded to the current guest lease (fresh-first forwarding).
+        self.forwarded = {}
+        self.forwarded_lease = None
         self.cargo = CargoTransactions(self)
         self.identities = Identities(self)
         self.npc_combat = NpcCombat(self)
@@ -304,6 +307,7 @@ class UniverseSession(DockSession):
                 self.entity_ids = {k: {record(row) for row in b.rows} for k, b in self.sectors.items()}
                 live = set().union(*self.entity_ids.values())
                 self.positions = {k: v for k, v in self.positions.items() if k in live}
+                self.forwarded = {k: v for k, v in self.forwarded.items() if k in live}
             return [f'UACK|1|{peer.lease}|{f[3]}|{f[4]}|{ack}'.encode('ascii')]
         except (ValueError, OverflowError, UnicodeError):
             return []
@@ -327,11 +331,25 @@ class UniverseSession(DockSession):
         if self.delivery:
             result.extend((guest.address, p) for p in self.delivery.packets(guest.lease, now))
         # Independent, lossy motion cannot create entities or commit a baseline.
-        live = [v for v in self.positions.values() if v[2] == sector and now - v[1] < .75]
+        # Samples not yet forwarded go first (oldest arrival first): a blind round robin
+        # over every live entity repeats unchanged samples while new ones wait, adding up
+        # to len(live)/640 s of jitter per sample in a dense sector. Remaining budget
+        # repeats latest samples round robin, as before, to cover datagram loss.
+        if self.forwarded_lease != guest.lease:
+            self.forwarded = {}; self.forwarded_lease = guest.lease
+        live = [(k, v) for k, v in self.positions.items() if v[2] == sector and now - v[1] < .75]
         if live:
-            for i in range(min(MOTION_BUDGET, len(live))):
-                entry = live[(self.position_cursor + i) % len(live)]
+            fresh = sorted((kv for kv in live if self.forwarded.get(kv[0]) != kv[1][0]), key=lambda kv: kv[1][1])
+            chosen = fresh[:MOTION_BUDGET]
+            if len(chosen) < MOTION_BUDGET:
+                taken = {k for k, _ in chosen}
+                rest = [kv for kv in live if kv[0] not in taken]
+                if rest:
+                    take = min(MOTION_BUDGET - len(chosen), len(rest))
+                    chosen += [rest[(self.position_cursor + i) % len(rest)] for i in range(take)]
+                    self.position_cursor = (self.position_cursor + take) % len(rest)
+            for entity, entry in chosen:
                 fields, kind = entry[3], entry[4]
+                self.forwarded[entity] = entry[0]
                 result.append((guest.address, (kind+'|1|' + guest.lease + '|' + '|'.join(fields)).encode()))
-            self.position_cursor = (self.position_cursor + MOTION_BUDGET) % len(live)
         return result

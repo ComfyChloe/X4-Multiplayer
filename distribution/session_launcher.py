@@ -139,6 +139,7 @@ def session_config(session, slot, host):
                seed_id=session['bubble'], seed_verified=False, coop_docks=True,
                pilot_health=True, shot_claims=True, shot_visual=True, shot_capture=True,
                npc_combat=True, faction_missions=True,
+               npc_motion_diagnostics=1,
                projectile_visuals=True, shot_undo=False,
                slot=slot, mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
     return ('-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
