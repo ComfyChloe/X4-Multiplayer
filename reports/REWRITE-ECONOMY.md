@@ -312,19 +312,22 @@ sector 0x58, zone 0x6d. Ware ids resolve through the WareDB map *(0x6cf1620) key
 - `msg`: `EconMsg { stamp, time, actor, seen: (offer, version), op: Reserve | Release at owner }`;
   `apply_in_order` applies them in stamp order to the owners' reservation lists (stale decisions become
   `Conflict`, never silently applied) and returns the owners to refresh, once each, first request first.
-- `sector`: `SectorEconomy` + `step_frame` (parallel phase, barrier, refresh of touched owners,
-  snapshot); stations own their reservations; offer refresh and storage are stand-ins (engine price
-  curve and reservation totals, capacity-share target) until 6.3 step 4 and 0x424b90/0x356010/0x420aa0
-  are modelled.
+- `sector` (on x4mp-sim v0.5, merged 03623ab): components `EconStation` (sector-local: times,
+  modules, cargo, capacity, reservations, offer-refresh flag, the station's 'ECON' generator
+  stream) and `EconOffers` (published: other sectors read it from the snapshot); system
+  `economy` (run_sector: catch-up, offer refresh, synthetic demand; barrier: reservations in
+  x4mp-sim total order, then one refresh per touched owner). Offer refresh and storage are
+  stand-ins (engine price curve and reservation totals, capacity-share target) until 6.3 step 4 and
+  0x424b90/0x356010/0x420aa0 are modelled. Ids and the engine generator are x4mp-sim's.
 - `capture`: X4ECON parser, replay (`x4mp-econ-replay`).
 
 Cheap queries for other systems (faction AI): per station `cargo` (sorted ware list), per module `state`,
 `next` (next event time), `factors`, item list; per sector `OfferBook`; galaxy `OfferSnapshot::find`
 (O(offers of that ware)). All are plain data, no engine call.
 
-Fit with x4mp-sim (interfaces.md v0): stations are entities with economy components; `run_sector` =
-`SectorEconomy::run`; cross-sector reservations are `Target::Barrier` messages sorted by our `Stamp`
-(the AI driver provides the original order rank); the offer snapshot is a published per-sector column.
+Fit with x4mp-sim (interfaces.md v0.5, economy section there): stations are entities with economy
+components; cross-sector reservations are `Target::Barrier` messages in x4mp-sim's total order (order
+key, sector, seq; the AI driver can set the original order key); the offers are a published column.
 
 ## 9. Capture and replay (stage 3)
 
