@@ -93,11 +93,23 @@ class FixedTickProbeTests(unittest.TestCase):
           local base=handle.stats
           handle.stats=function(self) local s=base(self);s.walkpar_ready=1;s.walkpar_mode=1
             s.walkpar_frames=60;s.walkpar_sector_ms=8.2;s.walkpar_sector_max_ms=2.04;s.walkpar_deliver_ms=1.1
-            s.walkpar_ideal_speedup=4.02;s.walkpar_posts=120;s.walkpar_posts_imm=90;s.walkpar_deliver_calls=110
-            s.walkpar_deliver_listeners=250;s.walkpar_xsector_listener=3.5;return s end
+            s.walkpar_ideal_speedup=4.02;s.walkpar_posts=120;s.walkpar_posts_imm=90;s.walkpar_posts_rootlevel=5.5
+            s.walkpar_deliver_calls=110;s.walkpar_deliver_listeners=250;s.walkpar_xsector_listener=3.5;return s end
           ui();ui()
           local found
-          for _,l in ipairs(logs) do if l:find('WALKCENSUS mode=census frames=60',1,true) and l:find('speedup=4.02',1,true) then found=true end end
+          for _,l in ipairs(logs) do if l:find('WALKCENSUS mode=census frames=60',1,true) and l:find('speedup=4.02',1,true)
+            and l:find('rootlevel=5.50',1,true) then found=true end end
+          assert(found)
+        ''')
+
+    def test_walkpar_census_speedup_na_without_walkprof(self):
+        self.runtime().execute('''
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.walkpar_mode=1;s.walkpar_frames=30
+            s.walkpar_sector_ms=0;s.walkpar_ideal_speedup=0;s.walkpar_deliver_ms=2.5;return s end
+          ui();ui()
+          local found
+          for _,l in ipairs(logs) do if l:find('WALKCENSUS',1,true) and l:find('speedup=n/a(walkprof)',1,true) then found=true end end
           assert(found)
         ''')
 

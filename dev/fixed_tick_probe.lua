@@ -48,9 +48,12 @@ local function logStats(now)
   DebugError('[X4LAN] FEATURE walkpar DISABLED reason=deferred-event detour signature mismatch')
  end
  if (s.walkpar_frames or 0)>0 then
-  DebugError(string.format('[X4LAN] WALKCENSUS mode=%s frames=%d sectorMs=%.3f sectorMaxMs=%.3f deliverMs=%.3f speedup=%.2f posts=%.1f imm=%.1f cancels=%.1f delivers=%.1f listeners=%.1f xPost=%.2f xList=%.2f creates=%.2f effects=%.2f tempZones=%.2f hits=%.2f cues=%.2f wakes=%.2f',
-   walkparModes[s.walkpar_mode or 0] or '?',s.walkpar_frames,s.walkpar_sector_ms or 0,s.walkpar_sector_max_ms or 0,
-   s.walkpar_deliver_ms or 0,s.walkpar_ideal_speedup or 0,s.walkpar_posts or 0,s.walkpar_posts_imm or 0,
+  -- walkpar no longer times sectors (no Sector::Move body patch); per-sector timing + ideal speedup
+  -- come from the WALKPROF line. Show n/a here when walkpar has no sector data (the native case).
+  local speedup=((s.walkpar_sector_ms or 0)>0) and string.format('%.2f',s.walkpar_ideal_speedup or 0) or 'n/a(walkprof)'
+  DebugError(string.format('[X4LAN] WALKCENSUS mode=%s frames=%d deliverMs=%.3f speedup=%s posts=%.1f imm=%.1f rootlevel=%.2f cancels=%.1f delivers=%.1f listeners=%.1f xPost=%.2f xList=%.2f creates=%.2f effects=%.2f tempZones=%.2f hits=%.2f cues=%.2f wakes=%.2f',
+   walkparModes[s.walkpar_mode or 0] or '?',s.walkpar_frames,
+   s.walkpar_deliver_ms or 0,speedup,s.walkpar_posts or 0,s.walkpar_posts_imm or 0,s.walkpar_posts_rootlevel or 0,
    s.walkpar_cancels or 0,s.walkpar_deliver_calls or 0,s.walkpar_deliver_listeners or 0,s.walkpar_xsector_post or 0,
    s.walkpar_xsector_listener or 0,s.walkpar_creates or 0,s.walkpar_effects or 0,s.walkpar_temp_zones or 0,
    s.walkpar_hits or 0,s.walkpar_cue_runactions or 0,s.walkpar_request_wakes or 0))
