@@ -53,7 +53,13 @@ static uintptr_t fake_client_render(void *self) {
     return 0;
 }
 static uintptr_t fake_camera_render(void *self) { (void)self; ++camera_renders; apply(&camera_fx); return 0; }
-static int game_renders;
+static int game_renders, element_updates;
+static effects element_fx;
+static uintptr_t fake_element_update(void *tree, void *root, uintptr_t time) {
+    assert(tree == (void *)0x298 && root == (void *)0x1000 && (uint32_t)time == 4242);
+    ++element_updates; apply(&element_fx);
+    return 0;
+}
 /* GameRender::Move shape: render banks UI and GameClient through their vtable entries. */
 static uintptr_t fake_game_render(void *self) {
     ++game_renders;
@@ -74,6 +80,7 @@ static void register_component(uint64_t slot, unsigned char *component, uint16_t
 static void reset_counts(void) {
     memset(&walk_fx, 0, sizeof(walk_fx)); memset(&camera_fx, 0, sizeof(camera_fx));
     memset(&render_fx, 0, sizeof(render_fx)); memset(&control_fx, 0, sizeof(control_fx));
+    memset(&element_fx, 0, sizeof(element_fx)); element_updates = 0;
     scene_walks = scene_manager_calls = ui_renders = client_renders = camera_renders = spins = game_renders = 0;
 }
 
@@ -92,6 +99,18 @@ static void setup_engine(void) {
     void *fakes[VS_COUNT] = {(void *)fake_scene_manager, (void *)fake_scene_walk, (void *)fake_ui_render,
                              (void *)fake_client_render, (void *)fake_camera_render, (void *)fake_game_render};
     for (int k = 0; k < VS_COUNT; ++k) { stub(x4_framediet_vtables[k].fn, fakes[k]); *entry_of(k) = fn_of(k); }
+    /* The presentation update's call of the element update: sub rsp,0x28; call rel32; add rsp,0x28; ret,
+       with the E8 exactly at ELEMENT_CALL_RVA, and the "engine function" at ELEMENT_FN_RVA. */
+    {
+        unsigned char *c = image + ELEMENT_CALL_RVA - 4;
+        const unsigned char pro[] = {0x48, 0x83, 0xec, 0x28}, epi[] = {0x48, 0x83, 0xc4, 0x28, 0xc3};
+        memcpy(c, pro, 4);
+        c[4] = 0xe8;
+        int32_t rel = (int32_t)(ELEMENT_FN_RVA - (ELEMENT_CALL_RVA + 5));
+        memcpy(c + 5, &rel, 4);
+        memcpy(c + 9, epi, 5);
+        stub(ELEMENT_FN_RVA, (void *)fake_element_update);
+    }
     FlushInstructionCache(GetCurrentProcess(), image, X4_IMAGE_SIZE);
     *(uint64_t *)(image + RENDER_FLAGS_RVA) = 0x20;          /* noshadows */
     *(uint64_t *)(image + RENDER_FLAGS_STAGED_RVA) = 0x20;
@@ -119,12 +138,19 @@ static void disarm_all(void) {
     fd_current = NULL;
 }
 
-/* One MoveWorker frame: slot 2 guard, slot 6 scene update, slot 10 GameRender::Move (UI and camera banks). */
+static void presentation_update(void) {
+    ((fd_fn3)(void *)(image + ELEMENT_CALL_RVA - 4))((void *)0x298, (void *)0x1000, 4242);
+}
+
+/* One MoveWorker frame: slot 2 guard, slot 6 element update + scene update, slot 10 GameRender::Move. */
 static void frame(void) {
     fd_slot_move(&fd_hook);
+    presentation_update();
     ((fd_fn1)*entry_of(VS_SCENE_MANAGER))(NULL);
     ((fd_fn1)*entry_of(VS_GAME_RENDER))(NULL);
 }
+
+static int32_t call_rel_now(void) { int32_t r; memcpy(&r, image + ELEMENT_CALL_RVA + 1, 4); return r; }
 
 static volatile LONG other_done;
 static DWORD WINAPI other_thread_frame(LPVOID unused) {
@@ -151,6 +177,7 @@ int main(void) {
         assert(parse_sites("ui_scenes,camera", &s) && s == (FD_UI_SCENES | FD_CAMERA));
         assert(parse_sites("all", &s) && s == FD_ALL);
         assert(parse_sites("all,rng_split", &s) && s == (FD_ALL | FD_RNG_SPLIT));
+        assert(parse_sites("ui_elements", &s) && s == FD_UI_ELEMENTS);
         assert(parse_sites("", &s) && s == 0);
         assert(!parse_sites("ui_scene", &s) && !parse_sites("draw,bogus", &s));
         assert(parse_mode("diet", &m) && m == FD_DIET && parse_mode("pass", &m) && m == FD_PASS);
@@ -375,6 +402,44 @@ int main(void) {
     }
     disarm_all();
     puts("PASS: rng_split keeps view-dependent slot 10 draws off the simulation stream");
+
+    /* ui_elements: the E8 rel32 is retargeted to a near stub, skipped in diet, audited, restored. */
+    setup_engine();
+    {
+        int32_t original = call_rel_now();
+        assert(!arm(FD_DIET, FD_UI_ELEMENTS, 0, 0, 0));
+        assert(fd_call_patched && call_rel_now() != original && fd_stub_page);
+        unsigned char *target = image + ELEMENT_CALL_RVA + 5 + call_rel_now();
+        assert(target == fd_stub_page);
+        for (int f = 0; f < 5; ++f) frame();
+        assert(element_updates == 0 && fd_state.st[ST_UI_ELEMENTS].skipped == 5);
+        fd_state.mode = FD_PASS;
+        frame();
+        assert(element_updates == 1 && fd_state.st[ST_UI_ELEMENTS].passed == 1);   /* args preserved */
+        fd_state.mode = FD_AUDIT;
+        element_fx.rng_steps = 3;
+        frame();
+        assert(element_updates == 2 && fd_state.st[ST_UI_ELEMENTS].rng_steps == 3);
+        disarm_all();
+        assert(!fd_call_patched && call_rel_now() == original);
+        presentation_update();
+        assert(element_updates == 3);   /* original call again */
+        /* A foreign retarget is detected at the next frame and left alone. */
+        assert(!arm(FD_DIET, FD_UI_ELEMENTS, 0, 0, 0));
+        int32_t foreign = original + 16;
+        memcpy(image + ELEMENT_CALL_RVA + 1, &foreign, 4);
+        fd_slot_move(&fd_hook);
+        assert(!fd_state.armed && !strcmp(fd_state.reason, "element update call changed"));
+        assert(call_rel_now() == foreign);
+        fd_current = NULL;
+        memcpy(image + ELEMENT_CALL_RVA + 1, &original, 4);
+        /* A call site that no longer targets the element update refuses arming; nothing changes. */
+        image[ELEMENT_CALL_RVA] = 0xe9;
+        assert(!strcmp(arm(FD_DIET, FD_UI_ELEMENTS | FD_UI_SCENES, 0, 0, 0), "element update call site changed"));
+        assert(!fd_current && !fake_table[VBI_SLOT] && *entry_of(VS_SCENE_WALK) == fn_of(VS_SCENE_WALK));
+        image[ELEMENT_CALL_RVA] = 0xe8;
+    }
+    puts("PASS: ui_elements call-site patch: near stub, skip/pass/audit, restore, foreign value kept, refusal");
 
     /* Histogram summary orders by count and lists at most six words. */
     {

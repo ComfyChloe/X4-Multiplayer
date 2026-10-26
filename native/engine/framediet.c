@@ -23,6 +23,12 @@
  *   draw       RenderFlags bit disable_rendering (0x8000000 of qword 0x6adfa30 and its staged
  *              copy 0x6adfa38), an engine debug flag tested only by the main thread's
  *              RenderPreviousFrame (0xfa007a). Main thread / GPU only, no MoveWorker effect.
+ *   ui_elements  the Anark element tree update 0x1399c40 (~1.9 ms/frame): a direct call at 0x138f477 inside
+ *              0x138f2c0, whose caller also runs the per-frame Lua dispatch, so the call itself is
+ *              retargeted (CODE PATCH: the 4-byte rel32 of that E8, verified against the original
+ *              target, compare-exchanged, re-verified every frame, restored on disarm) to a near stub
+ *              that jumps to our wrapper. Opt-in: UI animations and attribute propagation stall
+ *              (UI only); `period` lets them run every Nth frame.
  *   rng_split  GameRender::Move (VBI slot 10, 0x121c1f0) runs with its own thread-RNG state: the
  *              MoveWorker's TLS+0x318 is swapped with a private render stream around the call, so
  *              view-dependent draws of the render walk never reach the simulation stream. Applies
@@ -94,11 +100,12 @@ API(void *, luaL_checkudata, (lua_State *, int, const char *));
 #define RNG_STEP_BOUND 65536u
 #define HISTOGRAM_WORDS (COMPONENT_WINDOW / 8)
 
-enum { FD_UI_SCENES = 1, FD_UI_RENDER = 2, FD_CAMERA = 4, FD_DRAW = 8, FD_RNG_SPLIT = 16, FD_ALL = 15 };
+enum { FD_UI_SCENES = 1, FD_UI_RENDER = 2, FD_CAMERA = 4, FD_DRAW = 8, FD_RNG_SPLIT = 16, FD_UI_ELEMENTS = 32,
+       FD_ALL = 15 };
 enum { FD_PASS = 0, FD_DIET = 1, FD_AUDIT = 2 };
 /* Statistics rows: the three MoveWorker regions plus the control window. */
-enum { ST_UI_SCENES, ST_UI_RENDER, ST_CAMERA, ST_CONTROL, ST_COUNT };
-static const char *const st_names[ST_COUNT] = {"ui_scenes", "ui_render", "camera", "control"};
+enum { ST_UI_SCENES, ST_UI_RENDER, ST_CAMERA, ST_UI_ELEMENTS, ST_CONTROL, ST_COUNT };
+static const char *const st_names[ST_COUNT] = {"ui_scenes", "ui_render", "camera", "ui_elements", "control"};
 /* Wrapped virtuals, in x4_framediet_vtables order (signatures.py FRAMEDIET_VTABLE_ENTRIES). */
 enum { VS_SCENE_MANAGER, VS_SCENE_WALK, VS_UI_RENDER, VS_CLIENT_RENDER, VS_CAMERA_RENDER, VS_GAME_RENDER, VS_COUNT };
 static const int vs_site[VS_COUNT] = {FD_UI_SCENES, FD_UI_SCENES, FD_UI_RENDER, FD_CAMERA, FD_CAMERA, FD_RNG_SPLIT};
@@ -131,6 +138,15 @@ typedef struct { uint64_t generation; } fd_handle;
 typedef struct { void **vtable; } fd_handler;
 typedef uintptr_t (*fd_fn1)(void *);
 typedef uintptr_t (*fd_fn2)(void *, void *);
+typedef uintptr_t (*fd_fn3)(void *, void *, uintptr_t);
+
+/* ui_elements call-site patch (0x138f477: E8 rel32 -> 0x1399c40). */
+#define ELEMENT_CALL_RVA 0x138f477u
+#define ELEMENT_FN_RVA 0x1399c40u
+#define STUB_PAGE 4096
+static unsigned char *fd_stub_page;      /* RX page within rel32 reach of the call site; never freed */
+static int32_t fd_call_original_rel, fd_call_hook_rel;
+static int fd_call_patched;
 
 static unsigned char *image;
 static fd_owner fd_state;          /* last owner's state, kept for stats() after stop */
@@ -294,7 +310,26 @@ static int write_entry(void **entry, void *expected, void *value) {
     return ok;
 }
 
+static volatile LONG *call_rel(void) { return (volatile LONG *)(image + ELEMENT_CALL_RVA + 1); }
+
+static int write_rel(LONG expected, LONG value) {
+    DWORD protection, ignored;
+    void *at = (void *)call_rel();
+    if (!VirtualProtect(at, 4, PAGE_EXECUTE_READWRITE, &protection)) return 0;
+    int ok = InterlockedCompareExchange(call_rel(), value, expected) == expected;
+    VirtualProtect(at, 4, protection, &ignored);
+    FlushInstructionCache(GetCurrentProcess(), at, 4);
+    return ok;
+}
+
+static void fd_call_restore(void) {
+    if (!fd_call_patched) return;
+    if (*call_rel() == fd_call_hook_rel) write_rel(fd_call_hook_rel, fd_call_original_rel);
+    fd_call_patched = 0;   /* a foreign value is left alone (fail closed: never overwrite it) */
+}
+
 static void fd_uninstall(void) {
+    fd_call_restore();
     for (int k = 0; k < VS_COUNT; ++k)
         if (fd_entry[k] && fd_orig[k] && *fd_entry[k] == fd_wrapper[k])
             write_entry(fd_entry[k], fd_wrapper[k], fd_orig[k]);
@@ -560,6 +595,70 @@ static uintptr_t fd_camera_render(void *self) {
     return original(self);
 }
 
+/* Target of the near stub at the element update call site (0x138f477): (tree, root, time). */
+static uintptr_t fd_element_update(void *tree, void *root, uintptr_t time) {
+    fd_fn3 original = (fd_fn3)(void *)(image + ELEMENT_FN_RVA);
+    fd_owner *o = fd_engaged_owner();
+    uintptr_t r;
+    if (!o) return original(tree, root, time);
+    fd_stats *s = &o->st[ST_UI_ELEMENTS];
+    ++s->calls;
+    if (fd_skipping(o, FD_UI_ELEMENTS)) { ++s->skipped; return 0; }
+    ++s->passed;
+    if (fd_auditing(o, FD_UI_ELEMENTS)) { AUDITED(o, ST_UI_ELEMENTS, r = original(tree, root, time)); return r; }
+    return original(tree, root, time);
+}
+
+/* A free 64 KiB-aligned page within rel32 reach of `site`, scanning outwards from it. */
+static unsigned char *fd_alloc_near(const unsigned char *site) {
+    SYSTEM_INFO info;
+    GetSystemInfo(&info);
+    uintptr_t gran = info.dwAllocationGranularity ? info.dwAllocationGranularity : 0x10000;
+    const uintptr_t reach = 0x7fff0000u;
+    uintptr_t at = (uintptr_t)site;
+    for (uintptr_t d = gran; d < reach; d += gran) {
+        for (int side = 0; side < 2; ++side) {
+            uintptr_t c = side ? ((at + d) & ~(gran - 1)) : (((at > d) ? at - d : 0) & ~(gran - 1));
+            if (!c) continue;
+            MEMORY_BASIC_INFORMATION m;
+            if (!VirtualQuery((void *)c, &m, sizeof(m)) || m.State != MEM_FREE) continue;
+            void *p = VirtualAlloc((void *)c, STUB_PAGE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            if (!p) continue;
+            intptr_t lo = (intptr_t)p - (intptr_t)(site + 5), hi = lo + 16;
+            if (lo == (int32_t)lo && hi == (int32_t)hi) return p;
+            VirtualFree(p, 0, MEM_RELEASE);
+        }
+    }
+    return NULL;
+}
+
+/* Verify the E8 rel32 still targets the element update, build the stub, retarget the call. */
+static const char *fd_call_install(void) {
+    unsigned char *site = image + ELEMENT_CALL_RVA;
+    if (!readable(site, 5, 0) || site[0] != 0xe8) return "element update call site changed";
+    int32_t rel;
+    memcpy(&rel, site + 1, 4);
+    if (site + 5 + rel != image + ELEMENT_FN_RVA) return "element update call site changed";
+    if (!fd_stub_page) {
+        unsigned char *page = fd_alloc_near(site);
+        if (!page) return "no stub page within rel32 reach";
+        void *target = (void *)fd_element_update;
+        memset(page, 0xcc, STUB_PAGE);
+        page[0] = 0x48; page[1] = 0xb8;           /* movabs rax, fd_element_update */
+        memcpy(page + 2, &target, 8);
+        page[10] = 0xff; page[11] = 0xe0;         /* jmp rax (rax is volatile, not an argument) */
+        DWORD old;
+        if (!VirtualProtect(page, STUB_PAGE, PAGE_EXECUTE_READ, &old)) return "stub page protection failed";
+        FlushInstructionCache(GetCurrentProcess(), page, STUB_PAGE);
+        fd_stub_page = page;
+    }
+    fd_call_original_rel = rel;
+    fd_call_hook_rel = (int32_t)((intptr_t)fd_stub_page - (intptr_t)(site + 5));
+    if (!write_rel(fd_call_original_rel, fd_call_hook_rel)) return "element update call patch failed";
+    fd_call_patched = 1;
+    return NULL;
+}
+
 /* GameRender::Move (VBI slot 10): with rng_split, the whole slot runs on the private render stream. */
 static uintptr_t fd_game_render(void *self) {
     fd_fn1 original = (fd_fn1)fd_orig[VS_GAME_RENDER];
@@ -589,6 +688,7 @@ static void fd_slot_move(fd_handler *self) {
     if (GetCurrentThreadId() != fd_thread || !fd_table_owned()) { fd_disarm("callback ownership lost"); return; }
     for (int k = 0; k < VS_COUNT; ++k)
         if (fd_entry[k] && *fd_entry[k] != fd_wrapper[k]) { fd_disarm("vtable entry changed"); return; }
+    if (fd_call_patched && *call_rel() != fd_call_hook_rel) { fd_disarm("element update call changed"); return; }
     fd_ctx_scenes = fd_ctx_camera = 0;
     if (fd_loading()) { ++o->loading_frames; fd_digest_row = -1; fd_frame_valid = 0; return; }
     ++o->frames;
@@ -619,6 +719,7 @@ static void fd_slot_move(fd_handler *self) {
     if (o->sites & FD_UI_SCENES) rows[n++] = ST_UI_SCENES;
     if (o->sites & FD_UI_RENDER) rows[n++] = ST_UI_RENDER;
     if (o->sites & FD_CAMERA) rows[n++] = ST_CAMERA;
+    if (o->sites & FD_UI_ELEMENTS) rows[n++] = ST_UI_ELEMENTS;
     rows[n++] = ST_CONTROL;
     int row = rows[fd_rotation++ % (unsigned)n];
     if (row != ST_CONTROL) { fd_digest_row = row; return; }
@@ -673,6 +774,7 @@ static int parse_sites(const char *text, int *out) {
         else if (n == 6 && !strncmp(p, "camera", n)) sites |= FD_CAMERA;
         else if (n == 4 && !strncmp(p, "draw", n)) sites |= FD_DRAW;
         else if (n == 9 && !strncmp(p, "rng_split", n)) sites |= FD_RNG_SPLIT;
+        else if (n == 11 && !strncmp(p, "ui_elements", n)) sites |= FD_UI_ELEMENTS;
         else if (n == 6 && !strncmp(p, "server", n)) sites |= FD_UI_SCENES | FD_DRAW;   /* behaviour-identical set */
         else if (n == 3 && !strncmp(p, "all", n)) sites |= FD_ALL;
         else if (n) return 0;
@@ -754,6 +856,16 @@ static const char *fd_arm(uint64_t generation, int mode, int sites, int period, 
         o->generation = 0;
         return "vtable entry is not the verified original";
     }
+    if (sites & FD_UI_ELEMENTS) {
+        const char *why = fd_call_install();
+        if (why) {
+            fd_uninstall();
+            InterlockedCompareExchangePointer((void *volatile *)&table[VBI_SLOT], NULL, &fd_hook);
+            fd_current = NULL;
+            o->generation = 0;
+            return why;
+        }
+    }
     o->installed = 1;
     o->armed = 1;
     return NULL;
@@ -813,7 +925,7 @@ static int set(lua_State *L) {
     if (top < 2 || p_lua_type(L, 2) != LUA_TSTRING || !parse_mode(p_lua_tolstring(L, 2, NULL), &mode))
         return failure(L, "unsupported mode");
     if (top >= 3 && p_lua_type(L, 3) != LUA_TNIL) {
-        int installed = FD_DRAW;
+        int installed = FD_DRAW | (fd_call_patched ? FD_UI_ELEMENTS : 0);
         for (int k = 0; k < VS_COUNT; ++k) if (fd_entry[k]) installed |= vs_site[k];
         if (p_lua_type(L, 3) != LUA_TSTRING || !parse_sites(p_lua_tolstring(L, 3, NULL), &sites))
             return failure(L, "unsupported sites");

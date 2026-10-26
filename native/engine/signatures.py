@@ -70,6 +70,11 @@ FRAMEDIET_SITES = {
     'fd_id_map_find': (0xCED70, 64, '99aa931616db6c9f92574b2408563aa3b9f09a452bc5456ce0ec25fa8a9bb9cf'),
     'fd_event_list_push': (0x998430, 112, '39da624a9f2bca0707dfbc5475e3f31b9eb4128a899171b51a165d4b306d29d3'),
     'fd_random_float_state': (0x14DDC90, 24, '99b587b2e3a3e175da228cdcadc902b715ec9fb81f048af19e0d4d7c10afb519'),
+    # ui_elements: 0x138f2c0 prologue, the element update call (lea rcx,[rdi+0x298] .. E8 rel32 at 0x138f477)
+    # and the element update itself.
+    'fd_presentation_update': (0x138F2C0, 32, '15a932ce611ce2558ab3a3542ad052a0a1e75f2000cdfd134fca95fe0719844a'),
+    'fd_element_update_call': (0x138F455, 39, '343e65ce1b29576faeaf537b44007640b990e598d048ba818992c02ef5964338'),
+    'fd_element_update': (0x1399C40, 32, 'f1dab7026e2d9766968166e135e63c22eed0c04179c72b04c4a692f7a2fa9ce7'),
     # GameRender::Move (VBI slot 10 handler): render banks, then the 0x6adfc30 release tail.
     'fd_game_render_move': (0x121C1F0, 106, '5d20ad384ae9ce74bb15625b923fd33638ad20d3f9e553c5d9cb7d264b20ed6f'),
 }
