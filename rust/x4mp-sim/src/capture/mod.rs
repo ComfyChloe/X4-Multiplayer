@@ -34,10 +34,12 @@ use std::fmt;
 pub mod check;
 pub mod mirror;
 pub mod read;
+pub mod replay;
 pub mod write;
 
 pub use mirror::{capture_universe, mirror, MirrorReport};
 pub use read::CaptureReader;
+pub use replay::{replay_frames, CaptureReplayReport, ReplaySetup};
 pub use write::CaptureWriter;
 
 pub const MAGIC: [u8; 8] = *b"X4MPCAP\0";

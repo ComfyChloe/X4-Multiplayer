@@ -85,6 +85,15 @@ impl std::fmt::Display for StructError {
 
 impl std::error::Error for StructError {}
 
+/// Options of [`World::compare_with`].
+#[derive(Debug, Clone, Copy)]
+pub struct CompareOpts<'a> {
+    /// Column names to compare (all when empty).
+    pub columns: &'a [&'a str],
+    /// Report missing/extra entities and row-order differences.
+    pub structure: bool,
+}
+
 /// Marker row for staged (not yet committed) entities in the IdMap.
 pub(crate) const STAGED_ROW: u32 = u32::MAX;
 
@@ -511,19 +520,36 @@ impl World {
     /// and extra entities and order differences are structural differences; every column
     /// present in both worlds (and selected by `columns`, all when empty) is compared row-wise.
     pub fn compare(&self, actual: &World, columns: &[&str], frame: u64, c: &mut Comparator) {
+        self.compare_with(actual, &CompareOpts { columns, structure: true }, frame, c);
+    }
+
+    /// [`World::compare`] with options: `structure: false` compares only the entities present
+    /// in both worlds and reports no missing/extra/order differences (replaying a system that
+    /// does not create or destroy entities against engine frames that do).
+    pub fn compare_with(&self, actual: &World, opts: &CompareOpts<'_>, frame: u64, c: &mut Comparator) {
         use crate::shadow::At;
-        c.set_at(At { frame, sector: Some(self.ix), entity: UniverseId::NONE });
+        let at = |entity| At { frame, sector: Some(self.ix), entity };
         let mut index = crate::id::IdHashMap::default();
         for (r, u) in actual.uids.iter().enumerate() {
             index.insert(*u, r);
         }
+        // Column pairs once per world, not per row.
+        let pairs: Vec<(usize, usize)> = self
+            .columns
+            .iter()
+            .enumerate()
+            .filter(|(_, col)| opts.columns.is_empty() || opts.columns.contains(&col.name()))
+            .filter_map(|(ci, _)| actual.column_index(self.types[ci]).map(|aci| (ci, aci)))
+            .collect();
         let mut matched = 0usize;
         let mut last_actual_row: Option<usize> = None;
         let mut order_ok = true;
         for (row, uid) in self.uids.iter().enumerate() {
-            c.set_at(At { frame, sector: Some(self.ix), entity: *uid });
+            c.set_at(at(*uid));
             let Some(&arow) = index.get(uid) else {
-                c.structural("entity", format!("present (row {row})"), "missing".into());
+                if opts.structure {
+                    c.structural("entity", format!("present (row {row})"), "missing".into());
+                }
                 continue;
             };
             matched += 1;
@@ -531,26 +557,24 @@ impl World {
                 order_ok = false;
             }
             last_actual_row = Some(arow);
-            for (ci, col) in self.columns.iter().enumerate() {
-                if !columns.is_empty() && !columns.contains(&col.name()) {
-                    continue;
-                }
-                if let Some(aci) = actual.column_index(self.types[ci]) {
-                    col.compare_row(row, actual.columns[aci].as_ref(), arow, c);
-                }
+            for &(ci, aci) in &pairs {
+                self.columns[ci].compare_row(row, actual.columns[aci].as_ref(), arow, c);
             }
         }
-        c.set_at(At { frame, sector: Some(self.ix), entity: UniverseId::NONE });
-        if matched != actual.uids.len() {
-            for uid in actual.uids.iter().filter(|u| !self.uids.contains(u)) {
-                c.set_at(At { frame, sector: Some(self.ix), entity: *uid });
-                c.structural("entity", "absent".into(), "extra".into());
+        if opts.structure {
+            if matched != actual.uids.len() {
+                let mine: std::collections::HashSet<UniverseId> = self.uids.iter().copied().collect();
+                for uid in actual.uids.iter().filter(|u| !mine.contains(u)) {
+                    c.set_at(at(*uid));
+                    c.structural("entity", "absent".into(), "extra".into());
+                }
+            }
+            if !order_ok {
+                c.set_at(at(UniverseId::NONE));
+                c.structural("order", "tree order".into(), "different row order".into());
             }
         }
-        c.set_at(At { frame, sector: Some(self.ix), entity: UniverseId::NONE });
-        if !order_ok {
-            c.structural("order", "tree order".into(), "different row order".into());
-        }
+        c.set_at(at(UniverseId::NONE));
     }
 
     /// Verifies the module invariants against the IdMap (tests, debugging).

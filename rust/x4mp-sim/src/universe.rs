@@ -507,6 +507,17 @@ impl Universe {
 
     /// Compares this (expected) universe with `actual` sector by sector.
     pub fn compare(&self, actual: &Universe, columns: &[&str], frame: u64, c: &mut Comparator) {
+        self.compare_with(actual, &crate::world::CompareOpts { columns, structure: true }, frame, c);
+    }
+
+    /// [`Universe::compare`] with options (see [`World::compare_with`]).
+    pub fn compare_with(
+        &self,
+        actual: &Universe,
+        opts: &crate::world::CompareOpts<'_>,
+        frame: u64,
+        c: &mut Comparator,
+    ) {
         if self.worlds.len() != actual.worlds.len() {
             c.structural("sectors", self.worlds.len().to_string(), actual.worlds.len().to_string());
         }
@@ -515,7 +526,7 @@ impl Universe {
                 c.structural("sector_uid", e.root_uid().to_string(), a.root_uid().to_string());
                 continue;
             }
-            e.compare(a, columns, frame, c);
+            e.compare_with(a, opts, frame, c);
         }
     }
 }
