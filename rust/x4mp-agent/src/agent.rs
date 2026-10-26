@@ -260,6 +260,7 @@ fn frame() -> Result<(), Disarm> {
     SPEED.store(speed.to_bits(), Ordering::Relaxed);
     TLS_DT.store(dt.to_bits(), Ordering::Relaxed);
     PAUSED.store(paused, Ordering::Relaxed);
+    crate::forkprobe::on_frame();
     let sample = FrameSample { frame, game_time, real_time, speed, tls_dt: dt, paused, monotonic_ns: now };
     export::on_frame(&sample).map_err(|_| Disarm::ExportFailed)
 }
@@ -432,8 +433,28 @@ fn worker(config: Config) {
     }
     let mut prev = snapshot();
     let mut prev_at = Instant::now();
+    let fork_trigger = {
+        let mut name = config.log.clone().into_os_string();
+        name.push(".fork");
+        std::path::PathBuf::from(name)
+    };
+    let mut fork_reporter = crate::forkprobe::Reporter::default();
+    log.line(&format!("X4MP_AGENT FORKPROBE ready trigger={}", fork_trigger.display()));
     loop {
         std::thread::sleep(Duration::from_millis(config.cadence_ms));
+        if let Ok(text) = fs::read_to_string(&fork_trigger) {
+            let _ = fs::remove_file(&fork_trigger);
+            match crate::forkprobe::parse_count(&text) {
+                Some(count) => {
+                    crate::forkprobe::request(count);
+                    log.line(&format!("X4MP_AGENT FORKPROBE requested count={count}"));
+                }
+                None => log.line("X4MP_AGENT FORKPROBE refused trigger (expected 1..1000)"),
+            }
+        }
+        for line in fork_reporter.poll() {
+            log.line(&line);
+        }
         if config.disarm_file.exists() {
             disarm(Disarm::DisarmFile);
         }
