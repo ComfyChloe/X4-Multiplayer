@@ -314,6 +314,27 @@ of MoveWorker (400: 13.17%). It has no AIPROF markers or bucket census, and incl
 not the same metric as phase/slot-loop share. It is a candidate for a future direct 800-ship AI census
 to revisit the optimization gate, not grounds to promote threaded execution now.
 
+### Native hash coverage diagnostic, 26 October 03:51
+
+`codex-hash-coverage` completed 03:50:42 on released lane b2, collection pass, graceful close and
+restoration. This was the sole additional Codex native run; it began after the existing chain finished.
+Frozen overlay source `26472be` (code `09c504e`), manifest `.local/evidence-070-withheld`;
+evidence `.local/evidence-078-withheld`. The run used compare mode without walkpar, had no
+timing claim, and left no AI-driver lane or waiter running.
+
+Direct coverage counts confirm the gap: 2,685 driver frames, all with zero hashed contexts and zero
+hashed wake-vector contexts; 0/63 final-window samples nonempty. Every reported hash was unavailable.
+The observed AI runs and event/wake activity continued normally, so this is not an idle/no-script
+control. Zero preflight refusals, bad callers or loop warnings. This verifies the new coverage
+diagnostics and invalidates the old constant hash as an AI-equivalence indicator. It does not repair
+live-context enumeration. The same run reports 23 event/wake-dirty passes and 2,979 RNG-order-inverted
+passes out of 12,329, plus nine passes too large for the null scan; these remain semantic limits.
+
+Next work: identify a complete context source or capture original per-context decisions, investigate
+the bursty foreign-event A/B difference, and run a direct 800-ship census if prioritization needs it.
+Any native joint walk integration must use the walk owner's later ABI fixes, not the earlier synthetic
+test snapshot. No per-entity RNG policy, gameplay authority or thread rewrite was approved here.
+
 ### Codex continuation, 26 October 03:13
 
 `s1-alt-idle` completed natively at 03:12:02 using the already-frozen `probe-s1b` overlay
