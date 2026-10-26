@@ -323,6 +323,25 @@ fn nan_times_are_rejected() {
 }
 
 #[test]
+fn incomplete_or_cross_station_records_are_rejected() {
+    let text = synthetic_capture();
+    let lines: Vec<&str> = text.lines().collect();
+    let first_module = lines.iter().position(|l| l.starts_with("M ")).unwrap();
+    let missing: Vec<&str> = lines.iter().enumerate().filter_map(|(i, &l)| (i != first_module).then_some(l)).collect();
+    assert!(Capture::parse(&missing.join("\n")).unwrap_err().msg.contains("incomplete station"));
+    // EOF midway through a station is just as invalid as a gap before the next station.
+    assert!(Capture::parse(&lines[..=first_module].join("\n")).unwrap_err().msg.contains("incomplete station"));
+    let mut duplicate = lines.clone();
+    duplicate[first_module + 1] = duplicate[first_module];
+    assert!(Capture::parse(&duplicate.join("\n")).unwrap_err().msg.contains("duplicate module"));
+
+    let prefix = "X4ECON 1 build=23660954\nW ore 10\nF 1 1 0\nC 0x5 1 -1 -1 0 0 0\n";
+    for wrong in ["S 0x6 0x100 100 0 0", "A 0x6 1 0", "O 0x6 0 1 0 0 0 1 0 1 100 0", "V 0x6 1 1 0 0 1 1"] {
+        assert!(Capture::parse(&format!("{prefix}{wrong}\n")).unwrap_err().msg.contains("station id"));
+    }
+}
+
+#[test]
 fn offer_and_reservation_records_parse() {
     let text = "X4ECON 1 build=23660954
 W refinedmetals 0

@@ -210,6 +210,7 @@ impl Capture {
     pub fn parse(text: &str) -> Result<Capture, ParseError> {
         let mut cap = Capture::default();
         let mut header = false;
+        let mut expected_modules: Option<(u64, usize)> = None;
         // Records embedded in an X4 debug log or stdout follow a "[X4LAN] ECONCAP " prefix; in
         // such a file every other line is log text and skipped.
         let embedded = text.contains("ECONCAP ");
@@ -225,6 +226,10 @@ impl Capture {
             };
             let mut t = Tok { it: line.split_whitespace(), line: ln + 1 };
             let kind = t.next()?;
+            if matches!(kind, "C" | "F" | "X4ECON") {
+                check_module_count(&cap, expected_modules)?;
+                expected_modules = None;
+            }
             match kind {
                 "X4ECON" => {
                     if t.u64()? != 1 {
@@ -283,7 +288,7 @@ impl Capture {
                     let a28 = t.f64()?;
                     let a30 = t.f64()?;
                     let a4c = t.bool()?;
-                    let _n = t.u64()?;
+                    let n = t.u64()?;
                     let cargo = t.list()?;
                     fr.stations.push(StationRecord {
                         uid,
@@ -295,11 +300,14 @@ impl Capture {
                         allocation: None,
                         storage: Vec::new(),
                     });
+                    expected_modules = Some((n, ln + 1));
                 }
                 "S" => {
                     let fr = cap.frames.last_mut().ok_or_else(|| t.err("S before F"))?;
                     let st = fr.stations.last_mut().ok_or_else(|| t.err("S before C"))?;
-                    let _uid = t.u64()?;
+                    if t.u64()? != st.uid {
+                        return Err(t.err("S station id differs from C"));
+                    }
                     let addr = t.u64()?;
                     let capacity = t.i32()?;
                     let n = t.u64()? as usize;
@@ -313,7 +321,9 @@ impl Capture {
                 "A" => {
                     let fr = cap.frames.last_mut().ok_or_else(|| t.err("A before F"))?;
                     let st = fr.stations.last_mut().ok_or_else(|| t.err("A before C"))?;
-                    let _uid = t.u64()?;
+                    if t.u64()? != st.uid {
+                        return Err(t.err("A station id differs from C"));
+                    }
                     let valid = t.bool()?;
                     let amounts = t.list()?;
                     st.allocation = Some(Allocation { valid, amounts });
@@ -321,7 +331,9 @@ impl Capture {
                 "O" => {
                     let fr = cap.frames.last_mut().ok_or_else(|| t.err("O before F"))?;
                     let st = fr.stations.last_mut().ok_or_else(|| t.err("O before C"))?;
-                    let _uid = t.u64()?;
+                    if t.u64()? != st.uid {
+                        return Err(t.err("O station id differs from C"));
+                    }
                     let list = t.u64()? as u8;
                     let trade = t.u64()?;
                     let w = t.next()?;
@@ -350,7 +362,9 @@ impl Capture {
                 "V" => {
                     let fr = cap.frames.last_mut().ok_or_else(|| t.err("V before F"))?;
                     let st = fr.stations.last_mut().ok_or_else(|| t.err("V before C"))?;
-                    let _uid = t.u64()?;
+                    if t.u64()? != st.uid {
+                        return Err(t.err("V station id differs from C"));
+                    }
                     let word = t.u64()? as u32;
                     let reserver = t.u64()?;
                     let order = t.u64()?;
@@ -376,6 +390,9 @@ impl Capture {
                     let st = fr.stations.last_mut().ok_or_else(|| t.err("M before C"))?;
                     let uid = t.u64()?;
                     let addr = t.u64()?;
+                    if st.modules.iter().any(|(id, m)| *id == uid || m.addr == addr) {
+                        return Err(t.err("duplicate module identity/address"));
+                    }
                     let functional = t.bool()?;
                     let raw = t.i32()?;
                     let state = State::from_raw(raw).ok_or_else(|| t.err("unknown production state"))?;
@@ -440,8 +457,22 @@ impl Capture {
         if !header {
             return Err(ParseError { line: 0, msg: "no X4ECON header".into() });
         }
+        check_module_count(&cap, expected_modules)?;
         Ok(cap)
     }
+}
+
+fn check_module_count(cap: &Capture, expected: Option<(u64, usize)>) -> Result<(), ParseError> {
+    if let Some((expected, line)) = expected {
+        let actual = cap.frames.last().and_then(|f| f.stations.last()).map_or(0, |s| s.modules.len());
+        if actual as u64 != expected {
+            return Err(ParseError {
+                line,
+                msg: format!("incomplete station: C declares {expected} modules but {actual} M records found"),
+            });
+        }
+    }
+    Ok(())
 }
 
 /// Environment for replaying one catch-up: the earlier record's cargo, unlimited storage,

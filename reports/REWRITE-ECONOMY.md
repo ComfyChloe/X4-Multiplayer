@@ -398,6 +398,13 @@ captures preserves the previous counts: lab4 1722 transitions / 172 mismatches; 
 896 / 1. These remain failed captures, not native acceptance. The replay now identifies
 container time differences directly instead of misleadingly reporting equal module counts.
 
+Capture integrity is also checked before replay: each station must contain the number of
+module records its `C` record declares, including at EOF; module IDs/addresses cannot repeat;
+and storage/allocation/offer/reservation records must name their enclosing station. Synthetic
+deleted/truncated/duplicate/cross-station records are rejected. The suite is now 19 unit,
+10 replay and 1 thread-invariance tests; both old native logs still parse and retain the same
+failed replay counts.
+
 1. `stress4` (lane, simprof profile mode + econcap of 12 clones, ~12 min; `stress3` was stopped): economy share with working
    station traders; offers and reservations of trading stations for 6.2/6.3.
 2. `lab3` (lane, probe mode + econcap, ~12 min): production capture; the replay must report 0 mismatches.
