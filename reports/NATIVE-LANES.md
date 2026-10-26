@@ -4,8 +4,9 @@ Owner: lane agent, branch `contrib/ferrite-rw-lane` (rewrite program, see `REWRI
 Own files: `dev/x4lane.py`, `dev/lane/`, this report, `C:\Users\developer\Documents\X4Mods\lanes\`,
 profiles 45850/45851/45853/45854. Live usage notes for the other agents: `rewrite-coord\native-lane.md`.
 
-Status: single-lane runs READY, validated natively on 26 October 2026 (see "Validation"); session
-mode, queue, stop, doctor and stall detection offline-tested, native validation pending. Evidence
+Status: single-lane runs, two-client sessions and deliberate-hang stall detection validated
+natively on 26 October 2026 (see "Validation"). Queue and stop were also exercised by the
+concurrent lane users; doctor is offline-tested and has inspected free native lanes. Evidence
 stays outside git (`.local/evidence-075-withheld`).
 
 The other agents run a read-only export of a tested commit, `X4Mods\lanes\release` (made by
@@ -283,12 +284,19 @@ numbers below are functional, not timing-grade. Overlay: fixed-tick probe built 
 | v5-session-3 | same, order-free `--server-until` | **pass**: b1 (p1) + b3 (p2), relay UDP 127.0.0.1:63439 only, both peers listed, WM_CLOSE 28 s each, lanes restored, gates re-pinned (9 .lua per client), max 6 X4 on the PC |
 | ramp | `x4lane observe`, 01:52-02:08 | 6 X4: 8-9 GB available, 24-32 fps; 7 X4: 0.8-2.7 GB, 6k-16k hard faults/s, commit 141/191 GB; 8 X4: 0.4-0.6 GB, up to 43k-46k pages/s. Lead set MAX_X4_TOTAL 6 and MIN_FREE_PER_START 14 GB |
 | other agents | queue, protected clients, stop | the queue served up to 8 waiters; the lead used `x4lane stop --lane b2`; protected clients were never touched |
+| v6-stall | deliberate hang of the owned b2 X4 after READY, `--stall 60 --close-grace 20` | **expected failure detected**: `exit_reason=stalled`, exit 3; the owned PID 38604 was suspended at 03:01:07, the runner detected 60 s without a debug line and a nonresponding window, then escalated from WM_CLOSE after 20.72 s to TerminateProcess. Finished 03:02:28 with `lane_restored=true`, no warnings; later doctor inspection found all eight lanes free and clean. This is stall-detector acceptance, not a passing gameplay run. |
 
 Peak commit per lane X4: 8.8-9.0 GB (fresh custom_creative world). No save files were written,
 no dialog other than the provoked one appeared, the foreground window stayed with the user's
 application while lane X4 instances started (SW_SHOWNOACTIVATE). The autostart's `GetCurRealTime()`
 restarts near 0 when the new world starts, so its 300 s menu deadline and the quit_after safety net
 count from the latest world start.
+
+The v6-stall injection is recorded in `.local/evidence-100-withheld`; the runner output
+and collected evidence are `v6-stall.txt` and `v6-stall/`. The helper verified the target image
+was the b2 lane-view X4 before suspending it. No protected client was targeted. This native
+test used released tool commit 386f37e; subsequent e04b02a changes concern quiet-window
+admission, not the stall detector. The 03:12 read-only doctor check used release e04b02a.
 
 ## Open points
 
