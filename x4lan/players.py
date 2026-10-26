@@ -59,6 +59,7 @@ class PlayerRoster:
         self.relations = {}     # (a, b) -> (rev, value text)
         self.sectors = {}       # macro -> (seq, owner token)
         self.host_lease = None
+        self.request_sequences = {}  # slot -> (client lease, last accepted relation intent)
         self.next_roster = self.next_sectors = 0.0
 
     @staticmethod
@@ -121,6 +122,13 @@ class PlayerRoster:
                 value = relation(f[5])
                 if not 1 <= target or target == own:
                     return []
+                previous = self.request_sequences.get(slot)
+                if previous and previous[0] == peer.lease and seq <= previous[1]:
+                    return []
+                # UDP can duplicate/reorder intents with DIFFERENT values. Reapplying an
+                # older intent would undo the human's latest choice. Fence per client
+                # lease, so reconnects may restart their sequence without being blocked.
+                self.request_sequences[slot] = (peer.lease, seq)
                 out.append((host.address, f'PFREQ|1|{host.lease}|{own}|{seq}|{target}|{value:.4f}'.encode()))
             elif kind == 'PFSEC' and len(f) == 6:
                 seq = number(f[3])
