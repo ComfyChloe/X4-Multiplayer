@@ -16,6 +16,7 @@ api={
  GetCurrentGameTime=function() return gameTime end,
  IsGamePaused=function() return paused end,
  GetPlayerContainerID=function() return 11 end,
+ GetPlayerID=function() return 11 end,
  GetContextByClass=function() return 22 end,
 }
 local realRequire=require

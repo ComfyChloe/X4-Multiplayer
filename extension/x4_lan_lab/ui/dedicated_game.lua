@@ -7,6 +7,7 @@ const char* GetSaveFolderPath(void);
 double GetCurrentGameTime(void);
 bool IsGamePaused(void);
 UniverseID GetPlayerContainerID(void);
+UniverseID GetPlayerID(void);
 UniverseID GetContextByClass(UniverseID,const char*,bool);
 ]]
 local D={failed=false,seen=nil,frames=0};X4LAN_DEDICATED=D
@@ -72,7 +73,8 @@ local function frame()
  if not D.ready then D.ready=true;D.nextHeartbeat=0;log('READY build='..cfg.build..' slot='..cfg.slot) end
  if now<(D.nextHeartbeat or 0) then return end
  D.nextHeartbeat=now+D.interval
- local object=C.GetPlayerContainerID();local sector=object~=0 and C.GetContextByClass(object,'sector',false) or 0
+ -- The authority's player may be outside any container (e.g. in its observer suit).
+ local object=C.GetPlayerContainerID();if object==0 then object=C.GetPlayerID() end;local sector=object~=0 and C.GetContextByClass(object,'sector',false) or 0
  local macro=sector~=0 and GetComponentData(ConvertStringToLuaID(tostring(sector):gsub('ULL$','')),'macro') or ''
  local elapsed=D.heartbeatAt and now-D.heartbeatAt or 0
  local rate=D.heartbeatAt and elapsed>0 and (D.frames-(D.heartbeatFrames or 0))/elapsed or 0
