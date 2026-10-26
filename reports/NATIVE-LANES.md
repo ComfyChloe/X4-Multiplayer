@@ -181,7 +181,9 @@ exited runner, or not refreshed for 5 minutes, are dropped. `x4lane.py queue` li
 (Windows frame driver) and the loopback config with the session tokens. With
 `python -m x4lan.host --bind 127.0.0.1 --port {port} --token {token} --build {build} --bubble {bubble}`
 as the server, both clients log `connected to relay as pN` and `relay=connected remote=receiving`,
-and the relay prints `p1@127.0.0.1:..., p2@127.0.0.1:...`.
+and the relay prints both peers in join order (`p2@127.0.0.1:..., p1@127.0.0.1:...` is as likely as the
+reverse), so `--server-until` must not depend on the order:
+`(?=.*p1@127\.0\.0\.1:\d+)(?=.*p2@127\.0\.0\.1:\d+)`.
 
 ## Stop, stall, doctor
 

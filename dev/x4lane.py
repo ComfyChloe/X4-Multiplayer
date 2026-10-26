@@ -2312,7 +2312,9 @@ def cmd_make_overlay(args, paths):
                  '"{python} -m x4lan.host --bind 127.0.0.1 --port {port} --token {token} --build {build} '
                  '--bubble {bubble}" (server cwd: a worktree with the x4lan package; default this one)',
                  'Clients log "[X4LAN] connected to relay as pN" and every 5 s "[X4LAN] relay=connected '
-                 'remote=receiving"; the relay prints "p1@127.0.0.1:<port>, p2@127.0.0.1:<port>".',
+                 'remote=receiving"; the relay prints both peers in join order, e.g. "p2@127.0.0.1:<port>, '
+                 'p1@127.0.0.1:<port>" (match them order-free: '
+                 '--server-until "(?=.*p1@127\\.0\\.0\\.1:\\d+)(?=.*p2@127\\.0\\.0\\.1:\\d+)").',
                  'Needs re-pinned profile gates (session default) and the simtick DLL from '
                  'native/engine/build.py (no --fixedtick).']
     else:
