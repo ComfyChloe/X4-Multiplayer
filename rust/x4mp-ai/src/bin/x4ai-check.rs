@@ -13,12 +13,19 @@ fn main() {
             std::process::exit(1);
         }
     };
-    let text = if raw.contains("AITR\t") { x4mp_ai::native::extract(&raw) } else { raw };
-    match x4mp_ai::native::parse(&text) {
-        Ok(c) => print!("{}", x4mp_ai::native::check(&c).render()),
-        Err(e) => {
-            eprintln!("x4ai-check: {e}");
-            std::process::exit(2);
+    let sessions = if raw.contains("AITR\t") { x4mp_ai::native::extract_sessions(&raw) } else { vec![raw] };
+    let mut failed = false;
+    for (i, text) in sessions.iter().enumerate() {
+        println!("== session {}", i + 1);
+        match x4mp_ai::native::parse(text) {
+            Ok(c) => print!("{}", x4mp_ai::native::check(&c).render()),
+            Err(e) => {
+                eprintln!("x4ai-check: session {}: {e}", i + 1);
+                failed = true;
+            }
         }
+    }
+    if failed {
+        std::process::exit(2);
     }
 }

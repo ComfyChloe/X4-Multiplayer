@@ -43,6 +43,23 @@ pub mod kw {
     }
 }
 
+/// The capture sessions in a lane's engine-output.log (one per `X4AITRACE` header; the probe restarts
+/// the capture when it re-arms), each without the `AITR\t` prefix.
+pub fn extract_sessions(log: &str) -> Vec<String> {
+    let mut out: Vec<String> = Vec::new();
+    for l in log.lines() {
+        if let Some(rest) = l.strip_prefix("AITR\t") {
+            if rest.starts_with("X4AITRACE\t") || out.is_empty() {
+                out.push(String::new());
+            }
+            let cur = out.last_mut().expect("session");
+            cur.push_str(rest);
+            cur.push('\n');
+        }
+    }
+    out
+}
+
 /// Extract the capture lines (`AITR\t...`) from a lane's engine-output.log, without the prefix.
 pub fn extract(log: &str) -> String {
     let mut out = String::new();
@@ -85,6 +102,8 @@ pub struct Delivery {
     pub mask: u32,
     pub mask_after: u32,
     pub matched: Vec<String>,
+    /// Script of the entity's last bracket before the delivery (the frame on top).
+    pub top: String,
     pub trace_line: usize,
 }
 
@@ -117,10 +136,12 @@ pub fn parse(text: &str) -> Result<Capture, String> {
     }
     let mut c = Capture::default();
     let mut open: BTreeMap<u64, Vec<Bracket>> = BTreeMap::new();
+    let mut top: BTreeMap<u64, String> = BTreeMap::new();
     for r in &t.records {
         match r.tag.as_str() {
             "track" => c.entities.push(r.ent),
             "run" | "irun" => {
+                top.insert(r.ent.0, r.name.clone());
                 let b = Bracket {
                     ent: r.ent,
                     irq: r.tag == "irun",
@@ -174,6 +195,7 @@ pub fn parse(text: &str) -> Result<Capture, String> {
                     mask: u(r, "mask")? as u32,
                     mask_after: u(r, "mask_after")? as u32,
                     matched,
+                    top: top.get(&r.ent.0).cloned().unwrap_or_else(|| "?".into()),
                     trace_line: r.line,
                 });
             }
@@ -300,7 +322,10 @@ pub fn check(c: &Capture) -> NativeReport {
     for b in &c.brackets {
         let key = (b.ent.0, b.script.clone());
         let end = end_label(b);
-        let before = prev.get(&key).cloned().unwrap_or_else(|| "start".into());
+        // A fresh instance (start wake at pc 0) has no previous yield.
+        let fresh = !b.irq && b.pc_in == 0 && b.mask & 1 != 0;
+        let before =
+            if fresh { "start".to_string() } else { prev.get(&key).cloned().unwrap_or_else(|| "start".into()) };
         if !b.irq {
             prev.insert(key, end.clone());
         }
@@ -358,7 +383,7 @@ pub fn check(c: &Capture) -> NativeReport {
         } else {
             "none".into()
         };
-        let k = format!("{} kw{} {}", if d.global { "global" } else { "block" }, d.kw, verdict);
+        let k = format!("{} kw{} top={} {}", if d.global { "global" } else { "block" }, d.kw, d.top, verdict);
         if let Some(n) = d.steps {
             *rep.delivery_classes.entry(k).or_default().entry(n).or_default() += 1;
         }
@@ -439,6 +464,14 @@ mod tests {
     }
 
     #[test]
+    fn sessions_split_at_headers() {
+        let log = "AITR\tX4AITRACE\t1\tbuild=23660954\nAITR\ttrack\tc:0x1\tx\tslot=i:0\nnoise\nAITR\tX4AITRACE\t1\tbuild=23660954\nAITR\t# end\n";
+        let s = extract_sessions(log);
+        assert_eq!(s.len(), 2);
+        assert!(s[0].ends_with("slot=i:0\n") && s[1].starts_with("X4AITRACE"));
+    }
+
+    #[test]
     fn extract_strips_the_prefix_and_ignores_other_output() {
         let log = "Starting X4\nAITR\tX4AITRACE\t1\tbuild=23660954\nnoise\nAITR\ttrack\tc:0x1\tx\tslot=i:0\n";
         assert_eq!(extract(log), "X4AITRACE\t1\tbuild=23660954\ntrack\tc:0x1\tx\tslot=i:0\n");
@@ -456,8 +489,11 @@ mod tests {
         assert!(r.first_wait_mismatch.is_none());
         assert_eq!(r.patrol_leg_engine_draws.get(&3), Some(&1));
         assert_eq!(r.classes["order.fight.patrol start -> wait@317"].get(&2), Some(&1));
-        assert_eq!(r.delivery_classes["block kw1286 none"].get(&1), Some(&1));
-        assert_eq!(r.delivery_classes["global kw1340 matched order.fight.patrol/9"].get(&0), Some(&1));
+        assert_eq!(r.delivery_classes["block kw1286 top=order.fight.patrol none"].get(&1), Some(&1));
+        assert_eq!(
+            r.delivery_classes["global kw1340 top=order.fight.patrol matched order.fight.patrol/9"].get(&0),
+            Some(&1)
+        );
         let text = r.render();
         assert!(text.contains("wait order.fight.patrol L317: 1/1"), "{text}");
     }

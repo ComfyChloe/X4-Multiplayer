@@ -4,10 +4,11 @@ Owner: ai-orders agent, branch `contrib/ferrite-rw-ai-orders` (base `contrib/fer
 Own files: `rust/x4mp-ai/`, this report. Program and method: `reports/REWRITE-PROGRAM.md`.
 Target: X4 9.00, Steam build 23660954, Windows `X4.exe` SHA-256 19750A65...6891. All addresses are RVAs.
 
-**Status (26 Oct 2026): milestone 1 offline.** Static ranking, the engine model of AI orders, the exact
-RNG semantics, the capture/replay format, `order.fight.patrol` + `move.seekenemies` as Rust state machines,
-and replay tests against **hand-built (synthetic) traces**. No native capture exists yet and no native X4 run
-was made by this agent; every result below is offline unless marked native.
+**Status (26 Oct 2026):** M1 offline (static ranking, engine model, exact RNG semantics, X4AITRACE format,
+`order.fight.patrol` + `move.seekenemies` in Rust, replay tests against **hand-built (synthetic) traces**);
+M2a **native**: the first bracket capture of Patrol job ships (section 9a) confirms the model with no
+contradiction (24/24 wait wake times bit-exact, constant draw counts per bracket class). Everything else
+below is offline unless marked native.
 
 ## 1. Ranking of AI orders
 
@@ -271,14 +272,34 @@ contract (`resume`, `matches`, `handler_actions`, `block_interrupt`, `on_abort`,
   threads give identical effect logs and state hashes; an entity's effects are identical with 0 or 5
   neighbours in its sector (per-entity streams).
 
+## 9a. Native result (M2a bracket capture)
+
+NATIVE, lane b3 (profile 45853), new world `custom_creative`, about 8 min (ended early when the queued job was
+moved to the release x4lane copy; the capture streams to stdout and is complete up to then), 8 Patrol job
+ships, 85 interpreter brackets, 503 deliveries. Evidence: `.local/evidence-061-withheld`
+(engine-output.log, `x4ai-check` output); summary: rewrite-coord/results/2026-10-26-ai-orders-m2a-native-capture.md.
+
+| check | result |
+|---|---|
+| `<wait>` wake times (Patrol L317, L509) | **24/24 bit-exact** (formula of section 3; the wait draws last) |
+| Patrol first run (job ship, `$space` null) | 2 draws on 8/8: L199 `chance="0"` debug + L317 (chance-0 lines draw) |
+| Patrol restart (`$space` set by L201/L204 edits) | 1 draw on 10/10 |
+| Patrol leg L317 -> L493 | 10 draws on 12/12 = 3 script draws (L398, L430, L485) + 7 engine (create_position + get_safe_pos) |
+| L493 -> L509; sector patrol L509 -> L317 | 1 (4/4); 2 (2/2: L511 roll failed, L317) |
+| lib.target.selection without target | 3 (L67, L80, L293) on 3/3 |
+| seek after distress interrupt / gravidar hit | interrupt run 1 (L394) then 3 (L572, L587, L615) -> Attack; 3 (L394, L432, L448) |
+| orders.base | 1 before each order (L349 `chance="0"`), abort handler 1 (L54 `chance="0"`) |
+| gravidar scans while flying, no match | **419/419 drew exactly 1** (distress `check_all chance="80"`) |
+| unmatched signals / matching scan / global deliveries | 1 (73/73) / 0 / 0 |
+| open | seek start 6 (8x) vs 4 (4x): get_safe_pos engine draws vary; one matched distress signal drew 2 (condition-level `debug_text debugchance` at L383, to confirm) |
+
 ## 10. Native steps needed (next stage)
 
 1. Done offline (M2a): `aicapture.h` bracket capture on ai-driver's `ad_observer`, tested with synthetic
    engine structures (test_aicapture.c, both modes) and in a local integration build of the ai-driver tree
    (all ai-driver/fixedtick tests still pass); probe Lua hookup checked under LuaJIT with a mock module.
-2. Queued: one lane run (`x4lane run --agent ai-orders`, <= 18 min, new world `custom_creative`, overlay =
-   integration DLL + probe + `X4LAN_AIDRIVER='census'`, `X4LAN_AICAPTURE='order.fight.patrol'`) waiting for
-   quiet.lock; then `x4ai-check` on its engine-output.log.
+2. Done natively (section 9a); a full-length run (from lanes/release x4lane.py, `--wait`) adds zone patrols'
+   second legs and resupply rolls.
 3. M2b: value capture (slot-3 swaps on FindComponent, GetGlobalPath, CreatePosition, GetSafePos, the effect
    classes; facts per bracket) for a full replay of native Patrol traces. Register sites in hooks.tsv first.
 4. Cheap native check of the chance-0 finding: a test MD cue that executes 100,000 `debug_text chance="0"`
