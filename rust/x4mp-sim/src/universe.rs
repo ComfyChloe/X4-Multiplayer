@@ -9,7 +9,7 @@ use std::time::Instant;
 use crate::bus::{Command, Envelope, Item, Message, Outbox, Target};
 use crate::column::Bundle;
 use crate::comp::{self, Component, RngState};
-use crate::hash::Fnv64;
+use crate::hash::{Fnv64, StableHash};
 use crate::id::{EntityId, IdMap, Loc, OrderKey, SectorIx, UniverseId};
 use crate::rng::entity_seed;
 use crate::sched::{BarrierCtx, FrameInfo, FrameReport, PhaseReport, Pool, SectorCtx, System};
@@ -34,6 +34,15 @@ pub struct Universe {
     message_log: Vec<String>,
     serial_seq: u32,
     barrier_inboxes: Vec<(&'static str, Vec<Envelope>)>,
+    hashed_resources: Vec<(TypeId, ResourceHasher)>,
+}
+
+type ResourceHasher = fn(&(dyn std::any::Any + Send + Sync), &mut Fnv64);
+
+fn hash_resource_as<R: std::any::Any + StableHash>(r: &(dyn std::any::Any + Send + Sync), h: &mut Fnv64) {
+    if let Some(v) = r.downcast_ref::<R>() {
+        v.stable_hash(h);
+    }
 }
 
 impl Universe {
@@ -70,6 +79,7 @@ impl Universe {
             message_log: Vec::new(),
             serial_seq: 0,
             barrier_inboxes: Vec::new(),
+            hashed_resources: Vec::new(),
         }
     }
 
@@ -95,6 +105,16 @@ impl Universe {
             info.published = true;
         }
         self.published = self.registry.iter().filter(|c| c.published).map(|c| c.type_id).collect();
+        self
+    }
+
+    /// Includes the per-sector resource `R` (see [`World::resource_mut`]) in
+    /// [`Universe::state_hash`], so thread-invariance checks cover system state kept there.
+    pub fn hash_resource<R: std::any::Any + Send + Sync + StableHash>(&mut self) -> &mut Universe {
+        let id = TypeId::of::<R>();
+        if !self.hashed_resources.iter().any(|(t, _)| *t == id) {
+            self.hashed_resources.push((id, hash_resource_as::<R>));
+        }
         self
     }
 
@@ -385,14 +405,24 @@ impl Universe {
             sector_max_ns: self.worlds.iter().map(|w| w.cost_ns).max().unwrap_or(0),
             ..PhaseReport::default()
         };
-        // Barrier 1: structural commands in total order (sector order, emission order).
-        let mut msgs = Vec::new();
+        // Barrier 1: structural commands in total order: (order key, sector, emission) with
+        // all keys 0 unless a job set one, i.e. sector order then emission order.
+        let keyed = self.worlds.iter().any(|w| w.outbox.keyed);
+        let mut ordered: Vec<(u32, Item)> = Vec::new();
         for s in 0..self.worlds.len() {
             let mut items = std::mem::take(&mut self.worlds[s].outbox.items);
-            for item in items.drain(..) {
+            ordered.extend(items.drain(..).map(|it| (s as u32, it)));
+            self.worlds[s].outbox.items = items;
+        }
+        if keyed {
+            ordered.sort_by_key(|(s, it)| it.sort_key(*s));
+        }
+        let mut msgs = Vec::new();
+        {
+            for (s, item) in ordered {
                 match item {
                     Item::Msg(env) => msgs.push(env),
-                    Item::Cmd { seq, cmd } => {
+                    Item::Cmd { seq, cmd, .. } => {
                         rep.commands += 1;
                         match &cmd {
                             Command::Spawn { .. } => rep.spawned += 1,
@@ -408,7 +438,6 @@ impl Universe {
                     }
                 }
             }
-            self.worlds[s].outbox.items = items;
         }
         self.commit();
         // Barrier 2: route messages in the same total order.
@@ -447,6 +476,15 @@ impl Universe {
         h.write_u64(self.worlds.len() as u64);
         for w in &self.worlds {
             w.hash_into(&mut h);
+            for (t, f) in &self.hashed_resources {
+                match w.resource_any(*t) {
+                    Some(r) => {
+                        h.write_u8(1);
+                        f(r, &mut h);
+                    }
+                    None => h.write_u8(0),
+                }
+            }
         }
         h.finish()
     }

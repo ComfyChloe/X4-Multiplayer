@@ -276,6 +276,10 @@ impl World {
         self.resources[pos].1.downcast_mut::<R>().expect("resource type")
     }
 
+    pub(crate) fn resource_any(&self, t: TypeId) -> Option<&(dyn Any + Send + Sync)> {
+        self.resources.iter().find(|(x, _)| *x == t).map(|(_, r)| r.as_ref())
+    }
+
     pub fn resource<R: Any + Send + Sync>(&self) -> Option<&R> {
         let id = TypeId::of::<R>();
         self.resources.iter().find(|(t, _)| *t == id).and_then(|(_, r)| r.downcast_ref::<R>())

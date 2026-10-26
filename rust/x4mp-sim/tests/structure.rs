@@ -344,3 +344,99 @@ fn hull_column_survives_register_after_spawn() {
     assert!(u.get::<Hull>(e).unwrap().max.is_nan(), "default hull: max unknown");
     u.check().unwrap();
 }
+
+// --- order keys and hashed resources -----------------------------------------------------
+
+#[derive(Debug)]
+struct Tag(&'static str);
+
+struct Keyed {
+    use_keys: bool,
+}
+impl System for Keyed {
+    fn name(&self) -> &'static str {
+        "keyed"
+    }
+    fn run_sector(&self, ctx: &mut SectorCtx<'_>) {
+        let x = ctx.ids.by_uid(UniverseId(77));
+        match ctx.sector.0 {
+            0 => {
+                if self.use_keys {
+                    ctx.out.set_order(3);
+                }
+                ctx.out.send(Target::Barrier, Tag("s0 first, key 3"));
+                if self.use_keys {
+                    ctx.out.set_order(1);
+                }
+                ctx.out.send(Target::Barrier, Tag("s0 second, key 1"));
+                if let Some(x) = x {
+                    if self.use_keys {
+                        ctx.out.set_order(4);
+                    }
+                    ctx.out.migrate(x, SectorIx(0));
+                }
+            }
+            1 => {
+                if self.use_keys {
+                    ctx.out.set_order(2);
+                }
+                ctx.out.send(Target::Barrier, Tag("s1, key 2"));
+                if let Some(x) = x {
+                    ctx.out.despawn(x);
+                }
+            }
+            _ => {}
+        }
+    }
+    fn barrier(&self, ctx: &mut BarrierCtx<'_>) {
+        let tags: Vec<String> = ctx.messages.iter().map(|m| m.get::<Tag>().unwrap().0.to_string()).collect();
+        ctx.universe.world_mut(SectorIx(0)).resource_mut::<Vec<String>>().extend(tags);
+    }
+}
+
+fn keyed_run(use_keys: bool) -> (Vec<String>, u64, Vec<String>) {
+    let pool = Pool::new(2);
+    let mut u = Universe::new(1);
+    let s0 = u.add_sector(UniverseId(100), WorldKind::Sector);
+    u.add_sector(UniverseId(101), WorldKind::Sector);
+    u.spawn(s0, UniverseId(77), Bundle::new()).unwrap();
+    let rep = u.step(&pool, &[&Keyed { use_keys }], &FrameInfo::default());
+    let tags = u.world(SectorIx(0)).resource::<Vec<String>>().unwrap().clone();
+    (tags, rep.phases[0].command_errors, rep.errors)
+}
+
+#[test]
+fn order_keys_define_the_barrier_total_order() {
+    // Default: sector order, then emission order; s0's migrate runs before s1's despawn.
+    let (tags, errors, _) = keyed_run(false);
+    assert_eq!(tags, vec!["s0 first, key 3", "s0 second, key 1", "s1, key 2"]);
+    assert_eq!(errors, 0);
+    // Keys: (key, sector, seq). s1's despawn has key 2 (set before it), s0's migrate key 4:
+    // the despawn now comes first and the migrate fails deterministically.
+    let (tags, errors, msgs) = keyed_run(true);
+    assert_eq!(tags, vec!["s0 second, key 1", "s1, key 2", "s0 first, key 3"]);
+    assert_eq!(errors, 1);
+    assert!(msgs[0].contains("stale entity"), "{msgs:?}");
+}
+
+#[derive(Default)]
+struct Counter(u64);
+impl x4mp_sim::hash::StableHash for Counter {
+    fn stable_hash(&self, h: &mut x4mp_sim::hash::Fnv64) {
+        h.write_u64(self.0);
+    }
+}
+
+#[test]
+fn hashed_resources_enter_the_state_hash() {
+    let mut u = Universe::new(1);
+    let s = u.add_sector(UniverseId(100), WorldKind::Sector);
+    let h0 = u.state_hash();
+    u.world_mut(s).resource_mut::<Counter>().0 = 5;
+    assert_eq!(u.state_hash(), h0, "unregistered resources are not hashed");
+    u.hash_resource::<Counter>();
+    let h1 = u.state_hash();
+    assert_ne!(h1, h0);
+    u.world_mut(s).resource_mut::<Counter>().0 = 6;
+    assert_ne!(u.state_hash(), h1);
+}

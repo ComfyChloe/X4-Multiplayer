@@ -14,6 +14,12 @@
 //!    the same barrier), `Barrier` targets are handed to that system's serial
 //!    [`crate::sched::System::barrier`] hook. A system therefore receives its own messages in
 //!    the next frame, and messages from an earlier system of the same frame in this frame.
+//!
+//! **Order keys.** Tree order is the original order of the component walk. Where the
+//! original sequential order is something else (for example the AI director's wake order),
+//! a job calls [`Outbox::set_order`] before emitting the effects of one unit of original
+//! work; the barrier then uses the total order (order key, sector, emission sequence).
+//! Keys default to 0, which gives plain (sector, emission) order.
 
 use std::any::Any;
 use std::fmt;
@@ -63,6 +69,8 @@ pub enum Target {
 pub struct Envelope {
     pub from: SectorIx,
     pub seq: u32,
+    /// Order key (see the module docs); 0 unless the sender set one.
+    pub order: u64,
     pub to: Target,
     /// Name of the system the message is addressed to.
     pub system: &'static str,
@@ -131,7 +139,16 @@ impl fmt::Debug for Command {
 
 pub(crate) enum Item {
     Msg(Envelope),
-    Cmd { seq: u32, cmd: Command },
+    Cmd { seq: u32, order: u64, cmd: Command },
+}
+
+impl Item {
+    pub(crate) fn sort_key(&self, sector: u32) -> (u64, u32, u32) {
+        match self {
+            Item::Msg(e) => (e.order, sector, e.seq),
+            Item::Cmd { seq, order, .. } => (*order, sector, *seq),
+        }
+    }
 }
 
 /// A sector job's output buffer (see the module docs for the ordering guarantees).
@@ -139,20 +156,30 @@ pub(crate) enum Item {
 pub struct Outbox {
     from: SectorIx,
     seq: u32,
+    order: u64,
+    pub(crate) keyed: bool,
     system: &'static str,
     pub(crate) items: Vec<Item>,
 }
 
 impl Outbox {
     pub(crate) fn new(from: SectorIx, system: &'static str) -> Outbox {
-        Outbox { from, seq: 0, system, items: Vec::new() }
+        Outbox { from, seq: 0, order: 0, keyed: false, system, items: Vec::new() }
     }
 
     pub(crate) fn reset(&mut self, from: SectorIx, system: &'static str) {
         self.from = from;
         self.seq = 0;
+        self.order = 0;
+        self.keyed = false;
         self.system = system;
         self.items.clear();
+    }
+
+    /// Sets the order key of everything emitted from now on (see the module docs).
+    pub fn set_order(&mut self, key: u64) {
+        self.order = key;
+        self.keyed |= key != 0;
     }
 
     fn next_seq(&mut self) -> u32 {
@@ -170,35 +197,36 @@ impl Outbox {
     /// Sends a message to another system's next run after this barrier.
     pub fn send_to<M: Message>(&mut self, system: &'static str, to: Target, msg: M) {
         let seq = self.next_seq();
-        self.items.push(Item::Msg(Envelope { from: self.from, seq, to, system, payload: Box::new(msg) }));
+        let order = self.order;
+        self.items.push(Item::Msg(Envelope { from: self.from, seq, order, to, system, payload: Box::new(msg) }));
     }
 
     /// Spawns an entity at the end of `sector`'s tree order.
     pub fn spawn(&mut self, sector: SectorIx, uid: UniverseId, bundle: Bundle) {
         let seq = self.next_seq();
-        self.items.push(Item::Cmd { seq, cmd: Command::Spawn { sector, uid, key: None, bundle } });
+        self.items.push(Item::Cmd { seq, order: self.order, cmd: Command::Spawn { sector, uid, key: None, bundle } });
     }
 
     /// Spawns an entity at tree-order position `key`.
     pub fn spawn_at(&mut self, sector: SectorIx, uid: UniverseId, key: OrderKey, bundle: Bundle) {
         let seq = self.next_seq();
-        self.items.push(Item::Cmd { seq, cmd: Command::Spawn { sector, uid, key: Some(key), bundle } });
+        self.items.push(Item::Cmd { seq, order: self.order, cmd: Command::Spawn { sector, uid, key: Some(key), bundle } });
     }
 
     pub fn despawn(&mut self, entity: EntityId) {
         let seq = self.next_seq();
-        self.items.push(Item::Cmd { seq, cmd: Command::Despawn { entity } });
+        self.items.push(Item::Cmd { seq, order: self.order, cmd: Command::Despawn { entity } });
     }
 
     /// Moves an entity (all components, same EntityId) to the end of `to`'s tree order.
     pub fn migrate(&mut self, entity: EntityId, to: SectorIx) {
         let seq = self.next_seq();
-        self.items.push(Item::Cmd { seq, cmd: Command::Migrate { entity, to, key: None } });
+        self.items.push(Item::Cmd { seq, order: self.order, cmd: Command::Migrate { entity, to, key: None } });
     }
 
     pub fn migrate_at(&mut self, entity: EntityId, to: SectorIx, key: OrderKey) {
         let seq = self.next_seq();
-        self.items.push(Item::Cmd { seq, cmd: Command::Migrate { entity, to, key: Some(key) } });
+        self.items.push(Item::Cmd { seq, order: self.order, cmd: Command::Migrate { entity, to, key: Some(key) } });
     }
 
     pub fn len(&self) -> usize {
