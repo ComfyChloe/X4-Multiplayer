@@ -487,10 +487,16 @@ class SessionPieceTests(Temp):
             core.check_offline_config(ok)                          # single runs stay offline
 
     def test_free_port_and_server_command(self):
-        import socket
-        port = core.free_loopback_port()
-        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
-            udp.bind(('127.0.0.1', port))
+        for attempt in range(5):                  # another process may be handed the port in between
+            port = core.free_loopback_port()
+            self.assertTrue(1024 <= port <= 65535)
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+                    udp.bind(('127.0.0.1', port))
+                break
+            except OSError:
+                if attempt == 4:
+                    raise
         values = {k: f'<{k}>' for k in x4lane.SERVER_TOKENS}
         values['port'] = port
         command = x4lane.server_command('{python} -m x4lan.host --bind 127.0.0.1 --port {port} --token {token}',
