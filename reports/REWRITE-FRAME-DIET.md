@@ -2,8 +2,9 @@
 
 Owner: frame-diet agent, branch `contrib/ferrite-rw-frame-diet` (base `contrib/ferrite-rewrite-base` e63d9cf).
 Build: X4 9.00, Steam build 23660954 (Windows RVAs; Linux VAs in bin-linux/X4 where given).
-Status 26 Oct 2026: module, audit mode and tests done; native functional audit done on a lane; the timing
-measurement waits for a quiet window (rewrite-coord Q9). Terminology: the dedicated X4 is the **server**,
+Status 26 Oct 2026: module, audit mode and tests done; native functional audits done on a lane (audit-001:
+presentation regions; audit-003: rng_split A/B and ui_elements); the timing measurement waits for a quiet window
+(rewrite-coord Q9). Terminology: the dedicated X4 is the **server**,
 players connect as **clients**.
 
 ## Summary
@@ -21,8 +22,11 @@ players connect as **clients**.
 - **Not behaviour-identical**: the camera render (`camera`, ~2.1 / 2.3 ms). It draws about 150 MoveWorker
   thread-RNG steps per frame, allocates UniverseIDs for mass-traffic welding effects and sets a view-cache flag on
   every rendered component. Skipping it changes the RNG stream and later IDs relative to a client that renders.
-  The camera view is therefore an input of the simulation RNG stream on every X4 (a parity leak). The new
-  `rng_split` site moves slot 10's draws to a private stream (proposal of the determinism owner).
+  The camera view is therefore an input of the simulation RNG stream on every X4 (a parity leak). The
+  `rng_split` site moves slot 10's draws to a private stream (proposal of the determinism owner); natively all
+  ~150 draws per frame moved and the simulation stream stayed continuous (audit-003). IDs are not covered.
+- `ui_elements` (opt-in, the Anark element update): 0 RNG steps, 0 IDs, 0 changed words in 589,824 snapshots over
+  43,312 calls natively; it stalls UI animations, so it is not part of `server`.
 - Expected saving of the behaviour-identical set: ~1.9-2.0 ms per frame on the MoveWorker (11 % of the
   baseline frame, 7 % under load) plus the whole main-thread draw; the opt-in `ui_elements` (Anark element
   update, a call-site patch) another ~1.9-2.0 ms, `camera` and `ui_render` another ~2.3-2.6 ms. Measured
@@ -122,11 +126,11 @@ from the universe ID map), inside the Lua dispatch that the diet keeps.
 | site | hook (data-only except `ui_elements`) | what is skipped | equivalence |
 |---|---|---|---|
 | `ui_scenes` | AnarkScene vtable 0x2bc0e10 slot 12 (entry 0x2bc0e70, fn 0xaf8760), skipped only inside AnarkSceneManager slot 3 (entry 0x2bc0dd8, fn 0xaf8e50) on the MoveWorker | the per-frame UI scene-graph pass (element world matrices, render layers); slot 5 still clears the scene's per-frame lists, so they stay empty (= the engine's state for a scene whose root is not visible) | simulation identical (static + native audit); UI element matrices stale (UI render, picking) |
-| `ui_elements` | CODE PATCH: E8 rel32 at 0x138f477 (call of 0x1399c40 inside 0x138f2c0) retargeted to a near stub; verified against the original target, compare-exchanged, re-verified every frame, restored on disarm | the Anark element update (keyframes/attributes) | no Lua entry, no RNG/ID calls statically; native audit pending; UI animations stall: opt-in |
+| `ui_elements` | CODE PATCH: E8 rel32 at 0x138f477 (call of 0x1399c40 inside 0x138f2c0) retargeted to a near stub; verified against the original target, compare-exchanged, re-verified every frame, restored on disarm | the Anark element update (keyframes/attributes) | simulation identical as far as probed (static direct-call closure + native audit-003: 0 RNG, 0 IDs, 0 component words); UI animations stall: opt-in |
 | `draw` | RenderFlags bit `disable_rendering` 0x8000000 of qword 0x6adfa30 and staged copy 0x6adfa38 (interlocked OR/AND of that bit only, re-applied each frame, released only if we set it) | main-thread `RenderPreviousFrame` 0xf9ff40 skips drawing the render targets (test at 0xfa007a); per-target bookkeeping, present and frame limiter still run | identical (main thread only reads the double-buffered half) |
 | `ui_render` | CUIController XVbiHandler vtable 0x2bc07d0 slot 2 (entry 0x2bc07e0, fn 0xb3bba0) | UI draw-list build (CXAnarkController slot 2 0xb36c10 -> AnarkSceneManager slot 4 0xaf8a10 -> AnarkScene slot 6 -> AnarkRenderEngine 0x13af290/0x13af530/0xb2f740); also the OS cursor shape (g_InputSystem+0x90e8, WM_SETCURSOR) | no RNG/ID/event effect natively; statically no per-frame growth (manager state saved/restored per call, render queues reset by FrameTick, element dirty bits 1/3 at +0x15b stay set and only force the walk to recompute); native commit-size check pending: opt-in |
 | `camera` | U::Camera vtable 0x2bae1a0 slot 3 (entry 0x2bae1b8, fn 0x983160), skipped only inside the GameClient render bank (entry 0x2c8abe0, fn 0x122bfc0) | camera render-list preparation | **changes the RNG stream, IDs and view-cache flags**: opt-in |
-| `rng_split` | X4::GameRender vtable 0x2c8ac08 slot 1 (entry 0x2c8ac10, fn 0x121c1f0) | nothing: slot 10 runs with TLS+0x318 swapped to a private render stream (seed "RENDERV1") | a determinism fix; effect objects created by the render still take IDs |
+| `rng_split` | X4::GameRender vtable 0x2c8ac08 slot 1 (entry 0x2c8ac10, fn 0x121c1f0) | nothing: slot 10 runs with TLS+0x318 swapped to a private render stream (seed "RENDERV1") | a determinism fix, verified natively (audit-003); effect objects created by the render still take IDs |
 
 Per-frame guard: empty VBI slot 2 (before GameClient::Move). It re-verifies the table pointer, its own slot and
 every installed vtable entry; any change disarms everything (entries restored by compare-exchange, a foreign
@@ -181,7 +185,7 @@ events, word histogram, control), rng_split on/off, the ui_elements call-site pa
 forwarding, restore, foreign retarget, refusal), CPU accounting: 10 groups. Real Lua ABI: `framediet_lua_abi.py`.
 Loader: 14 LuaJIT tests; analyzer: 6 unit tests.
 
-Native (functional, lane b1, other X4 running; `results/2026-10-26-frame-diet-audit.md`): 9,952 frames:
+Native (functional, lane b1, other X4 running; `results/2026-10-26-frame-diet-audit.md`), audit-001, 9,952 frames:
 
 | region | RNG steps | IDs | events | changed components |
 |---|---|---|---|---|
@@ -190,13 +194,37 @@ Native (functional, lane b1, other X4 running; `results/2026-10-26-frame-diet-au
 | camera (19,904) | 1,497,601 (~150 per frame) | 418 | 0 | 446 (+0x198 flags word 271x) |
 | control (82) | 0 | 0 | 0 | 54 (view-cache words of other threads) |
 
+audit-003 (10,801 frames, all five sites, 90 s phases without / with `rng_split`):
+
+| region | RNG steps | IDs | events | changed components |
+|---|---|---|---|---|
+| ui_scenes (43,312 calls) | 0 | 0 | +2 in 2 calls (background) | 0 / 589,824 |
+| ui_elements (43,312) | 0 | 0 | +2 in 1 call (background) | 0 / 589,824 |
+| ui_render (10,801) | 0 | 0 | 0 | 1 freed block |
+| camera (21,602) | 1,626,145 (150.4-150.8 per frame in every phase) | 976 | +1 | 105 (view cache [1] +0x1a0..+0x1d8) |
+
+| phase (frames) | simulation stream per frame | camera region per frame | render stream per frame |
+|---|---|---|---|
+| no split (2,174) | 644.8 | 150.4 | - |
+| split (2,767) | 392.9 | 150.7 | 150.7 |
+| no split (2,868) | 443.6 | 150.5 | - |
+| split (2,975) | 342.5 | 150.7 | 150.7 |
+
+With the split, the render stream advanced by exactly the camera region's steps (416,880 and 448,239), so the
+camera region is slot 10's only consumer and none of its draws reached the simulation stream; the simulation stream
+stayed continuous over all 10,800 frame intervals (0 unknown distances: an unrestored stream would be far beyond the
+65,536-step bound). Outside the camera region the simulation stream drew 494 / 393 / 293 / 343 / 446 steps per frame
+(new-world population drift, no step at the switches). The element update's 78 functions reachable by direct calls
+contain no event post, ID allocation, thread-RNG draw or Lua import (its 7 virtual calls go to Anark presentation
+objects and are not resolved statically).
+
 Interpretation: with fixed per-frame inputs (game time from the fixed-tick stage, same session RNG), the `server`
 set leaves every probed simulation channel bit-identical, so runs with and without it differ only through
 wall-clock-dependent engine behaviour (thread timing of Gravidar/MassTraffic/pathing), the same class of
 difference as running on a faster PC. Removing slot 10's camera work on the server instead changes the RNG
 stream relative to every client that renders (and IDs where welding traffic is in view); with `rng_split` on
-the server and on all clients the RNG streams stop depending on the view. In-session A/B of rng_split:
-audit-002 (pending, section 6).
+the server and on all clients the RNG streams stop depending on the view (audit-003). IDs still differ where
+welding traffic is in view (0.06-0.11 per frame in audit-003).
 
 ### rng_split design (determinism)
 
@@ -212,7 +240,8 @@ Proposal of the multiplayer determinism owner (rng-streams 23c841f), implemented
   UniverseIDs still come from the shared allocator: a client that renders welding traffic allocates IDs a
   server without that view does not. Treat such objects as client-local (not in the replicated ID space).
 - Parity needs the split on every participant (server and clients); with the split, `diet:all` and
-  `pass` give the same simulation stream (synthetic test; native measurement: audit-002).
+  `pass` give the same simulation stream (synthetic test; natively audit-003: every slot-10 draw on the render
+  stream, simulation stream continuous).
 - Not covered: other camera couplings outside slot 10. Render cameras are attention sources (Universe+0x2c0
   anchors read by ComputeAttention, slot 3; see the attention hooks), and UI Lua can create ICom message sources
   that take UniverseIDs (`CMessageManager::CreateSource` 0xae9050). Linux: the same swap on `fs:[-0x2720]`
@@ -243,9 +272,9 @@ state and with it the mod. What it does get, without hooks:
 ## 8. Next client-only costs
 
 1. Anark element update 0x1399c40 (~1.9 / 2.0 ms): implemented as the opt-in `ui_elements` site (09cadac):
-   a call-site rel32 patch through a near stub, because 0x138f2c0 also runs the Lua dispatch. Native audit and
-   stability pending. UI-only effect: animations and attribute propagation stall (or step every `period`
-   frames); UI Lua reading element state sees older values.
+   a call-site rel32 patch through a near stub, because 0x138f2c0 also runs the Lua dispatch. Native audit done
+   (audit-003, no simulation side effect); stability pending. UI-only effect: animations and attribute
+   propagation stall (or step every `period` frames); UI Lua reading element state sees older values.
 2. ICom message pump 0xae9880 / VisibilityData::Update 0xadcfa0 (0.75 / 1.2 ms): NOT presentation-only. Its
    message handling sets the player's soft target (`SetSofttargetMessage` in 0xaecb60 posts
    `U::PlayerChangedTargetEvent` deferred) and can post `U::StopDialogEvent` (0x11789d0), both visible to MD/AI.
@@ -315,5 +344,5 @@ Equivalence of `ui_elements` and the RNG split (functional lane run): mode `audi
   would need a server-role switch in the mod configuration that loads `x4lan_framediet_64.dll` with the
   `server` set (plus `rng_split` on every participant if RNG parity is wanted); the Linux server gets its own
   switches in rust/x4mp-agent (x4mods-61, Q10).
-- Native steps: audit-002 (rng_split on/off), a diet stability run (`server`, then `all`, 10+ min, Lua and frames
-  keep running, no `FEATURE ... DISABLED`), the quiet-window timing run (Q9).
+- Native steps: a diet stability run (`all,ui_elements,rng_split`, `server`, `all`, `pass`, 150 s each: Lua and
+  frames keep running, no `FEATURE ... DISABLED`, commit size per phase), the quiet-window timing run (Q9).
