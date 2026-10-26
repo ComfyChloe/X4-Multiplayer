@@ -2061,7 +2061,7 @@ def cmd_hold(args, paths):
     with a time limit, record whether the PC stayed X4-free, then hand the lock on."""
     require_windows()
     core.check_agent(args.agent)
-    command = list(args.command)
+    command = list(args.cmd)
     if command and command[0] == '--':
         command = command[1:]
     if not command:
@@ -2612,7 +2612,7 @@ def parser():
     s.add_argument('--minutes', type=float, default=15.0, help='time limit; the command is killed after it')
     s.add_argument('--wait', type=float, default=3600.0, help='seconds to wait for this agent\'s turn')
     s.add_argument('--collect', help='result folder (default X4Mods/lanes/holds/<time>-<agent>)')
-    s.add_argument('command', nargs=argparse.REMAINDER, help='-- CMD ARGS...')
+    s.add_argument('cmd', nargs=argparse.REMAINDER, metavar='CMD', help='-- CMD ARGS... (the command to run)')
     s = sub.add_parser('reserve', help='reserve X4 slots for the protected clients (or --clear)')
     s.add_argument('--slots', type=int)
     s.add_argument('--owner')
@@ -2661,9 +2661,9 @@ def parser():
     return p
 
 
-def main(argv=None):
+def main(argv=None, paths=None):
     args = parser().parse_args(argv)
-    paths = core.Paths.from_env(ROOT)
+    paths = paths or core.Paths.from_env(ROOT)                  # tests pass temporary paths
     if args.command == 'make-overlay' and args.kind == 'attnload' and not args.attnload:
         print('make-overlay attnload needs --attnload WORKTREE', file=sys.stderr)
         return 1

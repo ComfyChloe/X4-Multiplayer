@@ -1116,10 +1116,15 @@ class HoldTests(FakeWindows):
 
     def hold(self, *argv, minutes='1'):
         out = self.tmp / 'hold'
-        args = x4lane.parser().parse_args(['hold', '--agent', 'ecs-core', '--minutes', minutes, '--wait', '0',
-                                           '--collect', str(out), '--', sys.executable, '-c', *argv])
-        code = x4lane.cmd_hold(args, self.paths)
+        # the real command-line path (argparse + dispatch), with temporary paths instead of the live ones
+        code = x4lane.main(['hold', '--agent', 'ecs-core', '--minutes', minutes, '--wait', '0',
+                            '--collect', str(out), '--', sys.executable, '-c', *argv], paths=self.paths)
         return code, json.loads((out / 'result.json').read_text())
+
+    def test_hold_command_line_keeps_the_subcommand(self):
+        args = x4lane.parser().parse_args(['hold', '--agent', 'ecs-core', '--', 'python', '-c', 'print(1)'])
+        self.assertEqual(args.command, 'hold')
+        self.assertEqual(args.cmd, ['--', 'python', '-c', 'print(1)'])
 
     def test_hold_runs_in_its_turn_and_hands_on(self):
         path = self.window('ecs-core, physics')

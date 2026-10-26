@@ -557,14 +557,18 @@ def substitute_text(text: str, tokens: dict) -> str:
 
 
 def free_loopback_port() -> int:
-    """A port that is free on 127.0.0.1 for both UDP and TCP right now."""
-    for _ in range(50):
+    """A port that is free on 127.0.0.1 for both UDP and TCP right now. Candidates are drawn at
+    random below the dynamic range (20000-48999): OS-assigned UDP ports come in sequence and can
+    fall into a TCP exclusion range (Hyper-V/WinNAT reserve blocks of ~100 ports on this PC)."""
+    import random
+    candidates = [random.randint(20000, 48999) for _ in range(300)] + [0] * 50
+    for wanted in candidates:
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         try:
-            udp.bind((LOOPBACK, 0))
-            port = udp.getsockname()[1]
             try:
+                udp.bind((LOOPBACK, wanted))
+                port = udp.getsockname()[1]
                 tcp.bind((LOOPBACK, port))
             except OSError:
                 continue
