@@ -19,6 +19,7 @@ The other agents run a read-only export of a tested commit, `X4Mods\lanes\releas
 | b2 | `Documents\Egosoft\X4\45851` | `X4Mods\lanes\b2\...` | `rewrite-coord\lane-b2.lock` |
 | b3 | `Documents\Egosoft\X4\45853` | `X4Mods\lanes\b3\...` | `rewrite-coord\lane-b3.lock` |
 | b4 | `Documents\Egosoft\X4\45854` | `X4Mods\lanes\b4\...` | `rewrite-coord\lane-b4.lock` |
+| b5..b8 | `Documents\Egosoft\X4\45855`..`45858` | `X4Mods\lanes\b5\...`..`b8` | `rewrite-coord\lane-b5.lock`..`b8` |
 
 - **Game view**: every directory of the real install except `extensions` is a directory junction,
   every file a hardlink (`X4.exe`, `.cat/.dat`, DLLs). `steam_appid.txt` (392160) is the view's own
@@ -196,6 +197,42 @@ and the relay prints `p1@127.0.0.1:..., p2@127.0.0.1:...`.
   free lanes under their own lock, orphan lane X4s with a verified exe path, leftovers). Every run
   records the non-ok findings of a quick pass in `result.json` (`selfcheck`). Lanes also heal on use:
   a run on a dirty lane restores it, kills its orphan X4 and takes over a stale lock.
+
+## Protected X4 instances
+
+User decision (26 October): the x4mods-61 session's two clients and the user's own game are
+protected. Protected = an X4 whose command line names profile 45841 or 45842, whose exe is in the
+real Steam install or in `X4-Multiplayer-fixed-tick\.local\sandbox-baseline\guest\game-view`, or whose
+image path cannot be read (fail closed). The lanes never run x4lock on them (not even `query`), never
+close or terminate them; `stop`, `doctor --fix` and the orphan kill act on non-protected lane exes
+only. Presence of the instance mutex is read from the session's object directory
+(NtQueryDirectoryObject), never by opening it, so a lane can never hold a handle that keeps the name
+alive while x4mods-61 releases its own client. When only protected X4 run and the mutex exists, or
+when x4lock reports exit 5 after releasing a lane holder (a protected client holds the name too),
+the run waits (queue / `--wait`, retried every 10 s with the launch lock released in between).
+
+## Admission and memory pressure
+
+User: "we can handle like 7 or 8 instances at once". Every X4.exe on the PC counts (lanes, protected
+clients, other sessions): a lane X4 starts only while fewer than `MAX_X4_TOTAL = 8` run and at least
+`MIN_FREE_PER_START = 8` GB are available per X4 to be started (a session counts each client). The
+rule is checked at preflight and again under `lane-launch.lock`, so two runs cannot both pass it.
+Every running lane samples the machine every 10 s; when available memory stays under
+`PRESSURE_LOW_GB = 4` for more than 60 s, `rewrite-coord\lane-pressure.json` switches to `pressure`
+and no new lane X4 starts until available memory stayed at or above 8 GB for 60 s. Nothing is ever
+stopped for it (x4mods-61 reclaims the PC with quiet.lock or `x4lane stop --all-lanes`). result.json
+carries the samples (available RAM, X4 total, every X4's working set, hard faults from the kernel's
+PageReadCount, pressure) and summaries (`machine`, `log.fps`). `x4lane.py observe` records the same
+machine-wide, read-only, for any period.
+
+## Quiet-window handoff chain
+
+`handoff: a, b, c` in quiet.lock's owner.txt: a's `--timing` run adopts the lock (no other X4 may run);
+while it runs the rest of the chain is stored as `then:` (so nobody else can adopt it mid-run); at
+its end the lock is handed on (`handoff: b, c`, `handed_from: a`, `handoff_since`) instead of removed.
+A handed-on member that does not adopt within 10 minutes is skipped (by any run's checks or
+`doctor --fix`); the last member, or running out of members, removes the lock. The first member of
+a lead-made chain is not timed. `--timing` waiters never hold the queue head.
 
 ## Timing caveats
 
