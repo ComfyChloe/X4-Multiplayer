@@ -53,7 +53,7 @@
 #define MIRROR_PREFETCH_AHEAD 4u
 /* Round-robin capture (the path to a live mirror): after one complete frame (which counts the
    sectors), every captured frame walks the galaxy and cluster levels but only `sectors` sectors in
-   rotation (walk order), each set for two captured frames in a row with `pairs` (replay pairs), plus
+   rotation (walk order), each set for two captured frames in a row with `pairs` (paired observations), plus
    every sector whose attention is >= hot_attention (0 = none). A captured sector is the same walk as
    in a complete frame, so it is exact for its frame; the others keep their last captured frame.
    Subset frames carry MIRROR_FRAME_SUBSET in their FRAM flags. No engine pointer survives a frame.
@@ -950,6 +950,14 @@ static void mirror_frame(uint64_t frame) {
     qpc_read(&t_walk);
     for (unsigned v = 0; v < mirror_nvisitors; ++v)
         if (mirror_visitors[v]->end_frame) mirror_visitors[v]->end_frame(mirror_visitors[v]->user);
+    /* Subsets need a complete initial root/entity baseline. A row-limited first frame cannot
+       establish it; refuse instead of producing a sequence no safe mirror can consume. */
+    if (ms.rr.sectors && !ms.subset_now && mirror_full) {
+        ++ms.partial_frames;
+        ms.reason = "initial round-robin capture truncated";
+        mirror_stop();
+        return;
+    }
     uint32_t flags = (mirror_full ? 1u : 0u) | (ms.drop_flag ? 2u : 0u) | (ms.subset_now ? MIRROR_FRAME_SUBSET : 0u);
     if (ms.rr.sectors) {
         if (ms.subset_now) {

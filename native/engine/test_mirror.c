@@ -282,6 +282,12 @@ static unsigned check_records(const unsigned char *p, size_t n, uint64_t *stat_f
     return frames;
 }
 
+static void force_truncated_frame(void *unused, uint64_t frame) {
+    (void)unused;
+    (void)frame;
+    mirror_full = 1; /* exercise the same marker set by a row-budget exhaustion */
+}
+
 int main(int argc, char **argv) {
     int write_golden = argc > 1 && !strcmp(argv[1], "--write-golden");
     image = VirtualAlloc(NULL, X4_IMAGE_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
@@ -437,6 +443,17 @@ int main(int argc, char **argv) {
     assert(!mirror_arm_unchecked(rr, 1, 1, 0, 0));
     mirror_frame(1);
     assert(!ms.rr.sectors && !ms.subset_now && ms.nroots == 4);
+
+    /* A truncated initial capture cannot be promoted to the baseline for subset updates. */
+    static const mirror_visitor truncate = {.name = "test-truncation", .begin_frame = force_truncated_frame};
+    assert(mirror_add_visitor(&truncate));
+    DeleteFileW(rr);
+    mirror_rr_next = (mirror_rr_opts){1, 0, 0};
+    assert(!mirror_arm_unchecked(rr, 1, 3, 0, 0));
+    mirror_frame(1);
+    assert(!ms.armed && ms.frames_written == 0 && ms.frames_subset == 0 && ms.partial_frames == 1);
+    assert(!strcmp(ms.reason, "initial round-robin capture truncated"));
+    mirror_nvisitors = 0;
 
     printf("test_mirror: all passed (%zu bytes, layout %s)\n", n, MIRROR_LAYOUT_SHA256);
     return 0;
