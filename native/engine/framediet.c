@@ -50,6 +50,7 @@
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <bcrypt.h>
+#include <psapi.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -987,6 +988,14 @@ static int stats(lua_State *L) {
     number_field(L, "frame_rng_unknown", (double)o->frame_rng_unknown);
     number_field(L, "frame_ids", (double)o->frame_ids);
     number_field(L, "digest_max", o->digest_max);
+    {
+        /* Process commit (private bytes), to watch per-frame UI queues for growth while a site is skipped. */
+        PROCESS_MEMORY_COUNTERS_EX m;
+        memset(&m, 0, sizeof(m));
+        m.cb = sizeof(m);
+        if (K32GetProcessMemoryInfo(GetCurrentProcess(), (PROCESS_MEMORY_COUNTERS *)&m, sizeof(m)))
+            number_field(L, "commit_mb", (double)m.PrivateUsage / (1024.0 * 1024.0));
+    }
     string_field(L, "mode", modes[o->mode]);
     if (o->reason) string_field(L, "reason", o->reason);
     for (int r = 0; r < ST_COUNT; ++r) {

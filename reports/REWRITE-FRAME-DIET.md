@@ -87,8 +87,30 @@ Simulation-visible side effects of slot 10 found statically and confirmed native
   (AssignNewID 0xcc220, PostEvent) -> 0xd717a0 (`Component::ConnectTo` 0x3d6e50, SetLocalTransform): visual
   welding effects of construction traffic become components in the tree.
 - **View-cache flag**: the render helper 0x74ff70 sets bit 0x100000 in the flags word of the component's view
-  cache (`or [comp+0x11c+idx*0x80], 0x100000` at 0x75049a) after its LOD classification. Readers unknown
-  (rewrite-coord Q11 to transforms).
+  cache (`or [comp+0x11c+idx*0x80], 0x100000` at 0x75049a) after its LOD classification. Answer of transforms
+  (Q11): it means "rendered, attachment poses wanted"; PropagateCacheFlags then lets Positional vfunc 622
+  0x745920 recompute the attachment-pose block vc+0x30 (and clear the bit); BuildCache's walk itself never reads
+  the word. Without camera rendering the server saves that work (0.16-0.27 ms per frame of BuildCache in the
+  8-sector profile) and stops refreshing attachment poses; the only known reader of vc+0x30 is the render helper
+  (not proven that no simulation code reads it). Other dirty bits read by simulation code (0x40000 pose changed,
+  0x10000 registered) are not touched by the camera render.
+- OverlayCamera::Render 0x986070 calls Camera::Render 0x983160 directly (not through the vtable), so the
+  `camera` site does not skip overlay cameras.
+
+What the layer walk is (decompiled): AnarkScene slot 12 walks the scene's element tree depth-first and calls
+slot 15 per visible element (+0x10) and slot 16 after its children. Slot 15 computes the element's world
+matrices (+0x88..+0x104) from its local transform (+0x18..+0x48) and the scene's matrix stack (+0x70, depth +0x80),
+with dirty propagation in +0x15b, and assigns render layers ("MAX_LAYERS exceeded"); slot 16 pops the stack.
+So it is the UI scene-graph transform pass. While it is skipped, element world matrices stay at their last
+values (dirty flags stay set, so the first walk after the diet recomputes them). Readers are UI-side: the UI
+render, hit testing/picking and Lua functions that return element screen rectangles. The game's UI Lua can turn
+UI state into simulation inputs only on user interaction (clicks, hotkeys), which a server does not have.
+
+The element update 0x1399c40 (decompiled) walks the element tree (child +0x20, sibling +0x18, parent +0x10),
+evaluates keyframe tracks against the presentation time (+0x28 stamps, key arrays +0x30/+0x58, count +0x2f),
+marks changed elements through the presentation's vfunc +0xa0 into per-frame dirty lists that 0x138f2c0
+clears at the start of every update, and asks the presentation's time/slide object (+0x310) for child times. It
+reaches no Lua entry point; UI script events are dispatched earlier in the same update (0x138fa90).
 
 Slot 6 Anark functions (all 573 sampled ones) call no `Random::*` helper; the only UniverseID allocation in slot
 6 is `Lua::CreateSource` 0xb0e8a0 -> `CMessageManager::CreateSource` 0xae9050 (UI ICom message sources take IDs
@@ -98,7 +120,8 @@ from the universe ID map), inside the Lua dispatch that the diet keeps.
 
 | site | hook (all data-only) | what is skipped | equivalence |
 |---|---|---|---|
-| `ui_scenes` | AnarkScene vtable 0x2bc0e10 slot 12 (entry 0x2bc0e70, fn 0xaf8760), skipped only inside AnarkSceneManager slot 3 (entry 0x2bc0dd8, fn 0xaf8e50) on the MoveWorker | the per-frame layer walk; slot 5 still clears the scene's per-frame lists, so they stay empty (= the engine's state for a scene whose root is not visible); consumer is the UI render | identical (static + native audit) |
+| `ui_scenes` | AnarkScene vtable 0x2bc0e10 slot 12 (entry 0x2bc0e70, fn 0xaf8760), skipped only inside AnarkSceneManager slot 3 (entry 0x2bc0dd8, fn 0xaf8e50) on the MoveWorker | the per-frame UI scene-graph pass (element world matrices, render layers); slot 5 still clears the scene's per-frame lists, so they stay empty (= the engine's state for a scene whose root is not visible) | simulation identical (static + native audit); UI element matrices stale (UI render, picking) |
+| `ui_elements` | CODE PATCH: E8 rel32 at 0x138f477 (call of 0x1399c40 inside 0x138f2c0) retargeted to a near stub; verified against the original target, compare-exchanged, re-verified every frame, restored on disarm | the Anark element update (keyframes/attributes) | no Lua entry, no RNG/ID calls statically; native audit pending; UI animations stall: opt-in |
 | `draw` | RenderFlags bit `disable_rendering` 0x8000000 of qword 0x6adfa30 and staged copy 0x6adfa38 (interlocked OR/AND of that bit only, re-applied each frame, released only if we set it) | main-thread `RenderPreviousFrame` 0xf9ff40 skips drawing the render targets (test at 0xfa007a); per-target bookkeeping, present and frame limiter still run | identical (main thread only reads the double-buffered half) |
 | `ui_render` | CUIController XVbiHandler vtable 0x2bc07d0 slot 2 (entry 0x2bc07e0, fn 0xb3bba0) | UI draw-list build | no RNG/ID/event effect natively; per-frame UI queues consumed there are not yet checked for growth: opt-in |
 | `camera` | U::Camera vtable 0x2bae1a0 slot 3 (entry 0x2bae1b8, fn 0x983160), skipped only inside the GameClient render bank (entry 0x2c8abe0, fn 0x122bfc0) | camera render-list preparation | **changes the RNG stream, IDs and view-cache flags**: opt-in |
@@ -118,10 +141,10 @@ fields +8).
 never packaged. Lua: `start(mode, sites[, period[, audit_every[, digest_max]]])` returns a handle or
 `nil, reason`; `handle:set(mode[, sites])`, `handle:stats()`, `handle:active()`, `handle:stop()` (also `__gc`).
 Modes: `diet` (skip the active sites), `pass` (all wrappers installed, inert: A/B in one session), `audit`
-(run the originals and measure). Sites: `ui_scenes`, `ui_render`, `camera`, `draw`, `rng_split`, `server`
-(= ui_scenes,draw), `all` (= the four skip sites).
+(run the originals and measure). Sites: `ui_scenes`, `ui_render`, `camera`, `draw`, `ui_elements`, `rng_split`, `server`
+(= ui_scenes,draw), `all` (= ui_scenes,ui_render,camera,draw; ui_elements and rng_split are always named).
 
-Safety: X4.exe verified by size, SHA-256 and PE header; 14 code signatures (signatures.py `FRAMEDIET_SITES`)
+Safety: X4.exe verified by size, SHA-256 and PE header; 18 code signatures (signatures.py `FRAMEDIET_SITES`)
 for every wrapped function, the render-flag test and copy, and the audit probes; every vtable entry must hold the
 verified original before anything is written (all-or-nothing install); main Lua thread only; DLL pinned; state
 kept in static storage (the Lua handle only holds a generation number, so a wrapper running on another thread
@@ -192,10 +215,10 @@ state and with it the mod. What it does get, without hooks:
 
 ## 8. Next client-only costs
 
-1. Anark element update 0x1399c40 (~1.9 / 2.0 ms): direct call at 0x138f477 (E8 rel32) inside 0x138f2c0, whose
-   caller also runs the Lua dispatch. Data-only hooks cannot reach it; a call-site rel32 patch through a near
-   stub (as ai-driver does) can skip or throttle it (every k-th frame; the update is time-based). UI-only effect:
-   animations and attribute propagation stall or step coarsely; UI Lua reading element state sees older values.
+1. Anark element update 0x1399c40 (~1.9 / 2.0 ms): implemented as the opt-in `ui_elements` site (09cadac):
+   a call-site rel32 patch through a near stub, because 0x138f2c0 also runs the Lua dispatch. Native audit and
+   stability pending. UI-only effect: animations and attribute propagation stall (or step every `period`
+   frames); UI Lua reading element state sees older values.
 2. ICom message pump 0xae9880 / VisibilityData::Update 0xadcfa0 (0.75 / 1.2 ms): UI data and UI events; needs
    RE of which messages reach Lua/MD before anything is skipped.
 3. Slot 8 character animation, slot 9 sound (0.4 ms each under load): `-disablesound` first, then measure.
@@ -217,7 +240,7 @@ The framediet overlay holds `native/x4lan_framediet_64.dll`, `ui/framediet_probe
 
 ## 10. Open questions and native steps
 
-- Q11 (transforms): readers of view-cache flag bit 0x100000 set by the camera render.
+- Q11 answered (transforms): attachment-pose refresh; open whether simulation code reads vc+0x30.
 - `ui_render`: per-frame UI queue growth when skipped (commit size over a long diet run).
 - Whether `CMessageManager::CreateSource` IDs (UI message sources) differ between server and clients in practice.
 - Native steps: audit-002 (rng_split on/off), a diet stability run (`server`, then `all`, 10+ min, Lua and frames
