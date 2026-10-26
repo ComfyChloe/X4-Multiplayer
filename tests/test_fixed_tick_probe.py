@@ -138,7 +138,7 @@ class FixedTickProbeTests(unittest.TestCase):
           handle.aistats=function(self)
             return {installed=1,mode='rounds',frames=60,ms=1,max_ms=2,share=0.1,runs=40,irq_runs=2,passes=3,
               max_passes=5,loop_frames=0,driver_frames=60,buckets_run=12.5,deferred=3.25,evbuf=1,
-              cmp_passes_clean=170,cmp_passes_dirty=10,cmp_wake_absorb=0.125,state_hash='00000000deadbeef'}
+              cmp_passes_clean=170,cmp_passes_dirty=10,cmp_wake_absorb=0.125,cmp_deferred_immediate=0.375,state_hash='00000000deadbeef'}
           end
           ui();assert(aimode=='rounds')
           local en for _,l in ipairs(logs) do if l=='[X4LAN] FEATURE aidriver ENABLED mode=rounds' then en=true end end
@@ -147,7 +147,8 @@ class FixedTickProbeTests(unittest.TestCase):
           local drv
           for _,l in ipairs(logs) do
             if l:find('AIDRIVE mode=rounds driverFrames=60',1,true) and l:find('cmpClean=170 cmpDirty=10',1,true)
-              and l:find('cmpWakeAbsorb=0.125',1,true) and l:find('hash=00000000deadbeef',1,true) then drv=true end
+              and l:find('cmpWakeAbsorb=0.125',1,true) and l:find('cmpDeferredImmediate=0.375',1,true)
+              and l:find('hash=00000000deadbeef',1,true) then drv=true end
           end
           assert(drv)
         ''')

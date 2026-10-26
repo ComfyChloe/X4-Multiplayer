@@ -258,13 +258,43 @@ Stage 1, in order (lane runs with the `probe-s1b` overlay = d922398, release x4l
    census,normal`), idle then battle-400: structural means and per-run ratios (runs, passes, interrupt runs,
    attention restarts, removals, caller wakes, global handlers, wakes, events) agree within noise; zero
    `bad_caller`.
-3. `compare`, idle and attnload: fraction of order-equivalent passes and the four counters; reorder only on
+3. `compare`, idle and attnload: fraction of passes with no observed order hazard and the counters; reorder only on
    this branch (no walkpar), deferral in the integrated build (walkpar `WP_REPLAY`, see Q9).
 4. Before ours becomes authoritative outside tests (method step 2): capture the original's per-context
    decision trace natively (more call-site hooks inside the pinned Move body, census-only) and replay it
    offline against `ad_process_context`; zero differences required.
 
 ## 8. Open items / coordination (`rewrite-coord/questions.md`)
+
+### Codex continuation, 26 October 03:13
+
+`s1-alt-idle` completed natively at 03:12:02 using the already-frozen `probe-s1b` overlay
+(DLL SHA-256 `e19aebed712c1f92a52374bc692b26182fdaa64eb5ca4a9eaa24e30e56cee64b`).
+After 30 warmup windows, the same-world alternating run contains 287 original/census and 286 normal
+windows, 16,966 normal-driver frames, zero preflight refusals, loop warnings or bad callers. Relative
+normal/original differences: runs -0.1%, passes +0.6%, timed wakes -0.2%; all reported structural and
+population-normalized measures are within the prespecified 15% comparison band. This establishes
+idle structural consistency, not per-context decision equivalence or a performance improvement.
+The lane explicitly reports timing untrustworthy. The existing chain continues with compare-idle
+and battle-400; its immutable overlay is separate from the changes below.
+
+Compare diagnostics now account for a previously unobserved hazard: an immediate event buffered until
+the pass barrier can change what a later context in the **same** bucket sees. Sorting replay by original
+keys cannot repair that synchronous dependency. `cmpDeferredImmediate` counts such posts conservatively
+and marks the pass dirty. A legacy buffer lacking event-detail readout marks affected passes unchecked
+and dirty. Immediate posts are excluded from post/cancel conflict checks when their flag is available.
+The output says "no observed order hazard", since shared-state writes, duplicate-wake provenance and
+other uninstrumented channels still prevent an equivalence claim.
+
+Q9/Q20 adapter preparation: when `WP_HAS_AI_REPLAY` is present, bind only in `WP_REPLAY`/`WP_AI_REPLAY`,
+refreshing the binding at each AI phase so independently disabling the walk buffer cannot leave a stale
+"evbuf=1" claim. The append-only `buffer_event` readout is optional for older integrations.
+Synthetic regressions include a negative control where a later same-sector context sees an immediate
+effect in normal mode but misses it in ordered rounds, despite equal final event-delivery counts.
+Both C aidriver suites and 24 real LuaJIT probe tests pass; the fixed-tick DLL builds with warnings as
+errors. The new integrated walk adapter still requires validation against the walk owner's Q20 header
+and a later native test; these diagnostics do not change the unresolved RNG policy.
+
 
 - **Q4/Q7 (walk)**: answered — one buffer, `walkpar_api()` scopes + ordered replay; bound under
   `#ifdef X4LAN_WALKPAR_H`. **Q9 → walk** (open): an AI-only replay mode (WP_REPLAY also defers the walk) and

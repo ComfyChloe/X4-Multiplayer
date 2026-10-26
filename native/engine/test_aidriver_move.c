@@ -43,7 +43,7 @@ static int trace_seq_is(void *a, const int *want, int nwant) {
 
 /* ---- fake world ------------------------------------------------------------------------------ */
 #define NCTX 24
-enum { S_YIELD = 1, S_FINISH, S_WAKE, S_CLEAR, S_POST, S_POSTI, S_CANCEL, S_WAKESELF, S_DRAW };
+enum { S_YIELD = 1, S_FINISH, S_WAKE, S_CLEAR, S_POST, S_POSTI, S_CANCEL, S_WAKESELF, S_DRAW, S_OBSERVE_IMM };
 #define STEP(kind, a, b) (((kind) << 16) | ((a) << 8) | (b))
 typedef struct {
     unsigned char ctx[0x300];
@@ -54,7 +54,7 @@ typedef struct {
     unsigned char act[2][0x100];
     unsigned char bl[0x80];
     int steps[48], nsteps, runs;
-    int blocking, att_changed, irq_restart;
+    int blocking, att_changed, irq_restart, observed_imm;
     uint64_t gsel;                       /* handler index the global-interrupt runner selects */
 } fake_ctx;
 static fake_ctx C[NCTX];
@@ -225,7 +225,11 @@ static int fb_op(size_t i, uint64_t *src, int *task, int *type) {
     *src = B[i].src; *task = B[i].task; *type = B[i].type;
     return B[i].kind;
 }
-static const ad_event_buffer FB = {fb_scope_begin, fb_scope_end, fb_replay_tasks, fb_count, fb_op, NULL, NULL};
+static int fb_event(size_t i, int *imm, void **event) {
+    if (i >= nb_ops || B[i].kind != AD_OP_POST) return 0;
+    *imm = B[i].imm; *event = &B[i]; return 1;
+}
+static const ad_event_buffer FB = {fb_scope_begin, fb_scope_end, fb_replay_tasks, fb_count, fb_op, NULL, NULL, fb_event};
 static void fbo_set_order(uint64_t k) { cur_key = k; }
 static void fbo_replay_ordered(void) {   /* by (key, emission): smallest key first, ties in buffer order */
     for (;;) {
@@ -237,7 +241,7 @@ static void fbo_replay_ordered(void) {   /* by (key, emission): smallest key fir
     nb_ops = 0;
 }
 static const ad_event_buffer FBO = {fb_scope_begin, fb_scope_end, fb_replay_tasks, fb_count, fb_op,
-                                    fbo_set_order, fbo_replay_ordered};
+                                    fbo_set_order, fbo_replay_ordered, fb_event};
 
 /* ---- fake engine helpers ------------------------------------------------------------------------ */
 static void f_request_wake(void *dir, void *ctx) {
@@ -303,6 +307,7 @@ static void f_exec_run(void *es) {
     case S_CLEAR: f_clear_wake(CX(a)); break;
     case S_POST: ev_post(0x7000 + (uint64_t)a, b, 0); break;
     case S_POSTI: ev_post(0x7000 + (uint64_t)a, b, 1); break;
+    case S_OBSERVE_IMM: c->observed_imm = delivered_imm; break;
     case S_CANCEL: ev_cancel(0x7000 + (uint64_t)a, b); break;
     default: break;
     }
@@ -793,6 +798,41 @@ int main(void) {
             queue(x, 1); queue(yb, 1); queue(z, 1);
             frame(AD_ROUNDS);
             assert(nq == 3 && Q[0].src == 0x7001 && Q[1].src == (ord ? 0x7002u : 0x7003u) && Q[2].src == (ord ? 0x7003u : 0x7002u));
+        }
+        /* (i) key ordering cannot restore synchronous immediate delivery. Even a single bucket's
+               delayed immediate post must not produce a clean compare pass. Scheduled posts are
+               clean with readout; a legacy buffer without it is explicitly unchecked. */
+        for (int variant = 0; variant < 3; ++variant) {
+            static const int posti[] = {STEP(S_POSTI, 1, 9)};
+            ad_event_buffer buf = FBO;
+            if (variant == 2) buf.buffer_event = NULL;
+            ad_evbuf = &buf; fbo_on = 1;
+            world_reset(); nq = 0; nb_ops = 0; delivered_imm = 0;
+            void *a = mk(0, 0), *b = mk(1, 0);
+            steps(0, 1, variant == 0 ? posti : post); steps(1, 1, y);
+            queue(a, 1); queue(b, 1);
+            frame(AD_COMPARE);
+            assert(ad.win.cmp_deferred_immediate == (variant == 0 ? 1u : 0u));
+            assert(ad.win.cmp_unchecked == (variant == 2 ? 1u : 0u));
+            assert(ad.win.cmp_passes_dirty == (variant == 1 ? 0u : 1u));
+            assert(ad.win.cmp_passes_clean == (variant == 1 ? 1u : 0u));
+            assert(delivered_imm == (variant == 0 ? 1 : 0));
+            assert(nq == (variant == 0 ? 0 : 1));
+        }
+        /* Negative control: later context in the SAME bucket observes the immediate side effect in
+           normal mode, but misses it under an ordered barrier. The new hazard must catch this even
+           though there is no cross-bucket interaction and final delivery counts are identical. */
+        for (int mode = 0; mode < 2; ++mode) {
+            static const int posti[] = {STEP(S_POSTI, 1, 9)}, observe[] = {STEP(S_OBSERVE_IMM, 0, 0)};
+            ad_evbuf = &FBO; fbo_on = 1;
+            world_reset(); nq = 0; nb_ops = 0; delivered_imm = 0;
+            void *a = mk(0, 0), *b = mk(1, 0);
+            steps(0, 1, posti); steps(1, 1, observe);
+            queue(a, 1); queue(b, 1);
+            frame(mode ? AD_COMPARE : AD_NORMAL);
+            assert(C[1].observed_imm == (mode ? 0 : 1));
+            assert(delivered_imm == 1 && ad.win.cmp_post_cancel == 0);
+            if (mode) assert(ad.win.cmp_deferred_immediate == 1 && ad.win.cmp_passes_dirty == 1);
         }
         fbo_on = 0;
         ad_evbuf = NULL; evbuf_on = 0;

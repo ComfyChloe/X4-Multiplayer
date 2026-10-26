@@ -531,6 +531,7 @@ typedef struct {
     int (*buffer_op)(size_t i, uint64_t *src_id, int *task, int *type);   /* AD_OP_*; 0 = none */
     void (*set_order)(uint64_t key);    /* optional: key of the ops emitted from now on (0 = walk) */
     void (*replay_ordered)(void);       /* optional: replay all buffered ops by (key, emission) */
+    int (*buffer_event)(size_t i, int *immediate, void **event); /* optional Q9 readout, 1 = valid */
 } ad_event_buffer;
 static const ad_event_buffer *ad_evbuf;
 enum { AD_OP_POST = 1, AD_OP_CANCEL = 2 };   /* walkpar WP_OP_POST / WP_OP_CANCEL */
@@ -540,11 +541,16 @@ enum { AD_OP_POST = 1, AD_OP_CANCEL = 2 };   /* walkpar WP_OP_POST / WP_OP_CANCE
 static uint64_t ad_task_key(const void *sector) { return sector ? U64(sector, AD_COMP_ID) : AD_TASK_SERIAL; }
 
 #ifdef X4LAN_WALKPAR_H
-/* Integrated build (walkpar.h is included before this file): bind the walk agent's one buffer. Its
-   scopes defer posts only while walkpar runs in WP_REPLAY (which also defers the walk's own events). */
+/* Integrated build (walkpar.h is included before this file): bind only when scopes actually defer.
+   WP_AI_REPLAY leaves the component walk synchronous; WP_REPLAY also defers walk events. */
 static const ad_event_buffer *ad_walkpar_buffer(void) {
     static ad_event_buffer b;
     const wp_api *w = walkpar_api();
+#ifdef WP_HAS_AI_REPLAY
+    int mode = w->get_mode();
+    if (mode != WP_REPLAY && mode != WP_AI_REPLAY) return NULL;
+    b.buffer_event = w->buffer_event;
+#endif
     b.scope_begin = w->scope_begin; b.scope_end = w->scope_end; b.replay_tasks = w->replay_tasks;
     b.buffer_count = w->buffer_count; b.buffer_op = w->buffer_op;
 #ifdef WP_HAS_ORDER
@@ -583,6 +589,10 @@ static unsigned ad_post_cancel_conflicts(size_t ops) {
         for (size_t j = 0; j < ops; ++j) {
             uint64_t src2; int task2, type2;
             if (j == i || ad_evbuf->buffer_op(j, &src2, &task2, &type2) != AD_OP_POST) continue;
+            if (ad_evbuf->buffer_event) {
+                int imm; void *event;
+                if (ad_evbuf->buffer_event(j, &imm, &event) && imm) continue;
+            }
             if (src2 != src || type2 != type || task2 == task) continue;
             if ((j < i) != (ad_op_pos[j] < ad_op_pos[i])) { ++conflicts; break; }
         }
@@ -613,6 +623,27 @@ typedef struct {
     int pass_dirty;                   /* an order-visible interaction happened in this pass */
 } ad_rounds_t;
 static ad_rounds_t ad_rd;
+
+/* Ordered replay preserves post/cancel order, but cannot restore an immediate event's synchronous
+   effects on a later context in the same pass (including its own bucket). Mark these conservatively
+   before replay, while the buffer owns the event. No listener or event pointer is dereferenced here.
+   Older buffers without this readout leave the pass explicitly unchecked, never silently clean. */
+static void ad_check_deferred_events(size_t ops) {
+    if (!ops) return;
+    if (!ad_evbuf->buffer_op) { ++ad.win.cmp_unchecked; ad_rd.pass_dirty = 1; return; }
+    int unchecked = 0;
+    for (size_t i = 0; i < ops; ++i) {
+        uint64_t src; int task, type, immediate; void *event;
+        if (ad_evbuf->buffer_op(i, &src, &task, &type) != AD_OP_POST) continue;
+        if (!ad_evbuf->buffer_event || !ad_evbuf->buffer_event(i, &immediate, &event)) {
+            unchecked = 1;
+        } else if (immediate) {
+            ++ad.win.cmp_deferred_immediate;
+            ad_rd.pass_dirty = 1;
+        }
+    }
+    if (unchecked) { ++ad.win.cmp_unchecked; ad_rd.pass_dirty = 1; }
+}
 
 static int ad_rd_reserve(size_t n) {
     if (n <= ad_rd.cap) return 1;
@@ -810,6 +841,7 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
     }
     ad_rd.active = 0;
     ad_wake_restore(dir, w, wstart);   /* before the barrier replay: its wakes follow the pass's */
+    if (ad_evbuf && compare) ad_check_deferred_events(ad_evbuf->buffer_count());
     if (ordered) {    /* barrier: this pass's deferred ops in the original order, before the flip */
         ad_evbuf->set_order(0);
         size_t before = ad_evbuf->buffer_count();

@@ -128,6 +128,7 @@ typedef struct {
     uint64_t bad_caller, rounds_fallback, buckets_run, deferred;
     uint64_t cmp_event_pending, cmp_event_ran, cmp_null_lost, cmp_unchecked, cmp_passes_clean, cmp_passes_dirty;
     uint64_t cmp_post_cancel, cmp_wake_absorb;
+    uint64_t cmp_deferred_immediate;  /* synchronous posts delayed to the pass barrier (conservative hazard) */
     uint64_t rng_runs;                /* runs that drew from the interpreter's TLS random stream */
     uint64_t cmp_rng_passes;          /* passes whose drawing runs execute in another relative order */
     uint64_t wake_reordered;          /* rounds passes whose wakes were put back in the original order */
@@ -575,6 +576,10 @@ static void ad_phase(void *dir) {
     ad_move_fn original = (ad_move_fn)ad.calls[AD_CALL_PHASE].target;
     if (!ad_owner_ok() || ad.in_phase || dir != ad_director_now() || ad.mode == AD_OFF) { original(dir); return; }
     int mode = ad.mode;
+#ifdef X4LAN_WALKPAR_H
+    /* The independently controlled walk mode can change after aidriver was armed. */
+    ad_evbuf = mode >= AD_ROUNDS ? ad_walkpar_buffer() : NULL;
+#endif
     if (mode >= AD_NORMAL) {
         const char *why = ad_preflight(dir);
         if (why) { ad_driver_refuse(why); mode = AD_CENSUS; }
@@ -1072,6 +1077,7 @@ static int ad_lua_stats(lua_State *L) {
     number_field(L, "cmp_passes_dirty", (double)w->cmp_passes_dirty);
     number_field(L, "cmp_post_cancel", (double)w->cmp_post_cancel / frames);
     number_field(L, "cmp_wake_absorb", (double)w->cmp_wake_absorb / frames);
+    number_field(L, "cmp_deferred_immediate", (double)w->cmp_deferred_immediate / frames);
     number_field(L, "cmp_rng_passes", (double)w->cmp_rng_passes);
     number_field(L, "wake_reordered", (double)w->wake_reordered);
     number_field(L, "wake_order_skipped", (double)w->wake_order_skipped);

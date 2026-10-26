@@ -94,10 +94,11 @@ if drive:
     clean, dirty = dsum('cmpClean'), dsum('cmpDirty')
     if clean + dirty:
         p = clean + dirty
-        print(f'  compare: {p:.0f} passes, order-equivalent {100*clean/p:.2f}%, dirty {dirty:.0f}; '
-              f'unchecked (>1024 entries) {dsum("cmpUnchecked"):.0f}')
+        print(f'  compare: {p:.0f} passes, no observed order hazard {100*clean/p:.2f}%, dirty {dirty:.0f}; '
+              f'unchecked (large pass or missing event detail) {dsum("cmpUnchecked"):.0f}')
         print(f'  channels per frame: nullLost {dmean("cmpNullLost"):.3f}, wakeAbsorb {dmean("cmpWakeAbsorb"):.3f}, '
-              f'eventPending {dmean("cmpEventPending"):.3f}, eventRan {dmean("cmpEventRan"):.3f}, postCancel {dmean("cmpPostCancel"):.3f}')
+              f'eventPending {dmean("cmpEventPending"):.3f}, eventRan {dmean("cmpEventRan"):.3f}, postCancel {dmean("cmpPostCancel"):.3f}, '
+              f'deferredImmediate {dmean("cmpDeferredImmediate"):.3f}')
         print(f'  random order: {dsum("cmpRngPasses"):.0f} passes ({100*dsum("cmpRngPasses")/p:.2f}%) ran drawing contexts '
               f'in another relative order; wakes put back in original order in {dsum("wakeReordered"):.0f} passes '
               f'({100*dsum("wakeReordered")/p:.2f}%), skipped {dsum("wakeOrderSkipped"):.0f}')
