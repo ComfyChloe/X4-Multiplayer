@@ -395,9 +395,29 @@ For example, medical supplies repeatedly have a recorded 4400-cent sell price wh
 XML minimum is 4300 and the candidate predicts 4300. Captures now optionally append
 `prices <avg> <min> <max>` to each `W` record, reading the already documented loaded WareClass
 fields +0xc8/+0xd0/+0xd8. This eliminates an unverified base-XML assumption in future analysis;
-it does not establish the mismatch's cause. The extension passes synthetic C capture and Rust
-backward-compatible parser tests (32 Rust tests total); it was added after trade1 and has no
-native verification yet. Existing captures and the completed run overlay are unchanged.
+it does not by itself establish the mismatch's cause. The extension passes synthetic C capture
+and Rust backward-compatible parser tests. Existing captures and completed overlays are unchanged.
+
+**prices1 [native, 03:54-03:56 EDT]:** short bounded stress capture, b1/profile45850, source
+`a73e5d4`, frozen overlay `econ-prices-a73e5d4`. Of 27 captured reference-price triples, all 21
+present in the base XML match it; six additional wares are absent from that extracted file.
+Medical supplies is avg6600/min4300/max8900. The same 4300-candidate /
+4400-native sell discrepancy occurs at two stations in this run, ruling out differing base
+reference prices for these observations. The incomplete candidate has 22 exact / 10 different
+modeled buys, 30 exact / 13 different sells and 104 unmodeled observations. Production replay
+has 31 transitions: 17 exact, 5 recorded-draw, 9 undecidable, zero mismatches. Lane restored;
+timing untrustworthy. Evidence `.local/evidence-090-withheld`; log SHA-256
+`aaa4cac9d687740f7a894c693da173ec61bafa0698b2a2def218ad65c6e62463`.
+
+**Price-gap rule [static, synthetic]:** the final stage of 0x403a60 keeps an automatic sell
+price at least 100 cents above the buy price when both sides are eligible. It first reduces an
+automatic buy price, respecting the ware minimum, except that a fixed buy side or a sell price
+near the minimum makes it raise the automatic sell side. Two explicitly configured prices are
+left unchanged. `prices::separate_offer_prices` models this arithmetic and its fixed/automatic
+branches (33 Rust tests now pass). This rule is consistent with a 4300/4400 pair, but the capture
+does not yet contain buy/sell eligibility and override inputs, so it is a candidate explanation,
+not independently verified native price equivalence. The helper is not yet wired into the
+sector stand-in or used to relabel the candidate's mismatches.
 
 ## 10. Tests
 
@@ -413,7 +433,7 @@ native verification yet. Existing captures and the completed run overlay are unc
 
 ## 11. Native steps needed
 
-Next: verify the loaded reference-price capture extension natively, then continue the
+Next: capture buy/sell eligibility, overrides and refresh-time inputs for the price-gap and
 offer-target/reservation investigation. lab5 and trade1 production replays are complete within
 the limits in section 9. Preserve earlier failed captures and distinguish external trades from model differences.
 Historical run plans below describe how the lab/stress captures were prepared.

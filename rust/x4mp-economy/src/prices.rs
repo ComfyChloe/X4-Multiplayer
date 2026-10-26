@@ -173,12 +173,57 @@ pub fn cycles_in(cycle: f64, horizon: f64) -> f32 {
     }
 }
 
+/// Final buy/sell separation in `GetContainerWarePrice` (tail of 0x403a60, near 0x405d01).
+/// When both sides are eligible, automatic prices keep a one-credit (100-cent) gap.
+/// Prefer reducing the automatic buy price, respecting the ware minimum; raise the
+/// automatic sell price when the buy side is fixed or the sell side is near the minimum.
+/// Two explicitly configured prices are preserved. These flags describe the engine's
+/// price calculation, not whether an offer currently has a nonzero amount.
+///
+/// This isolated arithmetic is static-analysis/synthetic validated. Captures do not yet
+/// supply all eligibility/override inputs, so it is not used to claim native price replay.
+pub fn separate_offer_prices(
+    mut buy: i64,
+    mut sell: i64,
+    minimum: i64,
+    buy_enabled: bool,
+    sell_enabled: bool,
+    automatic_buy: bool,
+    automatic_sell: bool,
+) -> (i64, i64) {
+    let below_sell = sell.wrapping_sub(100);
+    if buy_enabled && sell_enabled && (automatic_buy || automatic_sell) && below_sell < buy {
+        if automatic_sell && (!automatic_buy || sell < minimum.wrapping_add(100)) {
+            sell = sell.max(buy.wrapping_add(100));
+        } else if automatic_buy {
+            buy = buy.min(below_sell.max(minimum));
+        }
+    }
+    (buy, sell)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
 
     // energycells: min 10, average 16, max 22 credits (wares.xml), in cents.
     const EC: WarePrices = WarePrices { avg: 1600, min: 1000, max: 2200 };
+
+    #[test]
+    fn automatic_offer_gap_preserves_fixed_prices_and_minimum() {
+        let gap =
+            |buy, sell, auto_buy, auto_sell| separate_offer_prices(buy, sell, 4300, true, true, auto_buy, auto_sell);
+        // At the minimum the buy price cannot drop: raise the automatic sell price.
+        assert_eq!(gap(4300, 4300, true, true), (4300, 4400));
+        assert_eq!(gap(4500, 4500, true, true), (4400, 4500));
+        assert_eq!(gap(4500, 4500, false, true), (4500, 4600));
+        assert_eq!(gap(4500, 4500, true, false), (4400, 4500));
+        assert_eq!(gap(4500, 4500, false, false), (4500, 4500));
+        assert_eq!(gap(4300, 4300, true, false), (4300, 4300));
+        assert_eq!(gap(4300, 4400, true, true), (4300, 4400));
+        assert_eq!(separate_offer_prices(4300, 4300, 4300, false, true, true, true), (4300, 4300));
+        assert_eq!(separate_offer_prices(4300, 4300, 4300, true, false, true, true), (4300, 4300));
+    }
 
     #[test]
     fn no_modifier_is_unit_times_amount() {
