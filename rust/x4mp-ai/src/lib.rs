@@ -12,11 +12,13 @@
 //! - [`runtime`]: the per-entity context: script stack, wakes, call/return, interrupt precedence.
 //! - [`orders`]: the ported scripts (`order.fight.patrol`, `move.seekenemies`).
 //! - [`replay`]: offline replay of a trace with a bit-exact diff.
+//! - [`native`]: native bracket captures (aicapture.h) and the checks that need no captured values.
 //! - [`system`]: the per-sector driver with per-entity RNG streams and a thread-invariance test bed.
 //!
 //! No third-party crates (workspace rule). No engine code is copied; semantics come from the game's
 //! own XML content and from disassembly notes cited at each item.
 
+pub mod native;
 pub mod orders;
 pub mod replay;
 pub mod rng;

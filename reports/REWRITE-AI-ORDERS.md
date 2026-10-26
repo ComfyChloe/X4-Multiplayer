@@ -211,9 +211,28 @@ builds and versions. Example: `rust/x4mp-ai/tests/data/patrol_zone.x4aitrace` (h
 | `abort` | orders.base `abort_called_scripts` | the order script is aborted |
 
 Capture points are agreed with the ai-driver agent (Q1): it owns the call-site and slot-565 hooks and offers
-the `ad_observer` callback table (aidriver.h, contrib/ferrite-rw-ai-driver 27beaf0); the capture module
-(planned `native/engine/aicapture.h`, ai-orders) chains there and adds only class-level slot-3 vtable swaps
-on query/effect action classes, registered in rewrite-coord/hooks.tsv before use, capture mode only.
+the `ad_observer` callback table (aidriver.h, contrib/ferrite-rw-ai-driver 27beaf0). The capture module
+`native/engine/aicapture.h` (ai-orders) chains there: **no hook site of its own, read-only** (hooks.tsv
+CHAIN-NOTE). Stage M2a is a *bracket capture* (`capture=bracket`): `run`/`yield`, `irun`/`irend` and `ev`
+records with game time, wake mask, TLS+0x318 at both ends, pc, the blocking action (keyword id, XML line),
+the timed wake, the abort/resume index, the global-interrupt queue entries a delivery added, and event
+parameters (components by UniverseID, numbers raw). Engine layouts used (decompile notes): ExecState
+`+0x00` caller, `+0x10` program, `+0x18` pc, `+0x20` blocking action index, `+0x30` yield flag, `+0x38`
+context value (tag 0x66, context + 0xa8); context `+0xc0` queue of `{handler index (-1 = blocking), event
+record}` (0x50 bytes), `+0x1a0` abort/resume index; event record at handler `+0x18`. Value capture for
+queries and facts (M2b) needs slot-3 swaps on the query action classes and is not built yet.
+
+Integration (the lead merges ai-driver + ai-orders): in `native/engine/fixedtick.c` add
+`#include "aicapture.h"` after `#include "aidriver.h"`, `static void ac_uninstall(void);` next to the
+`ad_uninstall` forward declaration, `ac_uninstall();` before `ad_uninstall();` in `disarm_because`, and
+`method(L, "aicapture", ac_lua_start); method(L, "aicapstats", ac_lua_stats);` after the aidriver methods;
+in `dev/fixed_tick_probe.lua`, after `FEATURE aidriver ENABLED`, call `owner:aicapture(X4LAN_AICAPTURE,
+X4LAN_AICAPTURE_MAX or 8)` when `X4LAN_AICAPTURE` is set, log `owner:aicapstats()` each second as
+`[X4LAN] AICAPTURE ...`, and stop with `owner:aicapture('off')` + `[X4LAN] AICAPTURE done` after
+`X4LAN_AICAPTURE_SECONDS`. Records go to X4's stdout (`AITR	` prefix); `x4ai-check
+<engine-output.log>` (rust/x4mp-ai) extracts and checks them (`x4mp_ai::native`): bit-exact wake times
+of every `<wait>` of Patrol and orders.base, exact draw counts per bracket class, the Patrol leg's engine
+share (create_position + get_safe_pos draws), and delivery draws per event class.
 
 ## 8. Implementation (`rust/x4mp-ai`, no third-party crates)
 
@@ -254,13 +273,15 @@ contract (`resume`, `matches`, `handler_actions`, `block_interrupt`, `on_abort`,
 
 ## 10. Native steps needed (next stage)
 
-1. Capture module `aicapture.h` on ai-driver's `ad_observer` (run/irun/ev brackets with TLS+0x318 and game
-   time; entity filter by script name `order.fight.patrol`), plus slot-3 swaps for FindComponent,
-   GetGlobalPath, CreatePosition, GetSafePos (results and TLS steps) and the effect classes; facts dumped per
-   bracket for the entity, its ship, zone, sector and current order. Register sites in hooks.tsv first.
-2. One lane run (`x4lane run`, <= 20 min, new world `custom_creative`) with the capture filtered to Patrol
-   job ships; collect the trace; replay offline; report mismatches by line.
-3. Cheap native check of the chance-0 finding: a test MD cue that executes 100,000 `debug_text chance="0"`
+1. Done offline (M2a): `aicapture.h` bracket capture on ai-driver's `ad_observer`, tested with synthetic
+   engine structures (test_aicapture.c, both modes) and in a local integration build of the ai-driver tree
+   (all ai-driver/fixedtick tests still pass); probe Lua hookup checked under LuaJIT with a mock module.
+2. Queued: one lane run (`x4lane run --agent ai-orders`, <= 18 min, new world `custom_creative`, overlay =
+   integration DLL + probe + `X4LAN_AIDRIVER='census'`, `X4LAN_AICAPTURE='order.fight.patrol'`) waiting for
+   quiet.lock; then `x4ai-check` on its engine-output.log.
+3. M2b: value capture (slot-3 swaps on FindComponent, GetGlobalPath, CreatePosition, GetSafePos, the effect
+   classes; facts per bracket) for a full replay of native Patrol traces. Register sites in hooks.tsv first.
+4. Cheap native check of the chance-0 finding: a test MD cue that executes 100,000 `debug_text chance="0"`
    in one action list, with the rng-streams counter: the MoveWorker draw count of that frame must rise by
    100,000.
 

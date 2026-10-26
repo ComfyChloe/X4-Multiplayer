@@ -15,6 +15,7 @@
 //! | raw u64 | `x:<hex>` (RNG states, masks) | `x:f3da54e488294596` |
 //! | position | `p:<x>,<y>,<z>` with each part an f32 token without prefix: 8 hex bits or `F<decimal>` | `p:F1,F0,F-2.5` |
 //! | keyword | `k:<token>` (classes, enums, order ids, script names) | `k:zone` |
+//! | engine tag only | `t:<tag>` (native capture of an undecoded value; read as keyword `tag:<n>`) | `t:85` |
 //! | string | `s:<text>` with `\t \n \\ \; \[ \]` escaped | `s:Patrol` |
 //! | list | `l:[<v>;<v>;...]` | `l:[c:0x10;c:0x11]` |
 
@@ -249,6 +250,8 @@ impl Val {
                 Ok(Val::Pos(Pos::new(c[0], c[1], c[2])))
             }
             "k" => Ok(Val::Key(body.to_string())),
+            // Native captures encode values they do not decode by their engine tag only.
+            "t" => body.parse::<u32>().map(|n| Val::Key(format!("tag:{n}"))).map_err(|e| format!("bad tag {t:?}: {e}")),
             "s" => Ok(Val::Str(unescape(body))),
             "l" => {
                 let inner = body
