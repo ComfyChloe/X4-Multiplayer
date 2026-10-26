@@ -13,11 +13,11 @@ called offline in a test process, no game running), **static** (reading the bina
 |---|---|---|
 | combat load scenario (`dev/combat_scenario/`) | done; full native pass (smoke-003) | native (functional) |
 | understand: weapon/turret update, aiming, firing, bullets, hits, damage | done (sections 3-7) | static |
-| battle profile | preliminary (battle-001 cut short by quiet.lock; 80 s in window) | native, not timing-trustworthy |
+| battle profile | complete run battle-002 (120 s window, 11 simprof windows, 110,233 samples) | native, not timing-trustworthy |
 | Rust: turret joint step `ikjoint::rotate_toward` | done, bit-identical | oracle: 1.7 M steps incl. NaN inputs |
 | capture/replay format and replay tool | done (binary + text form) | oracle + synthetic |
-| in-game recorder + shadow (`x4mp_combat.dll`, code patch 0xe1f840) | built; offline-tested on the mapped image; native run in progress | oracle (patch on mapped X4.exe) |
-| switch (Rust authoritative, verified) | built; offline-tested on the mapped image; native run pending | oracle (patch on mapped X4.exe) |
+| in-game recorder + shadow (`x4mp_combat.dll`, code patch 0xe1f840) | done: battle-002, 985,687 calls shadowed, 0 mismatches; 300,000-call capture replayed offline exact | native + oracle |
+| switch (Rust authoritative, verified) | done: battle-switch-001, 590,910 calls served by Rust, every call verified against the original, 0 mismatches | native + oracle |
 
 ## 2. Cost picture
 
@@ -29,28 +29,30 @@ almost no arithmetic: StopAiming only tests the turret's at-rest byte through tw
 once per weapon per frame. A data-oriented rewrite removes that cost by keeping the per-weapon state the
 idle test needs (at rest, aiming, functional, has target) in dense arrays per sector.
 
-Battle profile (native lane b3, run battle-001: 44 Argon vs 43 Xenon ships; cut short at game time 167 s
-by the user's N-player test, 8 complete 10-s simprof windows inside the measurement window, 74,296
-samples; other X4 instances on the PC, so shares are functional, not timing-trustworthy):
+Battle profile (native lane b1, run battle-002: 44 Argon vs 43 Xenon ships, complete 120.3 s
+measurement window, Xenon 43 -> 12 ships; 11 complete 10-s simprof windows, 110,233 samples; other X4
+instances on the PC, so shares are functional, not timing-trustworthy; the cut-short battle-001 gave the same
+ranking):
 
 | function | inclusive share of MoveWorker samples |
 |---|---|
-| `U::Weapon::Move` 0x8132d0 | 5.09 % |
-| - `UpdateShootDecision` 0x816d20 | 1.98 % (launch transform 0.82 %, aim point 0.51 %, angle tolerance 0.20 %) |
-| - `Fire` 0x817d20 -> bullet spawn (vfunc 998 0x8185b0) | 0.95 % (SpawnEffect 0.51 %, zone add 0.17 %) |
-| - `IsFunctional` 0x51e8b0 (twice per weapon) | 0.40 % |
-| - `AimAt` / `StopAiming` (turret IK) | 0.31 % / 0.26 % |
-| - `IKValue_RotateToward` 0xe1f840 (reimplemented) | 0.06 % |
-| launch-point transform `Weapon::vfunc985` 0x81c960, all callers | 0.91 % |
-| intercept solver 0x7e7460, all callers | 0.68 % |
-| `Bullet::UpdateFlight` 0xd4f240 | 0.88 % (ray cast 0.28 %, hit apply 0.26 %) |
-| zone ray cast 0xbc4d0, all callers (0x8401f0 0.35, bullets 0.28, navigation 0.17, missiles 0.08) | 0.99 % |
-| SpawnEffect 0xd73e00 / PostEvent 0x99a3f0 | 0.76 % / 1.47 % |
-| for scale: AIDirector::Move / Jolt Scene::Step / Sector::Move walk / ProcessDueEvents | 10.9 / 10.9 / 14.7 / 7.1 % |
+| `U::Weapon::Move` 0x8132d0 | 4.88 % (self 0.29 %) |
+| - `UpdateShootDecision` 0x816d20 | 1.90 % (launch transform 0x81cb80 0.79 %, aim point 0.44 %, self 0.21 %, angle tolerance 0x8169b0 0.13 %, LOS ray cast 0.06 %) |
+| - `Fire` 0x817d20 -> `FireShot` (vfunc 998 0x8185b0) | 0.77 % (SpawnEffect 0.38 %, zone bullet creation 0x83b500 0.14 %, bullet setup 0.09 %, heat 0.06 %, PostEvent 0.04 %) |
+| - `IsFunctional` 0x51e8b0 (twice per weapon), all callers | 0.59 % |
+| - `AimAt` / `StopAiming` (turret IK) | 0.29 % / 0.32 % (StopAiming all self) |
+| - `IKValue_RotateToward` 0xe1f840 (reimplemented) | 0.05 % |
+| launch-point transform `Weapon::vfunc985` 0x81c960, all callers / node transform 0x74c2d0 / 0x74be30 | 0.88 % / 1.31 % / 1.39 % |
+| aim point `ComputeAimPoint` 0x7e72b0 -> intercept solver 0x7e7460, all callers | 0.65 % (solver self 0.13 %) |
+| `Bullet::UpdateFlight` 0xd4f240 | 0.79 % (hit path OnHit/ApplyHit 0.20 %, impact effect 0.13 %, damage 0.08 %) |
+| zone ray cast 0xbc4d0, all callers (0x8401f0 0.31 %, bullets, navigation, missiles, fire decision) | 0.96 % |
+| SpawnEffect 0xd73e00 / PostEvent 0x99a3f0 / ComponentFactory::Create 0x8e0250, all callers | 0.55 % / 1.40 % / 0.21 % |
+| for scale: AIDirector::Move / Jolt Scene::Step / Sector::Move walk / ProcessDueEvents / BuildCache | 10.3 / 13.8 / 14.2 / 6.7 / 8.2 % |
 
 So in an 87-ship battle the weapon and bullet engine code is about 6-7 % of the MoveWorker; the joint step
-is negligible, the hottest pure part is the launch-point transform, then the intercept solver and the
-fire-decision geometry. A complete run in a quiet window gives the final ranking.
+is negligible, the hottest pure part is the launch-point transform (generic node-transform code, transforms
+agent, Q12), then the intercept solver and the fire-decision geometry. A run in a quiet window gives the
+timing-trustworthy ranking.
 
 ## 3. Weapon and turret update (`U::Weapon::Move`, vtable slot 674)
 
@@ -275,7 +277,11 @@ lane runs only by `dev/combat_scenario/combat_capture.lua` through the overlay f
   the bytes (head hash checked again), refuses a second session and a modified site, counts drops when the
   buffer is full. `native/engine/combat_check_lua.py` loads the DLL in a standalone LuaJIT: module table,
   argument checks, coroutine refusal, refusal outside the X4 process. Synthetic patch tests use a fake
-  function with the same prologue. Native run: pending (quiet.lock).
+  function with the same prologue.
+- Native (lane b1, battle-002, inside the 120-s window): 985,687 calls, all on the MoveWorker (foreign 0),
+  985,687 shadowed, **0 mismatches**; mode byte 0; MoveWorker MXCSR 0x1fbf (default control bits, sticky
+  exception flags, no FTZ/DAZ), unchanged during the window; the first 300,000 calls were captured and
+  `x4mp-combat-replay` replays them exactly offline. Code restored at window end.
 
 ## 10. Shadow and switch design for the joint step
 
@@ -292,7 +298,10 @@ lane runs only by `dev/combat_scenario/combat_capture.lua` through the overlay f
   reimplementation off for good (`FEATURE ikjoint DISABLED reason=verification mismatch`) and the original
   serves that and every later call. Offline on the mapped image: 4,000 calls with verify 1/7/0 equal the
   original alone bitwise; an injected one-bit fault is caught on the first verified call and every call
-  still gets the original's result.
+  still gets the original's result. **Native** (lane b4, battle-switch-001, verify 1, 120.3-s window of
+  the battle, Xenon 43 -> 24 ships): 590,910 joint steps served by the Rust step, all 590,910 verified
+  against the original on a scratch copy, 0 mismatches, no foreign value-source class, no switch-off; code
+  restored at window end and the scenario finished normally.
 - **Per sector:** the walk agent's per-sector jobs (rewrite-coord/interfaces.md) call the same function on
   each sector's turrets; joint steps are entity-local, aim events go into the sector's event buffer.
 
@@ -324,8 +333,8 @@ offline tests enforce all three rules.
 
 ## 12. Next pieces
 
-1. Joint step natively: capture + replay, shadow, then switch (verify 1) in a lane battle; quiet-window
-   battle profile for the final ranking.
+1. Joint step natively: done (capture + replay exact, shadow 0 mismatches, switch with verify 1 0
+   mismatches). Still open: a quiet-window battle profile for the timing-trustworthy ranking.
 2. Combat inside the parallel walk (with the walk agent's deferred-event buffer): the combat-specific
    hazards are bullet creation in `FireShot` (Weapon vtable slot 998: component factory, UniverseID, zone
    add), effect spawns, the thread-RNG draws (shot jitter and spin in `FireShot`, next-check jitter and
@@ -344,6 +353,6 @@ offline tests enforce all three rules.
 ## Open questions
 
 - Is the sub-stepped joint branch ever active (0x3d19b14)? Only the static initializer writes it (static).
-- MXCSR of the MoveWorker thread (native).
 - Thread safety of the zone spatial query under concurrent readers (0xbc4d0, global 0x6cf1670 in 0xd528f0).
-- The exact share of turret aiming in a battle (native profile).
+- Answered natively: MoveWorker MXCSR 0x1fbf; turret aiming in a battle is AimAt 0.29 % + StopAiming
+  0.32 % of the MoveWorker, the joint step 0.05 %.
