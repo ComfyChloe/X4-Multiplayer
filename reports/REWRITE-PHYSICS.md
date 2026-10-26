@@ -17,7 +17,8 @@ Every result below says whether it is static, synthetic (offline) or native (X4 
 | how much of the step is parallel | **none**: the step decomposes into ~68-450 jobs per frame (synthetic, at 14-30 reported workers) that all run serially on the MoveWorker | static + profile |
 | cost (8-sector harness, native profile 25 Oct) | `Scene::Step` 0.70 ms/frame at baseline, 0.81 ms/frame at 8 sectors (2.9-4.1% of MoveWorker samples); of that the Jolt update proper is ~1/3 (0.23-0.29 ms), the rest is X4's serial per-body synchronisation around it | native profile (existing evidence, re-attributed) |
 | pathing batch | one JobThreadManager job per batch (two batch vectors), agents assigned round robin; per batch a **wall-clock budget** (+0x218) after which the remaining agents get the cheap update and the cursor rotates. Under load the MoveWorker **does not wait** at the join (0.6% of the join's samples wait); the join cost is serial `ApplyQueuedOrders`, 2/3 of it one O(agents) scan (0xe955b0) | static + native profile |
-| more threads, same result? | **Jolt state: yes** (synthetic: bit-identical `SaveState` every frame, 4 scenarios, X4-style serial executor at 4/6/14/22/30/32 reported workers and Jolt's thread pool at 1-31 threads). **Contact callback order: no** - it changes with the decomposition once many pairs are in flight and with every parallel run. X4's listener is not thread-safe and sums manifold points per key in callback order. | offline harness `native/engine/physics_determinism.cpp` |
+| more threads, same result? | **Jolt state: yes** (synthetic: bit-identical `SaveState` every frame, 4 scenarios, X4-style serial executor at 4/6/14/22/30/32 reported workers, Jolt's thread pool at 1-31 threads, the parallel pool at 1-8 threads). **X4's listener state: yes as well** - the global callback order changes with the decomposition and with threads, but the calls of one body pair (and so of one contact-map key) keep their order in every execution. The listener still has to run serialised on the MoveWorker (no lock, TLS game time, allocations). | offline harness `native/engine/physics_determinism.cpp` (MSVC build), section 3 |
+| improvement | **joltwait** (native, exact): X4's job order without the per-job `Sleep(0)`; -0.128 ms/frame paired in a loaded battle run, worst frame 12.2 -> 5.0 ms; under CPU contention the Sleep(0) is 8.7 % of MoveWorker samples. Parallel pool: bit-identical offline, native integration deferred (Jolt compute ~0.7 ms/frame in the 87-ship battle) | sections 5-6 |
 
 ## 1. How X4 runs Jolt
 
@@ -139,7 +140,7 @@ mixed ships (boxes, spheres, capsules, hulls, mutable compounds of hulls, offset
 Every frame the complete `PhysicsSystem::SaveState(All)` (bodies, velocities, contact cache, global state) is
 hashed and compared with the reference (X4-style serial executor reporting 30 workers = this PC).
 
-Result `.local/evidence-220-withheld` (26 Oct): **VERDICT IDENTICAL**. 1700 frames x 4 scenarios
+Result `.local/evidence-220-withheld` (26 Oct, clang build): **VERDICT IDENTICAL**. 1700 frames x 4 scenarios
 x 12 configurations (X4-style serial at 4/6/14/22/30/32, `JobSystemSingleThreaded`, thread pool with 1/2/4/8/15/31
 threads, two runs each): state bit-identical every frame; the *set* of contact callbacks identical every frame;
 the *order* of callbacks identical only for the same decomposition run serially. In the packed scenario
@@ -150,19 +151,32 @@ Synthetic step times (this PC, clang build, not X4's MSVC code; per Update): swa
 at 2-4 threads, 250 us at 31 threads; packed 3.5-3.9 ms serial, 1.6-1.8 ms at 4-8 threads. Jolt at this scale
 gains ~2x from 2-4 threads and loses most of it beyond 8.
 
+MSVC build (`physics_build.py --msvc`, VS 2022 cl 19.44, the compiler family X4 uses; adds the C serial barrier
+of physics_jobs.h, the parallel pool of physics_pool.h and an X4-style listener that keeps, per body pair, a
+count and the sum of the averaged manifold points in callback order like 0xb75a0). Result
+`.local/evidence-221-withheld` (26 Oct): **VERDICT IDENTICAL** over 144 configuration
+runs: state, callback set and the listener aggregate identical every frame for every decomposition and thread
+count, both with the listener locked and called directly from the workers and with the buffered replay.
+
+Why the per-key order survives: every key of X4's contact map (both components and parts) belongs to one body
+pair, and all calls of one body pair are ordered by happens-before in every execution - one `ProcessBodyPair`
+per pair and collision step, then the CCD job for that pair (CCD-vs-CCD pairs are cast only from the lower body
+id), then the single removed-callbacks job, steps in sequence. Only the order *across* pairs varies, and X4
+walks its maps in key order. (The stage 1 version of this report wrongly concluded that X4's listener state
+depends on the decomposition.)
+
 Consequences for X4:
-- The Jolt state does not depend on the worker count or the execution order: a parallel job system would leave
-  bodies, velocities and the contact cache bit-identical.
-- X4's own state does: the listener's map sums manifold points per key in callback order, so with real threads
-  (and already today across PCs with different logical CPU counts, when many pairs are in flight) the averaged
-  contact position in `CollisionEvent`s can differ in the last bits when one key receives two or more manifolds
-  in one step. The probe counts how often that happens natively (`multiPairs`).
-- Running Jolt jobs on workers also requires serialising the listener (no locks) and giving workers the
-  MoveWorker's TLS game time and view-cache selection (the listener calls `GetTransformRelativeTo`).
+- Neither the Jolt state nor X4's listener state depends on the worker count or the execution order.
+- Running Jolt jobs on workers still requires serialising the listener (no locks; tree-node allocations) and
+  calling it on the MoveWorker (it reads the TLS game time and view-cache selection through
+  `GetTransformRelativeTo`). The buffer in physics_pool.h does that: calls are recorded on any thread with their
+  manifold and replayed after the step, grouped by body pair, in reservation order within a pair (which is the
+  serial per-pair order). The only listener output Jolt itself consumes, `mIsSensor`, depends on the pair only
+  (0xb74f0) and would be decided on the worker and verified at replay.
 
 ## 4. Native probe (physics_probe.h, data-only)
 Included by `fixedtick.c` (like walkprof.h) in every mode with the slot 0/15 brackets.
-- Wraps five .rdata vtable entries after verifying each holds the expected function (and 17 pinned code sites,
+- Wraps five .rdata vtable entries after verifying each holds the expected function (and 22 pinned code sites,
   `signatures.py` `PHYSICS_SITES`): XJobSystem CreateJob/WaitForJobs (jobs, time in Jolt per scene),
   XContactListener added/persisted/removed (callbacks, distinct body pairs, pairs with >= 2 manifolds).
   Counting only on the probe's MoveWorker; restored by compare-exchange on disarm.
@@ -171,14 +185,35 @@ Included by `fixedtick.c` (like walkprof.h) in every mode with the slot 0/15 bra
   busy workers while the MoveWorker is inside a Jolt step, pathing pass (batch phase) duration, and the slack
   between the end of the batch phase and the MoveWorker's join (+0x88).
 - Log: `[X4LAN] PHYSPROF ...` once per second (dev/fixed_tick_probe.lua); refusal `FEATURE physprof DISABLED`.
+- Mode `owner:physics_mode('joltwait'|'original')` (Lua `X4LAN_PHYSICS_MODE='joltwait'|'ab'`): the call only
+  queues the request; the owner thread switches at its next frame end, when no Jolt update is in flight
+  (X4 loads the UI script twice at game start and the first instance calls from another thread). A refusal or
+  anomaly is latched (`joltwait_reason`, `FEATURE joltwait DISABLED`); `modeFrames` per window tells pure
+  windows from mixed ones.
 - Tests: `native/engine/test_physics_probe.c` (synthetic image: verified swap or nothing, owner-thread counting,
   scene attribution, window folding, sampler occupancy/pass/join, loading skip, restore, foreign entries left
   alone), `tests/test_physics_probe_lua.py` (LuaJIT logging).
 
-## 5. Status and next stages
-- Stage 1 (this report, static + synthetic): done.
-- Stage 2 (native, lanes): probe runs (idle world, 8-sector harness) for Jolt time, contacts, multi-manifold
-  pairs, pool occupancy and the pathing join; results go to `rewrite-coord/results/`.
-- Stage 3: determinism-preserving improvement or measured no-go (candidates: parallel XJobSystem with a
-  serialised listener; the O(agents) removed-reference scan; the uncontended SetEvent in CanCollide).
+## 5. Native results (stage 2, lanes; timing not trustworthy)
+`rewrite-coord/results/2026-10-26-physics-stage2-native.md`. Idle world (physprof-001, 5,844 frames) and the
+combat battle scenario (battle-ab-002, 87 ships, 1,614 frames in the window): 94 / 114 jobs per frame, 685 /
+900 bodies in Main (Cutscene empty), ~8.4 / ~9.7 contact callbacks, 6.6 / 8.2 body pairs, 1.44 / 0.75 pairs
+with >= 2 manifolds per step; workers stay idle while the MoveWorker is in Jolt (0.00-0.016 busy); the pathing
+pass ends 8-27 ms before the MoveWorker joins.
+
+## 6. joltwait and the parallel pool (stage 3)
+`rewrite-coord/results/2026-10-26-physics-stage3-joltwait.md`.
+- joltwait swaps XJobSystem slots 3/4 for the serial barrier of physics_jobs.h: same selection rule (first
+  ready job in insertion order), no critical section, no `Sleep(0)`. Native A/B in the battle: 0.852 -> 0.726
+  ms/frame (paired +0.128 ms, 8 of 8 segment pairs), worst frame 12.2 -> 5.0 ms, 81,989 jobs, 0 anomalies.
+  In the contended combat profile `XBarrier::Wait` is 10.1 % of MoveWorker samples, 86 % of it `Sleep(0)`.
+- Parallel pool: offline bit-identical (section 3); native integration deferred - Jolt's own compute is
+  ~0.7 ms/frame (1.4 % of samples) in the battle, so 2x saves <= 0.35 ms/frame, and X4's shape, filter and
+  temp-allocator code would run concurrently for the first time.
+- Scene::Step besides Jolt (battle profile): `Body_UpdateShape` 0xbff80 0.68 %, velocity feedback 0xbfb00
+  0.67 %, pre-sync 0x3dc040 0.37 %, `SetLinearAndAngularVelocity` 0.22 % of MoveWorker samples.
+
+## 7. Status and next stages
+- Stage 1 (static + synthetic): done (6a0a9a8). Stage 2 (native probe runs): done. Stage 3: joltwait done
+  (quiet-window timing requested, Q17); parallel pool offline only.
 - Stage 4/5: flight/steering update 0xe8f250 assessment and a capture/replay of it.
