@@ -231,3 +231,48 @@ per-player money. Proposal: an authority-owned ledger, behind its own flag (play
    client 1 unchanged; FUNDS refusal independent per client; reconnect republishes the row;
    save/load on the authority keeps the ledger; a shared mission reward reaches only the
    accepting client; ordinary cargo/magnet and co-op trade results unchanged.
+
+MANUAL CHECKLIST (two humans; what dev/player_factions_session_probe.* cannot prove)
+Setup: matched internal packages, new world, both players use DIFFERENT commander names; client 1
+runs the authority world (7.x model). Both seated in their own co-op ship, undocked, about 2 km
+apart. Record both x4lan-debug.txt files.
+1. Radar/target (each client): the other co-op ship is on the radar and in the target list; select
+   it: target monitor shows the OTHER player's name as owner and the pool colour (client 1: slot 2
+   colour 255/140/0; client 2: slot 1 colour 0/170/255), green/friendly marker. Map: same owner
+   name in the object list and property owner filter does NOT list it as own property.
+2. Own ship: shows as own property ("player") on its own client; property menu lists it.
+3. Docking: client 2 docks at the LAN test station. Expect COOP_OWNER ... now=player on client 1
+   before/while docking (ship docked = shared player owner); docking granted; undock; the owner
+   returns to x4lan_player2 within ~1 s after free flight resumes.
+4. Trade: while docked, client 2 buys/sells energy cells at the station. Expect CARGO/TRADE result
+   OK on both logs and equal cargo counts on both clients (shared wallet in 7.x co-op).
+5. Jettison + magnet (7.1.1 case): client 2 drops 10 energy cells from its ship menu, then turns
+   on the loot magnet near the container: expect CARGO RESULT DROP OK then CARGO RESULT PICKUP OK
+   on client 2, the container disappears on both clients, ship 2 cargo equal on both.
+6. Handoff: client 2 docks, leaves the pilot seat; client 1 docks the other ship next to it and
+   takes ship 2's controls. Expect COOP_PILOT ship=2 pilot=0 -> pilot=p1, ship 2 player on client 1,
+   x4lan_player1 on client 2 once client 1 flies it.
+7. Diplomacy: both open the diplomacy menu: the other player's faction listed under its name and
+   colour, relation "Ally"; one changes it via console X4LAN_PLAYERS.setRelation (p1/p2) and both
+   menus follow; reset to allied.
+8. Friendly fire: client 1 fires a few shots at client 2's ship while allied. Expect at most a
+   short relation dip, RELATION_DRIFT ... restored=0.75 within 5 s on the affected client, no
+   police/NPC aggression afterwards.
+Pass = every step as expected and no FEATURE player_factions DISABLED / BUBBLE STOPPED lines.
+
+NAMES, RADAR, CARGO/MAGNET (session n-001, 26 October 2026 13:24-13:49, lanes b1/b2, tree 67002c0 +
+dev/player_factions_session_probe.{lua,xml}; strict validator success; logs .local/lane/sessions/n-001)
+- Distinct names: client 1 "Alpha Tester", client 2 "Bravo Tester" (set_object_name on player.entity
+  before READY; GetPlayerName reads it back). Client 1 shows x4lan_player2 = "Bravo Tester"
+  (diplomacy list, faction name, co-op ship 2 owner name); client 2 shows x4lan_player1 = "Alpha
+  Tester" likewise. Relations 0.75 -> 0 -> -0.5 -> 0.75 as before.
+- Radar: on each client the other client's co-op ship is known=true, isradarvisible=true, owner =
+  the other client's pool faction, ownername = the other player's name. (The target-monitor header
+  returned the unresolved placeholder $unlockheader$; the header text itself is not verified.)
+- Cargo/magnet with player factions on: client 1 (authority) seeded 30 energy cells into shared
+  ship 2 while it was owned by x4lan_player2 there. Client 2 jettisoned 10 natively (CARGO RESULT
+  DROP OK; authority CARGO_ORDER DROP status=OK, TRACK amount=10; client 2 CREATED the replica) and
+  collected it with the loot magnet (CARGO RESULT PICKUP OK; authority CARGO_ORDER PICKUP OK).
+- Not covered: docking/trade and handoff under player factions, visual colours, the target-monitor
+  header, and ships bought by client 2 mid-session (client-only new ships are not replicated to the
+  authority in the 7.x model, so they cannot appear on client 1 at all). See MANUAL CHECKLIST.
