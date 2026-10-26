@@ -31,7 +31,11 @@ The Rust relay carries the 7.6.0 motion work for every client: `NMODE` (normal, 
 travel, highway) is accepted from each ship's movement authority and forwarded to every
 other peer ahead of NAV2; clients keep one motion track, render clock and mode per remote
 ship and drive fast replicas by pose only. Universe motion is forwarded fresh-first per
-client (unsent samples oldest first, then round robin). `RTTPING` is answered with
+client (unsent samples oldest first, then catch-up of samples up to 5 s old, then two
+repeats), and `UFOCUS` from each client reaches the server with the client's lease
+appended. The server sends NPC motion on divergence from the shared prediction; clients
+estimate the server's clock rate (the fixed-step server runs slower than wall time) and
+dead-reckon replicas, see [ARCHITECTURE.md](ARCHITECTURE.md). `RTTPING` is answered with
 `RTTPONG` by the relay loop; the relay-side NETRTT statistics of the Python relay are
 not ported.
 
@@ -66,7 +70,8 @@ size; the relay rejects ships 3.. explicitly (no reply, or `REJECTED` for orders
 Per client and 20 Hz tick the relay sends AUTH, HGEN, WORLD, one NAV2 and one FIRE2
 per remote ship, one BODY2 per other player, a WALK2 per other player on foot
 (only on a new pose or every 0.2 s), and the existing bounded universe
-traffic (up to 32 new motion records plus 2 repeats, a 12-packet baseline window, NHP and
+traffic (up to 32 new motion records plus 2 repeats, in practice far fewer since NPC
+motion is sent on divergence, a 12-packet baseline window, NHP and
 IDENT only when the server issued a new sequence). Clients that send `XBCAP` receive each
 tick's packets packed into XB datagrams of at most 768 bytes. XSHIP adds
 `N - 3` rows per client at 5 Hz. Player traffic therefore grows linearly with N

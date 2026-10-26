@@ -212,6 +212,43 @@ class UniverseRelayTests(unittest.TestCase):
         later=forwarded(.71)  # round robin, not the same entities every tick
         self.assertEqual(len(later),REPEAT_BUDGET);self.assertFalse(set(later)&set(repeats))
 
+    def umove(self,entity,seq,time):
+        return f'UMOVE|1|{self.a}|{self.a}|{entity}|{seq}|{SECTOR}|{time}|1|2|3|0|0|0|100|0|0|0|0|0'.encode()
+
+    def test_guest_focus_reaches_host_once_per_sequence(self):
+        self.publish(Baseline.create(self.a,1,SECTOR,[row(1),row(2)]))
+        self.s.receive(f'UINTEREST|1|{self.b}|1|{SECTOR}'.encode(),P2,.2)
+        def focus(now): return [p for a,p in self.s.snapshots(now) if p.startswith(b'UFOCUS')]
+        self.s.receive(f'UFOCUS|1|{self.b}|1|0002'.encode(),P2,.3)
+        self.assertEqual(focus(.35),[f'UFOCUS|1|{self.a}|1|2'.encode()])
+        self.assertEqual(focus(.4),[])
+        for p,addr in [(f'UFOCUS|1|{self.b}|1|1',P2),(f'UFOCUS|1|{self.a}|5|1',P1),(f'UFOCUS|1|{self.b}|x|1',P2),
+                       (f'UFOCUS|1|{self.b}|3',P2)]:
+            self.assertEqual(self.s.receive(p.encode(),addr,.45),[])
+        self.assertEqual(focus(.5),[])
+        self.s.receive(f'UFOCUS|1|{self.b}|2|0'.encode(),P2,.55)
+        packets=self.s.snapshots(.6)
+        self.assertEqual([a for a,p in packets if p.startswith(b'UFOCUS')],[P1])
+
+    def test_sparse_motion_catches_up_recent_first_and_after_a_sector_change(self):
+        # Send on divergence: a straight-flying NPC's latest sample may be seconds old and is
+        # still what clients extrapolate; a client that has not received it gets it (<5 s).
+        self.publish(Baseline.create(self.a,1,SECTOR,[row(1),row(2)]))
+        self.publish(Baseline.create(self.a,2,OTHER,[row(7)]))
+        self.s.receive(self.umove(1,1,10),P1,1.0)
+        self.s.receive(self.umove(2,2,13),P1,4.0)
+        self.s.receive(f'UINTEREST|1|{self.b}|1|{SECTOR}'.encode(),P2,4.0)
+        def forwarded(now):
+            return [int(p.decode().split('|')[4]) for a,p in self.s.snapshots(now) if a==P2 and p.startswith(b'UMOVE')]
+        self.assertEqual(forwarded(4.05),[2,1])
+        self.assertEqual(forwarded(4.1),[2])           # one repeat of the recent sample
+        self.s.receive(f'UINTEREST|1|{self.b}|2|{OTHER}'.encode(),P2,4.2);forwarded(4.25)
+        self.s.receive(f'UINTEREST|1|{self.b}|3|{SECTOR}'.encode(),P2,4.3)
+        self.assertEqual(forwarded(4.35),[2,1])        # replicas were discarded: resend
+        self.s.receive(f'UINTEREST|1|{self.b}|4|{OTHER}'.encode(),P2,6.4);forwarded(6.45)
+        self.s.receive(f'UINTEREST|1|{self.b}|5|{SECTOR}'.encode(),P2,6.5)
+        self.assertEqual(forwarded(6.55),[2])          # entity 1 is older than 5 s
+
 
 @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')
 class UniverseLuaTests(unittest.TestCase):

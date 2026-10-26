@@ -20,6 +20,10 @@ const WINDOW: usize = 12;
 const MOTION_BUDGET: usize = 32;
 /// Unchanged samples repeated per tick for datagram loss (universe.py `REPEAT_BUDGET`).
 const REPEAT_BUDGET: usize = 2;
+/// Repeats only for samples younger than this; a sample a client has not received yet is
+/// forwarded while younger than `MOTION_KEEP` (universe.py `MOTION_LIVE`, `MOTION_KEEP`).
+const MOTION_LIVE: f64 = 0.75;
+const MOTION_KEEP: f64 = 5.0;
 const RETRY: f64 = 0.25;
 const STAGE_TIMEOUT: f64 = 15.0;
 const POSITION_LIMIT: f64 = 50_000_000.0;
@@ -295,6 +299,9 @@ pub struct GuestView {
     position_cursor: usize,
     /// entity -> motion seq last forwarded to this client (universe.py `forwarded`).
     forwarded: OrderedMap<u32, u32>,
+    /// UFOCUS (seq, target) from this client and the last seq forwarded to the server.
+    focus: Option<(u32, u32)>,
+    focus_sent: Option<u32>,
 }
 
 #[derive(Default)]
@@ -317,8 +324,8 @@ impl Universe {
     }
 }
 
-const UNIVERSE_PREFIXES: [&[u8]; 7] =
-    [b"UBEGIN|", b"UOBJECT|", b"UCOMMIT|", b"UACK|", b"UINTEREST|", b"UPOS|", b"UMOVE|"];
+const UNIVERSE_PREFIXES: [&[u8]; 8] =
+    [b"UBEGIN|", b"UOBJECT|", b"UCOMMIT|", b"UACK|", b"UINTEREST|", b"UPOS|", b"UMOVE|", b"UFOCUS|"];
 
 impl Session {
     /// UniverseSession.receive -> DockSession.receive -> CoopSession.receive.
@@ -370,12 +377,27 @@ impl Session {
                 if changed {
                     view.delivery = None;
                     view.delivered = None;
+                    // A sector change discards the client's replicas: resend cached motion.
+                    view.forwarded.clear();
                     // On sector return, require a capture newer than the last one sent.
                     view.interest_after_revision = match (&u.receiver.latest, same_guest) {
                         (Some(latest), true) => latest.revision,
                         _ => 0,
                     };
                 }
+                return Ok(vec![]);
+            }
+            ("UFOCUS", _, 5) if slot != Slot::P1 => {
+                // The client's selected NPC (0 = none); a newer sequence replaces the last.
+                let (sequence, target) = (seq(f[3])?, seq(f[4])?);
+                if !u.views.contains_key(&lease) {
+                    u.views.insert(lease, GuestView::default());
+                }
+                let view = u.views.get_mut(&lease).expect("inserted");
+                if view.focus.is_some_and(|(s, _)| sequence <= s) {
+                    return Err(Reject);
+                }
+                view.focus = Some((sequence, target));
                 return Ok(vec![]);
             }
             ("UACK", _, 6) if slot != Slot::P1 => {
@@ -495,23 +517,34 @@ impl Session {
                     view.delivery = Some(Sender::new(latest.clone()));
                 }
             }
+            if let Some((sequence, target)) = view.focus {
+                if view.focus_sent != Some(sequence) {
+                    view.focus_sent = Some(sequence);
+                    out.push((host_address, format!("UFOCUS|1|{host_lease}|{sequence}|{target}{claimant}").into_bytes()));
+                }
+            }
             if let Some(delivery) = view.delivery.as_mut() {
                 out.extend(delivery.packets(guest_lease, now).into_iter().map(|p| (guest_address, p)));
             }
             // Independent, lossy motion cannot create entities or commit a baseline.
-            // Samples not yet forwarded go first (oldest arrival first); up to REPEAT_BUDGET
-            // latest samples are then repeated round robin to cover datagram loss (universe.py).
-            let live: Vec<(u32, &Position)> = u
+            // Samples not yet forwarded go first: recent ones oldest arrival first, then older
+            // ones up to MOTION_KEEP (catch-up); up to REPEAT_BUDGET recent samples are then
+            // repeated round robin to cover datagram loss (universe.py).
+            let kept: Vec<(u32, &Position)> = u
                 .positions
                 .iter()
-                .filter(|(_, p)| p.sector == sector && now - p.at < 0.75)
+                .filter(|(_, p)| p.sector == sector && now - p.at < MOTION_KEEP)
                 .map(|(k, p)| (*k, p))
                 .collect();
-            if !live.is_empty() {
+            let live: Vec<(u32, &Position)> = kept.iter().copied().filter(|(_, p)| now - p.at < MOTION_LIVE).collect();
+            if !kept.is_empty() {
                 let mut fresh: Vec<(u32, &Position)> =
-                    live.iter().copied().filter(|(k, p)| view.forwarded.get(k) != Some(&p.seq)).collect();
-                // Stable, like Python's sorted(): equal arrival times keep insertion order.
-                fresh.sort_by(|a, b| a.1.at.partial_cmp(&b.1.at).unwrap_or(std::cmp::Ordering::Equal));
+                    kept.iter().copied().filter(|(k, p)| view.forwarded.get(k) != Some(&p.seq)).collect();
+                // Stable, like Python's sorted(): equal keys keep insertion order.
+                fresh.sort_by(|a, b| {
+                    let (old_a, old_b) = (now - a.1.at >= MOTION_LIVE, now - b.1.at >= MOTION_LIVE);
+                    old_a.cmp(&old_b).then(a.1.at.partial_cmp(&b.1.at).unwrap_or(std::cmp::Ordering::Equal))
+                });
                 let mut chosen: Vec<(u32, &Position)> = fresh.into_iter().take(MOTION_BUDGET).collect();
                 if chosen.len() < MOTION_BUDGET {
                     let rest: Vec<(u32, &Position)> =

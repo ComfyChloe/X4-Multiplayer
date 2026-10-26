@@ -423,6 +423,36 @@ def handwritten():
         for t in (.62, .7, .8, 1.0, 1.4, 2.5):
             s.snap(t)
 
+    # Send on divergence: UFOCUS reaches the host once per sequence; motion a guest has not
+    # received is forwarded while younger than 5 s (recent first), and again after a sector
+    # change; only recent samples are repeated.
+    s = case("universe: UFOCUS routing and sparse motion catch-up", "universe")
+    s.hello(0).hello(0, "p2", P2, 2)
+    s.send(.01, P1, "WORLD", 1, lease(1), 1, *world())
+    s.send(.02, P1, "CREW", 1, lease(1), 1, 1, 1).send(.02, P2, "CREW", 1, lease(2), 1, 2, 2)
+    for rev, sector, ids in ((1, SECTOR, (1, 2, 3)), (2, SECTOR2, (7,))):
+        rows = [ship_row(i) for i in ids]
+        digest = zlib.adler32("\n".join(rows).encode())
+        s.send(.03, P1, "UBEGIN", 1, lease(1), lease(1), rev, sector, len(rows), digest)
+        for i, row in enumerate(rows, 1):
+            s.send(.03, P1, "UOBJECT", 1, lease(1), lease(1), rev, i, row)
+        s.send(.03, P1, "UCOMMIT", 1, lease(1), lease(1), rev)
+    s.send(.04, P2, "UFOCUS", 1, lease(2), 1, 2)                       # before any interest
+    s.send(.05, P1, "UMOVE", 1, lease(1), lease(1), 1, 1, SECTOR, 10, 1, 2, 3, 0, 0, 0, 100, 0, 0, 0, 0, 0)
+    s.send(3.0, P1, "UMOVE", 1, lease(1), lease(1), 2, 2, SECTOR, 13, 1, 2, 3, 0, 0, 0, 100, 0, 0, 0, 0, 0)
+    s.send(3.0, P2, "UINTEREST", 1, lease(2), 1, SECTOR)
+    s.send(3.0, P2, "UFOCUS", 1, lease(2), 2, "0003")
+    s.send(3.0, P2, "UFOCUS", 1, lease(2), 2, 1)                       # same sequence
+    s.send(3.0, P1, "UFOCUS", 1, lease(1), 3, 1)                       # host cannot focus
+    s.send(3.0, P2, "UFOCUS", 1, lease(2), "x", 1).send(3.0, P2, "UFOCUS", 1, lease(2), 4)
+    for t in (3.05, 3.1, 3.2):
+        s.snap(t)
+    s.send(3.25, P2, "UFOCUS", 1, lease(2), 5, 0).snap(3.3)
+    s.send(3.4, P2, "UINTEREST", 1, lease(2), 2, SECTOR2).snap(3.45)
+    s.send(3.5, P2, "UINTEREST", 1, lease(2), 3, SECTOR).snap(3.55).snap(3.6)
+    s.send(5.6, P2, "UINTEREST", 1, lease(2), 4, SECTOR2).snap(5.65)
+    s.send(5.7, P2, "UINTEREST", 1, lease(2), 5, SECTOR).snap(5.75).snap(9.0)
+
     s = case("universe: build label must start with world1-", "universe")
     s.commands[0]["build"] = "test"
     s = case("base: invalid constructor token", "base")
@@ -497,7 +527,7 @@ class Fuzzer:
             kinds += ["CDOCK", "CDOCK"]
         if lvl == "universe":
             kinds += ["BASELINE*", "UBEGIN", "UOBJECT", "UCOMMIT", "UACK", "UINTEREST", "UPOS", "UMOVE", "UMOVE",
-                      "CARGOREQ", "CARGODONE", "CINV", "IDENT", "NHP", "NCLAIM", "NACK",
+                      "CARGOREQ", "CARGODONE", "CINV", "IDENT", "NHP", "NCLAIM", "NACK", "UFOCUS",
                       "FLOW_DELIVERY", "FLOW_DELIVERY", "FLOW_CARGO", "FLOW_NPC"]
         kind = r.choice(kinds)
         if kind.startswith("FLOW_"):
@@ -648,6 +678,9 @@ class Fuzzer:
             if kind == "UMOVE":
                 fields += self.pose(100)
             return [fields]
+        if kind == "UFOCUS":
+            seq = self.next_seq(("focus", slot)) if r.random() < .9 else r.randint(0, 3)
+            return [["UFOCUS", 1, L, seq, r.choice([0, r.randint(1, 40), "0007", "-1"])]]
         if kind == "CARGOREQ":
             verb = r.choice(["DROP", "PICKUP"])
             return [["CARGOREQ", 1, L, req, host, ship, epoch, verb, 0 if verb == "DROP" else r.choice([0, 11]),

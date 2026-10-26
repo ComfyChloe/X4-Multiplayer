@@ -24,6 +24,12 @@ MOTION_BUDGET = 32
 # (32 per tick, 640/s per guest) made up half of a guest's datagrams in a dense
 # sector while every mover already sends fresh samples; still objects resend every 2 s.
 REPEAT_BUDGET = 2
+# A sample is repeated only while younger than MOTION_LIVE s. The server sends on divergence
+# (a straight-flying NPC only every 1-4 s), and a client extrapolates any sample, so a sample
+# this client has not received yet (late joiner, sector change) is forwarded while younger
+# than MOTION_KEEP s, after the recent ones.
+MOTION_LIVE = .75
+MOTION_KEEP = 5.0
 RETRY = .25
 STAGE_TIMEOUT = 15
 
@@ -222,6 +228,9 @@ class UniverseSession(DockSession):
         # entity -> seq last forwarded to the current guest lease (fresh-first forwarding).
         self.forwarded = {}
         self.forwarded_lease = None
+        # UFOCUS (lease, seq, target): the guest's selected NPC, forwarded once per sequence.
+        self.focus = None
+        self.focus_sent = None
         self.cargo = CargoTransactions(self)
         self.identities = Identities(self)
         self.npc_combat = NpcCombat(self)
@@ -236,7 +245,8 @@ class UniverseSession(DockSession):
             return self.identities.receive(raw, address, now)
         if raw.startswith((b'CARGOREQ|', b'CARGODONE|', b'CINV|')):
             return self.cargo.receive(raw, address, now)
-        if not raw.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|', b'UACK|', b'UINTEREST|', b'UPOS|', b'UMOVE|')):
+        if not raw.startswith((b'UBEGIN|', b'UOBJECT|', b'UCOMMIT|', b'UACK|', b'UINTEREST|', b'UPOS|', b'UMOVE|',
+                               b'UFOCUS|')):
             return super().receive(raw, address, now)
         self.expire(now)
         if len(raw) > MAX_PACKET:
@@ -256,6 +266,8 @@ class UniverseSession(DockSession):
                 self.interest = (peer.lease, seq, sector)
                 if not old or old[0] != peer.lease or old[2] != sector:
                     self.delivery = None; self.delivered = None
+                    # A sector change discards the guest's replicas: resend cached motion.
+                    self.forwarded = {}
                     # The guest's receiver has a global monotonic revision. On
                     # sector return, an older cached baseline would be rejected
                     # forever and block delivery of the next fresh one. Require
@@ -263,6 +275,13 @@ class UniverseSession(DockSession):
                     # guest; a genuinely new guest may use the cache immediately.
                     self.interest_after_revision = (self.universe.latest.revision
                         if old and old[0] == peer.lease and self.universe.latest else 0)
+                return []
+            if f[0] == 'UFOCUS' and slot == 'p2' and len(f) == 5:
+                seq = sequence(f[3]); target = sequence(f[4])
+                old = self.focus
+                if old and old[0] == peer.lease and seq <= old[1]:
+                    return []
+                self.focus = (peer.lease, seq, target)
                 return []
             if f[0] == 'UACK' and slot == 'p2' and len(f) == 6:
                 rev = sequence(f[4]); index = -1 if f[5] == '-1' else sequence(f[5])
@@ -326,6 +345,10 @@ class UniverseSession(DockSession):
             return result
         _, seq, sector = self.interest
         result.append((host.address, f'UINTEREST|1|{host.lease}|{seq}|{sector}'.encode()))
+        focus = self.focus
+        if focus and focus[0] == guest.lease and focus[:2] != self.focus_sent:
+            self.focus_sent = focus[:2]
+            result.append((host.address, f'UFOCUS|1|{host.lease}|{focus[1]}|{focus[2]}'.encode()))
         if self.delivery_lease != guest.lease:
             self.delivery = None; self.delivered = None; self.delivery_lease = guest.lease
         latest = self.sectors.get(sector)
@@ -335,15 +358,18 @@ class UniverseSession(DockSession):
         if self.delivery:
             result.extend((guest.address, p) for p in self.delivery.packets(guest.lease, now))
         # Independent, lossy motion cannot create entities or commit a baseline.
-        # Samples not yet forwarded go first (oldest arrival first): a blind round robin
-        # over every live entity repeats unchanged samples while new ones wait, adding up
-        # to len(live)/640 s of jitter per sample in a dense sector. Up to REPEAT_BUDGET
-        # latest samples are then repeated round robin to cover datagram loss.
+        # Samples not yet forwarded go first: recent ones (younger than MOTION_LIVE) oldest
+        # arrival first, then older ones up to MOTION_KEEP (catch-up after a join or sector
+        # change). A blind round robin over every live entity repeated unchanged samples while
+        # new ones waited. Up to REPEAT_BUDGET recent samples are then repeated round robin to
+        # cover datagram loss.
         if self.forwarded_lease != guest.lease:
             self.forwarded = {}; self.forwarded_lease = guest.lease
-        live = [(k, v) for k, v in self.positions.items() if v[2] == sector and now - v[1] < .75]
-        if live:
-            fresh = sorted((kv for kv in live if self.forwarded.get(kv[0]) != kv[1][0]), key=lambda kv: kv[1][1])
+        kept = [(k, v) for k, v in self.positions.items() if v[2] == sector and now - v[1] < MOTION_KEEP]
+        live = [kv for kv in kept if now - kv[1][1] < MOTION_LIVE]
+        if kept:
+            fresh = sorted((kv for kv in kept if self.forwarded.get(kv[0]) != kv[1][0]),
+                           key=lambda kv: (now - kv[1][1] >= MOTION_LIVE, kv[1][1]))
             chosen = fresh[:MOTION_BUDGET]
             if len(chosen) < MOTION_BUDGET:
                 taken = {k for k, _ in chosen}

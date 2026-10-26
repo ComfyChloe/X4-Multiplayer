@@ -255,8 +255,8 @@ class NpcFlickerTests(unittest.TestCase):
           -- Baseline captured ~2 s ago (plus transfer): 6 km behind the live track.
           x=positions[object].x;baseline(2,{npcRow(1,math.floor(x-6000))},true)
           assert(run(120,true)==0 and positions[object].x>x)
-          -- Motion feed lost for longer than the hold: the baseline recovers the replica.
-          run(240,false);baseline(3,{npcRow(1,777)},true);run(2,false)
+          -- Motion feed lost for longer than the hold (8 s): the baseline recovers the replica.
+          run(540,false);baseline(3,{npcRow(1,777)},true);run(2,false)
           assert(positions[object].x==777 and not U.failed)
         ''')
 
@@ -278,38 +278,10 @@ class NpcFlickerTests(unittest.TestCase):
         self.assertTrue(4<=len(rows)<=6, rows)
         self.assertTrue(all(r.startswith('[X4LAN] UNIVERSE NPC_DIAG role=guest dt=') for r in rows), rows)
         self.assertIn('sector=cluster_14_sector001_macro replicas=1 hot=0 baseline_age=', rows[0])
-        for field, expected in (('creates',1),('respawns',1),('commits',1),('reset_jump',1),('suppressed',2),('samples',11)):
+        for field, expected in (('creates',1),('respawns',1),('commits',1),('snaps',1),('suppressed',2),('samples',11)):
             self.assertEqual(l.eval(f"total('{field}')"), expected, field)
         self.assertGreaterEqual(l.eval("total('jumps')"), 1)
         self.assertGreater(l.eval("total('max_jump')"), 80000)
-
-    def test_host_republishes_still_npcs_rarely_so_movers_keep_a_dense_sample_rate(self):
-        l=self.make();l.execute('''
-          local ids={};for id=1001,1300 do ids[#ids+1]=id;positions[id]={x=id*10,y=0,z=0,yaw=0,pitch=0,roll=0} end
-          api.GetNumAllFactionShips=function(f) return f=='argon' and #ids or 0 end
-          api.GetAllFactionShips=function(out,cap,f)
-           if f~='argon' then return 0 end;for i,id in ipairs(ids) do out[i-1]=id end;return #ids
-          end
-          U.receive({'UINTEREST','1',client.lease,'1','cluster_14_sector001_macro'},now)
-          for i=1,20 do now=now+.05;frames.onUpdate() end
-          assert(#U.publish==300,#U.publish)
-          for i=1,40 do now=now+.05;for id=1001,1030 do positions[id].x=positions[id].x+150 end;frames.onUpdate() end
-          local start=#sent;local counts={}
-          for i=1,60 do  -- 3 s
-           now=now+.05;for id=1001,1030 do positions[id].x=positions[id].x+150 end;frames.onUpdate()
-          end
-          for i=start+1,#sent do
-           local f=P.split(sent[i],'|')
-           if f[1]=='UMOVE' then local id=tonumber(f[5]);counts[id]=(counts[id] or 0)+1 end
-          end
-          local moverMin,stillMax=math.huge,0
-          for _,e in ipairs(U.publish) do
-           local n=counts[e.id] or 0
-           if e.object<=1030 then moverMin=math.min(moverMin,n) else stillMax=math.max(stillMax,n) end
-          end
-          -- Blind round robin gave every object 32*20/300 = 2.1 samples/s.
-          assert(moverMin>=45 and stillMax<=2,moverMin..' '..stillMax)
-        ''')
 
     def test_stale_baseline_and_invalid_diagnostic_value_are_logged_as_disabled_features(self):
         l=self.guest("X4LAN_CONFIG.npc_motion_diagnostics='often'");l.execute('''

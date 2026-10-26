@@ -37,24 +37,38 @@ is limited to 4096 objects. An overflowing enumeration never publishes a prefix.
 
 `UMOVE` carries host epoch, object ID, sequence, sector, source time, pose and
 linear/angular velocity for known committed IDs. Units are seconds, metres and
-radians. Legacy `UPOS` remains readable. Host and relay each budget 32 motion
-records per tick. The host republishes still (<1 m/s) NPCs every 2 s and slow
-(<20 m/s) ones every 0.5 s, so movers share the budget; the relay forwards
-not-yet-forwarded samples first. The guest writes replicas rendered at 150 m/s or
-more every frame (up to 256), and visits at most 128 others per frame no faster
-than every 15 ms. Rates are shared across a sector; there is no promise of
-20 updates/s per ship in a dense scene.
+radians. Legacy `UPOS` remains readable.
 
-The common `motion.lua` buffer estimates clock offset from the minimum observed
-arrival minus source time, interpolates with a 150 ms delay, predicts for at most
-350 ms and then freezes. Long gaps, discontinuities and ownership changes reset
-tracks. NPC replica tracks tolerate 2.5 s gaps, keep their clock offset, and
-raise the delay to 1.1 x the observed sample gap (max 0.6 s, horizon up to 1 s)
-through a bounded-rate render clock. Velocity and time are finite/bounded;
-orientation follows the shortest angular arc. Baselines recover lost motion; for
-NPC replicas only after 3 s without motion, as a baseline pose is older than live
-motion. See reports/NPC-FLICKER-20261025.txt. Engine changes wait for an unpaused
-frame; transport acknowledgement alone is not engine success.
+NPC motion is a shared prediction (`motion.lua` `M.drPredict`): pose plus velocity
+times elapsed source time, with a constant turn rate when the velocity heading matches
+the yaw (turns capped at 90 degrees, then straight). The host reads every published
+NPC each motion tick (one fixed 0.05 s server step), takes its velocity from the
+displacement over that tick (none across a jump above 100 km/s), and sends a sample
+only when the real pose diverges from the prediction of the last sent sample, or as a
+keepalive. Relevance sets thresholds and rates: hot (within 6 km of a player ship, or
+a client's target) 3 m / 0.02 rad, up to 20 Hz, keepalive 1 s; warm (within 25 km)
+25 m / 0.06 rad, up to 5 Hz, keepalive 2 s; cold 150 m / 0.2 rad, up to 2 Hz,
+keepalive 4 s. At most 32 samples per tick, most diverged first. A client reports its
+selected NPC with `UFOCUS|1|lease|seq|id` (0 = none, refreshed every second); relays
+forward each new sequence to the host (`|clientLease` appended on the dedicated relay),
+which treats it as hot for 3 s. Relays forward samples a client has not received
+first (younger than 0.75 s oldest arrival first, then up to 5 s old for a late joiner
+or sector change) and repeat at most two recent ones per tick.
+
+Clients dead-reckon on the host's clock. The dedicated server steps a fixed 0.05 s per
+frame at 12-20 fps, so its clock runs at about 0.6-1.1 x wall time; the client estimates
+rate and offset from the least-delayed samples (sliding 3 s window) and slews its render
+clock at most 0.1 s/s. A new sample's error blends out with a 0.3 s time constant; an
+error above max(1 km, 1 s of speed) snaps, at most once per second per replica, logged
+as `NPC_SNAP`. Prediction coasts 8 s past the last sample, then holds. Replicas moving
+at 150 m/s or more, or moving within 6 km of the player, are written every frame (up to
+256); the rest at most 128 per frame no faster than every 15 ms. A write whose engine
+pose slipped from the last written pose by more than max(5 km, 2 s of speed) is
+repeated in the same frame (`NPC_FRAME_SLIP`). A baseline pose replaces a live track
+only after 8 s without motion; replicas pause only when the baseline is 15 s old and
+no motion arrived for 5 s. The co-op `NAV2` path still uses the interpolation buffer
+(minimum-latency offset, 150 ms delay, 350 ms prediction). Engine changes wait for an
+unpaused frame; transport acknowledgement alone is not engine success.
 
 Guest replica mode removes independent NPCs only in its current sector and only
 following a complete, recent baseline. It creates host macro/owner replicas via
@@ -313,4 +327,5 @@ Other packets, and every packet for a peer without `XBCAP`, are sent as before; 
 relays ignore `XBCAP`, so old/new peers mix safely. The host sends `NHP` and `IDENT` only
 when a value changes, otherwise with a new sequence every 1.5 s (`NHP`) or 1.2 s
 (`IDENT`); the relays forward only sequences a client has not yet received, and repeat
-at most two unchanged universe motion samples per tick for loss.
+at most two unchanged universe motion samples per tick for loss. Universe motion is
+sent on divergence (see W01 above).
