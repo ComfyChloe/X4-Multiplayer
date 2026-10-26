@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4MP_PhysicsScenario" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <cue name="Start" namespace="this">
+      <conditions><event_cue_signalled cue="md.Setup.Start"/></conditions>
+      <actions>
+        <set_value name="$Allowed" exact="player.module == 'custom_creative'"/>
+        <set_value name="$Spawned" exact="false"/>
+        <debug_text text="'PHYSICSSCN loaded allowed=%s'.[$Allowed]"/>
+      </actions>
+      <cues>
+        <cue name="Spawn" checkinterval="1s">
+          <conditions><check_value value="$Allowed and player.age ge 15s and player.ship and not player.ship.dock"/></conditions>
+          <actions>
+            <create_group groupname="$Ships"/>
+            <do_all exact="3" counter="$i">
+              <create_ship name="$ship" macro="macro.ship_arg_s_fighter_01_a_macro" zone="player.zone" seed="9000 + $i">
+                <owner exact="faction.player" overridenpc="true"/>
+                <loadout><level exact="1.0"/><variation exact="0"/></loadout>
+                <pilot><select faction="faction.argon" tags="tag.aipilot"/></pilot>
+                <position object="player.ship" x="$i * 300m" y="$i * 100m" z="2km"/>
+                <rotation yaw="$i * 40deg" pitch="$i * 10deg" roll="$i * 5deg"/>
+              </create_ship>
+              <do_if value="$ship and $ship.pilot">
+                <add_to_group groupname="$Ships" object="$ship"/>
+                <start_script object="$ship.pilot" name="'x4mp.physics.forced'"/>
+              </do_if>
+            </do_all>
+            <set_value name="$Spawned" exact="true"/>
+            <debug_text text="'PHYSICSSCN spawned count=%s t=%s'.[$Ships.count, player.age]"/>
+          </actions>
+        </cue>
+        <cue name="Cleanup" checkinterval="1s">
+          <conditions><check_value value="$Spawned and player.age ge 90s"/></conditions>
+          <actions>
+            <destroy_group group="$Ships" explosion="false"/>
+            <debug_text text="'PHYSICSSCN cleaned'"/>
+          </actions>
+        </cue>
+      </cues>
+    </cue>
+  </cues>
+</mdscript>

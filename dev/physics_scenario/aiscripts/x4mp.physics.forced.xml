@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<aiscript name="x4mp.physics.forced" version="1" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="aiscripts.xsd">
+  <attention min="unknown">
+    <actions>
+      <set_flight_control_model object="this.ship" flightcontrolmodel="flightcontrolmodel.forced"/>
+      <debug_text text="'PHYSICSSCN forced ship=%s t=%s'.[this.ship, player.age]"/>
+      <wait exact="60s"/>
+      <set_to_default_flight_control_model object="this.ship"/>
+      <debug_text text="'PHYSICSSCN restored ship=%s t=%s'.[this.ship, player.age]"/>
+    </actions>
+  </attention>
+</aiscript>

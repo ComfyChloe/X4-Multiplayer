@@ -1,0 +1,2 @@
+<?xml version="1.0" encoding="utf-8"?>
+<content id="x4mp_physics_scenario" name="X4MP flight capture fixture" description="Disposable lane-only physics capture test" author="X4 Multiplayer contributors" version="1" save="false"><dependency version="900"/></content>
