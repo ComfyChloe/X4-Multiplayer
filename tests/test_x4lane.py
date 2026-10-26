@@ -343,6 +343,112 @@ class LockTests(Temp):
             core._remove_lock_dir(path, 'test')
 
 
+class HandoffTests(Temp):
+    def quiet(self, handoff=None):
+        path = self.tmp / 'quiet.lock'
+        path.mkdir()
+        lines = ['agent: overhaul-lead', 'purpose: drain for frame-diet']
+        if handoff:
+            lines.append(f'handoff: {handoff}')
+        (path / 'owner.txt').write_text(''.join(line + chr(10) for line in lines))
+        return path
+
+    def test_named_agent_adopts_and_removes_at_the_end(self):
+        path = self.quiet('frame-diet')
+        lock = core.DirLock.adopt(path, {'agent': 'frame-diet', 'run': 'r9'}, 'frame-diet')
+        owner = core.read_owner(path)
+        self.assertEqual(owner['agent'], 'frame-diet')
+        self.assertEqual(owner['handed_from'], 'overhaul-lead')
+        self.assertEqual(owner['handed_from_purpose'], 'drain for frame-diet')
+        self.assertNotIn('handoff', owner)                      # a second adoption is impossible
+        with self.assertRaises(core.LockBusy):
+            core.DirLock.adopt(path, {'agent': 'frame-diet', 'run': 'r10'}, 'frame-diet')
+        self.assertTrue(lock.release())
+        self.assertFalse(path.exists())
+
+    def test_other_agents_and_missing_handoff_are_refused(self):
+        path = self.quiet('frame-diet')
+        with self.assertRaises(core.LockBusy):
+            core.DirLock.adopt(path, {'agent': 'walk', 'run': 'r1'}, 'walk')
+        plain = self.tmp / 'plain'
+        plain.mkdir()
+        (plain / 'owner.txt').write_text('agent: overhaul-lead' + chr(10))
+        with self.assertRaises(core.LockBusy):
+            core.DirLock.adopt(plain, {'agent': 'frame-diet', 'run': 'r1'}, 'frame-diet')
+        self.assertEqual(core.read_owner(path)['handoff'], 'frame-diet')
+
+
+class PreflightHandoffTests(Temp):
+    """Run.preflight() with fake Windows hooks: who may start while quiet.lock exists."""
+
+    def setUp(self):
+        super().setUp()
+        import types
+        t = self.tmp
+        self.paths = core.Paths(t, t / 'lanes', t / 'coord', t / 'profiles', t / 'install', ROOT)
+        self.paths.coord.mkdir()
+        self.paths.x4lock_exe.parent.mkdir(parents=True)
+        self.paths.x4lock_exe.write_bytes(b'MZ')
+        self.others = []
+        fake = types.SimpleNamespace(
+            steam_status=lambda: {'running': True}, memory_status=lambda: (64 * 2**30, 40 * 2**30),
+            processes=lambda name='X4.exe': list(self.others), process_created=lambda pid: 1,
+            pid_alive=lambda pid, created=None: True)
+        self.saved = (x4lane.win, x4lane.verify_view, x4lane.check_base)
+        x4lane.win = lambda: fake
+        x4lane.verify_view = lambda paths, lane, check_hash=True: []
+        x4lane.check_base = lambda paths, base_lab=None: self.paths.base_lab
+
+    def tearDown(self):
+        x4lane.win, x4lane.verify_view, x4lane.check_base = self.saved
+        super().tearDown()
+
+    def run_for(self, agent, timing):
+        argv = ['run', '--agent', agent, '--collect', str(self.tmp / 'out'), '--timeout', '60', '--lane', 'b1']
+        run = x4lane.Run(x4lane.parser().parse_args(argv + (['--timing'] if timing else [])), self.paths)
+        return run
+
+    def quiet(self, handoff):
+        path = self.paths.quiet_lock
+        path.mkdir()
+        (path / 'owner.txt').write_text(''.join(line + chr(10) for line in (
+            'agent: overhaul-lead', 'purpose: drain', f'handoff: {handoff}')))
+        return path
+
+    def test_only_the_named_timing_run_adopts(self):
+        quiet = self.quiet('frame-diet')
+        for agent, timing in (('walk', True), ('frame-diet', False)):
+            with self.assertRaises(x4lane.TransientRefusal) as refused:
+                self.run_for(agent, timing).preflight()
+            self.assertIn('quiet.lock is held', str(refused.exception))
+            self.assertIn('handoff to frame-diet', str(refused.exception))
+        import types
+        self.others = [types.SimpleNamespace(pid=7, exe='C:/other/X4.exe', cmdline='-personalfolderid 45843')]
+        run = self.run_for('frame-diet', True)
+        with self.assertRaises(x4lane.TransientRefusal) as waiting:
+            run.preflight()
+        self.assertIn('no other X4', str(waiting.exception))
+        self.assertFalse(self.paths.lane('b1').lock.exists())      # lane lock given back while waiting
+        self.assertEqual(core.read_owner(quiet)['handoff'], 'frame-diet')
+        self.others = []
+        run = self.run_for('frame-diet', True)
+        run.preflight()
+        owner = core.read_owner(quiet)
+        self.assertEqual((owner['agent'], owner['handed_from'], owner['run']), ('frame-diet', 'overhaul-lead', run.run_id))
+        self.assertTrue(run.result['quiet_lock']['held_by_this_run'])
+        self.assertEqual(run.result['quiet_lock']['handed_from'], 'overhaul-lead')
+        run.release()
+        self.assertFalse(quiet.exists())
+        self.assertFalse(self.paths.lane('b1').lock.exists())
+
+    def test_timing_without_handoff_creates_and_removes_its_own_lock(self):
+        run = self.run_for('frame-diet', True)
+        run.preflight()
+        self.assertEqual(core.read_owner(self.paths.quiet_lock)['run'], run.run_id)
+        run.release()
+        self.assertFalse(self.paths.quiet_lock.exists())
+
+
 class LogWatcherTests(Temp):
     def test_until_markers_expect_and_partial_lines(self):
         log = self.tmp / 'x4lan-debug.txt'

@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
-"""Native X4 test lanes B1/B2: unattended disposable new-world runs on profiles 45850/45851.
+"""Native X4 test lanes b1-b4: unattended disposable new-world runs on profiles 45850/45851/45853/45854.
 
   python dev/x4lane.py status [--json]
-  python dev/x4lane.py setup [--lane b1|b2|all] [--check] [--refresh-base [--base-from DIR]]
-  python dev/x4lane.py run --agent NAME --collect OUTDIR --timeout S [--lane b1|b2|auto]
+  python dev/x4lane.py setup [--lane b1|b2|b3|b4|all] [--check] [--refresh-base [--base-from DIR]]
+  python dev/x4lane.py run --agent NAME --collect OUTDIR --timeout S [--lane b1|b2|b3|b4|auto]
          [--overlay DIR]... [--extension DIR]... [--until REGEX [--until-count N]] [--settle S]
          [--expect [N:]REGEX]... [--fail-on REGEX]... [--lua LINE]... [--ui-file ui/X.lua]...
          [--config KEY=VALUE]... [--gamestart ID] [--seed N] [--start module|menu]
          [--wait S] [--timing] [--base DIR] [--label TEXT] [--overwrite]
   python dev/x4lane.py make-overlay probe --out DIR [--root WORKTREE] [--mode MODE] [--dll FILE]
   python dev/x4lane.py make-overlay attnload --out DIR --attnload WORKTREE [--steps 0,8 ...]
-  python dev/x4lane.py restore --lane b1|b2      (after a crashed runner; needs the lane lock)
-  python dev/x4lane.py unlock --lane b1|b2       (removes a stale lane lock only)
+  python dev/x4lane.py restore --lane LANE      (after a crashed runner; needs the lane lock)
+  python dev/x4lane.py unlock --lane LANE       (removes a stale lane lock only)
 
 Lane game views (C:/Users/<you>/Documents/X4Mods/lanes/<lane>/game-view) link the real X4
 install through junctions and hardlinks and never write to it. A run refuses while
@@ -345,18 +345,20 @@ def cmd_setup(args, paths):
     log(f'x4lock: {paths.x4lock_exe}')
     for name in names:
         lane = paths.lane(name)
-        if args.rebuild_view:
-            lock = core.DirLock.acquire(lane.lock, lock_info('setup', 'rebuild view'), win().pid_alive)
-            try:
-                if any(p.exe and Path(p.exe) == lane.exe for p in x4_processes()):
-                    raise Refused(f'an X4 from lane {name} is running')
+        try:
+            lock = core.DirLock.acquire(lane.lock, lock_info('setup', 'setup lane'), win().pid_alive)
+        except core.LockBusy as busy:
+            print(f'lane {name}: busy, skipped ({busy})')
+            continue
+        try:
+            if any(p.exe and Path(p.exe) == lane.exe for p in x4_processes()):
+                raise Refused(f'an X4 from lane {name} is running')
+            if args.rebuild_view:
                 destroy_view(paths, lane, log)
-                make_view(paths, lane, log)
-            finally:
-                lock.release()
-        else:
             make_view(paths, lane, log)
-        make_profile(paths, lane, log)
+            make_profile(paths, lane, log)
+        finally:
+            lock.release()
         problems = verify_view(paths, lane)
         print(f'lane {name}: ' + ('ready' if not problems else '; '.join(problems)))
     return 0
@@ -413,7 +415,8 @@ def cmd_status(args, paths):
         return 0
     print(f"X4 native lanes {info['time']}")
     quiet = info['quiet_lock']
-    print('quiet.lock: ' + (f'HELD ({core.owner_summary(quiet)}) -> lane runs are refused' if quiet else 'free'))
+    handoff = f"; handoff to agent {quiet['handoff']} (its --timing run may adopt it)" if quiet and quiet.get('handoff') else ''
+    print('quiet.lock: ' + (f'HELD ({core.owner_summary(quiet)}){handoff} -> other lane runs are refused' if quiet else 'free'))
     for name, entry in info['lanes'].items():
         lock = entry['lock']
         state = 'free' if not lock else ('STALE ' if lock.get('stale') else 'held ') + core.owner_summary(lock)
@@ -545,9 +548,11 @@ class Run:
     def preflight(self):
         """One attempt to get a lane; raises TransientRefusal/Refused."""
         paths, a = self.paths, self.args
-        if paths.quiet_lock.exists():
-            raise TransientRefusal('rewrite-coord/quiet.lock is held ('
-                                   + core.owner_summary(core.read_owner(paths.quiet_lock))
+        quiet_owner = core.read_owner(paths.quiet_lock) if paths.quiet_lock.exists() else None
+        handoff = bool(quiet_owner is not None and a.timing and quiet_owner.get('handoff') == a.agent)
+        if quiet_owner is not None and not handoff:
+            raise TransientRefusal('rewrite-coord/quiet.lock is held (' + core.owner_summary(quiet_owner)
+                                   + (f", handoff to {quiet_owner['handoff']}" if quiet_owner.get('handoff') else '')
                                    + '); no X4 may be started now')
         steam = win().steam_status()
         if not steam['running']:
@@ -562,7 +567,7 @@ class Run:
             raise TransientRefusal(f'only {avail} GB RAM free (need {a.min_free_gb:g} GB)')
         base_lab = check_base(paths, self.base_lab)
         names, problems = [], []
-        for name in (['b1', 'b2'] if a.lane == 'auto' else [a.lane]):
+        for name in (list(core.LANE_PROFILES) if a.lane == 'auto' else [a.lane]):
             found = verify_view(paths, paths.lane(name), check_hash=False)
             problems += found
             if not found:
@@ -592,12 +597,17 @@ class Run:
                 others = [describe_x4(p) for p in x4_processes()]
                 if others:
                     raise TransientRefusal(f'--timing needs no other X4 running: {others}')
+                quiet_info = dict(
+                    lock_info(a.agent, f'x4lane timing run lane {self.lane.name}', self.run_id),
+                    owner=f'x4lane run {self.run_id} (agent {a.agent})',
+                    reason='timing-sensitive lane measurement', since=core.now_iso(),
+                    release='dev/x4lane.py removes it when the run ends')
                 try:
-                    self.quiet = core.DirLock.acquire(paths.quiet_lock, dict(
-                        lock_info(a.agent, f'x4lane timing run lane {self.lane.name}', self.run_id),
-                        owner=f'x4lane run {self.run_id} (agent {a.agent})',
-                        reason='timing-sensitive lane measurement', since=core.now_iso(),
-                        release='dev/x4lane.py removes it when the run ends'), take_stale=False)
+                    if handoff:
+                        self.quiet = core.DirLock.adopt(paths.quiet_lock, quiet_info, a.agent)
+                        self.result['quiet_lock']['handed_from'] = self.quiet.info.get('handed_from')
+                    else:
+                        self.quiet = core.DirLock.acquire(paths.quiet_lock, quiet_info, take_stale=False)
                 except core.LockBusy as error:
                     raise TransientRefusal(str(error))
                 self.result['quiet_lock']['held_by_this_run'] = True
@@ -606,7 +616,7 @@ class Run:
             self.lock = self.lane = None
             raise
         self.result.update(run_id=self.run_id, lane=self.lane.name, profile=self.lane.profile)
-        self.result['quiet_lock']['present_at_start'] = False
+        self.result['quiet_lock']['present_at_start'] = quiet_owner is not None
 
     def acquire(self):
         deadline = time.monotonic() + max(0, self.args.wait)
@@ -1101,8 +1111,8 @@ def copy_into(src: Path, out: Path, rel: str, note: list):
 GUARD_OLD = ("assert(cfg.attention_load_profile=='45841' or cfg.attention_load_profile=='45842',"
              "'unsupported attention load profile')")
 GUARD_NEW = ("assert(cfg.attention_load_profile=='45841' or cfg.attention_load_profile=='45842' or "
-             "cfg.attention_load_profile=='45850' or cfg.attention_load_profile=='45851',"
-             "'unsupported attention load profile')")
+             + ' or '.join(f"cfg.attention_load_profile=='{p}'" for p in core.LANE_PROFILES.values())
+             + ",'unsupported attention load profile')")
 
 
 def cmd_make_overlay(args, paths):
@@ -1134,9 +1144,9 @@ def cmd_make_overlay(args, paths):
         if GUARD_OLD in hooks:
             hooks = hooks.replace(GUARD_OLD, GUARD_NEW)
             note.append('ui/engine_hooks.lua: lane copy only - attention_load_profile guard also accepts '
-                        'the lane profiles 45850/45851 (one-line change, everything else unchanged)')
+                        'the lane profiles ' + '/'.join(core.LANE_PROFILES.values()) + ' (one-line change, everything else unchanged)')
         elif "'45850'" not in hooks:
-            raise UsageError('engine_hooks.lua profile guard changed and does not accept 45850/45851; '
+            raise UsageError('engine_hooks.lua profile guard changed and does not accept the lane profiles; '
                              'ask the attention-hooks owner to allow the lane profiles')
         (out / 'ui').mkdir(parents=True, exist_ok=True)
         (out / 'ui' / 'engine_hooks.lua').write_text(hooks, encoding='utf-8')
@@ -1177,13 +1187,13 @@ def parser():
     s = sub.add_parser('status', help='locks, quiet.lock, running X4, RAM, Steam')
     s.add_argument('--json', action='store_true')
     s = sub.add_parser('setup', help='create/check lane views, profiles, base and x4lock')
-    s.add_argument('--lane', default='all', choices=('b1', 'b2', 'all'))
+    s.add_argument('--lane', default='all', choices=tuple(core.LANE_PROFILES) + ('all',))
     s.add_argument('--check', action='store_true')
     s.add_argument('--refresh-base', action='store_true', help='replace lanes/base/x4_lan_lab')
     s.add_argument('--base-from', help='x4_lan_lab to snapshot (default: this worktree)')
     s.add_argument('--rebuild-view', action='store_true', help='remove and recreate the view (after X4 updates)')
     r = sub.add_parser('run', help='one unattended native run in a lane')
-    r.add_argument('--lane', default='auto', choices=('b1', 'b2', 'auto'))
+    r.add_argument('--lane', default='auto', choices=tuple(core.LANE_PROFILES) + ('auto',))
     r.add_argument('--agent', required=True)
     r.add_argument('--label', default='')
     r.add_argument('--collect', required=True, help='output directory (result.json, logs)')
@@ -1214,9 +1224,9 @@ def parser():
     r.add_argument('--allow-workshop', action='store_true')
     r.add_argument('--test-skip-release', action='store_true', help=argparse.SUPPRESS)  # lane self-test only
     s = sub.add_parser('restore', help='reset a lane to base after a crashed runner')
-    s.add_argument('--lane', required=True, choices=('b1', 'b2'))
+    s.add_argument('--lane', required=True, choices=tuple(core.LANE_PROFILES))
     s = sub.add_parser('unlock', help='remove a stale lane lock')
-    s.add_argument('--lane', required=True, choices=('b1', 'b2'))
+    s.add_argument('--lane', required=True, choices=tuple(core.LANE_PROFILES))
     m = sub.add_parser('make-overlay', help='build a ready overlay directory')
     m.add_argument('kind', choices=('probe', 'attnload'))
     m.add_argument('--out', required=True)

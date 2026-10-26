@@ -415,3 +415,128 @@ def terminate(pid: int, expected_exe) -> bool:
         if not path or PureWindowsPath(path) != PureWindowsPath(str(expected_exe)):
             return False
         return bool(kernel32.TerminateProcess(h, 1))
+
+
+
+# ---------------------------------------------------------------------------------------
+# network endpoints (session mode: a server must stay on loopback) and job process lists
+
+iphlpapi = ctypes.WinDLL('iphlpapi')
+AF_INET = 2
+AF_INET6 = 23
+TCP_TABLE_OWNER_PID_ALL = 5
+UDP_TABLE_OWNER_PID = 1
+ERROR_INSUFFICIENT_BUFFER = 122
+JOB_OBJECT_BASIC_PROCESS_ID_LIST = 3
+TCP_STATES = {1: 'CLOSED', 2: 'LISTEN', 3: 'SYN_SENT', 4: 'SYN_RCVD', 5: 'ESTABLISHED', 6: 'FIN_WAIT1',
+              7: 'FIN_WAIT2', 8: 'CLOSE_WAIT', 9: 'CLOSING', 10: 'LAST_ACK', 11: 'TIME_WAIT', 12: 'DELETE_TCB'}
+
+
+class MIB_TCPROW_OWNER_PID(ctypes.Structure):
+    _fields_ = [('dwState', wt.DWORD), ('dwLocalAddr', wt.DWORD), ('dwLocalPort', wt.DWORD),
+                ('dwRemoteAddr', wt.DWORD), ('dwRemotePort', wt.DWORD), ('dwOwningPid', wt.DWORD)]
+
+
+class MIB_UDPROW_OWNER_PID(ctypes.Structure):
+    _fields_ = [('dwLocalAddr', wt.DWORD), ('dwLocalPort', wt.DWORD), ('dwOwningPid', wt.DWORD)]
+
+
+class MIB_TCP6ROW_OWNER_PID(ctypes.Structure):
+    _fields_ = [('ucLocalAddr', ctypes.c_ubyte * 16), ('dwLocalScopeId', wt.DWORD), ('dwLocalPort', wt.DWORD),
+                ('ucRemoteAddr', ctypes.c_ubyte * 16), ('dwRemoteScopeId', wt.DWORD), ('dwRemotePort', wt.DWORD),
+                ('dwState', wt.DWORD), ('dwOwningPid', wt.DWORD)]
+
+
+class MIB_UDP6ROW_OWNER_PID(ctypes.Structure):
+    _fields_ = [('ucLocalAddr', ctypes.c_ubyte * 16), ('dwLocalScopeId', wt.DWORD), ('dwLocalPort', wt.DWORD),
+                ('dwOwningPid', wt.DWORD)]
+
+
+for _name in ('GetExtendedTcpTable', 'GetExtendedUdpTable'):
+    getattr(iphlpapi, _name).restype = wt.DWORD
+    getattr(iphlpapi, _name).argtypes = [ctypes.c_void_p, ctypes.POINTER(wt.DWORD), wt.BOOL, wt.ULONG,
+                                         ctypes.c_int, wt.ULONG]
+
+
+def _port(value) -> int:
+    return ((value & 0xFF) << 8) | ((value >> 8) & 0xFF)
+
+
+def _ipv4(value) -> str:
+    import socket
+    import struct
+    return socket.inet_ntoa(struct.pack('<I', value))
+
+
+def _ipv6(raw) -> str:
+    import socket
+    return socket.inet_ntop(socket.AF_INET6, bytes(raw))
+
+
+def _rows(function, family, table_class, row_type):
+    size = wt.DWORD(0)
+    function(None, ctypes.byref(size), False, family, table_class, 0)
+    for _ in range(6):
+        buffer = ctypes.create_string_buffer(size.value + 8192)
+        size = wt.DWORD(len(buffer))
+        status = function(buffer, ctypes.byref(size), False, family, table_class, 0)
+        if status == 0:
+            count = ctypes.c_uint32.from_buffer(buffer).value
+            return list((row_type * count).from_buffer(buffer, 4))
+        if status != ERROR_INSUFFICIENT_BUFFER:
+            raise OSError(status, f'{function.__name__} failed')
+    raise OSError(ERROR_INSUFFICIENT_BUFFER, 'endpoint table kept growing')
+
+
+def endpoints(pids) -> list:
+    """TCP (all states) and UDP endpoints owned by the given processes, IPv4 and IPv6."""
+    pids = {int(p) for p in pids}
+    out = []
+    for row in _rows(iphlpapi.GetExtendedTcpTable, AF_INET, TCP_TABLE_OWNER_PID_ALL, MIB_TCPROW_OWNER_PID):
+        if row.dwOwningPid in pids:
+            out.append({'proto': 'tcp', 'pid': row.dwOwningPid, 'local': _ipv4(row.dwLocalAddr),
+                        'lport': _port(row.dwLocalPort), 'remote': _ipv4(row.dwRemoteAddr),
+                        'rport': _port(row.dwRemotePort), 'state': TCP_STATES.get(row.dwState, str(row.dwState))})
+    for row in _rows(iphlpapi.GetExtendedTcpTable, AF_INET6, TCP_TABLE_OWNER_PID_ALL, MIB_TCP6ROW_OWNER_PID):
+        if row.dwOwningPid in pids:
+            out.append({'proto': 'tcp6', 'pid': row.dwOwningPid, 'local': _ipv6(row.ucLocalAddr),
+                        'lport': _port(row.dwLocalPort), 'remote': _ipv6(row.ucRemoteAddr),
+                        'rport': _port(row.dwRemotePort), 'state': TCP_STATES.get(row.dwState, str(row.dwState))})
+    for row in _rows(iphlpapi.GetExtendedUdpTable, AF_INET, UDP_TABLE_OWNER_PID, MIB_UDPROW_OWNER_PID):
+        if row.dwOwningPid in pids:
+            out.append({'proto': 'udp', 'pid': row.dwOwningPid, 'local': _ipv4(row.dwLocalAddr),
+                        'lport': _port(row.dwLocalPort)})
+    for row in _rows(iphlpapi.GetExtendedUdpTable, AF_INET6, UDP_TABLE_OWNER_PID, MIB_UDP6ROW_OWNER_PID):
+        if row.dwOwningPid in pids:
+            out.append({'proto': 'udp6', 'pid': row.dwOwningPid, 'local': _ipv6(row.ucLocalAddr),
+                        'lport': _port(row.dwLocalPort)})
+    return out
+
+
+def _job_pids(self) -> list:
+    """PIDs of all processes currently in this job (a server and the processes it started)."""
+    capacity = 256
+    for _ in range(4):
+        class LIST(ctypes.Structure):
+            _fields_ = [('NumberOfAssignedProcesses', wt.DWORD), ('NumberOfProcessIdsInList', wt.DWORD),
+                        ('ProcessIdList', ctypes.c_size_t * capacity)]
+        data = LIST()
+        if kernel32.QueryInformationJobObject(self.handle, JOB_OBJECT_BASIC_PROCESS_ID_LIST, ctypes.byref(data),
+                                              ctypes.sizeof(data), None):
+            return [int(data.ProcessIdList[i]) for i in range(data.NumberOfProcessIdsInList)]
+        if data.NumberOfAssignedProcesses > capacity:
+            capacity = data.NumberOfAssignedProcesses + 16
+            continue
+        raise OSError(ctypes.get_last_error(), 'QueryInformationJobObject(process list) failed')
+    return []
+
+
+kernel32.TerminateJobObject.argtypes = [HANDLE, wt.UINT]
+
+
+def _job_terminate(self, code=1) -> bool:
+    return bool(self.handle and kernel32.TerminateJobObject(self.handle, code))
+
+
+KillOnCloseJob.pids = _job_pids
+KillOnCloseJob.terminate = _job_terminate

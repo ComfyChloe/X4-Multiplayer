@@ -2,7 +2,7 @@
 
 Lane game views are linked to the real X4 install with directory junctions and hardlinks;
 the install itself is never written. Everything this module writes lives in the lanes
-root, the lane profiles (45850, 45851), lock directories in the coordination folder, or
+root, the lane profiles (45850, 45851, 45853, 45854), lock directories in the coordination folder, or
 the caller's collect directory. Every delete/write helper re-checks that rule.
 """
 from __future__ import annotations
@@ -20,7 +20,7 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-LANE_PROFILES = {'b1': '45850', 'b2': '45851'}
+LANE_PROFILES = {'b1': '45850', 'b2': '45851', 'b3': '45853', 'b4': '45854'}
 # Profiles that belong to other sessions or to the user; never written by the lanes.
 FOREIGN_PROFILES = {'45841', '45842', '45843', '45844', '45852', '70000001', '70000002'}
 SOURCE_PROFILE = '45842'          # display/audio/input preferences are copied from here (read only)
@@ -664,6 +664,25 @@ class DirLock:
             lock.refresh()
             return lock
         raise LockBusy(path, read_owner(path))
+
+    @classmethod
+    def adopt(cls, path, info, agent):
+        """Take over a held lock whose owner.txt names this agent in a ``handoff:`` line (quiet-window
+        handoff). owner.txt is rewritten to the new owner with a ``handed_from`` line."""
+        path = Path(path)
+        owner = read_owner(path)
+        if not owner or owner.get('handoff') != agent:
+            raise LockBusy(path, owner)
+        info = dict(info)
+        info['handed_from'] = owner.get('agent') or owner.get('owner') or '?'
+        if owner.get('purpose') or owner.get('reason'):
+            info['handed_from_purpose'] = owner.get('purpose') or owner.get('reason')
+        if read_owner(path) != owner:                      # changed since we judged it
+            raise LockBusy(path, read_owner(path))
+        lock = cls(path, info)
+        lock.held = True
+        lock.refresh()
+        return lock
 
     def refresh(self):
         if not self.held:
