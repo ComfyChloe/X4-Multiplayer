@@ -15,7 +15,14 @@
  * wrapper and restored on disarm. The wrappers call the original first-class and count only on the
  * probe's MoveWorker thread. Every code site whose bytes establish an offset read here is hash-pinned
  * (signatures.py PHYSICS_SITES); any mismatch refuses the probe (the rest of fixedtick keeps running).
- * Engine RVAs (build 23660954) are documented in reports/REWRITE-PHYSICS.md. */
+ * Engine RVAs (build 23660954) are documented in reports/REWRITE-PHYSICS.md.
+ *
+ * Optional mode "joltwait" (Lua owner:physics_mode('joltwait')): XJobSystem slots 3/4 (Create/
+ * DestroyBarrier) are swapped for physics_jobs.h's serial barrier and the slot-5 wrapper waits with it:
+ * X4's job schedule exactly (same jobs, same order, same thread, X4's own Job::Execute 0xb4100) minus the
+ * critical section and the Sleep(0) X4 issues after every job. Switched only between frames on the
+ * MoveWorker; any anomaly (foreign thread, stall, allocation failure) switches back and is reported. */
+#include "physics_jobs.h"
 
 #define PP_SCENE0_RVA 0x38f0748u      /* XPhys::Scene* stepped first by UniverseFrameUpdate */
 #define PP_SCENE1_RVA 0x38f0740u      /* ... and second */
@@ -39,6 +46,8 @@
 #define PP_SCENES 2
 
 enum { PP_CREATE, PP_WAIT, PP_ADDED, PP_PERSISTED, PP_REMOVED, PP_ENTRIES };
+enum { PP_MODE_CREATE_BARRIER, PP_MODE_DESTROY_BARRIER, PP_MODE_ENTRIES };
+#define PP_EXECUTE_RVA 0xb4100u   /* JPH::JobSystem::Job::Execute (out-of-line copy) */
 
 typedef void *(*pp_create_fn)(void *self, void *ret, const char *name, uint32_t color, const void *fn, uint32_t deps);
 typedef void (*pp_wait_fn)(void *self, void *barrier);
@@ -82,6 +91,12 @@ typedef struct {
 
 static void **pp_entry[PP_ENTRIES];
 static void *pp_orig[PP_ENTRIES];
+static void **pp_mode_entry[PP_MODE_ENTRIES];
+static void *pp_mode_orig[PP_MODE_ENTRIES];
+static int pp_joltwait;                  /* 1 while slots 3/4 point at the serial barrier */
+static const char *pp_joltwait_reason;
+static uint64_t pp_joltwait_seen;        /* anomaly count already accounted */
+static uint64_t pp_joltwait_frames, pp_joltwait_jobs_mark;
 static int pp_installed;
 static const char *pp_reason;
 static pp_counts pp_frame;
@@ -116,12 +131,19 @@ static void *pp_create(void *self, void *ret, const char *name, uint32_t color, 
     return ((pp_create_fn)pp_orig[PP_CREATE])(self, ret, name, color, fn, deps);
 }
 
+/* A barrier made by the serial barrier is always waited by it (routing by object, not by mode, so a
+   switch between frames can never hand one kind of barrier to the other kind of wait). */
+static pp_wait_fn pp_wait_target(void *barrier) {
+    return (barrier && *(void ***)barrier == pj_sb_vtable) ? (pp_wait_fn)pj_sb_wait : (pp_wait_fn)pp_orig[PP_WAIT];
+}
+
 static void pp_wait(void *self, void *barrier) {
-    if (!pp_on_owner()) { ((pp_wait_fn)pp_orig[PP_WAIT])(self, barrier); return; }
+    pp_wait_fn target = pp_wait_target(barrier);
+    if (!pp_on_owner()) { target(self, barrier); return; }
     LARGE_INTEGER a, b;
     int timed = qpc_read(&a);
     pp_in_jolt = 1;
-    ((pp_wait_fn)pp_orig[PP_WAIT])(self, barrier);
+    target(self, barrier);
     pp_in_jolt = 0;
     if (!timed || !qpc_read(&b)) return;
     ++pp_frame.updates;
@@ -224,6 +246,40 @@ static void pp_take_sample(pp_sampled *s, pp_pass_track *t) {
     }
 }
 
+/* Fold one sample into the shared window (sampler thread; tests call it directly). */
+static void pp_fold_sample(const pp_sampled *s) {
+    AcquireSRWLockExclusive(&pp_lock);
+    pp_samp.samples += s->samples;
+    pp_samp.loading += s->loading;
+    pp_samp.busy_sum += s->busy_sum;
+    if (s->busy_max > pp_samp.busy_max) pp_samp.busy_max = s->busy_max;
+    pp_samp.cat1_sum += s->cat1_sum;
+    pp_samp.cat2_sum += s->cat2_sum;
+    pp_samp.other_sum += s->other_sum;
+    pp_samp.queue_sum += s->queue_sum;
+    if (s->queue_max > pp_samp.queue_max) pp_samp.queue_max = s->queue_max;
+    pp_samp.inflight += s->inflight;
+    pp_samp.jolt_samples += s->jolt_samples;
+    pp_samp.jolt_busy += s->jolt_busy;
+    pp_samp.passes += s->passes;
+    pp_samp.pass_ms_sum += s->pass_ms_sum;
+    if (s->pass_ms_max > pp_samp.pass_ms_max) pp_samp.pass_ms_max = s->pass_ms_max;
+    pp_samp.joins += s->joins;
+    pp_samp.tight_joins += s->tight_joins;
+    pp_samp.slack_ms_sum += s->slack_ms_sum;
+    if (s->workers) pp_samp.workers = s->workers;
+    ReleaseSRWLockExclusive(&pp_lock);
+}
+
+static void pp_sample_once(pp_pass_track *track) {
+    pp_sampled s;
+    memset(&s, 0, sizeof(s));
+    s.samples = 1;
+    if (pp_pub_loading) s.loading = 1;
+    else pp_take_sample(&s, track);
+    pp_fold_sample(&s);
+}
+
 /* Sampler thread: JobThreadManager occupancy and the pathing pass, read-only. */
 static DWORD WINAPI pp_sampler(LPVOID unused) {
     (void)unused;
@@ -237,32 +293,7 @@ static DWORD WINAPI pp_sampler(LPVOID unused) {
             else Sleep(1);
         } else Sleep(1);
         if (pp_stop) break;
-        pp_sampled s;
-        memset(&s, 0, sizeof(s));
-        s.samples = 1;
-        if (pp_pub_loading) s.loading = 1;
-        else pp_take_sample(&s, &track);
-        AcquireSRWLockExclusive(&pp_lock);
-        pp_samp.samples += s.samples;
-        pp_samp.loading += s.loading;
-        pp_samp.busy_sum += s.busy_sum;
-        if (s.busy_max > pp_samp.busy_max) pp_samp.busy_max = s.busy_max;
-        pp_samp.cat1_sum += s.cat1_sum;
-        pp_samp.cat2_sum += s.cat2_sum;
-        pp_samp.other_sum += s.other_sum;
-        pp_samp.queue_sum += s.queue_sum;
-        if (s.queue_max > pp_samp.queue_max) pp_samp.queue_max = s.queue_max;
-        pp_samp.inflight += s.inflight;
-        pp_samp.jolt_samples += s.jolt_samples;
-        pp_samp.jolt_busy += s.jolt_busy;
-        pp_samp.passes += s.passes;
-        pp_samp.pass_ms_sum += s.pass_ms_sum;
-        if (s.pass_ms_max > pp_samp.pass_ms_max) pp_samp.pass_ms_max = s.pass_ms_max;
-        pp_samp.joins += s.joins;
-        pp_samp.tight_joins += s.tight_joins;
-        pp_samp.slack_ms_sum += s.slack_ms_sum;
-        if (s.workers) pp_samp.workers = s.workers;
-        ReleaseSRWLockExclusive(&pp_lock);
+        pp_sample_once(&track);
     }
     return 0;
 }
@@ -275,7 +306,47 @@ static void pp_sampler_stop(void) {
     if (pp_timer) { CloseHandle(pp_timer); pp_timer = NULL; }
 }
 
+static uint64_t pp_joltwait_anomalies(void) { return pj_sb.stalls + pj_sb.foreign_calls + pj_sb.alloc_failures; }
+
+/* Owner thread, between frames. Restores the original barrier entries (only if they are still ours). */
+static void pp_joltwait_disable(const char *reason) {
+    if (!pp_joltwait) return;
+    void *ours[PP_MODE_ENTRIES] = {(void *)pj_sb_create, (void *)pj_sb_destroy};
+    for (int k = 0; k < PP_MODE_ENTRIES; ++k)
+        if (pp_mode_entry[k] && pp_mode_orig[k]) pp_write_entry(pp_mode_entry[k], ours[k], pp_mode_orig[k]);
+    pp_joltwait = 0;
+    if (reason && !pp_joltwait_reason) pp_joltwait_reason = reason;
+}
+
+/* Owner thread, between frames: verify both entries, preallocate, swap both or neither. */
+static const char *pp_joltwait_enable(void) {
+    if (!pp_installed) return "physics probe not installed";
+    if (pp_joltwait) return NULL;
+    if (sizeof(x4_physics_mode_vtables) / sizeof(x4_physics_mode_vtables[0]) != PP_MODE_ENTRIES) return "mode table size";
+    void *ours[PP_MODE_ENTRIES] = {(void *)pj_sb_create, (void *)pj_sb_destroy};
+    for (int k = 0; k < PP_MODE_ENTRIES; ++k) {
+        void **entry = (void **)(image + x4_physics_mode_vtables[k].entry);
+        void *function = image + x4_physics_mode_vtables[k].fn;
+        if (!readable(entry, sizeof(void *), 0) || *entry != function) return "barrier entry not original";
+        pp_mode_entry[k] = entry;
+        pp_mode_orig[k] = function;
+    }
+    for (int i = 0; i < PJ_BARRIERS; ++i)
+        if (pj_sb_pool[i].in_use || !pj_sb_reserve(&pj_sb_pool[i], 16384)) return "barrier pool unavailable";
+    pj_sb.execute = (pj_execute_fn)(void *)(image + PP_EXECUTE_RVA);
+    if (!pp_write_entry(pp_mode_entry[0], pp_mode_orig[0], ours[0])) return "barrier entry write failed";
+    if (!pp_write_entry(pp_mode_entry[1], pp_mode_orig[1], ours[1])) {
+        pp_write_entry(pp_mode_entry[0], ours[0], pp_mode_orig[0]);
+        return "barrier entry write failed";
+    }
+    pp_joltwait_seen = pp_joltwait_anomalies();
+    pp_joltwait_reason = NULL;
+    pp_joltwait = 1;
+    return NULL;
+}
+
 static void pp_uninstall(void) {
+    pp_joltwait_disable(NULL);
     pp_sampler_stop();
     if (!pp_installed) return;
     void *wrappers[PP_ENTRIES] = {(void *)pp_create, (void *)pp_wait, (void *)pp_added, (void *)pp_persisted, (void *)pp_removed};
@@ -287,6 +358,12 @@ static void pp_uninstall(void) {
 /* Owner thread, frame end (slot 15): fold the frame, refresh the published pointers. */
 static void pp_frame_end(void) {
     if (!pp_installed) return;
+    if (pp_joltwait) {
+        ++pp_joltwait_frames;
+        if (pp_joltwait_anomalies() != pp_joltwait_seen)
+            pp_joltwait_disable(pj_sb.alloc_failures ? "job list allocation failed" :
+                                pj_sb.foreign_calls ? "barrier used from another thread" : "no runnable job");
+    }
     void *jtm = NULL, *pm = NULL;
     if (readable(image + PP_JTM_RVA, sizeof(void *), 0)) jtm = *(void **)(image + PP_JTM_RVA);
     if (readable(image + PP_PATHING_RVA, sizeof(void *), 0)) pm = *(void **)(image + PP_PATHING_RVA);
@@ -371,10 +448,38 @@ static int pp_install(int verify_code) {
     return 1;
 }
 
+/* Lua owner:physics_mode('joltwait' | 'original') -> true or nil, reason. Runs on the MoveWorker (UI
+   slot), i.e. between two physics steps. */
+static int pp_lua_mode(lua_State *L) {
+    owner *o = p_luaL_checkudata(L, 1, META);
+    const char *mode = p_lua_type(L, 2) == LUA_TSTRING ? p_lua_tolstring(L, 2, NULL) : NULL;
+    const char *why = NULL;
+    if (o != current || !o->armed) why = "not the active owner";
+    else if (GetCurrentThreadId() != owner_thread) why = "not the owner thread";
+    else if (registered_table && *(int *)((unsigned char *)registered_table + 0x130)) why = "loading";
+    else if (!mode) why = "mode required";
+    else if (!strcmp(mode, "joltwait")) why = pp_joltwait_enable();
+    else if (!strcmp(mode, "original")) pp_joltwait_disable(NULL);
+    else why = "unsupported physics mode";
+    if (why) {
+        p_lua_pushnil(L);
+        p_lua_pushlstring(L, why, strlen(why));
+        return 2;
+    }
+    p_lua_pushboolean(L, 1);
+    return 1;
+}
+
 /* stats() fields for one window, then reset the window. */
 static void pp_stats(lua_State *L, void (*field)(lua_State *, const char *, double)) {
     field(L, "phys_installed", pp_installed);
     if (!pp_installed) return;
+    field(L, "phys_mode", pp_joltwait);
+    field(L, "joltwait_frames", (double)pp_joltwait_frames);
+    field(L, "joltwait_jobs", (double)(pj_sb.jobs_run - pp_joltwait_jobs_mark));
+    field(L, "joltwait_max_jobs", (double)pj_sb.max_jobs);
+    field(L, "joltwait_anomalies", (double)pp_joltwait_anomalies());
+    pp_joltwait_jobs_mark = pj_sb.jobs_run;
     double frames = pp_win.frames ? (double)pp_win.frames : 1.0;
     field(L, "phys_frames", (double)pp_win.frames);
     field(L, "phys_updates", (double)pp_win.sum.updates / frames);

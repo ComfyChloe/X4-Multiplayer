@@ -60,7 +60,13 @@ PHYSICS_VTABLE_SITES = {
     'contact_persisted': (0xB7250, 0x2A2AB60),
     'contact_removed': (0xB7270, 0x2A2AB68),
 }
-# Code whose bytes establish what the probe reads (no base relocations in any range).
+# Mode 'joltwait' swaps XJobSystem slots 3 CreateBarrier and 4 DestroyBarrier for the serial barrier of
+# physics_jobs.h (order matters: PP_MODE_CREATE_BARRIER, PP_MODE_DESTROY_BARRIER).
+PHYSICS_MODE_VTABLE_SITES = {
+    'job_create_barrier': (0xC5A30, 0x2A2ABB8),
+    'job_destroy_barrier': (0xC5A60, 0x2A2ABC0),
+}
+# Code whose bytes establish what the probe reads or calls (no base relocations in any range).
 PHYSICS_SITES = {
     'jolt_job_max_concurrency': (0xC5940, 24, 'ea41983c8853e368253719bebeee39612ea260cb5719e633669388722b04aaa6'),
     'jolt_job_create': (0xC5960, 32, '90b58768bed65170d856bb9eadac6760434f70cde60c08a1ac629c29e0b1706f'),
@@ -79,6 +85,11 @@ PHYSICS_SITES = {
     'jtm_thread_job_end': (0x14BC27C, 40, '38f5afff39b6887473f0be6e8fd5a923c2b879a876420d9740e17694bc45b1f5'),
     'jtm_thread_wait': (0x14BC0C0, 64, '2047329aa41dd9a836818c09d3bb0a498a2c8cf3c0041e50ec8d3d2c5f6d9095'),
     'jtm_thread_count': (0x14BD095, 75, '1cdaade74bb0a78b3e6c4a556565cc531071d26ec2c627ad7c4fc24cf3286599'),
+    'jolt_job_execute': (0xB4100, 111, 'c7c3156704013bcbb39109714376978ceb299fbc1edf753582cf55f214604159'),
+    'jolt_job_create_barrier': (0xC5A30, 45, '45dbdeb74471efc89a16d59350ff425eab8709689e7871f604590accac6eadf2'),
+    'jolt_job_destroy_barrier': (0xC5A60, 5, 'cfe8e60203df08650126edcd8f93b5e2efa56fc4bf2bb69690910ae46ac126b4'),
+    'jolt_job_free': (0xC5B30, 48, '36a288ff020ae17fca8379237d8cea6f9f94acd484f445ca3c44938e29e66cff'),
+    'jolt_barrier_on_finished': (0xC5F90, 48, '7090eda16704c9dbd775e4782a1ae134cef80db0517b159402d6e71d24c6da0f'),
 }
 
 SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **PHYSICS_SITES}
@@ -111,8 +122,9 @@ def c_header() -> str:
         lines.append(f'    {{{classes.index(name)}, 0x{entry:x}}},')
     lines.append('};')
     lines.append('typedef struct { const char *name; size_t fn; size_t entry; } x4_physics_vtable;')
-    lines.append('static const x4_physics_vtable x4_physics_vtables[] = {')
-    for name, (fn, entry) in PHYSICS_VTABLE_SITES.items():
-        lines.append(f'    {{"{name}", 0x{fn:x}, 0x{entry:x}}},')
-    lines.append('};')
+    for table, sites in (('x4_physics_vtables', PHYSICS_VTABLE_SITES), ('x4_physics_mode_vtables', PHYSICS_MODE_VTABLE_SITES)):
+        lines.append(f'static const x4_physics_vtable {table}[] = {{')
+        for name, (fn, entry) in sites.items():
+            lines.append(f'    {{"{name}", 0x{fn:x}, 0x{entry:x}}},')
+        lines.append('};')
     return '\n'.join(lines) + '\n'

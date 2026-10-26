@@ -4,6 +4,8 @@
 -- 'profile' measures like the default probe and samples the MoveWorker stack (simprof):
 -- X4LAN_SIMPROF_INTERVAL_MS (0.5..10, default 1), X4LAN_SIMPROF_DEPTH (8..64, default 32),
 -- X4LAN_SIMPROF_REPORT_S (default 10), X4LAN_SIMPROF_FOLD_LINES (folded stacks logged per frame, default 20).
+-- X4LAN_PHYSICS_MODE='joltwait' runs Jolt's jobs with X4's schedule minus the per-job Sleep(0) (identical
+-- results); 'ab' alternates 'original' and 'joltwait' every X4LAN_PHYSICS_AB_S seconds (default 20).
 if not X4LAN_CONFIG or X4LAN_CONFIG.test_profile~='45841' then return end
 if X4LAN_FIXEDTICK_PROBE then return end
 X4LAN_FIXEDTICK_PROBE=true
@@ -14,6 +16,8 @@ local native=initialise()
 local owner,reason
 local walkRefusedLogged
 local physRefusedLogged
+local joltwaitLogged
+local physMode,nextPhysMode=nil,0
 local sectorHooks={[0]='pending',[1]='original',[2]='chained',[3]='refused'}
 local nextTry=0
 local nextLog=0
@@ -54,12 +58,39 @@ local function logStats(now)
    s.path_pass_ms or 0,s.path_pass_max_ms or 0,s.path_joins or 0,s.path_tight_joins or 0,s.path_slack_ms or 0)..
    string.format(' jtmWorkers=%d jtmSamples=%d jtmBusy=%.2f jtmBusyMax=%d jtmCat1=%.2f jtmCat2=%.2f jtmOther=%.2f jtmQueue=%.2f jtmQueueMax=%d joltSamples=%d jtmBusyInJolt=%.2f',
    s.jtm_workers or 0,s.jtm_samples or 0,s.jtm_busy or 0,s.jtm_busy_max or 0,s.jtm_cat1 or 0,s.jtm_cat2 or 0,s.jtm_other or 0,
-   s.jtm_queue or 0,s.jtm_queue_max or 0,s.jtm_jolt_samples or 0,s.jtm_busy_in_jolt or 0))
+   s.jtm_queue or 0,s.jtm_queue_max or 0,s.jtm_jolt_samples or 0,s.jtm_busy_in_jolt or 0)..
+   string.format(' mode=%d joltwaitJobs=%d joltwaitMaxJobs=%d joltwaitAnomalies=%d',
+   s.phys_mode or 0,s.joltwait_jobs or 0,s.joltwait_max_jobs or 0,s.joltwait_anomalies or 0))
+  if s.joltwait_reason and not joltwaitLogged then
+   joltwaitLogged=true
+   DebugError('[X4LAN] FEATURE joltwait DISABLED reason='..tostring(s.joltwait_reason))
+  end
  elseif (s.phys_installed or 1)==0 and not physRefusedLogged then
   physRefusedLogged=true
   DebugError('[X4LAN] FEATURE physprof DISABLED reason='..tostring(s.phys_reason or 'unknown'))
  end
  nextLog=now+1
+end
+-- Physics job mode (between frames: the UI slot runs after the physics step on the MoveWorker).
+local function setPhysicsMode(mode,now)
+ local ok,why=owner:physics_mode(mode)
+ if ok then
+  DebugError(string.format('[X4LAN] PHYSMODE mode=%s t=%.3f',mode,now))
+  if mode=='joltwait' and X4LAN_PHYSICS_MODE=='joltwait' then DebugError('[X4LAN] FEATURE joltwait ENABLED') end
+ else
+  DebugError('[X4LAN] FEATURE joltwait DISABLED reason='..tostring(why))
+  physMode='refused'
+ end
+end
+local function applyPhysicsMode(now)
+ if not owner.physics_mode or physMode=='refused' then return end
+ if X4LAN_PHYSICS_MODE=='joltwait' then
+  if not physMode then physMode='joltwait';setPhysicsMode('joltwait',now) end
+ elseif X4LAN_PHYSICS_MODE=='ab' and now>=nextPhysMode then
+  nextPhysMode=now+(X4LAN_PHYSICS_AB_S or 20)
+  physMode=(physMode=='joltwait') and 'original' or 'joltwait'
+  setPhysicsMode(physMode,now)
+ end
 end
 local function checkProfileDisabled()
  if profileDisabled then return end
@@ -95,6 +126,7 @@ SetScript('onUpdate',function()
    owner:stop();owner=nil;return
   end
   if now>=nextLog then logStats(now) end
+  if X4LAN_PHYSICS_MODE then applyPhysicsMode(now) end
   if profiling then
    if now>=nextProfile then logProfile(now) end
    drainFolds()

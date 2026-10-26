@@ -155,18 +155,9 @@ int main(void) {
         assert(pp_frame.jobs == 0 && pp_frame.updates == 0 && pp_frame.added == 0);
     }
 
-    /* Sampler: occupancy of the fake pool and one pathing pass (outstanding 3 -> 0). */
+    /* Sampler thread: it runs and reads the fake pool. */
+    Sleep(40);
     {
-        LARGE_INTEGER start;
-        QueryPerformanceCounter(&start);
-        *(unsigned char *)(fake_pm + PP_PM_JOINED) = 0;
-        *(int32_t *)(fake_pm + PP_PM_OUTSTANDING) = 3;
-        *(int64_t *)(fake_pm + PP_PM_PASS_QPC) = start.QuadPart;
-        Sleep(30);
-        *(int32_t *)(fake_pm + PP_PM_OUTSTANDING) = 0;   /* batch phase ends */
-        Sleep(30);
-        *(unsigned char *)(fake_pm + PP_PM_JOINED) = 1;  /* the MoveWorker joins ~30 ms later */
-        Sleep(20);
         ncap = 0;
         pp_stats(NULL, capture);
         assert(got("phys_installed") == 1 && got("phys_frames") == 10);
@@ -174,12 +165,37 @@ int main(void) {
         assert(got("phys_jobs") == 10 && got("phys_added") == 3 && got("phys_bodies1") == 40);
         assert(got("path_batches_a") == 4 && got("path_batches_b") == 3);
         assert(fabs(got("path_budget_ms") - 4.0) < 1e-9 && fabs(got("path_dt") - 1.0 / 60.0) < 1e-6);
-        assert(got("jtm_samples") > 20 && got("jtm_workers") == 4);
+        assert(got("jtm_samples") >= 1 && got("jtm_workers") == 4);   /* timing depends on PC load */
+    }
+    /* Deterministic samples (thread stopped): occupancy, one pass (outstanding 3 -> 0), the join 20 ms later. */
+    {
+        pp_sampler_stop();
+        ncap = 0;
+        pp_stats(NULL, capture);   /* discard the thread's samples */
+        pp_pass_track track;
+        memset(&track, 0, sizeof(track));
+        LARGE_INTEGER start;
+        QueryPerformanceCounter(&start);
+        *(unsigned char *)(fake_pm + PP_PM_JOINED) = 0;
+        *(int32_t *)(fake_pm + PP_PM_OUTSTANDING) = 3;
+        *(int64_t *)(fake_pm + PP_PM_PASS_QPC) = start.QuadPart;
+        pp_sample_once(&track);
+        Sleep(30);
+        pp_sample_once(&track);
+        *(int32_t *)(fake_pm + PP_PM_OUTSTANDING) = 0;   /* batch phase ends */
+        pp_sample_once(&track);
+        Sleep(20);
+        pp_sample_once(&track);
+        *(unsigned char *)(fake_pm + PP_PM_JOINED) = 1;  /* the MoveWorker joins */
+        pp_sample_once(&track);
+        ncap = 0;
+        pp_stats(NULL, capture);
+        assert(got("jtm_samples") == 5 && got("jtm_workers") == 4);
         assert(fabs(got("jtm_busy") - 2.0) < 1e-9 && fabs(got("jtm_cat1") - 1.0) < 1e-9 && fabs(got("jtm_cat2") - 1.0) < 1e-9);
         assert(got("jtm_queue") == 7 && got("jtm_queue_max") == 7);
-        assert(got("path_inflight") > 0.1 && got("path_inflight") < 0.9);
-        assert(got("path_passes") == 1 && got("path_pass_ms") >= 20.0 && got("path_pass_ms") < 500.0);
-        assert(got("path_joins") == 1 && got("path_tight_joins") == 0 && got("path_slack_ms") >= 20.0);
+        assert(fabs(got("path_inflight") - 0.4) < 1e-9);
+        assert(got("path_passes") == 1 && got("path_pass_ms") >= 25.0 && got("path_pass_ms") < 5000.0);
+        assert(got("path_joins") == 1 && got("path_tight_joins") == 0 && got("path_slack_ms") >= 15.0);
         ncap = 0;
         pp_stats(NULL, capture);   /* the window was reset */
         assert(got("phys_frames") == 0 && got("path_passes") == 0);
@@ -188,20 +204,56 @@ int main(void) {
     /* Loading frames are skipped by the sampler. */
     *(int *)((unsigned char *)fake_table + 0x130) = 1;
     pp_frame_end();
-    Sleep(5);
-    ncap = 0;
-    pp_stats(NULL, capture);   /* discard samples taken before the flag was published */
-    Sleep(20);
-    ncap = 0;
-    pp_stats(NULL, capture);
-    assert(got("jtm_samples") > 10 && got("jtm_busy") == 0.0 && got("jtm_workers") == 0);
+    {
+        pp_pass_track track;
+        memset(&track, 0, sizeof(track));
+        pp_sample_once(&track);
+        ncap = 0;
+        pp_stats(NULL, capture);
+        assert(got("jtm_samples") == 1 && got("jtm_busy") == 0.0 && got("jtm_workers") == 0);
+    }
     *(int *)((unsigned char *)fake_table + 0x130) = 0;
 
     /* Disarm restores the original entries and joins the sampler. */
     restore_origs();
     disarm_because("test");
-    assert(!pp_installed && !pp_thread);
+    assert(!pp_installed && !pp_thread);   /* the sampler was stopped above; disarm is idempotent */
     for (int k = 0; k < PP_ENTRIES; ++k) assert(*entry_of(k) == fn_of(k));
+
+    /* joltwait: both barrier entries swapped or neither; waits route by barrier kind; anomalies switch back. */
+    {
+        setup();
+        for (int k = 0; k < PP_MODE_ENTRIES; ++k)
+            *(void **)(image + x4_physics_mode_vtables[k].entry) = image + x4_physics_mode_vtables[k].fn;
+        assert(pp_install(0));
+        use_fakes();
+        void **cb = (void **)(image + x4_physics_mode_vtables[PP_MODE_CREATE_BARRIER].entry);
+        void **db = (void **)(image + x4_physics_mode_vtables[PP_MODE_DESTROY_BARRIER].entry);
+        *db = image + 3;   /* foreign destroy entry: refused, create entry untouched */
+        assert(pp_joltwait_enable() && !pp_joltwait && *cb == image + x4_physics_mode_vtables[0].fn);
+        *db = image + x4_physics_mode_vtables[PP_MODE_DESTROY_BARRIER].fn;
+        assert(!pp_joltwait_enable() && pp_joltwait);
+        assert(*cb == (void *)pj_sb_create && *db == (void *)pj_sb_destroy);
+        /* A serial barrier is waited by the serial wait, anything else by the original. */
+        void *sb = pj_sb_create(NULL);
+        assert(sb && pp_wait_target(sb) == (pp_wait_fn)pj_sb_wait);
+        assert(pp_wait_target(fake_scene) == (pp_wait_fn)fake_wait);
+        int before = calls[PP_WAIT];
+        ((pp_wait_fn)*entry_of(PP_WAIT))(fake_sys[0] + PP_SYS_JOBS, sb);   /* empty barrier: returns at once */
+        assert(calls[PP_WAIT] == before);
+        pj_sb_destroy(NULL, sb);
+        pp_frame_end();
+        assert(pp_joltwait);
+        ++pj_sb.stalls;    /* an anomaly switches back at the next frame end */
+        pp_frame_end();
+        assert(!pp_joltwait && pp_joltwait_reason && !strcmp(pp_joltwait_reason, "no runnable job"));
+        assert(*cb == image + x4_physics_mode_vtables[0].fn && *db == image + x4_physics_mode_vtables[1].fn);
+        pj_sb.stalls = 0;
+        assert(!pp_joltwait_enable() && pp_joltwait);
+        restore_origs();
+        disarm_because("test");   /* uninstall switches back first */
+        assert(!pp_joltwait && *cb == image + x4_physics_mode_vtables[0].fn && *db == image + x4_physics_mode_vtables[1].fn);
+    }
 
     /* An entry changed by someone else after install is left alone on uninstall. */
     setup();
@@ -214,5 +266,6 @@ int main(void) {
     puts("PASS: physics probe: verified vtable swap or nothing, owner-thread counting, scene attribution");
     puts("PASS: physics probe: frame/window folding, read-only sampler (pool occupancy, pathing pass), loading skip");
     puts("PASS: physics probe: restore on disarm, foreign entries left alone");
+    puts("PASS: physics probe joltwait: verified swap of both barrier entries, routing by barrier kind, fail-back on anomaly");
     return 0;
 }

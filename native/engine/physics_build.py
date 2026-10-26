@@ -9,6 +9,9 @@ Jolt is third-party (MIT) source that is not committed here. It is taken from --
 outputs stay under .local/physics/.
 
   python native/engine/physics_build.py --zig <zig 0.15.2> [--jolt <checkout>] [--quick] [--no-run]
+  python native/engine/physics_build.py --msvc [--jolt <checkout>] [--quick]
+      MSVC build (VS 2022 Build Tools, vcvars64): same harness plus the C serial barrier of
+      physics_jobs.h behind an X4-like job system, i.e. the same ABI as inside X4.
 """
 import argparse
 import concurrent.futures
@@ -56,6 +59,54 @@ def jolt_checkout(value):
     return path
 
 
+VCVARS = Path('C:/Program Files (x86)/Microsoft Visual Studio/2022/BuildTools/VC/Auxiliary/Build/vcvars64.bat')
+MSVC_FLAGS = ['/nologo', '/std:c++17', '/O2', '/DNDEBUG', '/DJPH_FLOATING_POINT_EXCEPTIONS_ENABLED', '/fp:precise', '/EHsc', '/MD']
+
+
+def msvc_env():
+    vcvars = Path(os.environ.get('X4LAN_VCVARS', str(VCVARS)))
+    if not vcvars.exists():
+        raise SystemExit(f'MSVC build needs vcvars64.bat ({vcvars}); set X4LAN_VCVARS')
+    out = subprocess.run(f'cmd /c ""{vcvars}" >nul 2>&1 && set"', capture_output=True, text=True, shell=True)
+    env = dict(line.split('=', 1) for line in out.stdout.splitlines() if '=' in line)
+    if 'INCLUDE' not in env:
+        raise SystemExit('vcvars64.bat did not provide an MSVC environment')
+    path = env.get('PATH') or env.get('Path') or ''
+    for tool in ('cl', 'link'):
+        found = shutil.which(tool, path=path)
+        if not found:
+            raise SystemExit(f'{tool}.exe not found in the vcvars64 PATH')
+        env['X4LAN_' + tool.upper()] = found
+    return env
+
+
+def msvc_compile(env, jolt, src, obj, c_mode=False):
+    if obj.exists() and obj.stat().st_mtime >= src.stat().st_mtime:
+        return obj
+    obj.parent.mkdir(parents=True, exist_ok=True)
+    flags = ['/nologo', '/O2', '/TC'] if c_mode else MSVC_FLAGS
+    r = subprocess.run([env['X4LAN_CL'], *flags, '/c', '/I', str(jolt), str(src), f'/Fo{obj}'], env=env, capture_output=True, text=True)
+    if r.returncode:
+        raise SystemExit('cl failed for %s:\n%s\n%s' % (src, r.stdout, r.stderr))
+    return obj
+
+
+def build_msvc(jolt, out):
+    env = msvc_env()
+    objdir = out / 'jolt-msvc-obj'
+    sources = sorted((jolt / 'Jolt').rglob('*.cpp'))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=max(2, (os.cpu_count() or 4) - 2)) as pool:
+        objs = list(pool.map(lambda s: msvc_compile(env, jolt, s, objdir / s.relative_to(jolt).with_suffix('.obj')), sources))
+    here = ROOT / 'native' / 'engine'
+    objs.append(msvc_compile(env, jolt, here / 'physics_jobs_msvc.c', out / 'msvc' / 'physics_jobs_msvc.obj', c_mode=True))
+    objs.append(msvc_compile(env, jolt, here / 'physics_determinism.cpp', out / 'msvc' / 'physics_determinism.obj'))
+    exe = out / 'physics_determinism_msvc.exe'
+    r = subprocess.run([env['X4LAN_LINK'], '/nologo', f'/OUT:{exe}', *map(str, objs)], env=env, capture_output=True, text=True)
+    if r.returncode:
+        raise SystemExit('link failed:\n%s\n%s' % (r.stdout, r.stderr))
+    return exe
+
+
 def compile_one(zig, jolt, src, obj):
     if obj.exists() and obj.stat().st_mtime >= src.stat().st_mtime:
         return obj
@@ -67,14 +118,21 @@ def compile_one(zig, jolt, src, obj):
 def main():
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('--zig', type=str)
+    parser.add_argument('--msvc', action='store_true', help='build with MSVC instead of Zig (adds the C serial barrier configs)')
     parser.add_argument('--jolt', type=str)
     parser.add_argument('--quick', action='store_true', help='fewer frames per scenario')
     parser.add_argument('--repeats', type=int, default=2, help='runs per thread-pool configuration')
     parser.add_argument('--no-run', action='store_true')
     args = parser.parse_args()
-    zig = zig_path(args.zig)
     jolt = jolt_checkout(args.jolt)
     out = ROOT / '.local' / 'physics'
+    if args.msvc:
+        exe = build_msvc(jolt, out)
+        print(exe)
+        if not args.no_run:
+            sys.exit(subprocess.run([str(exe), f'--repeats={args.repeats}'] + (['--quick'] if args.quick else [])).returncode)
+        return
+    zig = zig_path(args.zig)
     objdir = out / 'jolt-obj'
     sources = sorted((jolt / 'Jolt').rglob('*.cpp'))
     with concurrent.futures.ThreadPoolExecutor(max_workers=max(2, (os.cpu_count() or 4) - 2)) as pool:

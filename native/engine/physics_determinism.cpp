@@ -135,6 +135,44 @@ private:
     int mMaxConcurrency;
 };
 
+#ifdef _MSC_VER
+// MSVC builds only (physics_build.py --msvc): the C serial barrier of physics_jobs.h ("joltwait", the
+// mode the probe can switch X4 to) behind an X4-like job system. Same ABI as inside X4.
+extern "C" {
+typedef uint32_t (*pjm_execute_fn)(void *job);
+void pjm_set_execute(pjm_execute_fn execute);
+void *pjm_create_barrier(void *system);
+void pjm_destroy_barrier(void *system, void *barrier);
+void pjm_wait(void *system, void *barrier);
+unsigned long long pjm_jobs_run(void);
+unsigned long long pjm_anomalies(void);
+}
+class X4CJobSystem final : public JobSystem {
+public:
+    explicit X4CJobSystem(int inMaxConcurrency) : mMaxConcurrency(inMaxConcurrency) { pjm_set_execute(&sExecute); }
+    int GetMaxConcurrency() const override { return mMaxConcurrency; }
+    JobHandle CreateJob(const char *inName, ColorArg inColor, const JobFunction &inJobFunction,
+                        uint32 inNumDependencies) override {
+        Job *job = new Job(inName, inColor, this, inJobFunction, inNumDependencies);
+        JobHandle handle(job);
+        if (inNumDependencies == 0) QueueJob(job);
+        return handle;
+    }
+    Barrier *CreateBarrier() override { return static_cast<Barrier *>(pjm_create_barrier(this)); }
+    void DestroyBarrier(Barrier *inBarrier) override { pjm_destroy_barrier(this, inBarrier); }
+    void WaitForJobs(Barrier *inBarrier) override { pjm_wait(this, inBarrier); }
+
+protected:
+    void QueueJob(Job *) override {}
+    void QueueJobs(Job **, uint) override {}
+    void FreeJob(Job *inJob) override { delete inJob; }
+
+private:
+    static uint32_t sExecute(void *inJob) { return static_cast<Job *>(inJob)->Execute(); }
+    int mMaxConcurrency;
+};
+#endif
+
 // ---------------------------------------------------------------------------------------------
 namespace Layers {
 static constexpr ObjectLayer NON_MOVING = 0;
@@ -349,7 +387,7 @@ struct RunResult {
     uint64_t jobs = 0;
 };
 
-enum class Exec { X4Serial, JoltSingle, Pool };
+enum class Exec { X4Serial, JoltSingle, Pool, X4C };
 
 static RunResult run(const Scenario &sc, Exec exec, int param) {
     World w;
@@ -358,6 +396,9 @@ static RunResult run(const Scenario &sc, Exec exec, int param) {
     X4StyleJobSystem *x4 = nullptr;
     if (exec == Exec::X4Serial) { x4 = new X4StyleJobSystem(param); js.reset(x4); }
     else if (exec == Exec::JoltSingle) js.reset(new JobSystemSingleThreaded(cMaxPhysicsJobs));
+#ifdef _MSC_VER
+    else if (exec == Exec::X4C) js.reset(new X4CJobSystem(param));
+#endif
     else js.reset(new JobSystemThreadPool(cMaxPhysicsJobs, cMaxPhysicsBarriers, param));
     TempAllocatorImpl temp(256 * 1024 * 1024);
     BodyInterface &bi = w.sys->GetBodyInterface();
@@ -442,6 +483,10 @@ int main(int argc, char **argv) {
                                  {"x4serial-c6", Exec::X4Serial, 6, 1}, {"x4serial-c14", Exec::X4Serial, 14, 1},
                                  {"x4serial-c22", Exec::X4Serial, 22, 1}, {"x4serial-c32", Exec::X4Serial, 32, 1},
                                  {"jolt-single", Exec::JoltSingle, 0, 1}};
+#ifdef _MSC_VER
+        cfgs.insert(cfgs.begin(), Cfg{"x4c-c30", Exec::X4C, 30, 1});
+        cfgs.insert(cfgs.begin() + 1, Cfg{"x4c-c4", Exec::X4C, 4, 1});
+#endif
         static char labels[16][32];
         int li = 0;
         for (int t : pools) { snprintf(labels[li], sizeof(labels[li]), "pool-%d", t); cfgs.push_back({labels[li], Exec::Pool, t, poolRepeats}); ++li; }
@@ -459,6 +504,9 @@ int main(int argc, char **argv) {
             }
         }
     }
+#ifdef _MSC_VER
+    printf("C serial barrier: %llu jobs run, %llu anomalies\n", pjm_jobs_run(), pjm_anomalies());
+#endif
     printf("VERDICT %s (state = PhysicsSystem::SaveState(All) bytes per frame; contactSet = sorted callback records)\n",
            failures ? "MISMATCH" : "IDENTICAL");
     UnregisterTypes();

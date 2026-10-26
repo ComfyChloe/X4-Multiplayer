@@ -37,6 +37,43 @@ class PhysicsProbeLuaTests(unittest.TestCase):
           assert(n==1)
         ''')
 
+    def test_joltwait_mode_is_requested_once(self):
+        self.runtime().execute('''
+          X4LAN_PHYSICS_MODE='joltwait';calls={}
+          handle.physics_mode=function(self,m) calls[#calls+1]=m;return true end
+          ui();ui();now=30;ui();ui()
+          assert(#calls==1 and calls[1]=='joltwait')
+          local on
+          for _,l in ipairs(logs) do if l:find('FEATURE joltwait ENABLED',1,true) then on=true end end
+          assert(on)
+        ''')
+
+    def test_ab_mode_alternates(self):
+        self.runtime().execute('''
+          X4LAN_PHYSICS_MODE='ab';X4LAN_PHYSICS_AB_S=10;calls={}
+          handle.physics_mode=function(self,m) calls[#calls+1]=m;return true end
+          ui();ui();now=5;ui();now=10;ui();now=20;ui();now=25;ui()
+          assert(#calls==3 and calls[1]=='joltwait' and calls[2]=='original' and calls[3]=='joltwait')
+        ''')
+
+    def test_joltwait_refusal_stops_requests(self):
+        self.runtime().execute('''
+          X4LAN_PHYSICS_MODE='ab';X4LAN_PHYSICS_AB_S=1;calls={}
+          handle.physics_mode=function(self,m) calls[#calls+1]=m;return nil,'barrier entry not original' end
+          ui();ui();now=5;ui();now=10;ui()
+          assert(#calls==1)
+          local n=0
+          for _,l in ipairs(logs) do if l:find('FEATURE joltwait DISABLED reason=barrier entry not original',1,true) then n=n+1 end end
+          assert(n==1)
+        ''')
+
+    def test_old_dll_without_physics_mode_is_ignored(self):
+        self.runtime().execute('''
+          X4LAN_PHYSICS_MODE='joltwait'
+          ui();ui();now=30;ui()
+          for _,l in ipairs(logs) do assert(not l:find('joltwait',1,true)) end
+        ''')
+
     def test_no_physics_fields_no_physics_lines(self):
         self.runtime().execute('''
           ui();ui();ui()

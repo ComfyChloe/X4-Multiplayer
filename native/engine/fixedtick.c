@@ -489,6 +489,7 @@ static int stats(lua_State *L) {
     if (o->reason) { p_lua_pushlstring(L, o->reason, strlen(o->reason)); p_lua_setfield(L, -2, "reason"); }
     pp_stats(L, number_field);
     if (pp_reason) { p_lua_pushlstring(L, pp_reason, strlen(pp_reason)); p_lua_setfield(L, -2, "phys_reason"); }
+    if (pp_joltwait_reason) { p_lua_pushlstring(L, pp_joltwait_reason, strlen(pp_joltwait_reason)); p_lua_setfield(L, -2, "joltwait_reason"); }
     if (o->profile) {
         const char *why = o->profile_reason ? o->profile_reason : (sp.state == 2 ? sp.reason : NULL);
         number_field(L, "simprof", why ? 2 : (o == current && sp.state == 1));
@@ -696,6 +697,7 @@ __declspec(dllexport) int luaopen_x4lan_fixedtick(lua_State *L) {
     method(L, "__gc", stop); method(L, "stop", stop);
     method(L, "active", active); method(L, "stats", stats);
     method(L, "profile", profile); method(L, "folds", folds);
+    method(L, "physics_mode", pp_lua_mode);
     p_lua_settop(L, -2);
     p_lua_createtable(L, 0, 1); method(L, "start", start);
     return 1;
