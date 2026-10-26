@@ -1,18 +1,24 @@
-# Native test lanes B1/B2 (dev/x4lane.py)
+# Native test lanes b1-b4 (dev/x4lane.py)
 
 Owner: lane agent, branch `contrib/ferrite-rw-lane` (rewrite program, see `REWRITE-PROGRAM.md`).
 Own files: `dev/x4lane.py`, `dev/lane/`, this report, `C:\Users\developer\Documents\X4Mods\lanes\`,
-profiles 45850/45851. Live usage notes for the other agents: `rewrite-coord\native-lane.md`.
+profiles 45850/45851/45853/45854. Live usage notes for the other agents: `rewrite-coord\native-lane.md`.
 
-Status: READY, validated natively on 26 October 2026 (see "Validation"). Evidence stays outside
-git (`.local/evidence-075-withheld`).
+Status: single-lane runs READY, validated natively on 26 October 2026 (see "Validation"); session
+mode, queue, stop, doctor and stall detection offline-tested, native validation pending. Evidence
+stays outside git (`.local/evidence-075-withheld`).
+
+The other agents run a read-only export of a tested commit, `X4Mods\lanes\release` (made by
+`x4lane.py publish-release`, commit in `RELEASE.txt`), never this development worktree.
 
 ## What a lane is
 
 | lane | profile | game view | lock |
 |---|---|---|---|
 | b1 | `Documents\Egosoft\X4\45850` | `X4Mods\lanes\b1\game-view\steamapps\common\X4 Foundations` | `rewrite-coord\lane-b1.lock` |
-| b2 | `Documents\Egosoft\X4\45851` | `X4Mods\lanes\b2\game-view\steamapps\common\X4 Foundations` | `rewrite-coord\lane-b2.lock` |
+| b2 | `Documents\Egosoft\X4\45851` | `X4Mods\lanes\b2\...` | `rewrite-coord\lane-b2.lock` |
+| b3 | `Documents\Egosoft\X4\45853` | `X4Mods\lanes\b3\...` | `rewrite-coord\lane-b3.lock` |
+| b4 | `Documents\Egosoft\X4\45854` | `X4Mods\lanes\b4\...` | `rewrite-coord\lane-b4.lock` |
 
 - **Game view**: every directory of the real install except `extensions` is a directory junction,
   every file a hardlink (`X4.exe`, `.cat/.dat`, DLLs). `steam_appid.txt` (392160) is the view's own
@@ -124,6 +130,73 @@ Text files (`.lua .xml .txt .json .md .append .files`) get `@X4LANE_PROFILE@`, `
 `content.xml` id is enabled for the run; `ego_dlc_*`, `ws_*`, `x4_lan_lab`, `x4lane_autostart` are
 reserved). `make-overlay probe` and `make-overlay attnload` build ready overlays (see native-lane.md).
 
+## Waiting: the lane queue
+
+`--wait S` puts a run or session into `rewrite-coord\lane-queue` (one JSON ticket per waiting
+runner, named by creation time). The queue is strict first come, first served: only the oldest live
+ticket attempts to take lanes (every 10 s); the others only refresh their ticket (every 30 s). A
+queued session keeps lanes it already got while it waits for the rest, for at most 10 minutes
+(then it gives them back and stays first). A run without `--wait` takes a free lane directly but is
+refused while others are queued. A quiet-window handoff target bypasses the queue. Tickets of an
+exited runner, or not refreshed for 5 minutes, are dropped. `x4lane.py queue` lists the queue.
+
+## Sessions: N clients in one loopback session
+
+`x4lane.py session --clients 2|3` (terminology: the dedicated X4 is the server, players are clients
+1..N, all equal):
+
+1. Takes N lanes (`--lanes b3,b4` or any free ones; all locks held for the whole session) and checks
+   RAM for N instances (12 GB each by default).
+2. Prepares each client like a single run, with the shared `--overlay/--config/--lua/--extension`
+   followed by that client's `--client-overlay N:DIR`, `--client-config N:K=V`, `--client-lua N:LINE`,
+   `--client-extension N:DIR`. Every client gets the same `--gamestart/--seed`. Session tokens are
+   substituted in client files: `@X4LANE_PORT@`, `@X4LANE_TOKEN@` (fresh 32 hex digits),
+   `@X4LANE_BUILD@`, `@X4LANE_BUBBLE@`, `@X4LANE_CLIENT@`, `@X4LANE_SLOT@` (p1..pN), `@X4LANE_CLIENTS@`,
+   `@X4LANE_SESSION@`.
+3. Profile gates: the lane copy is re-pinned from 45841 to the lane profile (quoted `'45841'`
+   literals, `test_profile` included, and `/45841/save` paths in every .lua of x4_lan_lab and the
+   test extensions). Each gate then accepts exactly the lane profile, as it accepted exactly 45841
+   before. `--no-repin` keeps them; single runs opt in with `--repin-profile`.
+4. Loopback guard instead of the offline guard: `enabled = true` and a token are allowed, but every
+   `host` value and every quoted IPv4 literal in the final config must be `127.0.0.1`, and no quoted URL.
+5. Optional server (`--server-cmd`): started first with `{port} {token} {build} {bubble} {clients}
+   {session} {outdir} {python} {repo}` substituted (and the same values as `X4LANE_*` environment),
+   in `--server-cwd` (default: the tool's checkout, which carries the `x4lan` relay package), output
+   in `server.log`, inside a kill-on-close job with every process it starts. It is ready when it
+   matches `--server-ready` or owns an endpoint on 127.0.0.1:{port}. Its TCP/UDP endpoints (IPv4 and
+   IPv6, all processes of its job) are checked at start and every 5 s: anything not bound to loopback,
+   or a TCP peer outside loopback, ends the session (`network_violation`, exit 5).
+6. Launches the clients one after the other under `lane-launch.lock` (each releases the previous
+   client's instance lock), then monitors all of them: pass when every client matched `--until`
+   `--until-count` times (`--until-mode any`: one client) and the server matched `--server-until`.
+   Any client exit, `--fail-on`, `--server-fail-on`, server exit or stall ends it.
+7. Closes all clients (WM_CLOSE to all, then wait/terminate), stops the server (job terminate),
+   collects `clientN\` (result.json, logs, installed files) and `server.log`, restores every lane and
+   writes the session `result.json` (clients[], server{command with the token masked, endpoints},
+   network{port, token hash}, until hits per client).
+
+`make-overlay session-telemetry` builds the client overlay for the 7.x telemetry adapter
+(`game.lua` with only `enabled = true`: HELLO/WELCOME to the relay, then poses): the simtick DLL
+(Windows frame driver) and the loopback config with the session tokens. With
+`python -m x4lan.host --bind 127.0.0.1 --port {port} --token {token} --build {build} --bubble {bubble}`
+as the server, both clients log `connected to relay as pN` and `relay=connected remote=receiving`,
+and the relay prints `p1@127.0.0.1:..., p2@127.0.0.1:...`.
+
+## Stop, stall, doctor
+
+- `x4lane.py stop --all-lanes|--lane b1,b2 [--force] [--reason]`: WM_CLOSE to lane X4 instances only
+  (exe path must be a lane view X4.exe); a `stop-request.json` marker lets their runners report
+  `exit_reason: stopped` (exit 9) with who and why. `--force` terminates after `--grace` (30 s).
+- `--stall S` (default 240): after INGAME the autostart writes an ALIVE line every `--alive` seconds;
+  a debug log silent for S seconds ends the run as `stalled` (exit 3) and records whether the window
+  still responds (IsHungAppWindow). Off with `--stall 0` or `--alive 0`.
+- `x4lane.py doctor [--fix] [--json]`: checks base, x4lock, Steam, release export, and per lane the
+  view, lock (stale?), base state (dirty while free?), orphan lane X4 without a runner, stop markers,
+  temp/staging leftovers; reports the queue. `--fix` repairs only what is safe (stale locks, dirty
+  free lanes under their own lock, orphan lane X4s with a verified exe path, leftovers). Every run
+  records the non-ok findings of a quick pass in `result.json` (`selfcheck`). Lanes also heal on use:
+  a run on a dirty lane restores it, kills its orphan X4 and takes over a stale lock.
+
 ## Timing caveats
 
 A lane run next to other X4 instances (other lanes, lane A, the x4mods-61 tests, save-trim runs)
@@ -162,11 +235,11 @@ count from the latest world start.
 
 ## Open points
 
-- `--timing` with quiet.lock held: validate when the PC is quiet.
-- Pair runs (one joint multiplayer session over loopback, questions.md Q6): not in v1; lanes are
-  offline by design. A `pair` mode on the same code is possible if the lead assigns it.
-- Profile-path gates other than the attention hooks (seed/dedicated/universe adapters) still accept
-  only 45841/45842; owners decide whether lane profiles join them.
+- `--timing` with quiet.lock held (own or adopted by handoff): validate when the PC is quiet.
+- Session mode (assigned by the lead after Q6/Q7): implemented, offline-tested; native two-client
+  loopback validation pending (the PC was reserved for the user's N-player test).
+- Single runs keep the offline guard; only sessions allow loopback networking. Profile gates in
+  source stay pinned to 45841; lane copies are re-pinned per run (sessions by default).
 - `native/engine/build.py --fixedtick --test`: the DLL and fixedtick tests pass; `test_simprof`'s
   overhead assertion (suspended < 3.0 %) failed once at 3.25 % while this PC was busy (load-sensitive).
 - `dev/lane/x4lock` is the project's x4lock tool, vendored unchanged from
