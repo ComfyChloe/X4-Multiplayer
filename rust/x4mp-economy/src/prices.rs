@@ -107,6 +107,72 @@ pub fn quantity_factor(unit: i64, w: &WarePrices) -> f32 {
     (unit as f32) / (w.avg as f32)
 }
 
+/// x86 `cvttsd2si r64` for the stock price: truncation toward zero.
+#[inline]
+fn trunc_i64(x: f64) -> i64 {
+    cvttsd2si64(x)
+}
+
+/// 0x34cde0: a station's unit price for a ware from its stock and its target amount, in cents.
+///
+/// The S-shaped price curve of station trade offers: average price at half the target,
+/// the ware's maximum price at an empty stock, its minimum price at the target.
+/// - `stock > target`: minimum price;
+/// - `stock <= 0` or `target <= 0` (and not above): maximum price;
+/// - otherwise, with `h = target * 0.5`, `d = clamp(stock - h, -h, h)` (and the average when
+///   `|stock - h| < 1e-7`), `s = avg - min` for `d >= 0` else `max - avg`, `k = -s * (1/0.7)`:
+///   `trunc(((-s - k) / (target^2 * (h * 0.25))) * (d * d * d) + (k * d) / h + avg)`.
+///
+/// All in f64 in the engine's operation order (`target^2 * (h * 0.25)`, `(d * d) * d`).
+pub fn stock_price(w: &WarePrices, stock: i32, target: i32) -> i64 {
+    if stock > target {
+        return w.min;
+    }
+    if stock <= 0 || target <= 0 {
+        return w.max;
+    }
+    let t = target as f64;
+    let h = t * 0.5;
+    let x = stock as f64 - h;
+    if !(x.abs() >= 1e-7) {
+        return w.avg;
+    }
+    // minsd/maxsd order of the engine: min(x, h), then max(.., -h); no NaN can occur here.
+    let d = if x <= h { x } else { h };
+    let d = if d > -h { d } else { -h };
+    let span = if d >= 0.0 { w.avg.wrapping_sub(w.min) } else { w.max.wrapping_sub(w.avg) };
+    let neg = -(span as f64);
+    let k = neg * 1.428_571_428_571_428_4;
+    let denom = (t * t) * (h * 0.25);
+    let cubic = ((neg - k) / denom) * ((d * d) * d);
+    trunc_i64(cubic + (k * d) / h + w.avg as f64)
+}
+
+/// 0x14dd240: clamped linear interpolation from `(x0, y0)` to `(x1, y1)` at `x` (f64); the
+/// mean of `y0` and `y1` when `|x0 - x1| < 1e-4`.
+pub fn lerp_clamped(x0: f64, x1: f64, y0: f64, y1: f64, x: f64) -> f64 {
+    if !((x0 - x1).abs() >= 1e-4) {
+        return (y0 + y1) * 0.5;
+    }
+    if x0 < x {
+        if x1 <= x {
+            return y1;
+        }
+        return ((x - x0) * (y1 - y0)) / (x1 - x0) + y0;
+    }
+    y0
+}
+
+/// 0x34ccf0: production cycles of a method with cycle time `cycle` seconds in `horizon`
+/// seconds, as f32 (0 for a cycle time below 1e-7).
+pub fn cycles_in(cycle: f64, horizon: f64) -> f32 {
+    if cycle.abs() >= 1e-7 {
+        (horizon / cycle) as f32
+    } else {
+        0.0
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -140,5 +206,44 @@ mod tests {
         assert_eq!(relative_price(4400, &EC), 2.0);
         assert_eq!(relative_price(3300, &EC), (3300.0f32 - 2200.0) / 2200.0 + 1.0);
         assert_eq!(quantity_factor(2400, &EC), 1.5);
+    }
+
+    #[test]
+    fn stock_price_curve() {
+        // Edges: above target -> min; empty or no target -> max; half target -> average.
+        assert_eq!(stock_price(&EC, 101, 100), 1000);
+        assert_eq!(stock_price(&EC, 0, 100), 2200);
+        assert_eq!(stock_price(&EC, 0, 0), 2200);
+        assert_eq!(stock_price(&EC, -5, 100), 2200);
+        assert_eq!(stock_price(&EC, 50, 100), 1600);
+        // At the target the cubic reaches the minimum (up to the f64 rounding of 1/0.7).
+        let at_target = stock_price(&EC, 100, 100);
+        assert!((999..=1000).contains(&at_target), "{at_target}");
+        // Monotonic falling between empty and full.
+        let mut last = i64::MAX;
+        for s in 1..=1000 {
+            let p = stock_price(&EC, s, 1000);
+            assert!(p <= last, "stock {s}: {p} > {last}");
+            assert!((999..=2200).contains(&p));
+            last = p;
+        }
+        // One value by hand in the engine's operation order: stock 25 of 100.
+        let (t, h) = (100.0f64, 50.0f64);
+        let d = 25.0f64 - h;
+        let neg = -600.0f64;
+        let k = neg * 1.428_571_428_571_428_4;
+        let v = ((neg - k) / ((t * t) * (h * 0.25))) * ((d * d) * d) + (k * d) / h + 1600.0;
+        assert_eq!(stock_price(&EC, 25, 100), v as i64);
+        assert_eq!(stock_price(&EC, 25, 100), 1996); // 1600 + 428.57 - 32.14
+    }
+
+    #[test]
+    fn interpolation_and_cycles() {
+        assert_eq!(lerp_clamped(0.0, 10.0, 1.0, 3.0, 5.0), 2.0);
+        assert_eq!(lerp_clamped(0.0, 10.0, 1.0, 3.0, -1.0), 1.0);
+        assert_eq!(lerp_clamped(0.0, 10.0, 1.0, 3.0, 12.0), 3.0);
+        assert_eq!(lerp_clamped(5.0, 5.00001, 1.0, 3.0, 0.0), 2.0);
+        assert_eq!(cycles_in(300.0, 3600.0), 12.0);
+        assert_eq!(cycles_in(0.0, 3600.0), 0.0);
     }
 }

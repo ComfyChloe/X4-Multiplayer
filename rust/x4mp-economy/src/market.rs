@@ -35,10 +35,10 @@ pub struct Offer {
     pub ware: WareIx,
     /// `true`: the owner buys (buy offer: Trade+0x10 set, +0x18 empty); `false`: sells.
     pub buy: bool,
-    /// Offered amount (Trade+0x40).
+    /// Offered amount (Trade+0x40). The engine computes it net of the owner's reservations
+    /// (the refresh after every reservation change), so it is also the amount a new
+    /// reservation can take.
     pub amount: u32,
-    /// Model-level sum of the reservations the barrier applied against this offer.
-    pub reserved: u32,
     /// Unit price in cents (Trade+0x30 tag; engine money is an `i64` in cents).
     pub unit_price: i64,
     /// Trade+0x54 flags (bundle 0x10, unbundle 0x20, supply 0x40, shady 0x8000, fixed price
@@ -46,13 +46,6 @@ pub struct Offer {
     pub flags: u32,
     /// Bumped by the owner's sector on every change of amount, reservation or price.
     pub version: u32,
-}
-
-impl Offer {
-    /// Amount still available to new reservations.
-    pub fn available(&self) -> u32 {
-        self.amount.saturating_sub(self.reserved)
-    }
 }
 
 /// Offers of one sector, kept sorted by `(key, list, pos, id)`.
@@ -88,7 +81,6 @@ impl OfferBook {
             Ok(i) => {
                 let old = &self.offers[i];
                 let changed = old.amount != offer.amount
-                    || old.reserved != offer.reserved
                     || old.unit_price != offer.unit_price
                     || old.ware != offer.ware
                     || old.buy != offer.buy
@@ -111,6 +103,14 @@ impl OfferBook {
 
     pub fn find_by_id_mut(&mut self, id: TradeId) -> Option<&mut Offer> {
         self.offers.iter_mut().find(|o| o.id == id)
+    }
+
+    /// A new version for every offer of `owner` for `ware` (the barrier changed the owner's
+    /// reservations; the refresh before the next snapshot recomputes them).
+    pub fn touch(&mut self, owner: UniverseId, ware: WareIx) {
+        for o in self.offers.iter_mut().filter(|o| o.owner == owner && o.ware == ware) {
+            o.version = o.version.wrapping_add(1);
+        }
     }
 }
 
@@ -193,7 +193,6 @@ mod tests {
             ware: WareIx(ware),
             buy,
             amount,
-            reserved: 0,
             unit_price: 1600,
             flags: 0,
             version: 0,

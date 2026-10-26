@@ -9,11 +9,14 @@
 //! - [`market`]: trade offers in per-sector books and the barrier-published, read-only
 //!   [`market::OfferSnapshot`] that trade searches of every sector read.
 //! - [`prices`]: the engine's offer price conversions (total price with a modifier, relative
-//!   price, quantity factor), bit for bit.
+//!   price, quantity factor) and the stock price curve of station offers (0x34cde0), bit for
+//!   bit.
 //! - [`reservations`]: a container's ware reservations (Container+0x980) with the engine's
-//!   merge, expiry and removal rules.
-//! - [`msg`]: reservations against offers of other sectors as stamped messages, applied at
-//!   the barrier in the original order, with stale-decision detection.
+//!   merge, expiry and removal rules, order-linked amounts and the per-ware totals the price
+//!   computation uses (0x4126d0).
+//! - [`msg`]: reservations at containers of other sectors as stamped messages, applied to the
+//!   owner's reservation list at the barrier in the original order, with stale-decision
+//!   detection and coalesced offer refreshes.
 //! - [`sector`]: the per-sector economy world and a deterministic parallel runner used by the
 //!   thread-invariance tests (a stand-in for `x4mp_sim::Universe::step` until x4mp-sim is
 //!   integrated).
@@ -23,8 +26,8 @@
 //! Stations, their storage and production are sector-local. Nothing in a sector job writes
 //! another sector's state: cross-sector effects are [`msg::EconMsg`]s.
 //!
-//! No third-party crates (workspace rule). Nothing here has run inside X4 yet; every native
-//! claim is in the report with its evidence.
+//! No third-party crates (workspace rule). Nothing here runs inside X4; every native claim
+//! (captures replayed against these models) is in the report with its evidence.
 
 // Negated float comparisons (`!(a > b)`) are deliberate: they keep the engine's NaN
 // behaviour of `comisd` + `jbe`/`jae` branches bit for bit.
