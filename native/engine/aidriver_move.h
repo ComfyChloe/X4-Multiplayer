@@ -257,10 +257,11 @@ static void ad_loop_diagnostic(void *ctx, uint32_t mask) {
 }
 
 /* Interrupt-runner call with census accounting around it. */
-static uintptr_t ad_irq(void *ctx, void *es, void *list, uintptr_t start, uintptr_t count, uintptr_t flag, uint32_t mask) {
+static uintptr_t ad_irq(int code, void *ctx, void *es, void *list, uintptr_t start, uintptr_t count, uintptr_t flag, uint32_t mask) {
     ad_run_frame f;
-    ad_run_begin(&f, ctx, es, mask, 1);
+    ad_run_begin(&f, ctx, es, mask, code);
     uintptr_t result = E.irq_run(es, list, start, count, flag);
+    ad.irq_result = result;
     ad_run_end(&f, es);
     return result;
 }
@@ -289,7 +290,7 @@ static int ad_global_interrupts(void *dir, void *ctx, void *es, uint32_t mask) {
             E.value_assign(P(ctx, AD_C_RECORD2 + 0x18), rec + 0x20);
             E.value_assign(P(ctx, AD_C_RECORD2 + 0x28), rec + 0x30);
             E.value_assign(P(ctx, AD_C_RECORD2 + 0x38), rec + 0x40);
-            ad_irq(ctx, es, list, 0, ad_vec_len(list), 0, mask);
+            ad_irq(AD_IRQ_GLOBAL, ctx, es, list, 0, ad_vec_len(list), 0, mask);
             uint64_t sel = U64(ctx, AD_C_SELECTED);
             if (sel < ad_vec_len(list)) {
                 U64(ctx, AD_C_SELECTED) = (uint64_t)-1;
@@ -439,9 +440,10 @@ static void ad_return_to_caller(void *es) {
     E.request_wake(ad_dir(), caller);
 }
 
-/* One queued context of the read vector `r` (dequeued here), as the original processes it. */
-static void ad_process_context(void *dir, void *ctx, unsigned r, int timed, unsigned pass) {
+/* One queued context of the read vector `r` (dequeued here, at index `pos`), as the original processes it. */
+static void ad_process_context(void *dir, void *ctx, unsigned r, int timed, unsigned pass, size_t pos) {
     void *es = PTR(ctx, AD_C_EXEC);
+    ad.run_pass = pass; ad.run_pos = (int64_t)pos;   /* original-order stamp (Q14) */
     I64(ctx, AD_C_SLOT + 8 * r) = -1;
     PTR(dir, AD_D_ENTITY) = PTR(ctx, AD_C_ENTITY);
     uint32_t mask;
@@ -465,7 +467,7 @@ static void ad_process_context(void *dir, void *ctx, unsigned r, int timed, unsi
         if (bl) {
             for (unsigned char *rec = PTR(ctx, AD_C_PENDING); rec != PTR(ctx, AD_C_PENDING + 8); rec += 0x50)
                 if (I64(rec, 0) == -1) { E.record_copy(P(ctx, AD_C_RECORD2), rec + 8); break; }
-            restart = (uint8_t)ad_irq(ctx, es, PTR(es, AD_E_PROGRAM), (uintptr_t)PTR(bl, 0x40), (uintptr_t)PTR(bl, 0x48), 1, mask);
+            restart = (uint8_t)ad_irq(AD_IRQ_INTERRUPT, ctx, es, PTR(es, AD_E_PROGRAM), (uintptr_t)PTR(bl, 0x40), (uintptr_t)PTR(bl, 0x48), 1, mask);
             E.record_clear(P(ctx, AD_C_RECORD2));
         }
         mask = saved;
@@ -479,7 +481,7 @@ static void ad_process_context(void *dir, void *ctx, unsigned r, int timed, unsi
         if (!(mask & 0x81)) {
             void *bl = E.blocking_action(es);
             if (!bl) ++ad.win.bad_caller;   /* the original dereferences it unchecked (would fault) */
-            else if (PTR(bl, 0x50)) ad_irq(ctx, es, PTR(es, AD_E_PROGRAM), (uintptr_t)PTR(bl, 0x50), (uintptr_t)PTR(bl, 0x58), 1, mask);
+            else if (PTR(bl, 0x50)) ad_irq(AD_IRQ_ATTENTION, ctx, es, PTR(es, AD_E_PROGRAM), (uintptr_t)PTR(bl, 0x50), (uintptr_t)PTR(bl, 0x58), 1, mask);
         }
         if (!U8(es, AD_E_NOATT)) {
             ++ad.win.attention_restarts;   /* counted at GetAttentionBlock, as the census does */
@@ -682,7 +684,7 @@ static void ad_rounds_scan(size_t n, size_t i) {
 static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int timed, unsigned pass, int compare) {
     if (!ad_rd_reserve(n)) {   /* allocation failure: run this pass in the original order */
         ++ad.win.rounds_fallback;
-        for (size_t i = 0; i < n; ++i) { void *ctx = ((void **)vec[0])[i]; if (ctx) ad_process_context(dir, ctx, r, timed, pass); }
+        for (size_t i = 0; i < n; ++i) { void *ctx = ((void **)vec[0])[i]; if (ctx) ad_process_context(dir, ctx, r, timed, pass, i); }
         return;
     }
     void **v = (void **)vec[0];
@@ -708,6 +710,10 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
     int scan = compare && n <= AD_CMP_SCAN_LIMIT;
     if (compare && !scan) ++ad.win.cmp_unchecked;
     ad.win.buckets_run += nb;
+    /* RNG order: the interpreter's random stream (TLS+0x318) is shared by every run, so contexts that
+       draw get different numbers when rounds runs them in another relative order than the original */
+    size_t last_draw = 0;
+    int have_draw = 0, rng_inverted = 0;
     size_t k = 0;
     for (uint32_t b = 0; b < nb; ++b) {
         ad_rd.cur_bucket = b;
@@ -720,7 +726,12 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
             size_t ops0 = ad_evbuf ? ad_evbuf->buffer_count() : 0;
             void **wvec = ad_vec(dir, 1u - r);
             size_t w0 = ((uintptr_t)wvec[1] - (uintptr_t)wvec[0]) / sizeof(void *);
-            if (ctx) ad_process_context(dir, ctx, r, timed, pass);
+            ad.ctx_drew = 0;
+            if (ctx) ad_process_context(dir, ctx, r, timed, pass, i);
+            if (ad.ctx_drew) {
+                if (have_draw && i < last_draw) rng_inverted = 1;
+                last_draw = i; have_draw = 1;
+            }
             if (ad_evbuf && compare) ad_op_pos_fill(ops0, ad_evbuf->buffer_count(), i);
             ad_rd.done[i] = 1;
             if (compare) ad_rounds_wakes(wvec, w0, i);
@@ -738,7 +749,10 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
         ad_evbuf->replay_tasks(ad_rd.tasks, (int)nb);   /* bucket order = rounds execution order */
         ad.win.deferred += before;
     }
-    if (compare) { if (ad_rd.pass_dirty) ++ad.win.cmp_passes_dirty; else ++ad.win.cmp_passes_clean; }
+    if (compare) {
+        if (ad_rd.pass_dirty) ++ad.win.cmp_passes_dirty; else ++ad.win.cmp_passes_clean;
+        if (rng_inverted) ++ad.win.cmp_rng_passes;   /* kept apart: random draws, not the other channels */
+    }
 }
 
 /* ---- the frame -------------------------------------------------------------------------------- */
@@ -763,7 +777,7 @@ static void ad_move_impl(void *dir, int mode) {
         if (mode == AD_NORMAL) {
             for (size_t i = 0; i < n; ++i) {
                 void *ctx = ((void **)vec[0])[i];
-                if (ctx) ad_process_context(dir, ctx, r, timed, pass);
+                if (ctx) ad_process_context(dir, ctx, r, timed, pass, i);
             }
         } else ad_rounds_pass(dir, vec, n, r, timed, pass, mode == AD_COMPARE);
         vec[1] = vec[0];

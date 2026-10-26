@@ -61,8 +61,8 @@ local function logStats(now)
     a.sectors or 0,a.sector_sum_ms or 0,a.sector_max_ms or 0,a.serial_ms or 0,a.speedup or 0,a.max_share or 0,a.fleets or 0,a.fleet_speedup or 0,a.dropped or 0)..
     string.format(' fleetResolver=%d fleetMaxShare=%.3f wakeFleetSame=%.2f evFleetSame=%.3f evPendingForeign=%.3f',
     a.fleet_resolver or 0,a.fleet_max_share or 0,a.wake_fleet_same or 0,a.ev_fleet_same or 0,a.ev_pending_foreign or 0)..
-    string.format(' attRestarts=%.3f removed=%.3f callerWakes=%.3f globalApplied=%.3f',
-    a.attention_restarts or 0,a.removed or 0,a.caller_wakes or 0,a.global_applied or 0))
+    string.format(' attRestarts=%.3f removed=%.3f callerWakes=%.3f globalApplied=%.3f rngRuns=%.2f',
+    a.attention_restarts or 0,a.removed or 0,a.caller_wakes or 0,a.global_applied or 0,a.rng_runs or 0))
    DebugError('[X4LAN] AIPROF scripts '..(a.scripts or ''))
    DebugError('[X4LAN] AIPROF sectors '..(a.top_sectors or ''))
    if a.mode~='census' or (a.driver_frames or 0)>0 then
@@ -70,6 +70,7 @@ local function logStats(now)
      a.mode,a.driver_frames or 0,a.preflight_refusals or 0,a.buckets_run or 0,a.deferred or 0,a.evbuf or 0,
      a.cmp_passes_clean or 0,a.cmp_passes_dirty or 0,a.cmp_event_pending or 0,a.cmp_event_ran or 0,
      a.cmp_null_lost or 0,a.cmp_wake_absorb or 0,a.cmp_post_cancel or 0,a.cmp_unchecked or 0)..
+     string.format(' cmpRngPasses=%d',a.cmp_rng_passes or 0)..
      string.format(' globalApplied=%.2f attentionRestarts=%.2f removed=%.2f badCaller=%d loopLogs=%d evPendingForeign=%.3f hash=%s',
      a.global_applied or 0,a.attention_restarts or 0,a.removed or 0,a.bad_caller or 0,a.loop_logs or 0,
      a.ev_pending_foreign or 0,tostring(a.state_hash or '-')))

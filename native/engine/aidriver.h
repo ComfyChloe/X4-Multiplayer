@@ -57,6 +57,9 @@
 #define AD_COMP_ID 0x08                  /* Component: UniverseID */
 #define AD_COMP_PARENT 0x70              /* Component: parent */
 #define AD_MOVE_MASK_SLOT 0x170          /* AIDirector::Move frame: [rbp+0x170] = mask of the current run */
+#define AD_MOVE_PASS_SLOT (-0xa8)        /* [rsp+0x58] = rbp-0xa8: pass counter */
+#define AD_MOVE_VEC_SLOT (-0x80)         /* rbp-0x80: header of this pass's read vector */
+#define AD_MOVE_ITER_SLOT (-0x88)        /* [rsp+0x78] = rbp-0x88: pointer to the element being processed */
 #define AD_PASS_LIMIT 0x40               /* Move's absolute pass cap */
 #define AD_LOOP_PASS 0x20                /* Move logs "Possibly infinite wake request loop" in this pass */
 
@@ -80,7 +83,15 @@ typedef uintptr_t (*ad_event_fn)(void *self, uintptr_t a2, uintptr_t a3, uintptr
 
 /* Optional observer for decision capture (ai-orders, X4AITRACE): called on the MoveWorker around every
    context run driven by the AI phase and around every HandleScriptEvent delivery (kind: 0 AI context,
-   1 call-stack context, 2 MD cue). `mask` is the wake mask the director used for the run. */
+   1 call-stack context, 2 MD cue). `mask` is the wake mask the director used for the run. `irq` is
+   0 for ExecState_Run, else the interrupt-runner site: AD_IRQ_GLOBAL (handler conditions, 0x106d8d6),
+   AD_IRQ_INTERRUPT (blocking-action interrupt, 0x106e2ef), AD_IRQ_ATTENTION (on attention change,
+   0x106e34a). In run_end of an interrupt run, ad.irq_result holds the runner's return value (non-zero:
+   the interrupt actions resumed, which Move answers with ExecState_JumpToLabel(es, 1)). From run_begin
+   to run_end, ad.run_pass / ad.run_pos give the run's original-order stamp (Q14): the pass and the
+   index in that pass's wake vector (= original wake order, also when rounds runs it elsewhere; -1 if
+   the census could not read it from Move's frame). */
+enum { AD_IRQ_NONE, AD_IRQ_GLOBAL, AD_IRQ_INTERRUPT, AD_IRQ_ATTENTION };
 typedef struct {
     void (*run_begin)(void *ctx, void *es, unsigned mask, int irq, void *user);
     void (*run_end)(void *ctx, void *es, int irq, void *user);
@@ -117,6 +128,8 @@ typedef struct {
     uint64_t bad_caller, rounds_fallback, buckets_run, deferred;
     uint64_t cmp_event_pending, cmp_event_ran, cmp_null_lost, cmp_unchecked, cmp_passes_clean, cmp_passes_dirty;
     uint64_t cmp_post_cancel, cmp_wake_absorb;
+    uint64_t rng_runs;                /* runs that drew from the interpreter's TLS random stream */
+    uint64_t cmp_rng_passes;          /* passes whose drawing runs execute in another relative order */
     uint64_t last_hash;
 } ad_window;
 
@@ -148,6 +161,10 @@ typedef struct {
     ad_script_acc scripts[AD_SCRIPT_SLOTS];
     unsigned scripts_used;
     const ad_observer *observer;
+    uintptr_t irq_result;                /* interrupt-runner return value, valid in run_end (Q13) */
+    uint32_t run_pass;                   /* original-order stamp of the current run (Q14): pass ... */
+    int64_t run_pos;                     /* ... and index in that pass's read vector (-1 unknown) */
+    int ctx_drew;                        /* a run of the current context drew from the TLS random stream */
 } ad_state_t;
 static ad_state_t ad;
 
@@ -155,8 +172,9 @@ static ad_state_t ad;
 
 static void *ad_director_now(void) { return image ? *(void **)(image + AD_DIRECTOR_RVA) : NULL; }
 
-/* X4's TLS block of the calling thread (TEB ThreadLocalStoragePointer[_tls_index]); NULL if absent. */
-static unsigned char *ad_engine_tls(void) {
+/* X4's TLS block of the calling thread (TEB ThreadLocalStoragePointer[_tls_index]); NULL if absent.
+   Called through ad_engine_tls so the offline tests can supply a fake block. */
+static unsigned char *ad_engine_tls_real(void) {
     unsigned char *teb = (unsigned char *)NtCurrentTeb();
     void **array = *(void ***)(teb + 0x58);
     unsigned index = *(volatile unsigned *)(image + AD_TLS_INDEX_RVA);
@@ -164,6 +182,7 @@ static unsigned char *ad_engine_tls(void) {
     unsigned char *block = array[index];
     return block && block[AD_TLS_INIT] ? block : NULL;
 }
+static unsigned char *(*ad_engine_tls)(void) = ad_engine_tls_real;
 
 static int ad_game_time(double *now) {
     unsigned char *tls = ad_engine_tls();
@@ -483,7 +502,10 @@ static void ad_frame_end(void *dir) {
 }
 
 /* One context run (ExecState_Run or an interrupt-runner call) of the AI phase. */
-typedef struct { void *ctx; const void *saved_key; void *saved_ctx; int saved_in_run, saved_hazard; int64_t t0; int irq; } ad_run_frame;
+typedef struct {
+    void *ctx; const void *saved_key; void *saved_ctx; int saved_in_run, saved_hazard; int64_t t0; int irq;
+    uint64_t rng0; int rng_ok;     /* interpreter random stream (TLS+0x318) before the run */
+} ad_run_frame;
 
 static void ad_run_begin(ad_run_frame *f, void *ctx, void *es, unsigned mask, int irq) {
     void *dir = ad.director;
@@ -497,6 +519,9 @@ static void ad_run_begin(ad_run_frame *f, void *ctx, void *es, unsigned mask, in
     ad.run_hazard = 0;
     if (irq) ++ad.f_irq; else { ++ad.f_runs; ad_mask_bits(ad.win.run_bits, mask); }
     if (ad.observer && ad.observer->run_begin) ad.observer->run_begin(ctx, es, mask, irq, ad.observer->user);
+    unsigned char *tls = ad_engine_tls();
+    f->rng_ok = tls != NULL;
+    f->rng0 = tls ? *(volatile uint64_t *)(tls + AD_TLS_RNG) : 0;
     f->t0 = ad_now();
 }
 
@@ -504,6 +529,10 @@ static void ad_run_end(ad_run_frame *f, void *es) {
     int64_t t1 = ad_now();
     double ms = f->t0 && t1 ? ad_ms(f->t0, t1) : 0.0;
     void *ctx = f->ctx;
+    if (f->rng_ok) {   /* the stream state changes iff the run drew (the generator is a bijection) */
+        unsigned char *tls = ad_engine_tls();
+        if (tls && *(volatile uint64_t *)(tls + AD_TLS_RNG) != f->rng0) { ++ad.win.rng_runs; ad.ctx_drew = 1; }
+    }
     if (ad.observer && ad.observer->run_end) ad.observer->run_end(ctx, es, f->irq, ad.observer->user);
     ad_wake_scan(ad.run_key);
     ad.win.run_ms += ms;
@@ -566,12 +595,22 @@ static void ad_saved_regs(int site, void **ctx, unsigned char **frame) {
     *frame = (unsigned char *)ad.saved[2 * site + 1];
 }
 
+/* Census: the original order of the run being made, from Move's frame (pinned body). */
+static void ad_stamp_from_frame(const unsigned char *frame) {
+    if (!frame) { ad.run_pos = -1; return; }
+    ad.run_pass = *(const uint32_t *)(frame + AD_MOVE_PASS_SLOT);
+    void *const *vec = *(void *const *const *)(frame + AD_MOVE_VEC_SLOT);
+    void *const *it = *(void *const *const *)(frame + AD_MOVE_ITER_SLOT);
+    ad.run_pos = vec && it >= (void *const *)vec[0] && it < (void *const *)vec[1] ? (int64_t)(it - (void *const *)vec[0]) : -1;
+}
+
 static void ad_exec_run(void *es) {
     void *ctx; unsigned char *frame;
     ad_saved_regs(AD_CALL_EXEC, &ctx, &frame);
     ad_exec_fn original = (ad_exec_fn)ad.calls[AD_CALL_EXEC].target;
     if (!ad_owner_ok() || !ad.in_phase) { original(es); return; }
     ad_run_frame f;
+    ad_stamp_from_frame(frame);
     ad_run_begin(&f, ctx, es, frame ? *(uint32_t *)(frame + AD_MOVE_MASK_SLOT) : 0, 0);
     original(es);
     ad_run_end(&f, es);
@@ -583,8 +622,11 @@ static uintptr_t ad_irq_common(int site, void *es, void *program, uintptr_t a3, 
     ad_irq_fn original = (ad_irq_fn)ad.calls[site].target;
     if (!ad_owner_ok() || !ad.in_phase) return original(es, program, a3, a4, a5);
     ad_run_frame f;
-    ad_run_begin(&f, ctx, es, frame ? *(uint32_t *)(frame + AD_MOVE_MASK_SLOT) : 0, 1);
+    int code = site == AD_CALL_IRQ_GLOBAL ? AD_IRQ_GLOBAL : site == AD_CALL_IRQ_INT ? AD_IRQ_INTERRUPT : AD_IRQ_ATTENTION;
+    ad_stamp_from_frame(frame);
+    ad_run_begin(&f, ctx, es, frame ? *(uint32_t *)(frame + AD_MOVE_MASK_SLOT) : 0, code);
     uintptr_t result = original(es, program, a3, a4, a5);
+    ad.irq_result = result;
     ad_run_end(&f, es);
     return result;
 }
@@ -1028,6 +1070,8 @@ static int ad_lua_stats(lua_State *L) {
     number_field(L, "cmp_passes_dirty", (double)w->cmp_passes_dirty);
     number_field(L, "cmp_post_cancel", (double)w->cmp_post_cancel / frames);
     number_field(L, "cmp_wake_absorb", (double)w->cmp_wake_absorb / frames);
+    number_field(L, "cmp_rng_passes", (double)w->cmp_rng_passes);
+    number_field(L, "rng_runs", (double)w->rng_runs / frames);
     {
         char hash[24];
         snprintf(hash, sizeof(hash), "%016llx", (unsigned long long)w->last_hash);

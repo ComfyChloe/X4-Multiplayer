@@ -310,6 +310,25 @@ int main(void) {
     puts("PASS: aidriver census buckets runs per sector, counts passes, external wakes and sum/max speedup");
     puts("PASS: aidriver classifies cross-sector wakes, keyless serial contexts and hazards");
     puts("PASS: aidriver event split counts same-sector, foreign, cue and director deliveries");
+    /* original-order stamp from Move's frame (Q14): pass at rbp-0xa8, read-vector header pointer at
+       rbp-0x80, element iterator at rbp-0x88 (rsp+0x58/+0x78 with rbp = rsp+0x100) */
+    {
+        static unsigned char fr[0x300];
+        static void *elems[8], *hdr[3];
+        unsigned char *rbp = fr + 0x180;
+        hdr[0] = elems; hdr[1] = elems + 5; hdr[2] = elems + 8;
+        *(uint32_t *)(rbp + AD_MOVE_PASS_SLOT) = 3;
+        *(void ***)(rbp + AD_MOVE_VEC_SLOT) = (void **)hdr;
+        *(void ***)(rbp + AD_MOVE_ITER_SLOT) = elems + 4;
+        ad_stamp_from_frame(rbp);
+        assert(ad.run_pass == 3 && ad.run_pos == 4);
+        *(void ***)(rbp + AD_MOVE_ITER_SLOT) = elems + 5;   /* past the end: unknown */
+        ad_stamp_from_frame(rbp);
+        assert(ad.run_pos == -1);
+        ad_stamp_from_frame(NULL);
+        assert(ad.run_pos == -1);
+    }
     puts("PASS: aidriver fleet-root resolver: commander chain after the phase, fleet buckets, cross-sector wakes inside a fleet");
+    puts("PASS: aidriver census original-order stamp (pass, read-vector index) from the Move frame");
     return 0;
 }

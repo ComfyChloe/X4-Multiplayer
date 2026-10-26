@@ -43,7 +43,7 @@ static int trace_seq_is(void *a, const int *want, int nwant) {
 
 /* ---- fake world ------------------------------------------------------------------------------ */
 #define NCTX 24
-enum { S_YIELD = 1, S_FINISH, S_WAKE, S_CLEAR, S_POST, S_POSTI, S_CANCEL, S_WAKESELF };
+enum { S_YIELD = 1, S_FINISH, S_WAKE, S_CLEAR, S_POST, S_POSTI, S_CANCEL, S_WAKESELF, S_DRAW };
 #define STEP(kind, a, b) (((kind) << 16) | ((a) << 8) | (b))
 typedef struct {
     unsigned char ctx[0x300];
@@ -63,7 +63,10 @@ static unsigned char DIR[0x300];
 static void *W0[512], *W1[512], *ALL[64];
 static unsigned char SCRIPT[4][0x300];   /* AIScript objects: name at +0x10, prio +0x5c, handlers +0x148 */
 static double now_game = 10.0;
+static unsigned char fake_tls[0x400];   /* engine TLS block: init flag +0x10, random stream +0x318 */
 static int run_log[4096], nrun;
+static uint32_t stamp_pass[4096];   /* ad.run_pass / ad.run_pos seen by each run (Q14 stamp) */
+static int64_t stamp_pos[4096];
 static char last_log[512], last_msg[256], last_push[64];
 
 static void *CX(int i) { return C[i].ctx; }
@@ -272,6 +275,7 @@ static void f_exec_run(void *es) {
     int i = ctx_index(es);
     fake_ctx *c = &C[i];
     TR(T_RUN, c->ctx, (uintptr_t)c->runs);
+    stamp_pass[nrun] = ad.run_pass; stamp_pos[nrun] = ad.run_pos;
     run_log[nrun++] = i;
     int s = c->runs < c->nsteps ? c->steps[c->runs] : STEP(S_FINISH, 0, 0);
     ++c->runs;
@@ -279,6 +283,7 @@ static void f_exec_run(void *es) {
     switch (kind) {
     case S_WAKE: U32(CX(a), AD_C_MASK) |= 1; f_request_wake(DIR, CX(a)); break;
     case S_WAKESELF: U32(c->ctx, AD_C_MASK) |= 1; f_request_wake(DIR, c->ctx); break;
+    case S_DRAW: U64(fake_tls, AD_TLS_RNG) = U64(fake_tls, AD_TLS_RNG) * 6364136223846793005ull + 1; break;
     case S_CLEAR: f_clear_wake(CX(a)); break;
     case S_POST: ev_post(0x7000 + (uint64_t)a, b, 0); break;
     case S_POSTI: ev_post(0x7000 + (uint64_t)a, b, 1); break;
@@ -370,6 +375,7 @@ static void f_op_delete(void *p, size_t n) { (void)n; free(p); }
 static void f_invalid_parameter(void) { assert(!"invalid parameter"); }
 static void f_tls_init(void) {}
 static double f_game_time(void) { return now_game; }
+static unsigned char *f_engine_tls(void) { return fake_tls; }
 static const uint64_t result_key = 0x4242;
 
 static void fake_engine(void) {
@@ -388,6 +394,7 @@ static void fake_engine(void) {
     E.log_error = f_log_error; E.id_to_string = f_id_to_string; E.op_delete = f_op_delete;
     E.invalid_parameter = f_invalid_parameter; E.tls_init = f_tls_init; E.game_time = f_game_time;
     E.abort_table = NULL; E.order_result_key = &result_key;
+    fake_tls[AD_TLS_INIT] = 1; U64(fake_tls, AD_TLS_RNG) = 0x1234; ad_engine_tls = f_engine_tls;
 }
 
 static void frame(int mode) {
@@ -743,6 +750,45 @@ int main(void) {
         ad_evbuf = NULL; evbuf_on = 0;
     }
 
+
+    /* 11. RNG order: the interpreter's random stream is shared; rounds runs a0, a1 (s0) before b0 (s1).
+           a0 b0 a1 all draw -> drawing positions 0,2,1 in rounds order: inverted against the original. */
+    {
+        static const int draw[] = {STEP(S_DRAW, 0, 0)}, y[] = {STEP(S_YIELD, 0, 0)};
+        world_reset();
+        void *a0 = mk(0, 0), *b0 = mk(1, 1), *a1 = mk(2, 0);
+        steps(0, 1, draw); steps(1, 1, draw); steps(2, 1, draw);
+        queue(a0, 1); queue(b0, 1); queue(a1, 1);
+        frame(AD_COMPARE);
+        assert(ad.win.rng_runs == 3 && ad.win.cmp_rng_passes == 1);
+        /* b0 does not draw: drawing positions 0,2 stay in order -> no RNG inversion */
+        world_reset();
+        a0 = mk(0, 0); b0 = mk(1, 1); a1 = mk(2, 0);
+        steps(0, 1, draw); steps(1, 1, y); steps(2, 1, draw);
+        queue(a0, 1); queue(b0, 1); queue(a1, 1);
+        frame(AD_COMPARE);
+        assert(ad.win.rng_runs == 2 && ad.win.cmp_rng_passes == 0);
+    }
+
+    /* 12. Original-order stamp (Q14): every run sees (pass, index in that pass's read vector), in normal
+           and in rounds order. a0 b0 a1 queued; a1 wakes b1 -> b1 runs in pass 1 at index 0. */
+    for (int m = 0; m < 2; ++m) {
+        static const int y[] = {STEP(S_YIELD, 0, 0)}, wk[] = {STEP(S_WAKE, 3, 0)};
+        world_reset();
+        void *a0 = mk(0, 0), *b0 = mk(1, 1), *a1 = mk(2, 0);
+        mk(3, 1);
+        steps(0, 1, y); steps(1, 1, y); steps(2, 1, wk); steps(3, 1, y);
+        queue(a0, 1); queue(b0, 1); queue(a1, 1);
+        frame(m ? AD_ROUNDS : AD_NORMAL);
+        static const int want_normal[] = {0, 1, 2, 3}, want_rounds[] = {0, 2, 1, 3};
+        static const int64_t pos_normal[] = {0, 1, 2, 0}, pos_rounds[] = {0, 2, 1, 0};
+        static const uint32_t pass_all[] = {0, 0, 0, 1};
+        assert(nrun == 4);
+        for (int k = 0; k < 4; ++k) {
+            assert(run_log[k] == (m ? want_rounds : want_normal)[k]);
+            assert(stamp_pos[k] == (m ? pos_rounds : pos_normal)[k] && stamp_pass[k] == pass_all[k]);
+        }
+    }
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: aidriver stage 1 outer loop: flip, timed harvest in time order into the node pool, exit");
     puts("PASS: aidriver stage 1 cleanup, interrupt-restart and attention-block paths match the original call order");
@@ -753,5 +799,7 @@ int main(void) {
     puts("PASS: aidriver stage 1 compare mode flags a cross-bucket ClearWake that changes which contexts run");
     puts("PASS: aidriver stage 1 compare mode flags a cross-bucket wake absorbed in one order but not the other");
     puts("PASS: aidriver stage 1 event buffer: post/cancel across buckets in both orders, inversion flagged, reverse-replay control");
+    puts("PASS: aidriver stage 1 compare mode flags passes whose random draws run in another relative order");
+    puts("PASS: aidriver stage 1 original-order stamp (pass, read-vector index) in normal and rounds order");
     return 0;
 }
