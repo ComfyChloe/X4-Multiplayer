@@ -164,6 +164,7 @@ Procedure: lane run with the fixed-tick probe overlay plus a mirror overlay (`de
 | **NATIVE** mirror-validate-2 (b3) | f772266 | 60 | walk_errors 0; Object sector 1732/1732 exact; local 1901/1920: the 19 misses are two superhighways (class overrides GetLocalTransform, see below); 262 ms/capture |
 | **NATIVE** mirror-validate-3 (b6) | 247642b (v1.1) | 60 x 16.3-16.7k objects | walk_errors 0; **local 1920/1920** (10 of them superhighways) and **Object sector 1758/1758** bit-identical; 271 ms/capture; 2,570 VirtualQuery/frame |
 | **NATIVE** mirror-validate-4 (b1, run mirror-005) | 3179ba6 | 60 x 16.7k objects | walk_errors 0; **EXACT**: local 1920/1920 (37 superhighways), Object sector 1707/1707; **429,325 components visited per frame** for 16,690 recorded rows; walk 272.8 ms, serialize 3.0 ms (of 275.9 ms); region cache never full (2.7k VirtualQuery/frame) |
+| **NATIVE, TIMING** mirror-cost-timing (b3, `--timing`, no other X4) | 3179ba6 | 60 x 16.6k objects | walk_errors 0; EXACT: local 1920/1920 (50 superhighways), Object sector 1677/1677; **112.2 ms per captured frame (walk 111.1, serialize 1.2)**, 428,297 components visited: 0.26 us each |
 | mirror-ab-1 | 96730d9 | 60 | queued: per-class visit histogram, A/B prefetch (odd frames) |
 
 Findings from the native data: six classes override GetLocalTransform (slot 648): Explosive, Missile,
@@ -173,8 +174,8 @@ offset; `check::local_step` models Highway and refuses the others. Out-of-sector
 updated sparsely: at attention 2, 460k of 583k consecutive-frame samples keep the identical pose with a
 non-zero velocity (`x4mp-capdump kinematics`).
 
-Capture cost: the walk is memory-latency bound (about 0.64 us per visited component; 26 components visited
-per recorded row). Next: the class histogram decides between pruning subtrees that cannot hold recorded
+Capture cost: the walk is memory-latency bound (0.26 us per visited component on a quiet PC, 0.64 us under
+load; 26 components visited per recorded row; results/2026-10-26-ecs-core-mirror-cost.md). Next: the class histogram decides between pruning subtrees that cannot hold recorded
 classes and prefetching; the A/B flag measures prefetching inside one run.
 
 Pending: capture cost (histogram, A/B); benchmarks in the quiet window (x4lane hold);
