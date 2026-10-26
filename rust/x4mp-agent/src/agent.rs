@@ -3,9 +3,9 @@
 //!
 //! The observer's only engine write is one pointer into a verified-empty per-frame slot of
 //! the VBI table (compare-exchange from null), and clearing it again on disarm. With
-//! `X4MP_SCHED=fixed60` the fixed-step scheduler (`sched_live.rs`) additionally patches
-//! two qwords of FrameTick's dt path and owns the FrameState render flag; both are
-//! restored on every disarm path.
+//! `X4MP_SCHED=fixedN` the fixed-step scheduler (`sched_live.rs`) additionally patches
+//! three qwords of FrameTick (render decision, dt) and owns one FrameState padding byte;
+//! all are restored on every disarm path, including its stall watchdog.
 
 use std::cell::Cell;
 use std::fs::{self, File, OpenOptions};
@@ -178,9 +178,9 @@ fn handler_address() -> usize {
 fn disarm(reason: Disarm) {
     let _ = DISARM.compare_exchange(0, reason as u32, Ordering::SeqCst, Ordering::SeqCst);
     if IS_OWNER.with(Cell::get) {
-        sched_live::restore_in_slot(); // MoveWorker: safe window available here
+        sched_live::restore_in_slot(); // MoveWorker, outside the scheduler lock
     } else {
-        sched_live::restore_from_worker(); // asks slot 13, falls back after 3 s
+        sched_live::restore_from_worker(); // takes the scheduler lock (at most 3 s)
     }
     if ARMED.swap(false, Ordering::SeqCst) {
         let table = TABLE.load(Ordering::SeqCst);
@@ -416,8 +416,14 @@ fn worker(config: Config) {
     }
     if let Some(sched) = config.sched {
         log.line(&format!(
-            "X4MP_AGENT SCHED CONFIG mode=fixed60 render={:?} max_catchup_steps={} max_lag_ms={} wait_ms={}",
-            sched.policy.render, sched.policy.max_catchup_steps, sched.policy.max_lag_ms, sched.wait_ms
+            "X4MP_AGENT SCHED CONFIG mode=fixed{} render={:?} max_catchup_steps={} max_render_gap_ms={} max_lag_ms={} wait_ms={} stall_ms={}",
+            sched.policy.hz,
+            sched.policy.render,
+            sched.policy.max_catchup_steps,
+            sched.policy.max_render_gap_ms,
+            sched.policy.max_lag_ms,
+            sched.wait_ms,
+            sched.stall_ms
         ));
         sched_live::init(sched);
     }
@@ -457,9 +463,21 @@ fn worker(config: Config) {
     let mut prev = snapshot();
     let mut prev_sched = sched_live::snapshot();
     let mut last_phase = sched_live::phase();
+    let mut watchdog = sched_live::Watchdog::new();
     let mut prev_at = Instant::now();
     loop {
-        std::thread::sleep(Duration::from_millis(config.cadence_ms));
+        // Poll the stall watchdog several times per cadence period.
+        let period = Duration::from_millis(config.cadence_ms);
+        let slice = Duration::from_millis(250).min(period);
+        let started = Instant::now();
+        while started.elapsed() < period {
+            std::thread::sleep(slice.min(period.saturating_sub(started.elapsed())).max(Duration::from_millis(1)));
+            if let Some(line) = watchdog.poll() {
+                log.line(&line);
+                disarm(Disarm::SchedulerGuard);
+                break;
+            }
+        }
         if config.disarm_file.exists() {
             disarm(Disarm::DisarmFile);
         }
@@ -500,9 +518,13 @@ fn log_phase(log: &mut Log, phase: sched_live::Phase) {
     use sched_live::Phase;
     match phase {
         Phase::Active => log.line(&format!(
-            "X4MP_AGENT SCHED ARMED dt=1/60 patch=0x{:x},0x{:x} render_flag=FrameState+0x{:x}",
+            "X4MP_AGENT SCHED ARMED dt=1/{} step_const=0x{:x} patch=0x{:x},0x{:x},0x{:x} decision=FrameState+0x{:x} flip_flag=FrameState+0x{:x}(untouched)",
+            sched_live::config().map(|c| c.policy.hz).unwrap_or(0),
+            sched_live::step_constant(),
+            pinned::DECISION_CMP_VA,
             pinned::DT_LOAD_VA,
             pinned::DT_MIN_VA,
+            pinned::FRAME_STATE_DECISION_BYTE,
             pinned::FRAME_STATE_RENDER_FLAG
         )),
         Phase::Refused => {

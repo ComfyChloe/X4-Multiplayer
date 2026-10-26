@@ -102,31 +102,54 @@ pub const SITES: &[Site] = &[
     Site { name: "frame_state_ctor_render_flag", va: 0x201d8e2, len: 0xe, sha256: "d15a01cf3ad3c5ae5aa3a691629d543ee431b1486d739639d0c63686f5c8f2e0" },
     // Read-only double 1/60 in .rodata (target of the patched dt load).
     Site { name: "rodata_one_sixtieth", va: 0x2e24578, len: 8, sha256: "c6c9a57771f2313713756c05b0b8a1413e5ef99d747cabf716952b4f6137f34b" },
+    // Read-only double 1/20 in .rodata (dt for fixed20).
+    Site { name: "rodata_one_twentieth", va: 0x2e270c0, len: 8, sha256: "7f925b2036e92fe2f1f0697c3aedfff74d719c1ee2cb6b739d7c30484e75972c" },
 ];
 
 // --- Fixed-step scheduler data (all inside the sites above) ---
 
 /// Global `FrameState*` (main-thread frame object, 0x2f0 bytes), set once by 0xfd10d8.
 pub const FRAME_STATE_GLOBAL: u64 = 0x3daaaf0;
-/// `bool` in FrameState: FrameTick renders and presents when non-zero, otherwise it takes
-/// the engine's no-render branch (0x2025430). Constructor sets 1; FrameTick (0x2025162,
-/// 0x2025208) is the only reader and nothing else writes it.
+/// `bool` in FrameState, set to 1 by the constructor and never written again; FrameTick
+/// reads it twice. Read #1 (0x2025162) gates the pre-render calls 0x224ceb0 and
+/// **0x218e2c0, which flips the render-list double buffer** (index 0x72a0fa0, halves of
+/// 0x16a9b00 bytes at 0x454d9a0) and resets its per-frame lists and counters. Read #2
+/// (0x2025208) chooses the render branch or the engine's no-render branch (0x2025430).
+/// The scheduler must never clear this flag: without the flip the producer half grows
+/// every frame (native freeze 25 Oct 2026). It only reads it as a guard.
 pub const FRAME_STATE_RENDER_FLAG: u64 = 0x200;
+/// FrameState padding byte after the render flag (no access to +0x201..+0x203 anywhere;
+/// +0x204 is a dword). With the decision patch, read #2 tests this byte, which the
+/// scheduler owns; read #1 keeps testing the engine's flag, so the flip runs every frame.
+pub const FRAME_STATE_DECISION_BYTE: u64 = 0x201;
+/// Read #2: `cmp byte ptr [rbx+0x200],0` (7 bytes) + first byte of the following `je`,
+/// one naturally aligned qword. Patched: the same compare on [rbx+0x201].
+pub const DECISION_CMP_VA: u64 = 0x2025208;
+pub const DECISION_CMP_ORIGINAL: [u8; 8] = [0x80, 0xbb, 0x00, 0x02, 0x00, 0x00, 0x00, 0x0f];
+pub const DECISION_CMP_PATCHED: [u8; 8] = [0x80, 0xbb, 0x01, 0x02, 0x00, 0x00, 0x00, 0x0f];
 /// Main-loop `bool` (initial value 1 in .data, so the first wait consumes semSimDone's
 /// initial count): 1 from FrameTick's return (0x72fb1b) until the main thread acquires
 /// semSimDone (cleared at 0x72f7aa). Seen as 1 from VBI slot 13, the main thread is
 /// parked outside FrameTick and cannot enter it before this simulation frame ends.
 pub const MAIN_FRAME_IN_FLIGHT: u64 = 0x3d8d97b;
+/// Main-loop appState (byte; bit 1 = synchronous loading, read at 0x72f756). While set the
+/// MoveWorker runs no frames; the stall watchdog does not count that time.
+pub const MAIN_APP_STATE: u64 = 0x3daab04;
 /// Movie-capture flag and its frame time (FrameTick 0x2025126 / 0x202512d).
 pub const MOVIE_CAPTURE_FLAG: u64 = 0x4533d38;
-/// `double 1/60` in .rodata.
+/// `double 1/60` and `double 1/20` in .rodata. The image has no 1/30; fixed30 points the
+/// dt load at a read-only page of the agent's own (see `sched_live`).
 pub const ONE_SIXTIETH_CONST: u64 = 0x2e24578;
+pub const ONE_TWENTIETH_CONST: u64 = 0x2e270c0;
+/// Candidate addresses for the agent's constant page: below the image (0x400000), far
+/// from the brk heap after .bss, within rip-relative reach of [`DT_LOAD_VA`].
+pub const CONST_PAGE_CANDIDATES: [u64; 3] = [0x300000, 0x200000, 0x380000];
 
 /// FrameTick's non-capture dt path at 0x2025260 (inside `frame_tick_time_advance`):
 /// `movsd xmm1,[rip+0xdff268]` (1.0) ; `minsd xmm1,xmm0` ; `pxor xmm0,xmm0`.
 /// Two naturally aligned qwords, each replaced with one atomic store:
-/// 1. the load's displacement is retargeted to [`ONE_SIXTIETH_CONST`] (dt = min(1/60, dt));
-/// 2. the `minsd` becomes a 4-byte NOP (dt = 1/60 exactly).
+/// 1. the load's displacement is retargeted to a `double 1/N` (dt = min(1/N, dt));
+/// 2. the `minsd` becomes a 4-byte NOP (dt = 1/N exactly).
 ///
 /// Every intermediate state is a valid dt (never 1.0); restore runs in reverse order.
 pub const DT_LOAD_VA: u64 = 0x2025260;
@@ -136,11 +159,12 @@ pub const DT_LOAD_ORIGINAL: [u8; 8] = [0xf2, 0x0f, 0x10, 0x0d, 0x68, 0xf2, 0xdf,
 pub const DT_MIN_ORIGINAL: [u8; 8] = [0xf2, 0x0f, 0x5d, 0xc8, 0x66, 0x0f, 0xef, 0xc0];
 pub const DT_MIN_PATCHED: [u8; 8] = [0x0f, 0x1f, 0x40, 0x00, 0x66, 0x0f, 0xef, 0xc0];
 
-/// The patched dt load: same instruction, displacement to [`ONE_SIXTIETH_CONST`].
-pub fn dt_load_patched() -> [u8; 8] {
-    let disp = (ONE_SIXTIETH_CONST as i64 - (DT_LOAD_VA as i64 + 8)) as i32;
+/// The patched dt load: same instruction, displacement to `target` (a `double 1/N`).
+/// `None` when `target` is out of rip-relative reach.
+pub fn dt_load_patched(target: u64) -> Option<[u8; 8]> {
+    let disp = i32::try_from(target as i64 - (DT_LOAD_VA as i64 + 8)).ok()?;
     let d = disp.to_le_bytes();
-    [0xf2, 0x0f, 0x10, 0x0d, d[0], d[1], d[2], d[3]]
+    Some([0xf2, 0x0f, 0x10, 0x0d, d[0], d[1], d[2], d[3]])
 }
 
 /// Read access to the executable by virtual address: the live process in the agent,
@@ -253,8 +277,21 @@ mod tests {
         // The original load reads the 1.0 clamp at 0x2e244d0; the patch reads 1/60.
         let target = |q: [u8; 8]| DT_LOAD_VA as i64 + 8 + i32::from_le_bytes([q[4], q[5], q[6], q[7]]) as i64;
         assert_eq!(target(DT_LOAD_ORIGINAL), 0x2e244d0);
-        assert_eq!(target(dt_load_patched()) as u64, ONE_SIXTIETH_CONST);
-        assert_eq!(dt_load_patched()[..4], DT_LOAD_ORIGINAL[..4]); // same movsd xmm1,[rip+d]
+        for c in [ONE_SIXTIETH_CONST, ONE_TWENTIETH_CONST, CONST_PAGE_CANDIDATES[0], CONST_PAGE_CANDIDATES[1], CONST_PAGE_CANDIDATES[2]] {
+            let q = dt_load_patched(c).unwrap();
+            assert_eq!(target(q) as u64, c);
+            assert_eq!(q[..4], DT_LOAD_ORIGINAL[..4]); // same movsd xmm1,[rip+d]
+        }
+        assert!(dt_load_patched(0x7fff_0000_0000).is_none());
+        // Read #2 is one aligned qword; the patch only changes the displacement byte.
+        let site = SITES.iter().find(|s| s.name == "frame_tick_dt_render_decision").unwrap();
+        assert_eq!(DECISION_CMP_VA % 8, 0);
+        assert!(site.va <= DECISION_CMP_VA && DECISION_CMP_VA + 8 <= site.va + site.len as u64);
+        let diff: Vec<usize> = (0..8).filter(|&i| DECISION_CMP_ORIGINAL[i] != DECISION_CMP_PATCHED[i]).collect();
+        assert_eq!(diff, vec![2]);
+        assert_eq!(DECISION_CMP_PATCHED[2] as u64, FRAME_STATE_DECISION_BYTE & 0xff);
+        let twentieth = SITES.iter().find(|s| s.name == "rodata_one_twentieth").unwrap();
+        assert_eq!(digest(&(1.0f64 / 20.0).to_le_bytes()), twentieth.sha256);
         // minsd xmm1,xmm0 becomes a 4-byte NOP; the following pxor is unchanged.
         assert_eq!(DT_MIN_PATCHED[..4], [0x0f, 0x1f, 0x40, 0x00]);
         assert_eq!(DT_MIN_PATCHED[4..], DT_MIN_ORIGINAL[4..]);

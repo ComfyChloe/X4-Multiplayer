@@ -1,24 +1,34 @@
 //! In-process side of the fixed-step scheduler (Linux only). Runs inside the agent's
-//! VBI slot-13 callback on the MoveWorker thread; the worker thread only logs and
-//! requests a restore.
+//! VBI slot-13 callback on the MoveWorker thread; the worker thread logs, runs the stall
+//! watchdog and can restore.
 //!
-//! Engine writes, all verified before and restored on disarm:
-//! 1. Code: two aligned qwords of FrameTick's dt path ([`pinned::DT_LOAD_VA`],
-//!    [`pinned::DT_MIN_VA`]) so every `FrameTick` advances time by exactly 1/60 s × speed.
-//!    Each is one 8-byte compare-exchange; every intermediate state is valid.
-//! 2. Data: the FrameState render flag (`+0x200`), written only while the main thread is
-//!    parked outside `FrameTick` (see [`scheduler::slot13_step`]).
+//! Engine writes, all verified before and restored on every disarm path:
+//! 1. Code, three naturally aligned qwords of FrameTick, each replaced and restored with
+//!    one 8-byte compare-exchange (every intermediate state is a valid FrameTick):
+//!    - [`pinned::DECISION_CMP_VA`]: FrameTick's second read (render or no-render branch)
+//!      tests FrameState+0x201 (padding the scheduler owns) instead of the engine's
+//!      render flag +0x200. The first read, which gates the render-list flip
+//!      (0x218e2c0) and 0x224ceb0, keeps testing +0x200 = 1, so the flip runs on every
+//!      frame, rendered or not. (Clearing +0x200 itself starved the flip and froze the
+//!      native server after ~1200 unrendered frames, 25 Oct 2026.)
+//!    - [`pinned::DT_LOAD_VA`] / [`pinned::DT_MIN_VA`]: dt = 1/hz exactly.
+//! 2. Data: the decision byte FrameState+0x201 (written in slot 13 while the main thread
+//!    is parked outside FrameTick; unread once the compare is restored).
+//! 3. fixed30 only: one anonymous read-only page of the agent's own holding `1/30`
+//!    (the image has no such constant), mapped below the image within rip reach.
 //!
 //! No semaphore is touched and no engine function is called.
 
-use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{Mutex, OnceLock};
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicU8, Ordering};
+use std::sync::{Mutex, OnceLock, TryLockError};
 use std::time::{Duration, Instant};
 
 use crate::agent::{covered, epoch_ns, read_f64, read_i32, read_u64, readable_ranges, LiveImage};
 use crate::config::Sched;
 use crate::pinned;
-use crate::scheduler::{check_step, slot13_step, Engine, SchedSnapshot, Scheduler, Slot13, StepCheck, TimeSample};
+use crate::scheduler::{
+    check_step, fixed_dt, slot13_step, Engine, SchedSnapshot, Scheduler, Slot13, StallWatch, StepCheck, TimeSample,
+};
 
 // ----------------------------------------------------------------------------------
 // Phases, faults and published statistics
@@ -61,18 +71,20 @@ pub enum Fault {
     FrameStateUnavailable,
     RenderFlagNotInitial,
     MovieCaptureActive,
-    DtBytesNotOriginal,
-    ConstantMismatch,
+    CodeBytesNotOriginal,
+    ConstantUnavailable,
     LiveSiteMismatch,
     CodePageNotRx,
     MprotectFailed,
     PatchRace,
     FrameStateChanged,
-    DtPatchChanged,
+    PatchBytesChanged,
     RealTimeStep,
     TimeInvalid,
-    ForeignFlagWrite,
+    ForeignDecisionWrite,
     StatePoisoned,
+    Stall,
+    RenderFlagChanged,
 }
 
 impl Fault {
@@ -83,18 +95,20 @@ impl Fault {
             FrameStateUnavailable,
             RenderFlagNotInitial,
             MovieCaptureActive,
-            DtBytesNotOriginal,
-            ConstantMismatch,
+            CodeBytesNotOriginal,
+            ConstantUnavailable,
             LiveSiteMismatch,
             CodePageNotRx,
             MprotectFailed,
             PatchRace,
             FrameStateChanged,
-            DtPatchChanged,
+            PatchBytesChanged,
             RealTimeStep,
             TimeInvalid,
-            ForeignFlagWrite,
+            ForeignDecisionWrite,
             StatePoisoned,
+            Stall,
+            RenderFlagChanged,
         ]
         .get(code as usize)
         .copied()
@@ -106,18 +120,20 @@ impl Fault {
             Fault::FrameStateUnavailable => "frame_state_unavailable",
             Fault::RenderFlagNotInitial => "render_flag_not_initial",
             Fault::MovieCaptureActive => "movie_capture_active",
-            Fault::DtBytesNotOriginal => "dt_bytes_not_original",
-            Fault::ConstantMismatch => "one_sixtieth_constant_mismatch",
+            Fault::CodeBytesNotOriginal => "code_bytes_not_original",
+            Fault::ConstantUnavailable => "step_constant_unavailable",
             Fault::LiveSiteMismatch => "live_site_mismatch",
-            Fault::CodePageNotRx => "dt_code_page_not_r-x",
+            Fault::CodePageNotRx => "code_page_not_r-x",
             Fault::MprotectFailed => "mprotect_failed",
-            Fault::PatchRace => "dt_bytes_changed_during_patch",
+            Fault::PatchRace => "code_bytes_changed_during_patch",
             Fault::FrameStateChanged => "frame_state_pointer_changed",
-            Fault::DtPatchChanged => "dt_patch_bytes_changed",
-            Fault::RealTimeStep => "real_time_step_not_one_sixtieth",
+            Fault::PatchBytesChanged => "patch_bytes_changed",
+            Fault::RealTimeStep => "real_time_step_not_fixed",
             Fault::TimeInvalid => "timer_values_invalid",
-            Fault::ForeignFlagWrite => "render_flag_foreign_write",
+            Fault::ForeignDecisionWrite => "decision_byte_foreign_write",
             Fault::StatePoisoned => "scheduler_state_poisoned",
+            Fault::Stall => "simulation_stalled",
+            Fault::RenderFlagChanged => "engine_render_flag_changed",
         }
     }
 }
@@ -126,23 +142,32 @@ static CONFIG: OnceLock<Sched> = OnceLock::new();
 static PHASE: AtomicU32 = AtomicU32::new(Phase::Off as u32);
 static FAULT: AtomicU32 = AtomicU32::new(0);
 static RESTORE_REQUEST: AtomicBool = AtomicBool::new(false);
-/// The dt qwords currently hold our patch.
-static PATCHED: AtomicBool = AtomicBool::new(false);
-/// The FrameState whose render flag we own, and the value we wrote last.
+/// Which code qwords currently hold our patch.
+static CMP_PATCHED: AtomicBool = AtomicBool::new(false);
+static DT_PATCHED: AtomicBool = AtomicBool::new(false);
+/// Patched dt load (depends on the step constant), and the constant's address.
+static DT_LOAD_PATCH: AtomicU64 = AtomicU64::new(0);
+static STEP_CONST: AtomicU64 = AtomicU64::new(0);
+/// The FrameState whose decision byte we own, its original value, our last write.
 static FRAME_STATE: AtomicU64 = AtomicU64::new(0);
-static FLAG_VALUE: AtomicBool = AtomicBool::new(true);
-static FLAG_OWNED: AtomicBool = AtomicBool::new(false);
+static DECISION_ORIGINAL: AtomicU8 = AtomicU8::new(0);
+static DECISION_OWNED: AtomicBool = AtomicBool::new(false);
+static DECISION_VALUE: AtomicBool = AtomicBool::new(true);
 static RESTORE_NOTE: AtomicU32 = AtomicU32::new(0);
+/// Completed slot-13 callbacks while armed (stall watchdog progress).
+static PROGRESS: AtomicU64 = AtomicU64::new(0);
 
 static ST_STEPS: AtomicU64 = AtomicU64::new(0);
 static ST_RENDERS: AtomicU64 = AtomicU64::new(0);
 static ST_SKIPPED: AtomicU64 = AtomicU64::new(0);
 static ST_FORCED: AtomicU64 = AtomicU64::new(0);
+static ST_FORCED_GAP: AtomicU64 = AtomicU64::new(0);
 static ST_LOADING: AtomicU64 = AtomicU64::new(0);
 static ST_DROPPED_NS: AtomicU64 = AtomicU64::new(0);
 static ST_REBASELINES: AtomicU64 = AtomicU64::new(0);
 static ST_MAX_LAG: AtomicU64 = AtomicU64::new(0);
 static ST_MAX_SKIP: AtomicU64 = AtomicU64::new(0);
+static ST_SKIP_RUN: AtomicU64 = AtomicU64::new(0);
 static ST_EXACT: AtomicU64 = AtomicU64::new(0);
 static ST_IRREGULAR: AtomicU64 = AtomicU64::new(0);
 static ST_NO_ADVANCE: AtomicU64 = AtomicU64::new(0);
@@ -167,14 +192,15 @@ pub fn fault() -> Fault {
 pub fn config() -> Option<Sched> {
     CONFIG.get().copied()
 }
-/// How the last restore ended: 0 none, 1 in slot, 2 from the worker, 3 flag written
-/// without seeing the main thread parked (timeout).
+pub fn step_constant() -> u64 {
+    STEP_CONST.load(Ordering::SeqCst)
+}
+/// How the last restore ran: in the slot-13 callback or from the worker thread.
 pub fn restore_note() -> &'static str {
     match RESTORE_NOTE.load(Ordering::SeqCst) {
         1 => "slot",
         2 => "worker",
-        3 => "slot_flag_unparked",
-        4 => "worker_flag_unparked",
+        3 => "worker_unlocked",
         _ => "none",
     }
 }
@@ -193,16 +219,21 @@ pub fn init(cfg: Sched) {
 }
 
 pub fn snapshot() -> SchedSnapshot {
-    let mut s = SchedSnapshot::default();
+    let mut s = SchedSnapshot { hz: config().map(|c| c.policy.hz).unwrap_or(0), ..Default::default() };
     s.stats.steps = ST_STEPS.load(Ordering::Relaxed);
     s.stats.renders = ST_RENDERS.load(Ordering::Relaxed);
     s.stats.skipped = ST_SKIPPED.load(Ordering::Relaxed);
     s.stats.forced_renders = ST_FORCED.load(Ordering::Relaxed);
+    s.stats.forced_gap_renders = ST_FORCED_GAP.load(Ordering::Relaxed);
     s.stats.loading_steps = ST_LOADING.load(Ordering::Relaxed);
     s.stats.dropped_ns = ST_DROPPED_NS.load(Ordering::Relaxed);
     s.stats.rebaselines = ST_REBASELINES.load(Ordering::Relaxed);
     s.stats.max_lag_steps = ST_MAX_LAG.swap(0, Ordering::Relaxed);
-    s.stats.max_skip_run = ST_MAX_SKIP.swap(0, Ordering::Relaxed);
+    // Window maximum of the no-render run; seeded with the current run so a long run is
+    // visible in every line it spans.
+    let run = ST_SKIP_RUN.load(Ordering::Relaxed);
+    s.stats.max_skip_run = ST_MAX_SKIP.swap(run, Ordering::Relaxed).max(run);
+    s.skip_run = run;
     s.exact_steps = ST_EXACT.load(Ordering::Relaxed);
     s.irregular_steps = ST_IRREGULAR.load(Ordering::Relaxed) + ST_NO_ADVANCE.load(Ordering::Relaxed);
     s.max_wait_ns = ST_MAX_WAIT_NS.swap(0, Ordering::Relaxed);
@@ -220,18 +251,24 @@ unsafe fn read_u8(va: u64) -> u8 {
 }
 
 fn qword(va: u64) -> &'static AtomicU64 {
-    // SAFETY: callers pass the two 8-byte-aligned dt addresses of the pinned image,
+    // SAFETY: callers pass the 8-byte-aligned patch addresses of the pinned image,
     // verified mapped before the first use.
     unsafe { &*(va as *const AtomicU64) }
 }
 
 extern "C" {
     fn mprotect(addr: *mut std::ffi::c_void, len: usize, prot: i32) -> i32;
+    fn mmap(addr: *mut std::ffi::c_void, len: usize, prot: i32, flags: i32, fd: i32, off: i64)
+        -> *mut std::ffi::c_void;
+    fn munmap(addr: *mut std::ffi::c_void, len: usize) -> i32;
     fn syscall(number: i64, ...) -> i64;
 }
 const PROT_READ: i32 = 1;
 const PROT_WRITE: i32 = 2;
 const PROT_EXEC: i32 = 4;
+const MAP_PRIVATE: i32 = 0x02;
+const MAP_ANONYMOUS: i32 = 0x20;
+const MAP_FIXED_NOREPLACE: i32 = 0x100000;
 const SYS_MEMBARRIER: i64 = 324;
 const MEMBARRIER_CMD_PRIVATE_EXPEDITED_SYNC_CORE: i64 = 32;
 const MEMBARRIER_CMD_REGISTER_PRIVATE_EXPEDITED_SYNC_CORE: i64 = 64;
@@ -250,8 +287,8 @@ fn sync_cores() {
     }
 }
 
-/// Run `f` with the dt code page writable (and still executable: other threads may run
-/// code on that page meanwhile), then make it `r-x` again.
+/// Run `f` with the FrameTick code page writable (and still executable: other threads
+/// may run code on that page meanwhile), then make it `r-x` again.
 fn with_code_writable<T>(f: impl FnOnce() -> T) -> Result<T, Fault> {
     let page = pinned::DT_PAGE as *mut std::ffi::c_void;
     // SAFETY: the page belongs to the pinned executable's text mapping (checked r-x).
@@ -267,68 +304,222 @@ fn with_code_writable<T>(f: impl FnOnce() -> T) -> Result<T, Fault> {
     }
 }
 
-fn code_page_is_rx() -> bool {
-    let Ok(maps) = std::fs::read_to_string("/proc/self/maps") else { return false };
-    maps.lines().any(|line| {
+fn maps_perms(start: u64, len: u64) -> Option<String> {
+    let maps = std::fs::read_to_string("/proc/self/maps").ok()?;
+    maps.lines().find_map(|line| {
         let mut parts = line.split_whitespace();
-        let (Some(range), Some(perms)) = (parts.next(), parts.next()) else { return false };
-        let Some((a, b)) = range.split_once('-') else { return false };
-        let (Ok(a), Ok(b)) = (u64::from_str_radix(a, 16), u64::from_str_radix(b, 16)) else { return false };
-        a <= pinned::DT_PAGE && pinned::DT_PAGE + 4096 <= b && perms.starts_with("r-x")
+        let (range, perms) = (parts.next()?, parts.next()?);
+        let (a, b) = range.split_once('-')?;
+        let (a, b) = (u64::from_str_radix(a, 16).ok()?, u64::from_str_radix(b, 16).ok()?);
+        (a <= start && start + len <= b).then(|| perms.to_owned())
     })
 }
 
-fn load_original() -> u64 {
-    u64::from_le_bytes(pinned::DT_LOAD_ORIGINAL)
-}
-fn load_patched() -> u64 {
-    u64::from_le_bytes(pinned::dt_load_patched())
-}
-fn min_original() -> u64 {
-    u64::from_le_bytes(pinned::DT_MIN_ORIGINAL)
-}
-fn min_patched() -> u64 {
-    u64::from_le_bytes(pinned::DT_MIN_PATCHED)
+fn q(bytes: [u8; 8]) -> u64 {
+    u64::from_le_bytes(bytes)
 }
 
-fn apply_patch() -> Result<(), Fault> {
+/// The `double 1/hz` the dt load will read: .rodata for 60/20 Hz, an own page for 30 Hz.
+fn step_constant_for(hz: u32) -> Result<u64, Fault> {
+    let want = fixed_dt(hz).to_bits();
+    let rodata = match hz {
+        60 => Some(pinned::ONE_SIXTIETH_CONST),
+        20 => Some(pinned::ONE_TWENTIETH_CONST),
+        _ => None,
+    };
+    if let Some(va) = rodata {
+        // SAFETY: .rodata of the pinned image (also covered by a pinned site).
+        return if unsafe { read_u64(va) } == want { Ok(va) } else { Err(Fault::ConstantUnavailable) };
+    }
+    for &addr in &pinned::CONST_PAGE_CANDIDATES {
+        // SAFETY: anonymous private mapping; MAP_FIXED_NOREPLACE never replaces an
+        // existing mapping (older kernels treat it as a hint, checked below).
+        unsafe {
+            let p = mmap(
+                addr as *mut _,
+                4096,
+                PROT_READ | PROT_WRITE,
+                MAP_PRIVATE | MAP_ANONYMOUS | MAP_FIXED_NOREPLACE,
+                -1,
+                0,
+            );
+            if p as isize == -1 {
+                continue;
+            }
+            if p as u64 != addr {
+                munmap(p, 4096);
+                continue;
+            }
+            std::ptr::write_volatile(p as *mut u64, want);
+            if mprotect(p, 4096, PROT_READ) != 0 {
+                munmap(p, 4096);
+                continue;
+            }
+            // Kept for the process lifetime: a thread may still be executing the patched
+            // load while it is being restored.
+            return Ok(addr);
+        }
+    }
+    Err(Fault::ConstantUnavailable)
+}
+
+fn apply_patches(load_patched: u64) -> Result<(), Fault> {
     let cas =
         |va: u64, from: u64, to: u64| qword(va).compare_exchange(from, to, Ordering::SeqCst, Ordering::SeqCst).is_ok();
     let result = with_code_writable(|| {
-        // Load first (dt = min(1/60, dt)), then drop the min (dt = 1/60).
-        if !cas(pinned::DT_LOAD_VA, load_original(), load_patched()) {
+        // 1. Decision: read #2 tests FrameState+0x201 (already set to 1 = render).
+        if !cas(pinned::DECISION_CMP_VA, q(pinned::DECISION_CMP_ORIGINAL), q(pinned::DECISION_CMP_PATCHED)) {
             return false;
         }
-        if !cas(pinned::DT_MIN_VA, min_original(), min_patched()) {
-            let _ = cas(pinned::DT_LOAD_VA, load_patched(), load_original());
+        CMP_PATCHED.store(true, Ordering::SeqCst);
+        // 2. dt load first (dt = min(1/hz, dt)), then drop the min (dt = 1/hz).
+        if !cas(pinned::DT_LOAD_VA, q(pinned::DT_LOAD_ORIGINAL), load_patched) {
             return false;
         }
+        if !cas(pinned::DT_MIN_VA, q(pinned::DT_MIN_ORIGINAL), q(pinned::DT_MIN_PATCHED)) {
+            let _ = cas(pinned::DT_LOAD_VA, load_patched, q(pinned::DT_LOAD_ORIGINAL));
+            return false;
+        }
+        DT_PATCHED.store(true, Ordering::SeqCst);
         true
     })?;
     sync_cores();
     if result {
-        PATCHED.store(true, Ordering::SeqCst);
         Ok(())
     } else {
         Err(Fault::PatchRace)
     }
 }
 
-/// Restore the dt bytes (reverse order). Safe from any thread at any time: each store is
-/// atomic and every intermediate state is a valid FrameTick.
-fn restore_code() {
-    if !PATCHED.swap(false, Ordering::SeqCst) {
-        return;
-    }
+/// Restore code (decision compare first, then dt in reverse order) and the decision
+/// byte. Safe from any thread at any time: each store is atomic, every intermediate
+/// state is a valid FrameTick, and nothing reads the decision byte once the compare is
+/// back to the engine's render flag.
+fn restore_all(note: u32) {
     let cas = |va: u64, from: u64, to: u64| {
         let _ = qword(va).compare_exchange(from, to, Ordering::SeqCst, Ordering::SeqCst);
     };
-    let _ = with_code_writable(|| {
-        cas(pinned::DT_MIN_VA, min_patched(), min_original());
-        cas(pinned::DT_LOAD_VA, load_patched(), load_original());
-    });
-    sync_cores();
+    let cmp = CMP_PATCHED.swap(false, Ordering::SeqCst);
+    let dt = DT_PATCHED.swap(false, Ordering::SeqCst);
+    if cmp || dt {
+        let load_patched = DT_LOAD_PATCH.load(Ordering::SeqCst);
+        let _ = with_code_writable(|| {
+            if cmp {
+                cas(pinned::DECISION_CMP_VA, q(pinned::DECISION_CMP_PATCHED), q(pinned::DECISION_CMP_ORIGINAL));
+            }
+            if dt {
+                cas(pinned::DT_MIN_VA, q(pinned::DT_MIN_PATCHED), q(pinned::DT_MIN_ORIGINAL));
+                cas(pinned::DT_LOAD_VA, load_patched, q(pinned::DT_LOAD_ORIGINAL));
+            }
+        });
+        sync_cores();
+    }
+    if DECISION_OWNED.swap(false, Ordering::SeqCst) {
+        let fs = FRAME_STATE.load(Ordering::SeqCst);
+        // SAFETY: fs was verified mapped at admission; FrameState lives for the process.
+        unsafe {
+            if fs != 0 && read_u64(pinned::FRAME_STATE_GLOBAL) == fs {
+                let byte = (fs + pinned::FRAME_STATE_DECISION_BYTE) as *mut u8;
+                std::ptr::write_volatile(byte, DECISION_ORIGINAL.load(Ordering::SeqCst));
+            }
+        }
+    }
+    if cmp || dt {
+        RESTORE_NOTE.store(note, Ordering::SeqCst);
+    }
 }
+
+/// Full restore from the slot-13 thread.
+pub fn restore_in_slot() {
+    restore_all(1);
+}
+
+/// Restore from the worker thread (disarm file, stall watchdog). Takes the scheduler
+/// lock when it can, so no slot-13 decision is written concurrently; after 3 s it
+/// restores anyway (a late decision write would then only touch unread padding).
+pub fn restore_from_worker() {
+    if !CMP_PATCHED.load(Ordering::SeqCst)
+        && !DT_PATCHED.load(Ordering::SeqCst)
+        && !DECISION_OWNED.load(Ordering::SeqCst)
+    {
+        if phase() == Phase::Pending {
+            PHASE.store(Phase::Restored as u32, Ordering::SeqCst);
+        }
+        return;
+    }
+    RESTORE_REQUEST.store(true, Ordering::SeqCst);
+    let start = Instant::now();
+    loop {
+        match STATE.try_lock() {
+            Ok(_guard) => {
+                restore_all(2);
+                break;
+            }
+            Err(TryLockError::Poisoned(_)) => {
+                restore_all(3);
+                break;
+            }
+            Err(TryLockError::WouldBlock) if start.elapsed() >= Duration::from_secs(3) => {
+                restore_all(3);
+                break;
+            }
+            Err(TryLockError::WouldBlock) => std::thread::sleep(Duration::from_millis(2)),
+        }
+    }
+    if matches!(phase(), Phase::Active | Phase::Pending) {
+        PHASE.store(Phase::Restored as u32, Ordering::SeqCst);
+    }
+}
+
+// ----------------------------------------------------------------------------------
+// Stall watchdog (worker thread)
+
+/// True while X4 legitimately runs no simulation frames: sync loading (main-loop
+/// appState bit 1) or the VBI loading flag.
+fn engine_loading() -> bool {
+    // SAFETY: fixed .bss/.data of the pinned image; table pointer checked for null.
+    unsafe {
+        if read_u8(pinned::MAIN_APP_STATE) & 2 != 0 {
+            return true;
+        }
+        let table = read_u64(pinned::VBI_TABLE_GLOBAL);
+        table != 0 && read_i32(table + pinned::VBI_LOADING_FLAG as u64) != 0
+    }
+}
+
+pub struct Watchdog(Option<StallWatch>);
+
+impl Watchdog {
+    pub fn new() -> Self {
+        Watchdog(config().map(|c| StallWatch::new(c.stall_ms)))
+    }
+    /// Polled by the worker. Returns a log line when the watchdog fired; it has then
+    /// restored everything and the caller disarms the agent.
+    pub fn poll(&mut self) -> Option<String> {
+        let watch = self.0.as_mut()?;
+        if phase() != Phase::Active {
+            return None;
+        }
+        let stalled = watch.observe(epoch_ns(), PROGRESS.load(Ordering::SeqCst), engine_loading())?;
+        // SAFETY: fixed .bss byte of the pinned image.
+        let in_flight = unsafe { read_u8(pinned::MAIN_FRAME_IN_FLIGHT) };
+        set_fault(Fault::Stall, Phase::Faulted);
+        restore_from_worker();
+        PHASE.store(Phase::Faulted as u32, Ordering::SeqCst);
+        Some(format!(
+            "X4MP_AGENT SCHED STALL no_step_ms={} main_frame_in_flight={} steps={} renders={} skip_run={} restore={}",
+            stalled / 1_000_000,
+            in_flight,
+            ST_STEPS.load(Ordering::Relaxed),
+            ST_RENDERS.load(Ordering::Relaxed),
+            ST_SKIP_RUN.load(Ordering::Relaxed),
+            restore_note()
+        ))
+    }
+}
+
+// ----------------------------------------------------------------------------------
+// The live engine for the slot-13 protocol
 
 fn main_parked() -> bool {
     // SAFETY: fixed .bss byte of the pinned image (inside main_loop_* sites).
@@ -346,75 +537,12 @@ fn wait_parked(timeout: Duration) -> bool {
     true
 }
 
-/// Put the render flag back to the engine's value (1) if we own it.
-fn restore_flag(wait: Duration, from_worker: bool) {
-    if !FLAG_OWNED.swap(false, Ordering::SeqCst) {
-        return;
-    }
-    let fs = FRAME_STATE.load(Ordering::SeqCst);
-    // SAFETY: fs was verified mapped at admission; FrameState lives for the process.
-    unsafe {
-        if read_u64(pinned::FRAME_STATE_GLOBAL) != fs || FLAG_VALUE.load(Ordering::SeqCst) {
-            return; // object replaced, or the flag already holds 1
-        }
-        let parked = wait_parked(wait);
-        let flag = (fs + pinned::FRAME_STATE_RENDER_FLAG) as *mut u8;
-        if std::ptr::read_volatile(flag) == 0 {
-            std::ptr::write_volatile(flag, 1);
-        }
-        FLAG_VALUE.store(true, Ordering::SeqCst);
-        RESTORE_NOTE.store(
-            match (from_worker, parked) {
-                (false, true) => 1,
-                (true, true) => 2,
-                (false, false) => 3,
-                (true, false) => 4,
-            },
-            Ordering::SeqCst,
-        );
-    }
-}
-
 fn wait_budget() -> Duration {
-    Duration::from_millis(config().map(|c| c.wait_ms).unwrap_or(10_000))
+    Duration::from_millis(config().map(|c| c.wait_ms).unwrap_or(5000))
 }
-
-/// Full restore from the slot-13 thread (safe window available).
-pub fn restore_in_slot() {
-    restore_code();
-    restore_flag(wait_budget(), false);
-}
-
-/// Restore requested from the worker thread: let slot 13 do it in its safe window; fall
-/// back to restoring here when the simulation does not run (e.g. loading) in time.
-pub fn restore_from_worker() {
-    let p = phase();
-    if !matches!(p, Phase::Active | Phase::Pending)
-        && !PATCHED.load(Ordering::SeqCst)
-        && !FLAG_OWNED.load(Ordering::SeqCst)
-    {
-        return;
-    }
-    RESTORE_REQUEST.store(true, Ordering::SeqCst);
-    let start = Instant::now();
-    while start.elapsed() < Duration::from_secs(3) {
-        if !PATCHED.load(Ordering::SeqCst) && !FLAG_OWNED.load(Ordering::SeqCst) && phase() != Phase::Active {
-            return;
-        }
-        std::thread::sleep(Duration::from_millis(5));
-    }
-    restore_code();
-    restore_flag(Duration::from_millis(500), true);
-    if phase() == Phase::Active || phase() == Phase::Pending {
-        PHASE.store(Phase::Restored as u32, Ordering::SeqCst);
-    }
-}
-
-// ----------------------------------------------------------------------------------
-// The live engine for the slot-13 protocol
 
 struct LiveEngine {
-    flag: *mut u8,
+    decision: *mut u8,
 }
 
 impl Engine for LiveEngine {
@@ -433,19 +561,19 @@ impl Engine for LiveEngine {
             std::thread::sleep(Duration::from_nanos((ns - now).min(1_000_000_000)));
         }
     }
-    fn render_flag(&self) -> bool {
-        // SAFETY: verified FrameState field.
-        unsafe { std::ptr::read_volatile(self.flag) != 0 }
+    fn render_decision(&self) -> bool {
+        // SAFETY: verified FrameState padding byte.
+        unsafe { std::ptr::read_volatile(self.decision) != 0 }
     }
-    fn set_render_flag(&self, render: bool) {
-        FLAG_OWNED.store(true, Ordering::SeqCst);
-        // SAFETY: verified FrameState field; main thread parked (slot13_step).
-        unsafe { std::ptr::write_volatile(self.flag, u8::from(render)) };
-        FLAG_VALUE.store(render, Ordering::SeqCst);
+    fn set_render_decision(&self, render: bool) {
+        // SAFETY: verified FrameState padding byte; main thread parked (slot13_step).
+        unsafe { std::ptr::write_volatile(self.decision, u8::from(render)) };
+        DECISION_VALUE.store(render, Ordering::SeqCst);
     }
 }
 
 fn admit(live: &mut Live) -> Result<bool, Fault> {
+    let cfg = config().ok_or(Fault::StatePoisoned)?;
     let ranges = readable_ranges();
     // SAFETY: every address is checked against /proc/self/maps first.
     unsafe {
@@ -459,9 +587,6 @@ fn admit(live: &mut Live) -> Result<bool, Fault> {
         if read_u8(pinned::MOVIE_CAPTURE_FLAG) != 0 {
             return Err(Fault::MovieCaptureActive);
         }
-        if read_u64(pinned::ONE_SIXTIETH_CONST) != (1.0f64 / 60.0).to_bits() {
-            return Err(Fault::ConstantMismatch);
-        }
         let image = LiveImage { ranges };
         for name in [
             "frame_tick_time_advance",
@@ -474,21 +599,34 @@ fn admit(live: &mut Live) -> Result<bool, Fault> {
                 return Err(Fault::LiveSiteMismatch);
             }
         }
-        if qword(pinned::DT_LOAD_VA).load(Ordering::SeqCst) != load_original()
-            || qword(pinned::DT_MIN_VA).load(Ordering::SeqCst) != min_original()
+        if qword(pinned::DECISION_CMP_VA).load(Ordering::SeqCst) != q(pinned::DECISION_CMP_ORIGINAL)
+            || qword(pinned::DT_LOAD_VA).load(Ordering::SeqCst) != q(pinned::DT_LOAD_ORIGINAL)
+            || qword(pinned::DT_MIN_VA).load(Ordering::SeqCst) != q(pinned::DT_MIN_ORIGINAL)
         {
-            return Err(Fault::DtBytesNotOriginal);
+            return Err(Fault::CodeBytesNotOriginal);
         }
-        if !code_page_is_rx() {
+        if !maps_perms(pinned::DT_PAGE, 4096).is_some_and(|p| p.starts_with("r-x")) {
             return Err(Fault::CodePageNotRx);
         }
         // Patch only while the main thread is parked outside FrameTick.
         if !wait_parked(wait_budget()) {
             return Ok(false); // try again next frame
         }
+        let constant = match STEP_CONST.load(Ordering::SeqCst) {
+            0 => step_constant_for(cfg.policy.hz)?,
+            c => c,
+        };
+        STEP_CONST.store(constant, Ordering::SeqCst);
+        let load_patched = pinned::dt_load_patched(constant).ok_or(Fault::ConstantUnavailable)?;
+        DT_LOAD_PATCH.store(q(load_patched), Ordering::SeqCst);
+        // Own the decision byte (render = 1) before read #2 is pointed at it.
+        let byte = (fs + pinned::FRAME_STATE_DECISION_BYTE) as *mut u8;
         FRAME_STATE.store(fs, Ordering::SeqCst);
-        FLAG_VALUE.store(true, Ordering::SeqCst);
-        apply_patch()?;
+        DECISION_ORIGINAL.store(std::ptr::read_volatile(byte), Ordering::SeqCst);
+        DECISION_OWNED.store(true, Ordering::SeqCst);
+        std::ptr::write_volatile(byte, 1);
+        DECISION_VALUE.store(true, Ordering::SeqCst);
+        apply_patches(q(load_patched))?;
         live.prev = None;
         Ok(true)
     }
@@ -500,9 +638,13 @@ fn publish(live: &Live) {
     ST_RENDERS.store(s.renders, Ordering::Relaxed);
     ST_SKIPPED.store(s.skipped, Ordering::Relaxed);
     ST_FORCED.store(s.forced_renders, Ordering::Relaxed);
+    ST_FORCED_GAP.store(s.forced_gap_renders, Ordering::Relaxed);
     ST_LOADING.store(s.loading_steps, Ordering::Relaxed);
     ST_DROPPED_NS.store(s.dropped_ns, Ordering::Relaxed);
     ST_REBASELINES.store(s.rebaselines, Ordering::Relaxed);
+    let run = live.sched.current_skip_run();
+    ST_SKIP_RUN.store(run, Ordering::Relaxed);
+    ST_MAX_SKIP.fetch_max(run, Ordering::Relaxed);
 }
 
 /// The scheduler's part of one slot-13 callback. `Err` means the scheduler faulted and
@@ -526,7 +668,7 @@ pub fn on_frame(loading: bool) -> Result<(), Fault> {
         PHASE.store(Phase::Restored as u32, Ordering::SeqCst);
         return Ok(());
     }
-    match frame_inner(live, p, loading) {
+    let result = match frame_inner(live, p, loading) {
         Ok(()) => Ok(()),
         Err(f) => {
             restore_in_slot();
@@ -539,7 +681,9 @@ pub fn on_frame(loading: bool) -> Result<(), Fault> {
                 Err(f)
             }
         }
-    }
+    };
+    PROGRESS.fetch_add(1, Ordering::SeqCst);
+    result
 }
 
 fn frame_inner(live: &mut Live, p: Phase, loading: bool) -> Result<(), Fault> {
@@ -549,19 +693,25 @@ fn frame_inner(live: &mut Live, p: Phase, loading: bool) -> Result<(), Fault> {
         }
         PHASE.store(Phase::Active as u32, Ordering::SeqCst);
     }
+    let hz = config().map(|c| c.policy.hz).unwrap_or(60);
     let fs = FRAME_STATE.load(Ordering::SeqCst);
+    let load_patched = DT_LOAD_PATCH.load(Ordering::SeqCst);
     // SAFETY: fixed addresses of the pinned image and the FrameState verified at admit.
     let (sample, temp_paused) = unsafe {
         if read_u64(pinned::FRAME_STATE_GLOBAL) != fs {
             return Err(Fault::FrameStateChanged);
         }
+        if read_u8(fs + pinned::FRAME_STATE_RENDER_FLAG) != 1 {
+            return Err(Fault::RenderFlagChanged);
+        }
         if read_u8(pinned::MOVIE_CAPTURE_FLAG) != 0 {
             return Err(Fault::MovieCaptureActive);
         }
-        if qword(pinned::DT_LOAD_VA).load(Ordering::SeqCst) != load_patched()
-            || qword(pinned::DT_MIN_VA).load(Ordering::SeqCst) != min_patched()
+        if qword(pinned::DECISION_CMP_VA).load(Ordering::SeqCst) != q(pinned::DECISION_CMP_PATCHED)
+            || qword(pinned::DT_LOAD_VA).load(Ordering::SeqCst) != load_patched
+            || qword(pinned::DT_MIN_VA).load(Ordering::SeqCst) != q(pinned::DT_MIN_PATCHED)
         {
-            return Err(Fault::DtPatchChanged);
+            return Err(Fault::PatchBytesChanged);
         }
         (
             TimeSample {
@@ -577,7 +727,7 @@ fn frame_inner(live: &mut Live, p: Phase, loading: bool) -> Result<(), Fault> {
         live.prev = None;
     } else {
         if let Some(prev) = live.prev {
-            match check_step(&prev, &sample) {
+            match check_step(&prev, &sample, fixed_dt(hz)) {
                 StepCheck::Exact => {
                     ST_EXACT.fetch_add(1, Ordering::Relaxed);
                 }
@@ -597,25 +747,41 @@ fn frame_inner(live: &mut Live, p: Phase, loading: bool) -> Result<(), Fault> {
     ST_GAME.store(sample.game.to_bits(), Ordering::Relaxed);
     ST_SPEED.store(sample.speed.to_bits(), Ordering::Relaxed);
 
-    let engine = LiveEngine { flag: (fs + pinned::FRAME_STATE_RENDER_FLAG) as *mut u8 };
-    let mut last = FLAG_VALUE.load(Ordering::SeqCst);
+    let engine = LiveEngine { decision: (fs + pinned::FRAME_STATE_DECISION_BYTE) as *mut u8 };
+    let mut last = DECISION_VALUE.load(Ordering::SeqCst);
     let wait_ns = wait_budget().as_nanos() as u64;
     let outcome = slot13_step(&mut live.sched, &engine, &mut last, loading || no_advance, temp_paused, wait_ns);
     match outcome {
-        Slot13::Stepped { waited_ns, .. } => {
+        Slot13::Stepped { decision, waited_ns } => {
             ST_MAX_WAIT_NS.fetch_max(waited_ns, Ordering::Relaxed);
+            ST_MAX_LAG.fetch_max(decision.lag_steps, Ordering::Relaxed);
         }
         Slot13::WaitTimeout { waited_ns } => {
             ST_MAX_WAIT_NS.fetch_max(waited_ns, Ordering::Relaxed);
             ST_TIMEOUTS.fetch_add(1, Ordering::Relaxed);
         }
-        Slot13::ForeignFlagWrite => return Err(Fault::ForeignFlagWrite),
+        Slot13::ForeignFlagWrite => return Err(Fault::ForeignDecisionWrite),
     }
-    // Per-window maxima (the worker swaps them to 0 per log line).
-    if let Slot13::Stepped { decision, .. } = outcome {
-        ST_MAX_LAG.fetch_max(decision.lag_steps, Ordering::Relaxed);
-    }
-    ST_MAX_SKIP.fetch_max(live.sched.current_skip_run(), Ordering::Relaxed);
     publish(live);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn thirty_hertz_constant_page_is_mapped_read_only_within_reach() {
+        // Maps the agent's own constant page in the test process (the image constants
+        // for 60/20 Hz exist only inside X4 and are covered by sigcheck instead).
+        let va = step_constant_for(30).expect("constant page");
+        assert!(pinned::CONST_PAGE_CANDIDATES.contains(&va));
+        // SAFETY: just mapped and filled by step_constant_for.
+        assert_eq!(unsafe { std::ptr::read_volatile(va as *const f64) }, 1.0 / 30.0);
+        assert_eq!(maps_perms(va, 4096).as_deref().map(|p| &p[..3]), Some("r--"));
+        assert!(pinned::dt_load_patched(va).is_some());
+        // A second request takes the next candidate (never replaces a mapping).
+        let other = step_constant_for(30).expect("second page");
+        assert_ne!(other, va);
+    }
 }

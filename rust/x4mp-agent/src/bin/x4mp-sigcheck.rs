@@ -47,10 +47,12 @@ fn main() -> ExitCode {
         }
     }
     // Scheduler preconditions in the file (the live agent re-checks them before patching).
-    let checks: [(&str, u64, Vec<u8>); 4] = [
+    let checks: [(&str, u64, Vec<u8>); 6] = [
+        ("decision_cmp_original", pinned::DECISION_CMP_VA, pinned::DECISION_CMP_ORIGINAL.to_vec()),
         ("dt_load_original", pinned::DT_LOAD_VA, pinned::DT_LOAD_ORIGINAL.to_vec()),
         ("dt_min_original", pinned::DT_MIN_VA, pinned::DT_MIN_ORIGINAL.to_vec()),
         ("one_sixtieth_constant", pinned::ONE_SIXTIETH_CONST, (1.0f64 / 60.0).to_le_bytes().to_vec()),
+        ("one_twentieth_constant", pinned::ONE_TWENTIETH_CONST, (1.0f64 / 20.0).to_le_bytes().to_vec()),
         ("main_frame_in_flight_initial", pinned::MAIN_FRAME_IN_FLIGHT, vec![1]),
     ];
     for (name, va, want) in checks {
@@ -61,6 +63,14 @@ fn main() -> ExitCode {
             failures += 1;
         }
     }
+    // fixed30's constant page must lie outside every PT_LOAD segment of the image.
+    for &page in &pinned::CONST_PAGE_CANDIDATES {
+        if image.loads.iter().any(|l| page < l.vaddr + l.filesz.max(1) && l.vaddr < page + 4096) {
+            eprintln!("FAIL scheduler const page 0x{page:x} overlaps the image");
+            failures += 1;
+        }
+    }
+    println!("PASS scheduler const page candidates outside the image");
     if failures == 0 {
         println!("PASS executable {} build {}; no files modified", pinned::GAME_VERSION, pinned::STEAM_BUILD);
         ExitCode::SUCCESS

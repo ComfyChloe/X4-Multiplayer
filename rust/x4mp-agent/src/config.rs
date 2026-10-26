@@ -9,21 +9,31 @@ pub const ENV_LOG: &str = "X4MP_AGENT_LOG";
 pub const ENV_CADENCE_MS: &str = "X4MP_AGENT_CADENCE_MS";
 pub const ENV_SETTLE_MS: &str = "X4MP_AGENT_SETTLE_MS";
 pub const ENV_DISARM_FILE: &str = "X4MP_AGENT_DISARM_FILE";
-/// `fixed60` enables the fixed-step scheduler; unset or `off` leaves it off.
+/// `fixed60`, `fixed30` or `fixed20` enables the fixed-step scheduler at that step rate;
+/// unset or `off` leaves it off.
 pub const ENV_SCHED: &str = "X4MP_SCHED";
 /// `never`, or the minimum ms between renders (0 = render every on-time step).
 pub const ENV_RENDER_INTERVAL_MS: &str = "X4MP_RENDER_INTERVAL_MS";
 pub const ENV_SCHED_MAX_CATCHUP: &str = "X4MP_SCHED_MAX_CATCHUP";
 pub const ENV_SCHED_MAX_LAG_MS: &str = "X4MP_SCHED_MAX_LAG_MS";
 pub const ENV_SCHED_WAIT_MS: &str = "X4MP_SCHED_WAIT_MS";
+/// Longest time without a render, even while behind or with `never` (0 disables).
+pub const ENV_SCHED_MAX_RENDER_GAP_MS: &str = "X4MP_SCHED_MAX_RENDER_GAP_MS";
+/// Stall watchdog: no simulation step for this long outside loading restores and disarms.
+pub const ENV_SCHED_STALL_MS: &str = "X4MP_SCHED_STALL_MS";
 
-/// Fixed-step scheduler settings (only with `X4MP_SCHED=fixed60`).
+/// Hard cap on consecutive no-render steps (`X4MP_SCHED_MAX_CATCHUP` upper bound).
+pub const MAX_CATCHUP_CAP: u64 = 3600;
+
+/// Fixed-step scheduler settings (only with `X4MP_SCHED=fixedN`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Sched {
     pub policy: SchedConfig,
     /// Longest wait in slot 13 for the main thread to leave FrameTick before the frame
-    /// is left undecided. 100..=60000 ms, default 10000.
+    /// is left undecided. 100..=60000 ms, default 5000.
     pub wait_ms: u64,
+    /// Stall watchdog limit. 1000..=600000 ms, default 10000.
+    pub stall_ms: u64,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -37,7 +47,7 @@ pub struct Config {
     pub settle_ms: u64,
     /// When this file exists the agent disarms permanently. Default `<log>.disarm`.
     pub disarm_file: PathBuf,
-    /// `None` unless `X4MP_SCHED=fixed60`.
+    /// `None` unless `X4MP_SCHED=fixedN`.
     pub sched: Option<Sched>,
 }
 
@@ -69,19 +79,31 @@ fn absolute(text: &str, name: &str) -> Result<PathBuf, String> {
 }
 
 fn parse_sched(get: &impl Fn(&str) -> Option<String>) -> Result<Option<Sched>, String> {
-    match get(ENV_SCHED).as_deref() {
+    let hz = match get(ENV_SCHED).as_deref() {
         None | Some("off") => return Ok(None),
-        Some("fixed60") => {}
-        Some(_) => return Err(format!("{ENV_SCHED} must be fixed60 or off")),
-    }
+        Some("fixed60") => 60,
+        Some("fixed30") => 30,
+        Some("fixed20") => 20,
+        Some(_) => return Err(format!("{ENV_SCHED} must be fixed60, fixed30, fixed20 or off")),
+    };
     let render = match get(ENV_RENDER_INTERVAL_MS).as_deref() {
         Some("never") => RenderPolicy::Never,
         other => RenderPolicy::IntervalMs(bounded(other.map(str::to_owned), ENV_RENDER_INTERVAL_MS, 0, 0, 600_000)?),
     };
-    let max_catchup_steps = bounded(get(ENV_SCHED_MAX_CATCHUP), ENV_SCHED_MAX_CATCHUP, 120, 1, 36_000)? as u32;
+    let max_catchup_steps =
+        bounded(get(ENV_SCHED_MAX_CATCHUP), ENV_SCHED_MAX_CATCHUP, 120, 1, MAX_CATCHUP_CAP)? as u32;
+    let max_render_gap_ms = bounded(get(ENV_SCHED_MAX_RENDER_GAP_MS), ENV_SCHED_MAX_RENDER_GAP_MS, 5000, 0, 600_000)?;
     let max_lag_ms = bounded(get(ENV_SCHED_MAX_LAG_MS), ENV_SCHED_MAX_LAG_MS, 1000, 50, 60_000)?;
-    let wait_ms = bounded(get(ENV_SCHED_WAIT_MS), ENV_SCHED_WAIT_MS, 10_000, 100, 60_000)?;
-    Ok(Some(Sched { policy: SchedConfig { render, max_catchup_steps, max_lag_ms }, wait_ms }))
+    let wait_ms = bounded(get(ENV_SCHED_WAIT_MS), ENV_SCHED_WAIT_MS, 5000, 100, 60_000)?;
+    let stall_ms = bounded(get(ENV_SCHED_STALL_MS), ENV_SCHED_STALL_MS, 10_000, 1000, 600_000)?;
+    if wait_ms >= stall_ms {
+        return Err(format!("{ENV_SCHED_WAIT_MS} must be below {ENV_SCHED_STALL_MS}"));
+    }
+    Ok(Some(Sched {
+        policy: SchedConfig { hz, render, max_catchup_steps, max_render_gap_ms, max_lag_ms },
+        wait_ms,
+        stall_ms,
+    }))
 }
 
 /// `get` looks up an environment variable (injected for tests).
@@ -157,23 +179,40 @@ mod tests {
         let Parsed::Enabled(c) = with(&[(ENV_SCHED, "off")]) else { panic!() };
         assert_eq!(c.sched, None);
         let Parsed::Enabled(c) = with(&[(ENV_SCHED, "fixed60")]) else { panic!() };
-        assert_eq!(c.sched, Some(Sched { policy: SchedConfig::default(), wait_ms: 10_000 }));
+        assert_eq!(c.sched, Some(Sched { policy: SchedConfig::default(), wait_ms: 5000, stall_ms: 10_000 }));
         let Parsed::Enabled(c) = with(&[
-            (ENV_SCHED, "fixed60"),
+            (ENV_SCHED, "fixed30"),
             (ENV_RENDER_INTERVAL_MS, "500"),
             (ENV_SCHED_MAX_CATCHUP, "600"),
+            (ENV_SCHED_MAX_RENDER_GAP_MS, "0"),
             (ENV_SCHED_MAX_LAG_MS, "250"),
             (ENV_SCHED_WAIT_MS, "3000"),
+            (ENV_SCHED_STALL_MS, "20000"),
         ]) else {
             panic!()
         };
         let s = c.sched.unwrap();
-        assert_eq!(s.policy, SchedConfig { render: RenderPolicy::IntervalMs(500), max_catchup_steps: 600, max_lag_ms: 250 });
-        assert_eq!(s.wait_ms, 3000);
+        assert_eq!(
+            s.policy,
+            SchedConfig {
+                hz: 30,
+                render: RenderPolicy::IntervalMs(500),
+                max_catchup_steps: 600,
+                max_render_gap_ms: 0,
+                max_lag_ms: 250
+            }
+        );
+        assert_eq!((s.wait_ms, s.stall_ms), (3000, 20_000));
+        let Parsed::Enabled(c) = with(&[(ENV_SCHED, "fixed20")]) else { panic!() };
+        assert_eq!(c.sched.unwrap().policy.hz, 20);
         let Parsed::Enabled(c) = with(&[(ENV_SCHED, "fixed60"), (ENV_RENDER_INTERVAL_MS, "never")]) else { panic!() };
         assert_eq!(c.sched.unwrap().policy.render, RenderPolicy::Never);
         for bad in [
-            vec![(ENV_SCHED, "fixed30")],
+            vec![(ENV_SCHED, "fixed45")],
+            vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_MAX_CATCHUP, "3601")],
+            vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_STALL_MS, "999")],
+            vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_WAIT_MS, "10000"), (ENV_SCHED_STALL_MS, "10000")],
+            vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_MAX_RENDER_GAP_MS, "x")],
             vec![(ENV_SCHED, "fixed60"), (ENV_RENDER_INTERVAL_MS, "-1")],
             vec![(ENV_SCHED, "fixed60"), (ENV_RENDER_INTERVAL_MS, "600001")],
             vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_MAX_CATCHUP, "0")],
