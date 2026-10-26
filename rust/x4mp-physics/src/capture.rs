@@ -87,12 +87,31 @@ impl FlightCapture {
         if header.pe_timestamp != pinned::PE_TIMESTAMP || header.size_of_image != pinned::SIZE_OF_IMAGE {
             return Err("capture is not from the pinned build".into());
         }
-        let need = header.head_bytes + header.model_bytes + header.agent_bytes + 2 * header.slot_bytes;
-        if header.record_size < need || header.record_size % 16 != 0 {
+        if header.agent_from != 0x340 || header.agent_bytes != 0x60 {
+            return Err("unsupported agent capture layout".into());
+        }
+        // The forced replay reads through model+0x5f. Accept the 0x60-byte oracle fixture
+        // as well as the native 0x70-byte object, but never a shorter model image.
+        if header.model_bytes < 0x60 {
+            return Err("model image is too short".into());
+        }
+        let need = u64::from(header.head_bytes) + u64::from(header.model_bytes)
+            + u64::from(header.agent_bytes) + 2 * u64::from(header.slot_bytes);
+        if u64::from(header.record_size) < need || header.record_size % 16 != 0 {
             return Err("record size does not fit the layout".into());
         }
-        if data.len() != 56 + header.records as usize * header.record_size as usize {
+        let file_size = 56u64 + u64::from(header.records) * u64::from(header.record_size);
+        if data.len() as u64 != file_size {
             return Err(format!("file size {} does not match {} records", data.len(), header.records));
+        }
+        for index in 0..header.records as usize {
+            let at = 56 + index * header.record_size as usize;
+            if u32_at(&data, at) != header.model {
+                return Err(format!("record {index} model differs from the capture header"));
+            }
+            if u32_at(&data, at + 4) & !7 != 0 {
+                return Err(format!("record {index} has unsupported flags"));
+            }
         }
         Ok(FlightCapture { header, data })
     }
@@ -204,6 +223,9 @@ pub fn replay_forced(cap: &FlightCapture, math: &impl CrtMath) -> ReplayReport {
 
 /// Replay any supported capture.
 pub fn replay(cap: &FlightCapture, math: &impl CrtMath) -> Result<ReplayReport, String> {
+    if cap.header.records == 0 {
+        return Err("capture contains no calls; replay equivalence is untested".into());
+    }
     match cap.header.model {
         0 => Ok(replay_forced(cap, math)),
         m => Err(format!("no reimplementation for the {} model yet", MODEL_NAMES[m as usize])),
