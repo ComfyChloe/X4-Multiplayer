@@ -614,3 +614,113 @@ def named_object_exists(name: str, session=None) -> bool:
                 return False
     finally:
         ntdll.NtClose(directory)
+
+
+# ---------------------------------------------------------------------------------------
+# system counters: hard page faults (PDH), per-process working sets
+
+pdh = ctypes.WinDLL('pdh')
+PDH_FMT_DOUBLE = 0x00000200
+
+
+class PDH_FMT_COUNTERVALUE(ctypes.Structure):
+    _fields_ = [('CStatus', wt.DWORD), ('doubleValue', ctypes.c_double)]
+
+
+pdh.PdhOpenQueryW.restype = wt.DWORD
+pdh.PdhOpenQueryW.argtypes = [wt.LPCWSTR, ctypes.c_size_t, ctypes.POINTER(HANDLE)]
+pdh.PdhAddEnglishCounterW.restype = wt.DWORD
+pdh.PdhAddEnglishCounterW.argtypes = [HANDLE, wt.LPCWSTR, ctypes.c_size_t, ctypes.POINTER(HANDLE)]
+pdh.PdhCollectQueryData.restype = wt.DWORD
+pdh.PdhCollectQueryData.argtypes = [HANDLE]
+pdh.PdhGetFormattedCounterValue.restype = wt.DWORD
+pdh.PdhGetFormattedCounterValue.argtypes = [HANDLE, wt.DWORD, ctypes.POINTER(wt.DWORD),
+                                            ctypes.POINTER(PDH_FMT_COUNTERVALUE)]
+pdh.PdhCloseQuery.argtypes = [HANDLE]
+
+
+class RateCounter:
+    """One PDH rate counter, by default hard page faults: \\Memory\\Pages Input/sec."""
+
+    def __init__(self, path=r'\Memory\Pages Input/sec'):
+        self.query, self.counter = HANDLE(), HANDLE()
+        if pdh.PdhOpenQueryW(None, 0, ctypes.byref(self.query)) != 0:
+            raise OSError('PdhOpenQuery failed')
+        if pdh.PdhAddEnglishCounterW(self.query, path, 0, ctypes.byref(self.counter)) != 0:
+            self.close()
+            raise OSError(f'PdhAddEnglishCounter({path}) failed')
+        pdh.PdhCollectQueryData(self.query)
+
+    def read(self):
+        if not self.query or pdh.PdhCollectQueryData(self.query) != 0:
+            return None
+        value, kind = PDH_FMT_COUNTERVALUE(), wt.DWORD(0)
+        if pdh.PdhGetFormattedCounterValue(self.counter, PDH_FMT_DOUBLE, ctypes.byref(kind),
+                                           ctypes.byref(value)) != 0:
+            return None
+        return round(value.doubleValue, 1)
+
+    def close(self):
+        if self.query:
+            pdh.PdhCloseQuery(self.query)
+            self.query = HANDLE()
+
+
+class SYSTEM_PERFORMANCE_INFORMATION_HEAD(ctypes.Structure):
+    """The stable leading fields of SYSTEM_PERFORMANCE_INFORMATION (NtQuerySystemInformation class 2)."""
+    _fields_ = [('IdleProcessTime', ctypes.c_int64), ('IoReadTransferCount', ctypes.c_int64),
+                ('IoWriteTransferCount', ctypes.c_int64), ('IoOtherTransferCount', ctypes.c_int64),
+                ('IoReadOperationCount', wt.ULONG), ('IoWriteOperationCount', wt.ULONG),
+                ('IoOtherOperationCount', wt.ULONG), ('AvailablePages', wt.ULONG), ('CommittedPages', wt.ULONG),
+                ('CommitLimit', wt.ULONG), ('PeakCommitment', wt.ULONG), ('PageFaultCount', wt.ULONG),
+                ('CopyOnWriteCount', wt.ULONG), ('TransitionCount', wt.ULONG), ('CacheTransitionCount', wt.ULONG),
+                ('DemandZeroCount', wt.ULONG), ('PageReadCount', wt.ULONG), ('PageReadIoCount', wt.ULONG)]
+
+
+ntdll.NtQuerySystemInformation.restype = ctypes.c_long
+ntdll.NtQuerySystemInformation.argtypes = [ctypes.c_ulong, ctypes.c_void_p, ctypes.c_ulong,
+                                           ctypes.POINTER(ctypes.c_ulong)]
+
+
+def system_performance():
+    buffer = ctypes.create_string_buffer(4096)
+    returned = ctypes.c_ulong(0)
+    if ntdll.NtQuerySystemInformation(2, buffer, len(buffer), ctypes.byref(returned)) != 0:
+        return None
+    return SYSTEM_PERFORMANCE_INFORMATION_HEAD.from_buffer_copy(buffer)
+
+
+class HardFaultCounter:
+    """Hard page faults as pages read from disk per second (the kernel's PageReadCount, the same
+    quantity as the \\Memory\\Pages Input/sec counter; PDH counters are unavailable on this PC)."""
+
+    def __init__(self):
+        info = system_performance()
+        self.last = (time.monotonic(), info.PageReadCount) if info else None
+
+    def read(self):
+        info = system_performance()
+        if info is None or self.last is None:
+            return None
+        now = time.monotonic()
+        then, count = self.last
+        self.last = (now, info.PageReadCount)
+        if now <= then:
+            return None
+        return round(((info.PageReadCount - count) % 2**32) / (now - then), 1)
+
+    def close(self):
+        self.last = None
+
+
+def working_sets_gb(pids) -> dict:
+    """Working set (GB) of each readable process; read-only (PROCESS_QUERY_LIMITED_INFORMATION)."""
+    out = {}
+    for pid in pids:
+        handle = open_process(pid)
+        if handle:
+            with handle as h:
+                counters = memory_counters(h)
+            if counters:
+                out[pid] = counters['working_set_gb']
+    return out

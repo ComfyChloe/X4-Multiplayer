@@ -20,7 +20,8 @@ import time
 import xml.etree.ElementTree as ET
 from pathlib import Path
 
-LANE_PROFILES = {'b1': '45850', 'b2': '45851', 'b3': '45853', 'b4': '45854'}
+LANE_PROFILES = {'b1': '45850', 'b2': '45851', 'b3': '45853', 'b4': '45854',
+                 'b5': '45855', 'b6': '45856', 'b7': '45857', 'b8': '45858'}
 # Profiles that belong to other sessions or to the user; never written by the lanes.
 FOREIGN_PROFILES = {'45841', '45842', '45843', '45844', '45852', '70000001', '70000002'}
 SOURCE_PROFILE = '45842'          # display/audio/input preferences are copied from here (read only)
@@ -30,7 +31,18 @@ LAB_ID = 'x4_lan_lab'
 LOCK_STALE_S = 45 * 60            # rewrite-coord/README.md: stale after 45 min without update
 LOCK_MAX_HOLD_S = 30 * 60         # lane locks: max hold 30 min
 MAX_TIMEOUT_S = 1680              # leaves room for preparation, settle and close inside 30 min
-MIN_FREE_RAM_GB = 12.0
+# Admission (user: "we can handle like 7 or 8 instances at once"): every X4.exe on the PC counts
+# (lanes, protected clients, other sessions). A lane X4 may start while fewer than MAX_X4_TOTAL run
+# and at least MIN_FREE_PER_START GB are available per X4 to be started.
+MAX_X4_TOTAL = 8
+MIN_FREE_PER_START = 8.0
+MIN_FREE_RAM_GB = MIN_FREE_PER_START          # old name, kept for the --min-free-gb default
+# Pressure back-off: available memory under PRESSURE_LOW_GB for more than PRESSURE_HOLD_S stops new
+# lane starts (rewrite-coord/lane-pressure.json) until it stayed at or above MIN_FREE_PER_START for
+# PRESSURE_RECOVER_S. Running X4 instances are never stopped for it.
+PRESSURE_LOW_GB = 4.0
+PRESSURE_HOLD_S = 60
+PRESSURE_RECOVER_S = 60
 CONFIG_FORBIDDEN = ('load', 'module', 'mpar', 'seed', 'usedefaultconfig')
 CONFIG_OVERRIDE_FORBIDDEN = CONFIG_FORBIDDEN + ('autosave',)
 TEXT_SUFFIXES = {'.lua', '.xml', '.txt', '.json', '.md', '.append', '.files', '.cfg', '.ini'}
@@ -111,6 +123,10 @@ class Paths:
     @property
     def queue(self) -> Path:
         return self.coord / 'lane-queue'
+
+    @property
+    def pressure(self) -> Path:
+        return self.coord / 'lane-pressure.json'
 
     @property
     def base(self) -> Path:
@@ -788,6 +804,58 @@ def _remove_lock_dir(path, why):
 
 
 # ---------------------------------------------------------------------------------------
+# memory pressure back-off (rewrite-coord/lane-pressure.json), shared by every runner
+
+PRESSURE_STALE_S = 600
+
+
+def observe_pressure(path, avail_gb, who, now=None) -> dict | None:
+    """Update the shared pressure state with one sample of available memory; returns the state.
+
+    low:       available < PRESSURE_LOW_GB since low_since (not yet pressure)
+    pressure:  it stayed low for more than PRESSURE_HOLD_S: no new lane starts
+    recovered: in pressure, available >= MIN_FREE_PER_START for PRESSURE_RECOVER_S: file removed
+    """
+    path = Path(path)
+    now = time.time() if now is None else now
+    try:
+        state = json.loads(path.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        state = None
+    if state is not None and now - state.get('updated', 0) > PRESSURE_STALE_S and avail_gb >= MIN_FREE_PER_START:
+        state = None                                   # nobody observed it for 10 min and memory is fine
+        _remove_quietly(path)
+    if avail_gb < PRESSURE_LOW_GB:
+        if state is None:
+            state = {'state': 'low', 'low_since': now}
+        if state['state'] == 'low' and now - state['low_since'] > PRESSURE_HOLD_S:
+            state.update(state='pressure', since=now)
+        state.update(recover_since=None, min_avail_gb=min(avail_gb, state.get('min_avail_gb', avail_gb)))
+    elif state is None:
+        return None
+    elif state['state'] == 'low':
+        _remove_quietly(path)                          # it did not last PRESSURE_HOLD_S
+        return None
+    elif avail_gb >= MIN_FREE_PER_START:
+        state['recover_since'] = state.get('recover_since') or now
+        if now - state['recover_since'] >= PRESSURE_RECOVER_S:
+            _remove_quietly(path)
+            return None
+    else:
+        state['recover_since'] = None
+    state.update(updated=now, avail_gb=round(avail_gb, 2), by=who)
+    write_json(path, state)
+    return state
+
+
+def _remove_quietly(path):
+    try:
+        Path(path).unlink()
+    except OSError:
+        pass
+
+
+# ---------------------------------------------------------------------------------------
 # lane queue (rewrite-coord/lane-queue): first come, first served for runs that --wait
 
 TICKET_STALE_S = 5 * 60            # a waiting runner refreshes its ticket at least every 60 s
@@ -873,6 +941,9 @@ MARKERS = {
 }
 
 
+FRAMEPROBE_RE = re.compile(r'\[X4LAN\] FRAMEPROBE frames=(\d+) .*?realTime=([\d.]+)')
+
+
 def parse_expect(spec: str):
     """'N:REGEX' (at least N matching lines) or 'REGEX' (at least one)."""
     match = re.match(r'^(\d+):(.*)$', spec, re.S)
@@ -914,6 +985,8 @@ class LogWatcher:
         self.failed_regex = None
         self.markers = {}
         self.last_line_at = None                       # clock() of the newest complete line
+        self.fps = []                                  # frames/s between consecutive FRAMEPROBE lines
+        self._frameprobe = None
 
     def poll(self):
         try:
@@ -942,6 +1015,14 @@ class LogWatcher:
     def line(self, text):
         self.lines += 1
         self.last_line_at = self.clock()
+        probe = FRAMEPROBE_RE.search(text)
+        if probe:
+            frames, real = int(probe.group(1)), float(probe.group(2))
+            last = self._frameprobe
+            if last is not None and real > last[1] and frames >= last[0]:
+                self.fps.append(round((frames - last[0]) / (real - last[1]), 1))
+                del self.fps[:-5000]
+            self._frameprobe = (frames, real)
         if '[=ERROR=]' in text:
             self.errors += 1
         elapsed = round(self.clock() - self.t0, 3)
@@ -971,6 +1052,15 @@ class LogWatcher:
 
     def expectations_ok(self):
         return all(hits >= count for count, _regex, hits in self.expect)
+
+    def fps_summary(self):
+        """Frame rate of the X4 main loop from FRAMEPROBE lines (needs the fixed-tick probe overlay)."""
+        if not self.fps:
+            return None
+        values = sorted(self.fps)
+        pick = lambda q: values[min(len(values) - 1, int(q * (len(values) - 1) + 0.5))]   # noqa: E731
+        return {'samples': len(values), 'min': values[0], 'p10': pick(0.10), 'median': pick(0.5),
+                'max': values[-1]}
 
 
 # ---------------------------------------------------------------------------------------

@@ -120,8 +120,37 @@ class TransientRefusal(Refused):
     """A refusal that --wait may outlast (quiet.lock, busy lanes, low RAM)."""
 
 
-class ProtectedHolder(TransientRefusal):
+class LaunchWait(TransientRefusal):
+    """A start must wait (re-checked under the launch lock): the launch loops retry it."""
+
+
+class ProtectedHolder(LaunchWait):
     """The single-instance mutex is held by a protected X4 (or a process we may not query)."""
+
+
+class CapReached(LaunchWait):
+    """MAX_X4_TOTAL X4 instances run, too little memory is available, or memory pressure is on."""
+
+
+def admission(paths, instances, min_free_gb, who):
+    """Raise CapReached unless `instances` more X4 may start now: every X4.exe on the PC counts
+    towards MAX_X4_TOTAL, MIN_FREE_PER_START GB must be available per start, and no memory
+    pressure episode may be active. Returns (x4 total, available GB) when admitted."""
+    total = len(x4_processes())
+    if total + instances > core.MAX_X4_TOTAL:
+        raise CapReached(f'{total} X4 run on this PC; {instances} more would exceed MAX_X4_TOTAL='
+                         f'{core.MAX_X4_TOTAL} (lanes, protected clients and other sessions all count)')
+    _ram, avail = free_ram_gb()
+    state = core.observe_pressure(paths.pressure, avail, who)
+    if state and state.get('state') == 'pressure':
+        raise CapReached(f'memory pressure: available stayed under {core.PRESSURE_LOW_GB:g} GB for more than '
+                         f'{core.PRESSURE_HOLD_S} s (now {avail} GB); no new lane starts until it stays at or above '
+                         f'{core.MIN_FREE_PER_START:g} GB for {core.PRESSURE_RECOVER_S} s')
+    need = max(core.MIN_FREE_PER_START, min_free_gb) * instances
+    if avail < need:
+        raise CapReached(f'only {avail} GB RAM available (need {need:g} GB: '
+                         f'{max(core.MIN_FREE_PER_START, min_free_gb):g} GB per X4 start)')
+    return total, avail
 
 
 # ---------------------------------------------------------------------------------------
@@ -543,6 +572,10 @@ def cmd_status(args, paths):
                 entry['lane'] = name
         info['x4'].append(entry)
     info['instance_mutex_present'] = win().named_object_exists(INSTANCE_MUTEX)
+    try:
+        info['pressure'] = json.loads(paths.pressure.read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        info['pressure'] = None
     total, avail = free_ram_gb()
     info['ram_gb'] = {'total': total, 'free': avail}
     info['steam'] = win().steam_status()
@@ -575,7 +608,14 @@ def cmd_status(args, paths):
               if info['instance_mutex_present'] and protected and len(protected) == len(info['x4'])
               else 'present' if info['instance_mutex_present'] else 'free')
     print(f'instance mutex {INSTANCE_MUTEX}: {holder}')
-    print(f"RAM: {avail} GB free of {total} GB (a run needs >= {core.MIN_FREE_RAM_GB:g} GB)")
+    print(f"admission: {len(info['x4'])} of MAX_X4_TOTAL={core.MAX_X4_TOTAL} X4 running (all X4.exe count); "
+          f"each start needs MIN_FREE_PER_START={core.MIN_FREE_PER_START:g} GB available")
+    pressure = info.get('pressure')
+    print('memory pressure: ' + (f"{pressure.get('state')} since {pressure.get('since') or pressure.get('low_since')} "
+                                 f"(min {pressure.get('min_avail_gb')} GB) -> new lane starts held back"
+                                 if pressure and pressure.get('state') == 'pressure' else
+                                 f"low, watching (under {core.PRESSURE_LOW_GB:g} GB)" if pressure else 'none'))
+    print(f"RAM: {avail} GB available of {total} GB")
     steam = info['steam']
     print('Steam: ' + (f"running pid={steam['pid']}" if steam['running'] else 'NOT running (runs are refused)'))
     print('x4lock: ' + (info['x4lock'] or 'not built (setup builds it)'))
@@ -611,6 +651,7 @@ class Run:
         self.other_seen = {}
         self.closing = None                 # (time, windows sent) after request_close()
         self.wait_deadline = 0.0            # set by acquire(): --wait also covers a protected mutex holder
+        self.faults = None                  # hard page fault counter (sample_system)
         self.owns_quiet = False             # a session holds quiet.lock for all of its clients
         self.extra_tokens = {}              # session tokens (@X4LANE_PORT@, @X4LANE_SLOT@, ...)
         self.network = 'offline'            # 'loopback' only inside a session
@@ -722,11 +763,7 @@ class Run:
         protected = [p for p in procs if is_protected(p)]
         if protected and len(protected) == len(procs) and win().named_object_exists(INSTANCE_MUTEX):
             raise ProtectedHolder(f'instance mutex held by protected X4 {describe_protected(protected)}; waiting')
-        _total, avail = free_ram_gb()
-        need = a.min_free_gb * instances
-        if avail < need:
-            raise TransientRefusal(f'only {avail} GB RAM free (need {a.min_free_gb:g} GB per X4, '
-                                   f'{need:g} GB for {instances})')
+        admission(paths, instances, a.min_free_gb, f'admission {a.agent}')
         self.base_lab = check_base(paths, self.base_lab)
         ensure_x4lock(paths)
         return quiet_owner, handoff
@@ -927,7 +964,7 @@ class Run:
             try:
                 self.start_sequence()
                 return
-            except ProtectedHolder as error:
+            except LaunchWait as error:
                 waiting = error
             finally:
                 self.launch_lock.release()
@@ -944,6 +981,7 @@ class Run:
         paths = self.paths
         if paths.quiet_lock.exists() and not self.quiet_is_ours():
             raise Refused('quiet.lock appeared before launch; not starting X4')
+        admission(paths, 1, self.args.min_free_gb, self.run_id)           # re-check under the launch lock
         procs = x4_processes()
         others = [describe_x4(p) for p in procs]
         self.result['other_x4']['at_start'] = others
@@ -961,6 +999,10 @@ class Run:
             code, lines = x4lock(paths, 'release', '--pid', holder.pid, '--expect-path', holder.exe,
                                  '--wait-ms', 30000)
             self.result['x4lock'] += [f'release pid {holder.pid} exit {code}'] + lines
+            if code == 5 and protected:
+                # the holder we may release is free now, but a protected client holds the name too
+                raise ProtectedHolder(f'instance mutex also held by protected X4 {describe_protected(protected)}; '
+                                      'waiting (it is never released by the lanes)')
             if code != 0:
                 raise LaunchFailed(f'x4lock release of pid {holder.pid} failed (exit {code}); '
                                    'X4 not started (it would show "Game is already running!")',
@@ -1029,7 +1071,8 @@ class Run:
             time.sleep(POLL_S)
 
     def sample(self):
-        for proc in x4_processes():
+        procs = x4_processes()
+        for proc in procs:
             if self.proc is not None and proc.pid == self.proc.pid:
                 handle = win().open_process(proc.pid, win().PROCESS_QUERY_LIMITED_INFORMATION)
                 if handle:
@@ -1043,6 +1086,33 @@ class Run:
                 entry['first_seen_s'] = self.elapsed()
                 self.other_seen[proc.pid] = entry
                 self.result['other_x4']['during_run'].append(entry)
+        self.sample_system(procs)
+
+    def sample_system(self, procs):
+        """Machine-wide sample (every 10 s): available RAM, X4 count and working sets, hard faults,
+        and the shared memory-pressure state (this run only observes; it never stops anything)."""
+        try:
+            _ram, avail = free_ram_gb()
+            state = core.observe_pressure(self.paths.pressure, avail, self.run_id or 'run')
+            working = win().working_sets_gb([p.pid for p in procs])
+            if self.faults is None:
+                self.faults = win().HardFaultCounter()
+            row = {'t': self.elapsed(), 'avail_gb': avail, 'x4_total': len(procs),
+                   'hard_fault_pages_per_s': self.faults.read(),
+                   'own_ws_gb': working.get(self.proc.pid) if self.proc is not None else None,
+                   'ws_gb': {str(pid): gb for pid, gb in working.items()},
+                   'pressure': state.get('state') if state else None}
+        except Exception as error:                                   # noqa: BLE001 - sampling never fails a run
+            row = {'t': self.elapsed(), 'error': repr(error)}
+            state = None
+        samples = self.result.setdefault('samples', [])
+        samples.append(row)
+        del samples[:-400]
+        if state and state.get('state') == 'pressure' and 'pressure' not in self.result:
+            self.result['pressure'] = {'seen_s': self.elapsed(), 'since': state.get('since'),
+                                       'min_avail_gb': state.get('min_avail_gb')}
+            self.warn(f"memory pressure on this PC (available under {core.PRESSURE_LOW_GB:g} GB for more than "
+                      f"{core.PRESSURE_HOLD_S} s): new lane starts are held back; this run continues")
 
     def begin_monitor(self):
         self.mon = {'start': time.monotonic(), 'dialog': 0.0, 'sample': 0.0, 'refresh': 0.0}
@@ -1174,7 +1244,17 @@ class Run:
         if self.watch is not None:
             self.watch.flush()
             self.result['log'] = {'lines': self.watch.lines, 'errors': self.watch.errors,
-                                  'bytes': self.watch.offset}
+                                  'bytes': self.watch.offset, 'fps': self.watch.fps_summary()}
+            rows = [row for row in self.result.get('samples', []) if 'avail_gb' in row]
+            if rows:
+                faults = [row['hard_fault_pages_per_s'] for row in rows if row.get('hard_fault_pages_per_s') is not None]
+                own = [row['own_ws_gb'] for row in rows if row.get('own_ws_gb') is not None]
+                self.result['machine'] = {
+                    'samples': len(rows), 'min_avail_gb': min(row['avail_gb'] for row in rows),
+                    'max_x4_total': max(row['x4_total'] for row in rows),
+                    'max_own_ws_gb': max(own) if own else None,
+                    'max_hard_fault_pages_per_s': max(faults) if faults else None,
+                    'pressure_seen': any(row.get('pressure') == 'pressure' for row in rows)}
             self.result['markers'] = self.watch.markers
             self.result['expect'] = self.watch.expect_report()
             if self.until is not None:
@@ -1645,7 +1725,7 @@ class SessionRun:
                 try:
                     client.start_sequence()
                     break
-                except ProtectedHolder as error:
+                except LaunchWait as error:
                     waiting = error
                 finally:
                     self.launch_lock.release()

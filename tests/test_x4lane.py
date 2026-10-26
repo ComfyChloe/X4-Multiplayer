@@ -561,7 +561,7 @@ class SessionPreflightTests(FakeWindows):
         self.assertEqual([c.lane.name for c in run.clients], ['b1', 'b2'])
         for client in run.clients:
             client.give_back_lane()
-        blockers = [core.DirLock.acquire(self.paths.lane(n).lock, {'agent': 'x', 'run': n}) for n in ('b2', 'b3', 'b4')]
+        blockers = [core.DirLock.acquire(self.paths.lane(n).lock, {'agent': 'x', 'run': n}) for n in [n for n in core.LANE_PROFILES if n != 'b1']]
         run = self.session()
         with self.assertRaises(x4lane.TransientRefusal):
             run.preflight()
@@ -573,7 +573,7 @@ class SessionPreflightTests(FakeWindows):
         run = self.session('--min-free-gb', '25')                 # fake host has 40 GB free
         with self.assertRaises(x4lane.TransientRefusal) as refused:
             run.preflight()
-        self.assertIn('50 GB for 2', str(refused.exception))
+        self.assertIn('need 50 GB', str(refused.exception))
         self.assertFalse(any(self.paths.lane(n).lock.exists() for n in core.LANE_PROFILES))
 
     def test_quiet_lock_blocks_sessions(self):
@@ -707,7 +707,7 @@ class StopAndReserveTests(FakeWindows):
             client = x4lane.Run(run.client_args(index, {'overlay': empty, 'extension': empty, 'lua': empty,
                                                         'config': empty}), self.paths)
             run.clients.append(client)
-        blockers = [core.DirLock.acquire(self.paths.lane(n).lock, {'agent': 'x', 'run': n}) for n in ('b2', 'b3', 'b4')]
+        blockers = [core.DirLock.acquire(self.paths.lane(n).lock, {'agent': 'x', 'run': n}) for n in [n for n in core.LANE_PROFILES if n != 'b1']]
         with self.assertRaises(x4lane.TransientRefusal) as refused:
             run.preflight(keep=True)
         self.assertIn("reserved so far: ['b1']", str(refused.exception))
@@ -723,7 +723,7 @@ class StopAndReserveTests(FakeWindows):
         self.assertFalse(self.paths.lane('b4').lock.exists())
         self.assertIsNone(run.reserved_since)
         run.give_back_all()
-        for blocker in blockers[:2]:
+        for blocker in blockers[:2] + blockers[3:]:
             blocker.release()
         self.assertFalse(any(self.paths.lane(n).lock.exists() for n in core.LANE_PROFILES))
 
@@ -929,6 +929,83 @@ class ProtectedTests(FakeWindows):
         self.others = [self.proc(41, lane_exe, '45841'), self.proc(43, self.INSTALL, '45841')]
         x4lane.doctor(self.paths, fix=True)
         self.assertEqual(killed, [])
+
+
+class AdmissionTests(FakeWindows):
+    def procs(self, count):
+        import types
+        return [types.SimpleNamespace(pid=100 + i, exe=f'C:/x/{i}/X4.exe', cmdline='-personalfolderid 4590',
+                                      created=1) for i in range(count)]
+
+    def ram(self, gb):
+        x4lane.win().memory_status = lambda: (94 * 2**30, int(gb * 2**30))
+
+    def test_every_x4_counts_towards_the_cap(self):
+        self.others = self.procs(7)
+        self.assertEqual(x4lane.admission(self.paths, 1, 0, 'test')[0], 7)
+        with self.assertRaises(x4lane.CapReached) as refused:
+            x4lane.admission(self.paths, 2, 0, 'session')          # a session counts every client
+        self.assertIn('MAX_X4_TOTAL=8', str(refused.exception))
+        self.others = self.procs(8)
+        with self.assertRaises(x4lane.CapReached):
+            x4lane.admission(self.paths, 1, 0, 'test')
+
+    def test_memory_per_start_and_no_lowering(self):
+        self.ram(9.0)
+        x4lane.admission(self.paths, 1, 0, 'test')
+        with self.assertRaises(x4lane.CapReached):
+            x4lane.admission(self.paths, 2, 0, 'session')          # 2 x 8 GB
+        with self.assertRaises(x4lane.CapReached):
+            x4lane.admission(self.paths, 1, 12, 'test')           # --min-free-gb may raise it
+        self.ram(7.5)
+        with self.assertRaises(x4lane.CapReached):
+            x4lane.admission(self.paths, 1, 2, 'test')            # ... but never lower it
+
+    def test_pressure_holds_back_starts_until_it_recovers(self):
+        path = self.paths.pressure
+        t = 1000.0
+        self.assertIsNone(core.observe_pressure(path, 3.0 + 6, 'a', now=t))
+        self.assertEqual(core.observe_pressure(path, 3.0, 'a', now=t)['state'], 'low')
+        self.assertIsNone(core.observe_pressure(path, 5.0, 'a', now=t + 30))   # short dip: forgotten
+        self.assertFalse(path.exists())
+        core.observe_pressure(path, 3.0, 'a', now=t + 40)
+        self.assertEqual(core.observe_pressure(path, 3.5, 'b', now=t + 101)['state'], 'pressure')
+        self.assertEqual(core.observe_pressure(path, 6.0, 'b', now=t + 120)['state'], 'pressure')  # not recovered
+        self.assertEqual(core.observe_pressure(path, 8.5, 'b', now=t + 130)['recover_since'], t + 130)
+        self.assertEqual(core.observe_pressure(path, 7.0, 'b', now=t + 150)['recover_since'], None)
+        core.observe_pressure(path, 9.0, 'b', now=t + 160)
+        self.assertIsNone(core.observe_pressure(path, 9.0, 'b', now=t + 221))  # 60 s at >= 8 GB
+        self.assertFalse(path.exists())
+
+    def test_admission_refuses_during_pressure(self):
+        core.write_json(self.paths.pressure, {'state': 'pressure', 'since': time.time() - 30, 'updated': time.time(),
+                                              'low_since': time.time() - 100})
+        self.ram(10.0)
+        with self.assertRaises(x4lane.CapReached) as refused:
+            x4lane.admission(self.paths, 1, 0, 'test')
+        self.assertIn('memory pressure', str(refused.exception))
+        stale = time.time() - core.PRESSURE_STALE_S - 5            # nobody observed it for 10 min
+        core.write_json(self.paths.pressure, {'state': 'pressure', 'since': stale, 'updated': stale})
+        x4lane.admission(self.paths, 1, 0, 'test')
+
+
+class ExitFiveTests(ProtectedTests):
+    def test_release_exit_5_next_to_a_protected_client_waits(self):
+        self.others = [self.proc(41, self.INSTALL, '45841'), self.proc(60, 'C:/other/save-trim/X4.exe', '45843')]
+        self.holders = {60}
+        saved = x4lane.x4lock
+
+        def x4lock(paths, *args, timeout=60):
+            if args[0] == 'release':
+                self.calls.append(tuple(str(a) for a in args))
+                return 5, ['error: EGOSOFT_X4_INSTANCE still exists after close (another process holds it)']
+            return saved(paths, *args, timeout=timeout)
+        x4lane.x4lock = x4lock
+        run = self.run_ready()
+        with self.assertRaises(x4lane.ProtectedHolder) as waiting:
+            run.start_sequence()
+        self.assertIn('also held by protected X4 41/45841', str(waiting.exception))
+        self.assertEqual(run.started, [])
 
 
 class LogWatcherTests(Temp):
