@@ -207,7 +207,29 @@ Offline validation: C synthetic tree covers rotation, wraparound, two-frame hold
 sectors, new-sector budgeting, root IDs, serialized subset flags and unchanged full-frame golden
 bytes. Rust covers explicit subset opt-in, stable root mapping, migration, omission versus empty
 roots, initialization/truncation refusals and full-world replay exclusion. LuaJIT covers settings
-and subset statistics. Native round-robin correctness/cost acceptance remains pending.
+and subset statistics. Native functional validation is recorded below; trustworthy timing and
+full-cycle native coverage remain pending.
+
+Native RR run `20261026-033118-b6-ecs-core-48240` on lane b6 used DLL/driver `42e9aeb`,
+65 consecutive frames, rr=2, pairs=1, hot=0. The first full frame contained 153 sectors plus
+129 galaxy/cluster roots and 16,364 rows. Every following frame retained all 129 upper roots and
+exactly two selected sectors (203–530 rows), held for 32 pairs covering 64 distinct sectors.
+All 64 subset flags were present; no captures were dropped/truncated and no walk errors occurred.
+Native export comparisons are EXACT: 2,080/2,080 local positions (159 custom Highway cases included)
+and 1,334/1,334 Object sector positions; the remaining 746 sampled rows are not Objects.
+No missing captured frames/UIDs or unsupported classes occurred in these samples.
+
+The real capture also loaded through `mirror` then `mirror_subset`, passing `Universe::check()`
+after every frame. Re-encoding each observed root reproduced all 164,654 captured column byte
+arrays across 39,949 observed rows exactly; the diagnostic universe retained 282 worlds.
+Ordinary `mirror` refused every subset without mutation. No entity migration occurred in this
+run; migration behavior is covered synthetically, not by this native trace.
+
+Evidence: `.local/evidence-088-withheld`, matching `.x4cap`, local `inspect_rr.py` and
+`check_rr_mirror.rs` validation helpers. Multiple other X4 instances ran. The 12.173 ms average
+and 175.320 ms maximum are contended diagnostics, not a trustworthy speedup measurement.
+Native hot-sector inclusion and full rotation wraparound remain unmeasured (synthetic coverage
+exists); this run establishes correctness of sampled rows and the exercised paired selections.
 
 ### Native complete-component census
 
