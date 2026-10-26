@@ -225,9 +225,33 @@ struct Record {
     live: bool,
     bolt: Option<Bolt>,
     end: Option<Head>,
+    /// Forwarding state per recipient lease. With two players there is one recipient and
+    /// this is projectile_relay.py's single sent/end_sent/at; with more players every
+    /// other client keeps its own repeats and gap (one shared counter starved all but the
+    /// first recipient, which was the server).
+    delivery: OrderedMap<Hex32, Delivery>,
+}
+
+#[derive(Clone, Copy, Debug)]
+struct Delivery {
     sent: u32,
     end_sent: u32,
     at: f64,
+}
+
+impl Delivery {
+    const NEW: Delivery = Delivery { sent: 0, end_sent: 0, at: -1e9 };
+}
+
+impl Record {
+    fn to(&self, peer: &Hex32) -> Delivery {
+        self.delivery.get(peer).copied().unwrap_or(Delivery::NEW)
+    }
+
+    /// Every recipient that received this record has had all end repeats.
+    fn ends_delivered(&self) -> bool {
+        !self.delivery.is_empty() && self.delivery.values().all(|d| d.end_sent >= REPEATS)
+    }
 }
 
 /// One pilot's records under one (lease, epoch, gen) key.
@@ -266,7 +290,7 @@ impl Stream {
             let bolt = record.bolt.as_ref().expect("live records are births");
             if source >= bolt.head.time + bolt.ttl
                 || bolt.sector.as_str() != sector
-                || (record.end.is_some() && record.end_sent >= REPEATS)
+                || (record.end.is_some() && record.ends_delivered())
             {
                 record.live = false;
             }
@@ -345,13 +369,13 @@ impl Session {
                     return;
                 }
                 stream.births.push_back(now);
-                let record = Record { live: true, bolt: Some(bolt), end: None, sent: 0, end_sent: 0, at: -1e9 };
+                let record = Record { live: true, bolt: Some(bolt), end: None, delivery: OrderedMap::new() };
                 stream.mark(head.id, record);
             }
             Message::End(end) => match old {
                 // End before birth: a bounded tombstone refuses the late birth.
                 None => {
-                    let record = Record { live: false, bolt: None, end: Some(end), sent: 0, end_sent: 0, at: 0.0 };
+                    let record = Record { live: false, bolt: None, end: Some(end), delivery: OrderedMap::new() };
                     stream.mark(head.id, record);
                 }
                 Some(record) => {
@@ -394,25 +418,27 @@ impl Session {
                 let mut budget = PER_TICK;
                 // Unsent births first, so repeats never delay a new projectile's first forward.
                 let mut order: Vec<u32> = stream.seen.iter().filter(|(_, r)| r.live).map(|(id, _)| *id).collect();
-                order.sort_by_key(|id| stream.seen.get(id).expect("listed").sent > 0);
+                order.sort_by_key(|id| stream.seen.get(id).expect("listed").to(&peer.lease).sent > 0);
                 for id in order {
                     if budget == 0 {
                         break;
                     }
                     let record = stream.seen.get_mut(&id).expect("listed");
-                    if now - record.at < GAP {
+                    let mut d = record.to(&peer.lease);
+                    if now - d.at < GAP {
                         continue;
                     }
-                    let message = if record.sent == 0 || (record.end.is_none() && record.sent < REPEATS) {
-                        record.sent += 1;
+                    let message = if d.sent == 0 || (record.end.is_none() && d.sent < REPEATS) {
+                        d.sent += 1;
                         Message::Bolt(record.bolt.clone().expect("live birth"))
-                    } else if record.end.is_some() && record.end_sent < REPEATS {
-                        record.end_sent += 1;
+                    } else if record.end.is_some() && d.end_sent < REPEATS {
+                        d.end_sent += 1;
                         Message::End(record.end.clone().expect("checked"))
                     } else {
                         continue;
                     };
-                    record.at = now;
+                    d.at = now;
+                    record.delivery.insert(peer.lease, d);
                     budget -= 1;
                     out.push((peer.address, serialize_forwarded(&message, peer.lease, lease)));
                 }

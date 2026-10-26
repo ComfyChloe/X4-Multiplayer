@@ -350,3 +350,36 @@ fn rtt_ping_is_answered_for_authenticated_clients_only() {
     assert!(relay.rtt_pong(format!("RTTPING|1|{lease}|x|1|-|0").as_bytes(), addr(3), 2.0).is_none());
     assert!(relay.session.core.peers.len() == 1, "a ping never takes a slot");
 }
+
+#[test]
+fn projectile_births_reach_every_other_client_not_only_the_server() {
+    let mut s = dedicated(Level::Coop, "test", 3);
+    let l = [join(&mut s, 1, 0.0), join(&mut s, 2, 0.0), join(&mut s, 3, 0.0)];
+    let world = "100|100|0|64.5|30|0|100|100|100|100|200|1|1|0|0|0|0";
+    s.receive(format!("WORLD|1|{}|1|{world}", l[0]).as_bytes(), addr(1), 0.05);
+    assert!(crew(&mut s, &l[1], 2, 1, 2, 0.08).is_empty());
+    assert!(crew(&mut s, &l[2], 3, 1, 1, 0.08).is_empty());
+    s.snapshots(0.1);
+    let gen = s.coop.health_gen[Ship::TWO.index()];
+    s.receive(format!("HACK|1|{}|2|{gen}", l[1]).as_bytes(), addr(2), 0.12);
+    let nav = format!("NAV2|1|{}|2|1|1|{SECTOR}|1000|0|0|0|0|0|0|1|1000|0|0|0|0|0|0", l[1]);
+    s.receive(nav.as_bytes(), addr(2), 0.2);
+    let bolt = format!("BOLT|1|{}|2|1|{gen}|1|1000.05|{SECTOR}|1|1030|-10|160|0|0|2300|0|0|0|0.7", l[1]);
+    s.receive(bolt.as_bytes(), addr(2), 0.21);
+    let snap = s.snapshots(0.25);
+    for slot in [1u16, 3] {
+        let bolts: Vec<String> = text(&snap, addr(slot)).into_iter().filter(|p| p.starts_with("BOLT|")).collect();
+        assert_eq!(bolts.len(), 1, "p{slot}: {bolts:?}");
+        assert!(bolts[0].starts_with(&format!("BOLT|1|{}|{}|2|", l[usize::from(slot) - 1], l[1])), "{}", bolts[0]);
+    }
+    assert!(text(&snap, addr(2)).iter().all(|p| !p.starts_with("BOLT|")), "never back to the pilot");
+    // Each recipient has its own gap and repeats: at most three births each.
+    let mut counts = [0usize; 4];
+    for now in [0.26, 0.30, 0.35, 0.40, 0.45, 0.50] {
+        let snap = s.snapshots(now);
+        for slot in [1u16, 3] {
+            counts[usize::from(slot)] += text(&snap, addr(slot)).iter().filter(|p| p.starts_with("BOLT|")).count();
+        }
+    }
+    assert_eq!((counts[1], counts[3]), (2, 2), "repeats per recipient");
+}

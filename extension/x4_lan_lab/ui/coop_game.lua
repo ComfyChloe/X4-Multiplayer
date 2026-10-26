@@ -42,6 +42,17 @@ local function admittedSlot(slot)
  local n=tonumber(tostring(slot):match('^p([1-8])$'));return n and n<=R.players
 end
 local function log(v) DebugError('[X4LAN] '..v) end
+-- Rate-limited drop diagnostics for remote weapon visuals: one REMOTE_FIRE_DROP row per
+-- (kind, reason) at most every 5 s, with the number of drops since the last row.
+c.drops={}
+function c.dropped(kind,entity,reason,now)
+ local key=kind..'|'..reason;local d=c.drops[key] or {n=0,next=0};c.drops[key]=d;d.n=d.n+1
+ now=now or GetCurRealTime()
+ if now>=d.next then
+  log(string.format('REMOTE_FIRE_DROP kind=%s ship=%s reason=%s count=%d',kind,tostring(entity),reason,d.n))
+  d.n=0;d.next=now+5
+ end
+end
 local function integer(v,limit)
  local n=tonumber(v);if not n or n~=n or n<0 or n%1~=0 or n>(limit or 2147483647) then return nil end;return n
 end
@@ -238,10 +249,11 @@ function c.receive(f,now)
   if #f~=12 then return true end
   local entity,epoch,seq=integer(f[5],c.count),integer(f[6]),integer(f[7])
   local time=numeric(f[8],1e12);local groups={integer(f[9],4),integer(f[10],4)};local shots={integer(f[11]),integer(f[12])}
-  if not entity or entity<1 or not epoch or not seq or not time or time<0 then return true end
-  if not groups[1] or groups[1]<1 or not groups[2] or groups[2]<1 or not shots[1] or not shots[2] then return true end
-  if not fire2Ready then return true end
-  if c.owners[entity]==cfg.slot or c.epochs[entity]~=epoch then return true end
+  if not entity or entity<1 or not epoch or not seq or not time or time<0 then c.dropped('FIRE2',f[5],'malformed',now);return true end
+  if not groups[1] or groups[1]<1 or not groups[2] or groups[2]<1 or not shots[1] or not shots[2] then c.dropped('FIRE2',entity,'malformed',now);return true end
+  if not fire2Ready then c.dropped('FIRE2',entity,'weapon-group-api-missing',now);return true end
+  if c.owners[entity]==cfg.slot then c.dropped('FIRE2',entity,'own-ship',now);return true end
+  if c.epochs[entity]~=epoch then c.dropped('FIRE2',entity,'epoch '..tostring(c.epochs[entity])..'~='..epoch,now);return true end
   local q=c.fire2[entity]
   if not q or q.epoch~=epoch then
    -- Baseline: adopt the counters without replaying them.
