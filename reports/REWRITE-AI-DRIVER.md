@@ -11,8 +11,8 @@ contexts once per simulation frame. The Rust per-sector *order behaviours* are t
 
 ## 0. Status
 
-- **Stage 0 (measurement-only census): native on lanes for idle and attnload (8 high-attention sectors);
-  the combat load is queued** (the first combat run hit script errors in the scenario v1 and is invalid).
+- **Stage 0 (measurement-only census): native on lanes for all three loads**: idle, attnload (8
+  high-attention sectors) and the combat scenario v3 `battle-400` (400 ships; the v1 combat run was invalid).
   Results: `rewrite-coord/results/2026-10-26-ai-driver-census.md`, summary in section 3a. Timing values are
   not trustworthy (shared PC); the structural numbers are.
 - **Stage 1 (our AIDirector::Move, single-threaded, normal / rounds / compare): built and tested offline**
@@ -103,21 +103,25 @@ All counters are per-frame means over the window; the window resets on each `ais
 
 ## 3a. Native census results (lanes, 2026-10-26; timing not trustworthy)
 
-| measure | idle (463 s) | attnload, 8 sectors (292 s) |
-|---|---|---|
-| AI phase share of the slot loop | 9.1 % | 9.2 % |
-| contexts run / interrupt runs per frame | 48.7 / 5.1 | 71.2 / 8.4 |
-| passes per frame (max) | 6.3 (14) | 7.5 (15) |
-| foreign-sector share of wakes made during runs | 33.8 % | 35.6 % |
-| events during runs: own / foreign / MD cue | 5.5 / 0.31 / 3.5 | 8.1 / 0.21 / 4.9 |
-| runs touching a foreign sector or cue | 5.0 % | 6.2 % |
-| AI-active sectors; largest sector's share | 26.7; 26 % | 36.9; 20 % |
+| measure | idle (463 s) | attnload, 8 sectors (292 s) | battle-400 window (121 s) |
+|---|---|---|---|
+| AI phase share of the slot loop | 9.1 % | 9.2 % | 10.3 % (windows up to 18.5 %) |
+| contexts run / interrupt runs per frame | 48.7 / 5.1 | 71.2 / 8.4 | 121.3 / 23.2 |
+| passes per frame (max) | 6.3 (14) | 7.5 (15) | 8.5 (14) |
+| foreign-sector share of wakes made during runs | 33.8 % | 35.6 % | 37.1 % |
+| events during runs: own / foreign / MD cue | 5.5 / 0.31 / 3.5 | 8.1 / 0.21 / 4.9 | 16.7 / 0.15 / 174.5 |
+| runs touching a foreign sector or cue | 5.0 % | 6.2 % | 8.5 % |
+| AI-active sectors; largest sector's share | 26.7; 26 % | 36.9; 20 % | 50.0; 30 % (windows up to 52 %) |
+| runs that advance the MoveWorker random stream | - | - | 93 % |
 
-Script ranking (both loads): move.generic ≈ 24 %, trade.find.free 15-20 %, fight.attack.object.fighter
-13-15 % (most runs), order.dock ≈ 8 %, move.idle ≈ 8 %. Against the partition report's rule the AI phase
-is under the 20 % bar at these loads (threads for the AI phase alone do not pay; combat pending); balance
-and hazard are within bounds; a third of the wakes cross sectors, which a pass-synchronous rounds driver
-absorbs (they land in the next pass in both orders) but threads would turn into outbox traffic.
+Script ranking: move.generic ≈ 24 % (18 % in the battle), trade.find.free 15-22 %, fight.attack.object.*
+13-15 % at idle and 34 % in the battle (fighter, medium, capital), order.dock ≈ 8 %, move.idle ≈ 8 %. Against
+the partition report's rule the AI phase is under the 20 % bar in all three loads (threads for the AI phase
+alone do not pay); balance and hazard are within bounds; a third of the wakes cross sectors, which a
+pass-synchronous rounds driver absorbs (they land in the next pass in both orders) but threads would turn
+into outbox traffic. Fleet-root keying moves only 0.8 % of the foreign wakes into the waker's bucket (battle).
+Nearly every run draws from the MoveWorker's random stream, so reordering hands runs different random
+numbers unless the streams are per entity. Battle census: build d922398, run `census-b400` (lane b1).
 
 ## 4. Hooks and safety (ENGINE-INSTRUMENTATION.txt; registered in `rewrite-coord/hooks.tsv`)
 
@@ -284,12 +288,12 @@ Stage 1, in order (lane runs with the `probe-s1b` overlay = d922398, release x4l
 
 **Gate.** The partition report drops stage 2 when the AI phase is under 20 % of the frame, the largest bucket
 holds over 60 %, or over 10 % of runs would migrate. Measured (section 3a): AI phase **≈ 9 %** of the slot loop
-at idle and with 8 high-attention sectors; largest sector 20-26 %; runs touching a foreign sector or cue 5-6 %.
-Amdahl bound: stage 2 can save at most share × (1 − 1/S); with the ideal per-sector S = 3.9-5.2 that is
-≤ 7 % of the frame, and less in practice (a barrier per pass at 6-8 passes per frame, the serial bucket, the
+at idle and with 8 high-attention sectors and **10.3 %** in a 400-ship battle; largest sector 20-30 %; runs
+touching a foreign sector or cue 5-8.5 %. Amdahl bound: stage 2 can save at most share × (1 − 1/S); with the
+ideal per-sector S = 3.5-5.2 that is ≤ 7 % of the frame, and less in practice (a barrier per pass at 6-8 passes per frame, the serial bucket, the
 barrier replay, migrated runs). The combat agent's battle profile (87 ships) shows AIDirector::Move at 10.9 %
-of MoveWorker samples, also under the bar. **Recommendation: do not build stage 2 at these loads.** Re-evaluate
-with the large-battle census (battle-200/400/800 when listed) and after ai-orders' native ports of the top
+of MoveWorker samples, also under the bar. **Recommendation: do not build stage 2 at these loads** (the
+battle-400 census confirms it). Re-evaluate only for loads well beyond a 400-ship battle and after ai-orders' native ports of the top
 scripts (move.generic, trade.find.free, fight.attack.object.fighter ≈ 55 % of AI run time), which remove the
 interpreter cost outright and run per sector in x4mp-sim, where parallelism comes by construction.
 
