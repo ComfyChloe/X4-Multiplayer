@@ -41,7 +41,7 @@
 #define MIRROR_MAX_VISITORS 4u
 #define MIRROR_MAX_VCOLS 16u
 #define MIRROR_SAMPLE_MAX 64u
-#define MIRROR_REGION_CACHE 16u
+#define MIRROR_REGION_CACHE 8192u /* sorted readable intervals, reset every captured frame */
 #define MIRROR_QUEUE 8u /* frames the writer may lag behind before frames are dropped */
 #define MIRROR_RECORD_ALL 1u
 #define MIRROR_NO_NAV_CACHE 2u
@@ -120,7 +120,8 @@ typedef struct {
     unsigned nfactions, factions_emitted;
     int drop_flag;
     uint64_t sample[MIRROR_SAMPLE_MAX]; unsigned nsample;
-    mirror_region regions[MIRROR_REGION_CACHE]; unsigned nregions, region_next;
+    unsigned nregions, galaxy_misses;
+    uint64_t region_queries;
     unsigned char *buf; size_t buf_cap, buf_len, fram_at;
     /* writer thread (lock and condition: mirror_cs / mirror_cv, never reset) */
     HANDLE thread;
@@ -130,6 +131,7 @@ typedef struct {
 } mirror_state;
 
 static mirror_state ms;
+static mirror_region mirror_regions[MIRROR_REGION_CACHE];
 static CRITICAL_SECTION mirror_cs;
 static CONDITION_VARIABLE mirror_cv;
 static int mirror_sync_ready;
@@ -180,26 +182,45 @@ static int mirror_protect_readable(DWORD protect) {
            p == PAGE_EXECUTE_READWRITE || p == PAGE_EXECUTE_WRITECOPY;
 }
 
-/* [p, p+len) is committed readable memory (possibly across several regions). */
+/* Index of the first cached interval with end > a (intervals are sorted and disjoint). */
+static unsigned mirror_region_find(uintptr_t a) {
+    unsigned lo = 0, hi = ms.nregions;
+    while (lo < hi) {
+        unsigned mid = (lo + hi) / 2;
+        if (mirror_regions[mid].end <= a) lo = mid + 1;
+        else hi = mid;
+    }
+    return lo;
+}
+
+static void mirror_region_add(uintptr_t base, uintptr_t end) {
+    unsigned i = mirror_region_find(base);
+    if (i < ms.nregions && mirror_regions[i].base <= base) return; /* already covered */
+    if (ms.nregions >= MIRROR_REGION_CACHE) return;                /* full: queries keep working */
+    memmove(&mirror_regions[i + 1], &mirror_regions[i], (ms.nregions - i) * sizeof(mirror_region));
+    mirror_regions[i] = (mirror_region){base, end};
+    ++ms.nregions;
+}
+
+/* [p, p+len) is committed readable memory (possibly across several regions). Readable regions
+   seen this frame are cached as sorted intervals, so most checks are a binary search. */
 static int mirror_ok(const void *p, size_t len) {
     uintptr_t a = (uintptr_t)p, b = a + len;
     if (!p || b < a) return 0;
-    for (unsigned i = 0; i < ms.nregions; ++i)
-        if (a >= ms.regions[i].base && b <= ms.regions[i].end) return 1;
-    uintptr_t at = a, first = 0, last = 0;
+    uintptr_t at = a;
     while (at < b) {
+        unsigned i = mirror_region_find(at);
+        if (i < ms.nregions && mirror_regions[i].base <= at) {
+            at = mirror_regions[i].end;
+            continue;
+        }
         MEMORY_BASIC_INFORMATION m;
+        ++ms.region_queries;
         if (!VirtualQuery((const void *)at, &m, sizeof(m)) || m.State != MEM_COMMIT || !mirror_protect_readable(m.Protect))
             return 0;
         uintptr_t rb = (uintptr_t)m.BaseAddress, re = rb + m.RegionSize;
-        if (!first) first = rb;
-        last = re;
+        mirror_region_add(rb, re);
         at = re;
-    }
-    if (last - first >= 4096) {
-        ms.regions[ms.region_next] = (mirror_region){first, last};
-        ms.region_next = (ms.region_next + 1) % MIRROR_REGION_CACHE;
-        if (ms.nregions < MIRROR_REGION_CACHE) ++ms.nregions;
     }
     return 1;
 }
@@ -827,8 +848,10 @@ static void mirror_frame(uint64_t frame) {
     if (!gcls || gcls->id0 != MIRROR_CLASS_GALAXY) {
         ++ms.walk_errors;
         ms.reason = "galaxy not found";
-        return; /* no world yet (or a different layout): nothing captured this frame */
+        if (++ms.galaxy_misses >= 600) mirror_stop(); /* about 10 s without a world: give up */
+        return; /* nothing captured this frame */
     }
+    ms.galaxy_misses = 0;
     unsigned root = mirror_new_root(*(const uint64_t *)(galaxy + MO_ID), 2);
     mirror_visit(galaxy, 0, root, 0, 0);
     for (unsigned v = 0; v < mirror_nvisitors; ++v)
@@ -925,6 +948,7 @@ static int l_mirror_stats(lua_State *L) {
     mirror_num(L, "max_ms", ms.max_ms);
     mirror_num(L, "mean_ms", ms.frames_written + ms.frames_dropped ? ms.sum_ms / (double)(ms.frames_written + ms.frames_dropped) : 0);
     mirror_num(L, "visitors", mirror_nvisitors);
+    mirror_num(L, "region_queries", (double)ms.region_queries);
     p_lua_pushlstring(L, MIRROR_LAYOUT_SHA256, strlen(MIRROR_LAYOUT_SHA256));
     p_lua_setfield(L, -2, "layout");
     if (ms.reason) {
