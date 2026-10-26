@@ -290,6 +290,30 @@ and the joint synthetic buffer test pass. They are not present in this already-f
 These observed dependencies block promotion of rounds to a behaviour-identical replacement. Normal
 serial mode remains the comparison baseline; no per-entity RNG policy change was made.
 
+### Native battle-400 continuation, 26 October 03:48
+
+`s1-alt-b400` completed 03:42:43 and `s1-compare-b400` 03:47:25, both lane collection passes, graceful
+close, frozen probe-s1b, timings untrustworthy. Evidence: corresponding `.local/evidence-075-withheld` folders.
+The original chain has finished; none of these runs contains the new Codex diagnostics.
+
+Alternating census/normal after 30 warmup windows: 88/87 windows, 1,341 normal-driver frames, zero
+refusals/bad callers/loop logs. Most structural means and all normalized ratios are within 15%, but
+foreign-context event delivery differs by -56% (0.926 versus 0.408 per frame). Three census windows
+contribute 64% of its summed window means, so bursty temporal sampling is a possible explanation,
+not an established cause. This difference remains unresolved; a clean normal-mode equivalence verdict
+is not justified. Measured phase share averages 12.0% original / 12.2% normal in this contended run.
+
+Compare after 30 warmup windows: 177 windows, 3,199 driver frames, 24,456 passes. Event/wake hazards
+occurred in 567 passes (2.32%, chiefly wake absorption); 7,386 passes (30.20%) inverted RNG-drawing
+context order. Wake order restored in 3,667 passes (14.99%), zero skips/refusals/bad callers/loop logs.
+The buffer was absent. All 205 non-initial hashes again equal the empty-vector digest. These are
+measured semantic hazards, not a successful rounds replacement.
+
+The combat owner's separate `scale-battle-800` profile reports inclusive AIDirector samples at 25.68%
+of MoveWorker (400: 13.17%). It has no AIPROF markers or bucket census, and inclusive sample share is
+not the same metric as phase/slot-loop share. It is a candidate for a future direct 800-ship AI census
+to revisit the optimization gate, not grounds to promote threaded execution now.
+
 ### Codex continuation, 26 October 03:13
 
 `s1-alt-idle` completed natively at 03:12:02 using the already-frozen `probe-s1b` overlay
