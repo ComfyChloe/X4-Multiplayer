@@ -654,7 +654,7 @@ pub struct ReplayReport {
     pub transitions: u64,
     pub exact: u64,
     /// Matched after taking one random draw per retrying module from the recording (each draw
-    /// checked to lie in `[0, max)`).
+    /// checked to lie in `[0, max]`, including the engine's f32-rounded upper endpoint).
     pub exact_with_recorded_draws: u64,
     /// A module drew more than once (long lazy gap with repeated retries) or a random item
     /// choice: not decidable from two snapshots.
@@ -759,9 +759,11 @@ fn attempt(prev: &StationRecord, next: &StationRecord, blocked: &[WareIx], wares
                 continue;
             };
             let d = (b.1.next - a.next) as f32;
-            if !(d >= 0.0 && d < max.max(f32::MIN_POSITIVE)) {
+            // FloatState converts low32 to f32 before scaling; values near u32::MAX
+            // round to 2^32, so an exact upper endpoint is a valid engine draw.
+            if !(d >= 0.0 && d <= max) {
                 return Attempt::Mismatch(format!(
-                    "station {:#x} module {:#x} at {}: implied retry draw {d} outside [0, {max})",
+                    "station {:#x} module {:#x} at {}: implied retry draw {d} outside [0, {max}]",
                     next.uid, addr, next.times.last_update
                 ));
             }

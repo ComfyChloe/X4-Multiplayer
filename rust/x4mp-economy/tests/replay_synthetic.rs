@@ -435,3 +435,48 @@ fn physical_storage_decisions_are_exact() {
         }
     }
 }
+
+#[test]
+fn recorded_retry_accepts_the_engine_float_upper_endpoint() {
+    // This state advances to 0x00000000ffffffff. Its low32 rounds to 2^32 in f32,
+    // so the actual engine generator returns exactly max, not a value below it.
+    const SEED: u64 = 0x0cee_2b8c_e153_5015;
+    assert_eq!(EngineLcg(SEED).float(0.5).to_bits(), 0.5f32.to_bits());
+    let ms = methods();
+    let mut m = module(0x4000, &ms[1], Factors::default());
+    m.state = State::ChoosingItem;
+    m.item = 0;
+    m.start = 10.0;
+    m.next = 10.0;
+    let mut rec = StationRecord {
+        uid: 0x123,
+        times: ContainerTimes { last_update: 9.0, ..ContainerTimes::default() },
+        cargo: Vec::new(),
+        modules: vec![(0x4001, m.clone())],
+        offers: Vec::new(),
+        reservations: Vec::new(),
+        allocation: Some(Allocation { valid: true, amounts: vec![(METAL, 0)] }),
+        storage: Vec::new(),
+    };
+    let index = |m: &Method| ms.iter().position(|x| x == m);
+    let mut text = String::from("X4ECON 1 build=23660954\nW energycells 1\nW ore 10\nW refinedmetals 14\n");
+    for (i, method) in ms.iter().enumerate() {
+        write_method(&mut text, i, method);
+    }
+    text.push_str("F 1 9 0\n");
+    write_station(&mut text, &rec, &index);
+    let mut env = Env { cargo: Vec::new(), storage: Storage::Allocation(0) };
+    update_production(&mut rec.times, 10.0, false, std::slice::from_mut(&mut m), &mut env, &mut EngineLcg(SEED));
+    assert_eq!(m.next, 15.5);
+    rec.modules[0].1 = m;
+    text.push_str("F 2 10 0\n");
+    write_station(&mut text, &rec, &index);
+    let mut cap = Capture::parse(&text).unwrap();
+    let rep = replay(&cap);
+    assert_eq!(rep.exact_with_recorded_draws, 1, "{rep:?}");
+    assert_eq!(rep.mismatched, 0, "{rep:?}");
+    cap.frames[1].stations[0].modules[0].1.next += 0.001;
+    let rep = replay(&cap);
+    assert_eq!(rep.mismatched, 1, "out-of-range draws must still fail: {rep:?}");
+    assert!(rep.first_difference.as_deref().unwrap().contains("outside [0, 0.5]"));
+}

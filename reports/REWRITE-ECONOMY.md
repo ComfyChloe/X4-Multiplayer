@@ -347,7 +347,7 @@ key, sector, seq; the AI driver can set the original order key); the offers are 
   Storage decisions use the captured allocation (0x424b90) and storage modules (0x356010: a module
   accepts a ware when the tag sets intersect, 0x806e10; modules of one tag group pooled); captures
   without them take the decision from the recording. Classes: exact, exact with the recorded retry draw
-  (one per module, checked to lie in [0, max)), exact with the recorded storage decision (old captures),
+  (one per module, checked to lie in [0, max]), exact with the recorded storage decision (old captures),
   rng-dependent (several draws in one catch-up: undecidable from two snapshots), external (cargo changed
   by something else, e.g. trades), mismatched (every difference listed with `--all`). [synthetic:
   replay_synthetic.rs PASS, incl. allocation and physical-storage scenarios]
