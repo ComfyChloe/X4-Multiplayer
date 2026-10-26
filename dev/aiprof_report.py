@@ -91,6 +91,12 @@ if drive:
           f'preflight refusals {dsum("preflightRefusals"):.0f}, loop logs {dsum("loopLogs"):.0f}, bad caller {dsum("badCaller"):.0f}')
     print(f'  per frame: globalApplied {dmean("globalApplied"):.2f}, attentionRestarts {dmean("attentionRestarts"):.2f}, '
           f'removed {dmean("removed"):.2f}, buckets {dmean("buckets"):.2f}, deferred {dmean("deferred"):.2f}')
+    covered = [d for d in drive if 'hashValid' in d]
+    if covered:
+        print(f'  hash coverage: {sum(d["hashValid"] > 0 for d in covered)}/{len(covered)} final-window samples nonempty; '
+              f'{dsum("hashEmptyFrames"):.0f} frames with no contexts in the sampled vectors (not full AI state)')
+    else:
+        print('  hash coverage: unavailable in this log; hash equality is not an equivalence verdict')
     clean, dirty = dsum('cmpClean'), dsum('cmpDirty')
     if clean + dirty:
         p = clean + dirty

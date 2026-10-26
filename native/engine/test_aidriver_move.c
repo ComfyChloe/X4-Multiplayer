@@ -918,6 +918,18 @@ int main(void) {
                ((void **)ad_vec(DIR, w)[0])[base + 2] == CX(6) && I64(CX(5), AD_C_SLOT + 8 * w) == (int64_t)(base + 1) &&
                I64(CX(6), AD_C_SLOT + 8 * w) == (int64_t)(base + 2));
     }
+    /* 14. A hash of drained vectors has no context coverage, even though it is nonzero. */
+    world_reset();
+    uint64_t empty_hash = ad_state_hash(DIR);
+    assert(empty_hash == 0xd852dcb87b6f12a3ull && ad.win.hash_contexts == 0 && ad.win.hash_wake_contexts == 0);
+    void *hash_ctx = mk(0, 0);
+    uint64_t populated_hash = ad_state_hash(DIR);
+    assert(populated_hash != empty_hash && ad.win.hash_contexts == 1);
+    U32(hash_ctx, AD_C_MASK) = 4;
+    assert(ad_state_hash(DIR) != populated_hash);
+    queue(hash_ctx, 1);
+    (void)ad_state_hash(DIR);
+    assert(ad.win.hash_contexts == 1 && ad.win.hash_wake_contexts == 1);
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: aidriver stage 1 outer loop: flip, timed harvest in time order into the node pool, exit");
     puts("PASS: aidriver stage 1 cleanup, interrupt-restart and attention-block paths match the original call order");

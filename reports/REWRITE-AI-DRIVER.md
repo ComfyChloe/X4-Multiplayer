@@ -201,8 +201,8 @@ which define exactly when a pass's outcome can differ from the original order:
    conservative, until the buffer readout exposes the flag).
 A pass with none of these has no observed event/wake hazard (`cmp_passes_clean`); RNG inversions are
 counted separately in `cmp_rng_passes`, and shared-state writes (blackboards,
-`global.$`) are not observed by these counters. A per-frame AI state hash (contexts, masks, wake time, queue
-membership, frame pcs, wake vectors) is logged in compare mode.
+`global.$`) are not observed by these counters. A per-frame hash of the observed context/wake vectors
+(masks, wake time, queue membership, frame pcs) is logged in compare mode; see the coverage failure below.
 
 **Fail closed.** Driver modes need the helper signatures; a structural pre-flight (write index, vector
 bounds, slot-index consistency of the first read vector, timed tree) runs before every frame and again
@@ -266,6 +266,28 @@ Stage 1, in order (lane runs with the `probe-s1b` overlay = d922398, release x4l
    offline against `ad_process_context`; zero differences required.
 
 ## 8. Open items / coordination (`rewrite-coord/questions.md`)
+
+### Native compare-idle result, 26 October 03:35
+
+The existing chain's `s1-compare-idle` finished at 03:34:59, lane harness pass (requested observation
+window completed), **not semantic equivalence**. After 30 warmup windows: 453 windows, 16,030 driver
+frames, 101,778 passes; 355 passes had event/wake hazards (mostly wake absorption), and 18,415 passes
+(18.09%) reordered RNG-drawing contexts. Wake order was restored in 2,513 passes, with zero skips;
+zero preflight refusals, bad callers or loop logs. No event buffer was bound (`evbuf=0`). Evidence:
+`.local/evidence-091-withheld`; timing is untrustworthy. The existing chain next runs battle-400.
+
+Every one of the 481 non-initial hash samples was `d852dcb87b6f12a3`: exactly this implementation's hash
+of three zero vector lengths. The post-phase context vector at director+0x148 and the two wake
+vectors therefore supplied no contexts in this workload. Its earlier label "AI state hash" overstated
+coverage; equality of these hashes proves nothing about active script state. The RemoveContext helper
+uses +0x148, but complete live-context enumeration remains unresolved; no new offset is guessed.
+New diagnostics report `hashValid`, `hashContexts`, `hashWakeContexts`, and `hashEmptyFrames`, and emit
+`hash=unavailable` when coverage is empty. Synthetic tests distinguish empty/populated contexts,
+changed masks and queued contexts; 24 real LuaJIT tests verify log transport. The diagnostics build
+and the joint synthetic buffer test pass. They are not present in this already-frozen native overlay.
+
+These observed dependencies block promotion of rounds to a behaviour-identical replacement. Normal
+serial mode remains the comparison baseline; no per-entity RNG policy change was made.
 
 ### Codex continuation, 26 October 03:13
 

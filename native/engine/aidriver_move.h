@@ -79,7 +79,7 @@ static ad_engine_t E;
 
 /* offsets used only by the driver (in addition to aidriver.h) */
 #define AD_D_FREE_NODES 0x1d0     /* timed-tree node pool (singly linked through node+0x10) */
-#define AD_D_ALL 0x148            /* vector of all contexts */
+#define AD_D_ALL 0x148            /* context vector used by RemoveContext; native coverage can be empty */
 #define AD_D_REFRESH_A 0x240      /* script refresh request list (applied, not dry) */
 #define AD_D_REFRESH_B 0x258      /* script refresh request list (dry run) */
 #define AD_C_RECORD 0x18          /* ScriptEventHandler event record: int kw +0, values +8/+0x18/+0x28/+0x38 */
@@ -921,10 +921,12 @@ static const char *ad_preflight(void *dir) {
     return NULL;
 }
 
-/* FNV-1a over the AI state after the phase (contexts in the director's all-contexts vector). Used by
-   the comparison mode and the offline normal-vs-rounds equivalence tests. */
+/* FNV-1a over the contexts exposed by dir+0x148 and the two wake vectors after the phase. Native
+   idle observations found all three vectors empty despite active scripts: this is NOT a complete
+   AI-state census. Expose actual coverage so a constant empty hash cannot masquerade as agreement. */
 static uint64_t ad_state_hash(void *dir) {
     uint64_t h = 1469598103934665603ull;
+    ad.win.hash_contexts = ad.win.hash_wake_contexts = 0;
 #define AD_MIX(x) do { uint64_t _x = (uint64_t)(x); for (int _b = 0; _b < 8; ++_b) { h ^= (_x >> (8 * _b)) & 0xff; h *= 1099511628211ull; } } while (0)
     void **all = (void **)PTR(dir, AD_D_ALL);
     size_t n = ad_vec_len(P(dir, AD_D_ALL));
@@ -932,6 +934,7 @@ static uint64_t ad_state_hash(void *dir) {
     for (size_t i = 0; i < n; ++i) {
         unsigned char *ctx = all[i];
         if (!ctx) { AD_MIX(0); continue; }
+        ++ad.win.hash_contexts;
         AD_MIX(U64(ctx, AD_COMP_ID));
         AD_MIX(U32(ctx, AD_C_MASK)); AD_MIX(U32(ctx, AD_C_TMASK));
         uint64_t wt; memcpy(&wt, P(ctx, AD_C_WAKETIME), 8); AD_MIX(wt);
@@ -945,7 +948,11 @@ static uint64_t ad_state_hash(void *dir) {
         void **v = ad_vec(dir, b);
         size_t m = ((uintptr_t)v[1] - (uintptr_t)v[0]) / 8;
         AD_MIX(m);
-        for (size_t i = 0; i < m; ++i) { unsigned char *c = ((void **)v[0])[i]; AD_MIX(c ? U64(c, AD_COMP_ID) : 0); }
+        for (size_t i = 0; i < m; ++i) {
+            unsigned char *c = ((void **)v[0])[i];
+            if (c) ++ad.win.hash_wake_contexts;
+            AD_MIX(c ? U64(c, AD_COMP_ID) : 0);
+        }
     }
 #undef AD_MIX
     return h;

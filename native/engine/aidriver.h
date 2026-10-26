@@ -134,6 +134,7 @@ typedef struct {
     uint64_t wake_reordered;          /* rounds passes whose wakes were put back in the original order */
     uint64_t wake_order_skipped;      /* ... that could not be (allocation or slot check failed) */
     uint64_t last_hash;
+    uint64_t hash_contexts, hash_wake_contexts, hash_empty_frames;
 } ad_window;
 
 typedef struct {
@@ -591,7 +592,10 @@ static void ad_phase(void *dir) {
     ad.in_phase = 0;
     ad_frame_end(dir);
     if (mode >= AD_NORMAL) {
-        if (mode == AD_COMPARE) ad.win.last_hash = ad_state_hash(dir);
+        if (mode == AD_COMPARE) {
+            ad.win.last_hash = ad_state_hash(dir);
+            if (!ad.win.hash_contexts && !ad.win.hash_wake_contexts) ++ad.win.hash_empty_frames;
+        }
         const char *why = ad_preflight(dir);   /* the next frame's first read vector must be sound */
         if (why) ad_driver_refuse(why);
     }
@@ -1082,9 +1086,15 @@ static int ad_lua_stats(lua_State *L) {
     number_field(L, "wake_reordered", (double)w->wake_reordered);
     number_field(L, "wake_order_skipped", (double)w->wake_order_skipped);
     number_field(L, "rng_runs", (double)w->rng_runs / frames);
+    number_field(L, "hash_valid", w->hash_contexts != 0 || w->hash_wake_contexts != 0);
+    number_field(L, "hash_contexts", (double)w->hash_contexts);
+    number_field(L, "hash_wake_contexts", (double)w->hash_wake_contexts);
+    number_field(L, "hash_empty_frames", (double)w->hash_empty_frames);
     {
         char hash[24];
-        snprintf(hash, sizeof(hash), "%016llx", (unsigned long long)w->last_hash);
+        if (w->hash_contexts || w->hash_wake_contexts)
+            snprintf(hash, sizeof(hash), "%016llx", (unsigned long long)w->last_hash);
+        else snprintf(hash, sizeof(hash), "unavailable");
         string_field(L, "state_hash", hash);
     }
     for (int b = 0; b < 9; ++b) {

@@ -71,6 +71,7 @@ local function logStats(now)
      a.cmp_passes_clean or 0,a.cmp_passes_dirty or 0,a.cmp_event_pending or 0,a.cmp_event_ran or 0,
      a.cmp_null_lost or 0,a.cmp_wake_absorb or 0,a.cmp_post_cancel or 0,a.cmp_unchecked or 0)..
      string.format(' cmpDeferredImmediate=%.3f cmpRngPasses=%d wakeReordered=%d wakeOrderSkipped=%d',a.cmp_deferred_immediate or 0,a.cmp_rng_passes or 0,a.wake_reordered or 0,a.wake_order_skipped or 0)..
+     string.format(' hashValid=%d hashContexts=%d hashWakeContexts=%d hashEmptyFrames=%d',a.hash_valid or 0,a.hash_contexts or 0,a.hash_wake_contexts or 0,a.hash_empty_frames or 0)..
      string.format(' globalApplied=%.2f attentionRestarts=%.2f removed=%.2f badCaller=%d loopLogs=%d evPendingForeign=%.3f hash=%s',
      a.global_applied or 0,a.attention_restarts or 0,a.removed or 0,a.bad_caller or 0,a.loop_logs or 0,
      a.ev_pending_foreign or 0,tostring(a.state_hash or '-')))
