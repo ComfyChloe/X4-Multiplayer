@@ -40,7 +40,8 @@ are messages and structural commands applied at a frame barrier in the original 
   `send_to` reaches a later system of the same frame). A first version delivered to "the next phase"; the
   thread-invariance test with two systems showed that this silently dropped messages, so it was changed.
 - Multi-pass systems (`System::max_passes`, requested by ai-orders for the AIDirector pass loop, up to
-  0x21 passes): `step` repeats the system, each pass a full phase with its barrier, until no message for it
+  0x40 passes, corrected by ai-driver Q21; 0x21 only controls the wake-buffer flip): `step` repeats
+  the system, each pass a full phase with its barrier, until no message for it
   waits and no job or hook called `request_pass`; its own messages are then handled in the next pass of the
   same frame. The pass count is an OR over worlds of deterministic state, so it is thread independent
   (tests/passes.rs); a bound hit with work left is reported (`more`) and the rest arrives next frame.

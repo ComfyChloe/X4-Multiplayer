@@ -42,7 +42,8 @@ pub trait System: Send + Sync {
     /// message for this system is waiting in any world or in its barrier queue, and no sector
     /// job or barrier hook called `request_pass`. Messages a pass sends to its own system are
     /// therefore handled in the next pass of the same frame, like the engine's AIDirector pass
-    /// loop (up to 0x21 passes). When the bound ends the loop with work left, the last pass
+    /// loop (up to 0x40 passes; 0x21 only controls its wake-buffer flip). When the bound ends
+    /// the loop with work left, the last pass
     /// reports `more == true` and the waiting messages are delivered in the next frame.
     fn max_passes(&self) -> u32 {
         1
