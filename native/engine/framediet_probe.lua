@@ -24,7 +24,10 @@ end
 local initialise,message=package.loadlib(X4LAN_FRAMEDIET_PATH or
  './extensions/x4_lan_lab/native/x4lan_framediet_64.dll','luaopen_x4lan_framediet')
 if not initialise then disabled('load failed: '..tostring(message));return end
-local native=initialise()
+local initialised,native=pcall(initialise)
+if not initialised or type(native)~='table' or type(native.start)~='function' then
+ disabled('module init failed: '..tostring(native));return
+end
 local mode=X4LAN_FRAMEDIET_MODE
 local sites=X4LAN_FRAMEDIET_SITES or 'server'
 local reportEvery=X4LAN_FRAMEDIET_REPORT_S or 10
@@ -48,7 +51,8 @@ local function report(s,now)
   s.draw_owned,s.draw_set,s.draw_reapplied)..
   string.format(' elementsCalls=%d elementsSkipped=%d splitCalls=%d splitRenderSteps=%d commitMb=%.1f',s.ui_elements_calls or 0,
   s.ui_elements_skipped or 0,s.split_calls or 0,s.split_render_steps or 0,s.commit_mb or 0)..
-  string.format(' mainCpuMs=%.1f workerCpuMs=%.1f processCpuMs=%.1f',s.main_cpu_ms or 0,s.worker_cpu_ms or 0,s.process_cpu_ms or 0))
+  string.format(' mainCpuMs=%.1f workerCpuMs=%.1f processCpuMs=%.1f drawRecleared=%d guardSkipped=%d',s.main_cpu_ms or 0,
+  s.worker_cpu_ms or 0,s.process_cpu_ms or 0,s.draw_recleared or 0,s.guard_skipped or 0))
  if s.mode~='audit' then return end
  DebugError(string.format('[X4LAN] FRAMEDIET_FRAMES audited=%d rngSteps=%d rngUnknown=%d ids=%d',
   s.frame_audited or 0,s.frame_rng_steps or 0,s.frame_rng_unknown or 0,s.frame_ids or 0))
@@ -81,7 +85,8 @@ local function arm(now)
  local ok,result,why=pcall(native.start,mode,sites,X4LAN_FRAMEDIET_PERIOD,X4LAN_FRAMEDIET_AUDIT_EVERY,X4LAN_FRAMEDIET_DIGEST)
  if not ok then finished=true;disabled(result);return end
  if not result then
-  if why=='loading' then return end
+  -- 'loading' and 'loading (UI on the main thread)': retried every second
+  if type(why)=='string' and string.sub(why,1,7)=='loading' then return end
   finished=true;disabled(why);return
  end
  owner=result;phase=mode

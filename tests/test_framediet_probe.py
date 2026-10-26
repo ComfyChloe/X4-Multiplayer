@@ -47,7 +47,9 @@ class FrameDietProbeTests(unittest.TestCase):
           function package.loadlib(path,symbol)
             assert(symbol=='luaopen_x4lan_framediet');loaded_path=path
             if load_failure then return nil,load_failure end
-            return function() return {start=function(...)
+            return function() if init_nothing then return end
+              if init_error then error(init_error) end
+              return {start=function(...)
               local args={n=select('#',...),...};starts[#starts+1]=args
               if refusal then local r=refusal;if refusal_once then refusal=nil end;return nil,r end
               current_mode=args[1]
@@ -115,6 +117,23 @@ class FrameDietProbeTests(unittest.TestCase):
         self.assertEqual(lua.eval('#starts'), 1)
         disabled = [line for line in self.logs(lua) if 'FEATURE framediet DISABLED' in line]
         self.assertEqual(disabled, ['[X4LAN] FEATURE framediet DISABLED reason=unsupported executable or modified engine signatures'])
+
+    def test_module_init_failure_is_loud(self):
+        for setting, reason in (("init_nothing=true", 'module init failed: nil'),
+                                ("init_error='boom'", 'module init failed: [string')):
+            lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';" + setting)
+            self.assertIsNone(lua.eval('ui'))
+            logs = self.logs(lua)
+            self.assertEqual(len(logs), 1)
+            self.assertTrue(logs[0].startswith('[X4LAN] FEATURE framediet DISABLED reason=' + reason), logs[0])
+
+    def test_main_thread_refusal_is_retried(self):
+        lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';refusal='loading (UI on the main thread)';refusal_once=true")
+        lua.execute('ui();now=1;ui()')
+        self.assertEqual(lua.eval('#starts'), 2)
+        logs = self.logs(lua)
+        self.assertFalse(any('DISABLED' in line for line in logs))
+        self.assertTrue(any('FRAMEDIET armed' in line for line in logs))
 
     def test_load_failure_is_loud(self):
         lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';load_failure='The specified module could not be found.'")

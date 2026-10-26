@@ -7,8 +7,8 @@
  * AI, input and every UI Lua script (the mod's networking runs there) keep running unchanged.
  * Analysis and evidence: reports/REWRITE-FRAME-DIET.md.
  *
- * Sites (all data-only: vtable entries compare-exchanged from the verified original, one empty
- * VBI slot, one engine-native render flag bit; nothing is written into code):
+ * Sites (data-only except ui_elements: vtable entries compare-exchanged from the verified original,
+ * one empty VBI slot, one engine-native render flag bit; ui_elements retargets one call's rel32):
  *   ui_scenes  AnarkScene vtable slot 12 (0xaf8760), the per-frame layer walk that the scene
  *              update (slot 5, 0x13aa510) tail-calls after clearing the scene's per-frame lists.
  *              Skipped only inside AnarkSceneManager slot 3 (0xaf8e50) on the MoveWorker, so the
@@ -36,6 +36,11 @@
  *              creates still take UniverseIDs.
  * The per-frame guard runs in empty VBI slot 2 (before GameClient::Move): it re-verifies the
  * table and every installed entry and disarms everything on any change.
+ *
+ * Threads: the module arms only on the MoveWorker (Lua runs there outside loading screens). On
+ * loading screens the UI, and so Lua (stop, __gc, set), runs on the main thread while the MoveWorker
+ * keeps calling the slot 2 guard. Every change of the installed state (arm, disarm, set, the guard's
+ * checks) therefore runs under one lock; the guard only tries it and skips a frame when it is held.
  *
  * Modes: `diet` skips the active sites, `pass` keeps every wrapper installed but inert (A/B
  * timing within one session), `audit` runs the originals and measures their side effects on the
@@ -124,7 +129,7 @@ typedef struct {
 
 typedef struct {
     uint64_t generation;
-    uint64_t frames, loading_frames, present_frames, draw_set, draw_reapplied;
+    uint64_t frames, loading_frames, present_frames, draw_set, draw_reapplied, draw_recleared, guard_skipped;
     uint64_t split_calls, split_render_steps;   /* rng_split: slot 10 calls, render-stream steps */
     /* audit: whole MoveWorker frames (slot 2 to slot 2) on the simulation stream and ID map */
     uint64_t frame_audited, frame_rng_steps, frame_rng_unknown, frame_ids;
@@ -160,7 +165,19 @@ static int64_t fd_qpf;
 static void **fd_entry[VS_COUNT];
 static void *fd_orig[VS_COUNT];
 static void *fd_wrapper[VS_COUNT];
-static int fd_draw_owned;
+/* Serialises arm, disarm, set and the guard's checks (see "Threads" above). Not recursive: nothing
+   that holds it calls back into Lua or into another locking function. */
+static SRWLOCK fd_lock = SRWLOCK_INIT;
+static int fd_file_verified;     /* the 55 MB executable hash is computed once per process */
+static int fd_draw_owned;        /* the current owner holds disable_rendering */
+/* The engine copies RenderFlags with plain loads and stores (options apply 0x121ef1f, graphics state
+   changes 0xfa3811), so a copy racing our release can bring the bit back. Nothing in the engine sets
+   disable_rendering itself: a bit that reappears within DRAW_WATCH_FRAMES of our release, or that a
+   previous owner of this module set, is ours and is cleared again. */
+#define DRAW_WATCH_FRAMES 120
+static int fd_draw_ours;         /* we set the bit and have not seen it stay clear since */
+static int fd_draw_watch;        /* guard frames left in which a reappearing bit is cleared */
+#define CONTROL_MAX_US 5000.0    /* control window cap (the mean of the slowest audited region) */
 static int fd_ctx_scenes, fd_ctx_camera;
 static int fd_present;           /* this frame runs every presentation site (period) */
 #define FD_RENDER_RNG_SEED 0x52454e4445525631ull   /* "RENDERV1": private slot 10 stream */
@@ -187,6 +204,14 @@ static void fd_spin_default(double us) {
     while ((double)(b.QuadPart - a.QuadPart) * 1e6 / (double)fd_qpf < us);
 }
 static void (*fd_spin)(double us) = fd_spin_default;
+/* 1 on X4's main thread (the process's earliest thread), 0 elsewhere, -1 when it cannot be found. */
+static HANDLE fd_find_main_thread(void);
+static int fd_on_main_thread_default(void) {
+    if (!fd_main_thread) fd_main_thread = fd_find_main_thread();
+    if (!fd_main_thread) return -1;
+    return GetThreadId(fd_main_thread) == GetCurrentThreadId();
+}
+static int (*fd_on_main_thread)(void) = fd_on_main_thread_default;
 
 static int readable(const void *ptr, size_t length, int write) {
     MEMORY_BASIC_INFORMATION m;
@@ -270,17 +295,24 @@ static int verify_checks(const x4_signature_check *checks, size_t count) {
     return 1;
 }
 
-static int verify_image(void) {
+/* Cheap part: this process's image has the pinned PE header (sets `image`). */
+static int verify_headers(void) {
     image = (unsigned char *)GetModuleHandleW(NULL);
     if (!readable(image, sizeof(IMAGE_DOS_HEADER), 0)) return 0;
     IMAGE_DOS_HEADER *dos = (IMAGE_DOS_HEADER *)image;
     if (dos->e_magic != IMAGE_DOS_SIGNATURE || dos->e_lfanew < 0 || dos->e_lfanew > 4096) return 0;
     IMAGE_NT_HEADERS64 *nt = (IMAGE_NT_HEADERS64 *)(image + dos->e_lfanew);
-    if (!readable(nt, sizeof(*nt), 0) || nt->Signature != IMAGE_NT_SIGNATURE ||
-        nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
-        nt->FileHeader.TimeDateStamp != X4_PE_TIMESTAMP ||
-        nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
-        nt->OptionalHeader.SizeOfImage != X4_IMAGE_SIZE || !verify_file()) return 0;
+    return readable(nt, sizeof(*nt), 0) && nt->Signature == IMAGE_NT_SIGNATURE &&
+           nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64 &&
+           nt->FileHeader.TimeDateStamp == X4_PE_TIMESTAMP &&
+           nt->OptionalHeader.Magic == IMAGE_NT_OPTIONAL_HDR64_MAGIC &&
+           nt->OptionalHeader.SizeOfImage == X4_IMAGE_SIZE;
+}
+
+/* Full check: headers, the file hash (once per process) and every code signature (each time). */
+static int verify_image(void) {
+    if (!verify_headers()) return 0;
+    if (!fd_file_verified && !(fd_file_verified = verify_file())) return 0;
     return verify_checks(x4_common_checks, sizeof(x4_common_checks) / sizeof(x4_common_checks[0])) &&
            verify_checks(x4_framediet_checks, sizeof(x4_framediet_checks) / sizeof(x4_framediet_checks[0])) &&
            readable(image + VBI_RVA, sizeof(void *), 0);
@@ -381,14 +413,32 @@ static void fd_uninstall(void) {
 static volatile uint64_t *render_flags(void) { return (volatile uint64_t *)(image + RENDER_FLAGS_RVA); }
 static volatile uint64_t *render_flags_staged(void) { return (volatile uint64_t *)(image + RENDER_FLAGS_STAGED_RVA); }
 
-static void fd_draw_release(void) {
-    if (!fd_draw_owned) return;
-    /* Clear only the bit we set; any other flag changes made meanwhile are kept. */
-    InterlockedAnd64((volatile LONG64 *)render_flags_staged(), ~(LONG64)DISABLE_RENDERING);
-    InterlockedAnd64((volatile LONG64 *)render_flags(), ~(LONG64)DISABLE_RENDERING);
-    fd_draw_owned = 0;
+static int fd_draw_bit_set(void) {
+    return ((*render_flags() | *render_flags_staged()) & DISABLE_RENDERING) != 0;
 }
 
+/* Clears only the bit; any other flag changes made meanwhile are kept. */
+static void fd_draw_clear(void) {
+    InterlockedAnd64((volatile LONG64 *)render_flags_staged(), ~(LONG64)DISABLE_RENDERING);
+    InterlockedAnd64((volatile LONG64 *)render_flags(), ~(LONG64)DISABLE_RENDERING);
+}
+
+/* Lock held. */
+static void fd_draw_release(void) {
+    if (!fd_draw_owned) return;
+    fd_draw_clear();
+    fd_draw_owned = 0;
+    fd_draw_watch = DRAW_WATCH_FRAMES;   /* the guard clears a copy that raced this release */
+}
+
+/* Lock held; guard frames in which the owner does not hold the bit. */
+static void fd_draw_watch_frame(fd_owner *o) {
+    if (fd_draw_watch <= 0) return;
+    if (fd_draw_bit_set()) { fd_draw_clear(); ++o->draw_recleared; fd_draw_watch = DRAW_WATCH_FRAMES; return; }
+    if (--fd_draw_watch == 0) fd_draw_ours = 0;   /* stayed clear for the whole watch */
+}
+
+/* Lock held. */
 static void fd_draw_hold(fd_owner *o) {
     /* Staged copy first: a concurrent options apply on the main thread copies it over the live value. */
     if (!(*render_flags_staged() & DISABLE_RENDERING) || !(*render_flags() & DISABLE_RENDERING)) {
@@ -396,9 +446,12 @@ static void fd_draw_hold(fd_owner *o) {
         InterlockedOr64((volatile LONG64 *)render_flags_staged(), (LONG64)DISABLE_RENDERING);
         InterlockedOr64((volatile LONG64 *)render_flags(), (LONG64)DISABLE_RENDERING);
         fd_draw_owned = 1;
+        fd_draw_ours = 1;
     }
+    fd_draw_watch = 0;
 }
 
+/* Lock held. */
 static void fd_disarm(const char *reason) {
     fd_owner *o = fd_current;
     if (o) { o->armed = 0; if (reason && !o->reason) o->reason = reason; }
@@ -721,17 +774,15 @@ static uintptr_t fd_game_render(void *self) {
     return r;
 }
 
-/* VBI slot 2, every MoveWorker frame before GameClient::Move. */
-static void fd_slot_move(fd_handler *self) {
-    (void)self;
-    fd_owner *o = fd_current;
-    if (!o || !o->armed) return;
+/* The guard body (lock held). */
+static void fd_guard(fd_owner *o) {
     if (GetCurrentThreadId() != fd_thread || !fd_table_owned()) { fd_disarm("callback ownership lost"); return; }
+    fd_ctx_scenes = fd_ctx_camera = 0;
+    /* Loading screens: the wrappers pass through (UI on the main thread); checks resume afterwards. */
+    if (fd_loading()) { ++o->loading_frames; fd_digest_row = -1; fd_frame_valid = 0; return; }
     for (int k = 0; k < VS_COUNT; ++k)
         if (fd_entry[k] && *fd_entry[k] != fd_wrapper[k]) { fd_disarm("vtable entry changed"); return; }
     if (fd_call_patched && *call_rel() != fd_call_hook_rel) { fd_disarm("element update call changed"); return; }
-    fd_ctx_scenes = fd_ctx_camera = 0;
-    if (fd_loading()) { ++o->loading_frames; fd_digest_row = -1; fd_frame_valid = 0; return; }
     ++o->frames;
     if (o->mode == FD_AUDIT) {
         /* Whole previous frame: every simulation-stream draw and ID insertion, for scale. */
@@ -752,7 +803,8 @@ static void fd_slot_move(fd_handler *self) {
     }
     fd_present = o->period > 0 && o->frames % (uint64_t)o->period == 0;
     if (fd_present) ++o->present_frames;
-    if (o->mode == FD_DIET && (o->sites & FD_DRAW)) fd_draw_hold(o); else fd_draw_release();
+    if (o->mode == FD_DIET && (o->sites & FD_DRAW)) fd_draw_hold(o);
+    else { fd_draw_release(); fd_draw_watch_frame(o); }
     fd_digest_row = -1;
     if (o->mode != FD_AUDIT || o->audit_every <= 0 || o->frames % (uint64_t)o->audit_every) return;
     /* Rotate the digest over the audited regions and the control window. */
@@ -765,14 +817,27 @@ static void fd_slot_move(fd_handler *self) {
     int row = rows[fd_rotation++ % (unsigned)n];
     if (row != ST_CONTROL) { fd_digest_row = row; return; }
     /* Control: nothing of ours runs; other threads may still write. Same length as the
-       slowest audited region on average (at least 0.5 ms). */
+       slowest audited region on average (at least 0.5 ms, at most CONTROL_MAX_US). */
     double us = 500.0;
     for (int r = 0; r < ST_CONTROL; ++r)
         if (o->st[r].audited && o->st[r].ms_total * 1000.0 / (double)o->st[r].audited > us)
             us = o->st[r].ms_total * 1000.0 / (double)o->st[r].audited;
+    if (us > CONTROL_MAX_US) us = CONTROL_MAX_US;
     fd_digest_row = ST_CONTROL;
     AUDITED(o, ST_CONTROL, fd_spin(us));
     fd_digest_row = -1;
+}
+
+/* VBI slot 2, every MoveWorker frame before GameClient::Move (also on loading screens). */
+static void fd_slot_move(fd_handler *self) {
+    (void)self;
+    fd_owner *o = fd_current;
+    if (!o || !o->armed) return;
+    /* Held while arm/stop/set run (on loading screens on the main thread): skip this frame. */
+    if (!TryAcquireSRWLockExclusive(&fd_lock)) { ++o->guard_skipped; return; }
+    o = fd_current;
+    if (o && o->armed) fd_guard(o);
+    ReleaseSRWLockExclusive(&fd_lock);
 }
 
 /* ---------------------------------------------------------------------------------------- */
@@ -853,13 +918,21 @@ static int number_arg(lua_State *L, int index, double fallback, double lo, doubl
 }
 
 /* Arms an owner on the verified process (start() runs the executable checks first; the synthetic
-   tests call this directly). Returns NULL or the refusal reason; nothing stays changed on refusal. */
+   tests call this directly). Lock held. Returns NULL or the refusal reason; nothing stays changed on
+   refusal (a previous owner's statistics included). */
 static const char *fd_arm(uint64_t generation, int mode, int sites, int period, int audit_every, unsigned digest_max) {
+    if (fd_current) return "an owner already exists; stop it first";
     void **table = table_now();
     if (!readable(table, 0x138, 1) || table[VBI_SLOT] || table[17 + VBI_SLOT] || !table[3])
         return "VBI slot occupied or unavailable";
     if (*(int *)((unsigned char *)table + LOADING_OFFSET)) return "loading";
-    if ((sites & FD_DRAW) && !readable(image + RENDER_FLAGS_RVA, 16, 1)) return "render flags unavailable";
+    /* Right after a loading screen Lua can still run on the main thread: only the MoveWorker arms
+       (the owner thread, and the rel32 write happens on the thread that executes that call). */
+    int on_main = fd_on_main_thread();
+    if (on_main < 0) return "main thread unknown";
+    if (on_main) return "loading (UI on the main thread)";
+    int flags_ok = readable(image + RENDER_FLAGS_RVA, 16, 1);
+    if ((sites & FD_DRAW) && !flags_ok) return "render flags unavailable";
     unsigned char *tls = fd_tls();
     unsigned char *map = *(unsigned char **)(image + ID_MAP_PTR_RVA);
     if (!tls || !readable(tls + TLS_GAME_TIME, 0x20, 0) || !readable(map, ID_MAP_BLOCKS + 32 * 8, 0) ||
@@ -873,7 +946,7 @@ static const char *fd_arm(uint64_t generation, int mode, int sites, int period, 
                             (LPCWSTR)&fd_hook, &pinned))
         return "cannot pin callback module";
     fd_owner *o = &fd_state;
-    fd_owner fresh;
+    fd_owner fresh, previous = *o;
     memset(&fresh, 0, sizeof(fresh));
     fresh.generation = generation;
     fresh.mode = mode; fresh.sites = sites; fresh.period = period; fresh.audit_every = audit_every;
@@ -884,9 +957,7 @@ static const char *fd_arm(uint64_t generation, int mode, int sites, int period, 
     fd_ctx_scenes = fd_ctx_camera = 0;
     fd_digest_row = -1;
     fd_present = 0;
-    fd_draw_owned = 0;
     fd_render_rng = FD_RENDER_RNG_SEED;
-    if (!fd_main_thread) fd_main_thread = fd_find_main_thread();
     if (fd_worker_thread) CloseHandle(fd_worker_thread);
     fd_worker_thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, GetCurrentThreadId());
     fd_frame_valid = 0;
@@ -894,25 +965,50 @@ static const char *fd_arm(uint64_t generation, int mode, int sites, int period, 
         return "VBI slot changed during registration";
     *o = fresh;
     fd_current = o;   /* the slot handler sees an unarmed owner until the entries are installed */
-    if (!fd_install(sites)) {
+    const char *why = NULL;
+    if (!fd_install(sites)) why = "vtable entry is not the verified original";
+    else if ((sites & FD_UI_ELEMENTS) && (why = fd_call_install()) != NULL) fd_uninstall();
+    if (why) {
         InterlockedCompareExchangePointer((void *volatile *)&table[VBI_SLOT], NULL, &fd_hook);
         fd_current = NULL;
-        o->generation = 0;
-        return "vtable entry is not the verified original";
+        *o = previous;   /* stats() of the previous owner keep working */
+        return why;
     }
-    if (sites & FD_UI_ELEMENTS) {
-        const char *why = fd_call_install();
-        if (why) {
-            fd_uninstall();
-            InterlockedCompareExchangePointer((void *volatile *)&table[VBI_SLOT], NULL, &fd_hook);
-            fd_current = NULL;
-            o->generation = 0;
-            return why;
-        }
-    }
+    /* A bit a previous owner set and whose release raced an engine copy is ours: adopt it, so this
+       owner holds or releases it. A bit set by anyone else stays foreign. */
+    fd_draw_owned = flags_ok && fd_draw_ours && fd_draw_bit_set();
     o->installed = 1;
     o->armed = 1;
     return NULL;
+}
+
+/* set(mode[, sites]) core; sites < 0 keeps them. Lock held. NULL or the refusal reason. */
+static const char *fd_set(fd_owner *o, int mode, int sites) {
+    if (!o || o != fd_current || !o->armed) return "not armed";
+    if (sites < 0) sites = o->sites;
+    int installed = FD_DRAW | (fd_call_patched ? FD_UI_ELEMENTS : 0);
+    for (int k = 0; k < VS_COUNT; ++k) if (fd_entry[k]) installed |= vs_site[k];
+    if (sites & ~installed) return "site not installed";
+    o->mode = mode;
+    o->sites = sites;
+    if (mode != FD_DIET || !(sites & FD_DRAW)) fd_draw_release();
+    return NULL;
+}
+
+/* stop() core. Lock held. */
+static void fd_stop(fd_owner *o) {
+    if (o && o == fd_current) { fd_disarm(NULL); fd_current = NULL; }
+}
+
+/* active() core: also notices a lost slot (the guard no longer runs then). Lock held. */
+static int fd_active(fd_owner *o) {
+    if (o && o == fd_current && o->armed && !fd_table_owned()) fd_disarm("callback ownership lost");
+    return o && o == fd_current && o->armed;
+}
+
+/* The owner state behind a handle's generation, or NULL for a stale handle. */
+static fd_owner *fd_owner_for(uint64_t generation) {
+    return generation && generation == fd_state.generation ? &fd_state : NULL;
 }
 
 static int start(lua_State *L) {
@@ -929,33 +1025,46 @@ static int start(lua_State *L) {
     int main_thread = p_lua_pushthread(L);
     p_lua_settop(L, -2);
     if (!main_thread) return failure(L, "main Lua thread required");
+    /* Cheap checks first: the probe retries every second on loading screens. */
+    if (!verify_headers()) return failure(L, "unsupported executable or modified engine signatures");
+    {
+        void **table = readable(image + VBI_RVA, sizeof(void *), 0) ? table_now() : NULL;
+        if (table && readable((unsigned char *)table + LOADING_OFFSET, 4, 0) &&
+            *(volatile int *)((unsigned char *)table + LOADING_OFFSET))
+            return failure(L, "loading");
+    }
     if (!verify_image()) return failure(L, "unsupported executable or modified engine signatures");
     /* The handle exists before anything is armed, so a Lua allocation error cannot orphan an owner. */
     fd_handle *h = p_lua_newuserdata(L, sizeof(*h));
     h->generation = ++fd_generation;
     p_lua_getfield(L, REGISTRY, META);
     p_lua_setmetatable(L, -2);
+    AcquireSRWLockExclusive(&fd_lock);
     const char *why = fd_arm(h->generation, mode, sites, (int)period, (int)audit_every, (unsigned)digest_max);
+    ReleaseSRWLockExclusive(&fd_lock);
     if (why) return failure(L, why);
     return 1;
 }
 
-/* The owner state behind a handle, or NULL for a stale handle. */
 static fd_owner *owner_of(lua_State *L) {
     fd_handle *h = p_luaL_checkudata(L, 1, META);
-    return h->generation && h->generation == fd_state.generation ? &fd_state : NULL;
+    return fd_owner_for(h->generation);
 }
 
 static int stop(lua_State *L) {
     fd_owner *o = owner_of(L);
-    if (o && o == fd_current) { fd_disarm(NULL); fd_current = NULL; }
+    AcquireSRWLockExclusive(&fd_lock);
+    fd_stop(o);
+    ReleaseSRWLockExclusive(&fd_lock);
     return 0;
 }
 
 static int active(lua_State *L) {
     fd_owner *o = owner_of(L);
-    if (o && o == fd_current && o->armed && !fd_table_owned()) fd_disarm("callback ownership lost");
-    p_lua_pushboolean(L, o && o == fd_current && o->armed);
+    AcquireSRWLockExclusive(&fd_lock);
+    int on = fd_active(o);
+    ReleaseSRWLockExclusive(&fd_lock);
+    p_lua_pushboolean(L, on);
     return 1;
 }
 
@@ -963,21 +1072,16 @@ static int active(lua_State *L) {
    (A/B timing in one session: `pass` and `diet` keep the same wrappers installed). */
 static int set(lua_State *L) {
     fd_owner *o = owner_of(L);
-    int mode, sites, top = p_lua_gettop(L);
-    if (!o || o != fd_current || !o->armed) return failure(L, "not armed");
-    sites = o->sites;
+    int mode, sites = -1, top = p_lua_gettop(L);
     if (top < 2 || p_lua_type(L, 2) != LUA_TSTRING || !parse_mode(p_lua_tolstring(L, 2, NULL), &mode))
         return failure(L, "unsupported mode");
-    if (top >= 3 && p_lua_type(L, 3) != LUA_TNIL) {
-        int installed = FD_DRAW | (fd_call_patched ? FD_UI_ELEMENTS : 0);
-        for (int k = 0; k < VS_COUNT; ++k) if (fd_entry[k]) installed |= vs_site[k];
-        if (p_lua_type(L, 3) != LUA_TSTRING || !parse_sites(p_lua_tolstring(L, 3, NULL), &sites))
-            return failure(L, "unsupported sites");
-        if (sites & ~installed) return failure(L, "site not installed");
-    }
-    o->mode = mode;
-    o->sites = sites;
-    if (mode != FD_DIET || !(sites & FD_DRAW)) fd_draw_release();
+    if (top >= 3 && p_lua_type(L, 3) != LUA_TNIL &&
+        (p_lua_type(L, 3) != LUA_TSTRING || !parse_sites(p_lua_tolstring(L, 3, NULL), &sites)))
+        return failure(L, "unsupported sites");
+    AcquireSRWLockExclusive(&fd_lock);
+    const char *why = fd_set(o, mode, sites);
+    ReleaseSRWLockExclusive(&fd_lock);
+    if (why) return failure(L, why);
     p_lua_pushboolean(L, 1);
     return 1;
 }
@@ -1024,6 +1128,8 @@ static int stats(lua_State *L) {
     number_field(L, "draw_owned", o == fd_current && fd_draw_owned);
     number_field(L, "draw_set", (double)o->draw_set);
     number_field(L, "draw_reapplied", (double)o->draw_reapplied);
+    number_field(L, "draw_recleared", (double)o->draw_recleared);
+    number_field(L, "guard_skipped", (double)o->guard_skipped);
     number_field(L, "split_calls", (double)o->split_calls);
     number_field(L, "split_render_steps", (double)o->split_render_steps);
     number_field(L, "frame_audited", (double)o->frame_audited);
