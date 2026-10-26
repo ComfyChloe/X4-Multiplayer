@@ -6,7 +6,7 @@ Both packages include the server and a private Python runtime. No Python install
 or download is needed. Open 00-START-HERE.html for detailed instructions.
 Extract Linux's .tar.xz (or equivalent Small.7z) or Windows' .zip completely before running any action.
 
-WHAT CHANGED IN 7.5.0
+WHAT CHANGED IN 7.6.0 (see CHANGELOG.txt; 7.5.0 notes follow)
 - Enable host-authoritative NPC shield/hull damage and death for free-flying S/M
   targets, including when the guest is in a different sector from the host.
 - Enable shared native matching-ship kill contracts: either role can accept,

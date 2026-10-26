@@ -199,6 +199,8 @@ class Relay:
         self.next_tick = 0.0
         self.received_packets = self.received_bytes = 0
         self.sent_packets = self.sent_bytes = self.send_errors = 0
+        from .netprobe import NetProbe
+        self.netprobe = NetProbe(time.monotonic())
 
     def step(self, now: float | None = None) -> None:
         now = time.monotonic() if now is None else now
@@ -212,6 +214,13 @@ class Relay:
                 continue  # A departed Windows UDP endpoint is not a relay failure.
             self.received_packets += 1
             self.received_bytes += len(packet)
+            peers = self.session.peers
+            self.netprobe.count_rx(peers, address, len(packet))
+            if packet.startswith(b'RTTPING|'):
+                # Measurement only: answered here, never seen by or forwarded through the session.
+                for response in self.netprobe.handle(packet, address, peers, now):
+                    self._send(response, address)
+                continue
             for response in self.session.receive(packet, address, now):
                 self._send(response, address)
         if now >= self.next_tick:
@@ -224,6 +233,7 @@ class Relay:
             count = self.socket.sendto(packet, address)
             self.sent_packets += 1
             self.sent_bytes += count
+            self.netprobe.count_tx(self.session.peers, address, count)
         except OSError:
             self.send_errors += 1  # Successful sends do not prove remote delivery.
 
@@ -282,6 +292,8 @@ def main() -> None:
     try:
         while True:
             relay.step()
+            for line in relay.netprobe.report(relay.session.peers, time.monotonic()):
+                print(line, flush=True)
             status = ", ".join(f"{slot}@{p.address[0]}:{p.address[1]}" for slot, p in session.peers.items()) or "waiting"
             if status != last_status:
                 print(status, flush=True)

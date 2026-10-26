@@ -67,3 +67,5 @@ import is read-only at the source. The withdrawn Workshop-selection writer stays
 withdrawn. Never commit credentials, saves, configured packages or installed
 `config.lua`; source configuration stays inert. Work remains internal; public
 packages or source-mirror updates require an explicit owner request.
+The current code uses no game-memory offsets or copied assets; engine
+instrumentation is opt-in under `ENGINE-INSTRUMENTATION.txt`.

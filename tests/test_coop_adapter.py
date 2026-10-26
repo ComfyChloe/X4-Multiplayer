@@ -7,11 +7,12 @@ UI=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui'
 
 @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')
 class CoopAdapterTests(unittest.TestCase):
- def make(self,slot='p1',dedicated=False):
+ def make(self,slot='p1',dedicated=False,setup=''):
   l=LuaRuntime(unpack_returned_tuples=True);l.execute(MOCK+EXTRA)
   l.globals().X4LAN_CONFIG.slot=slot;l.globals().X4LAN_CONFIG.coop=True
   l.globals().X4LAN_CONFIG.dedicated_session=dedicated
   if slot=='p3':l.globals().X4LAN_CONFIG.local_ship=1
+  if setup:l.execute(setup)
   l.execute('''
    sectors={[11]=22,[42]=22};ConvertIDTo64Bit=function(v) return tonumber(v) end
    api.GetContextByClass=function(object) return sectors[object] or 22 end
@@ -295,3 +296,78 @@ class CoopAdapterTests(unittest.TestCase):
    nav(2,1,2,'cluster_01_sector001_macro',9000)
    assert(not lastRequest('VelocityFence').enabled)
   """)
+
+ def test_sender_declares_motion_mode_with_each_nav2_sample(self):
+  l=self.make();l.execute("""
+   local hw=0;local base=api.GetContextByClass
+   api.GetContextByClass=function(object,class) if class=='highway' then return hw end;return base(object,class) end
+   local function last(kind) for i=#sent,1,-1 do if sent[i]:sub(1,#kind+1)==kind..'|' then return sent[i] end end end
+   local function step(expected)
+    now=now+.1;frames.onUpdate()
+    local nav,mode=last('NAV2'),last('NMODE')
+    local navSeq=nav:match('^NAV2|1|%x+|1|1|(%d+)|');local modeSeq,time,value=mode:match('^NMODE|1|%x+|1|1|(%d+)|([%d.]+)|(%a+)$')
+    assert(navSeq and navSeq==modeSeq and value==expected, mode)
+    assert(nav:find('|'..time..'|',1,true)) -- the same source time as its NAV2
+   end
+   now=11;step('normal')
+   hw=77;step('highway')
+   hw=0;GetPlayerSpeed=function() return 1,2,3,false,true end;step('travel')
+   GetPlayerSpeed=function() return 1,2,3,true,false end;step('boost')
+   controlled=0;container=11;step('normal')   -- boost/travel state belongs to the piloted ship only
+   hw=22;step('normal')                       -- a context equal to the sector is not a highway
+  """)
+
+ def high_speed_remote(self,setup=''):
+  l=self.make(setup=setup);l.execute("""
+   local c=X4LAN_BUBBLE_API.coop;c.sectors.cluster_14_sector001_macro=22
+   function lastRequest(name)
+    for i=#requests,1,-1 do if requests[i][2]==name then return requests[i][3] end end
+   end
+   function fenceCount(enabled) local n=0;for _,r in ipairs(requests) do if r[2]=='VelocityFence' and r[3].enabled==enabled then n=n+1 end end;return n end
+   function sample(k,v,x,mode)
+    now=10+k*.05;local time=50+k*.05
+    if mode then c.receive({'NMODE','1',client.lease,string.rep('b',32),'2','1',tostring(k+1),tostring(time),mode},now) end
+    c.receive({'NAV2','1',client.lease,string.rep('b',32),'2','1',tostring(k+1),'cluster_14_sector001_macro',
+     tostring(x),'10000','0','0','0','0','0','0',tostring(time),tostring(v),'0','0','0','0','0'},now)
+    frames.onUpdate()
+   end
+   zone=5;local base=api.GetContextByClass
+   api.GetContextByClass=function(object,class) if class=='zone' then return zone end;if class=='highway' then return 0 end;return base(object,class) end
+  """);return l
+
+ def test_highway_mode_drives_replica_by_pose_without_velocity_or_fence_churn(self):
+  l=self.high_speed_remote();l.execute("""
+   local x=1000
+   for k=0,4 do sample(k,100,x,'normal');x=x+5 end
+   assert(math.abs(lastRequest('Velocity').x-100)<1e-6 and fenceCount(true)==1, lastRequest('Velocity').x)
+   local velocities,disabled,previous=countRequest('Velocity'),fenceCount(false),positions[42].x
+   for k=5,60 do
+    x=x+500;zone=zone+1   -- 10 km/s; the free replica changes temp zone every frame
+    local n=#writes;sample(k,10000,x,'highway')
+    assert(#writes==n+1 and positions[42].x>=previous, k);previous=positions[42].x
+   end
+   assert(countRequest('Velocity')==velocities and fenceCount(false)==disabled+1 and fenceCount(true)==1)
+   assert(X4LAN_BUBBLE_API.coop.velocity[2]==nil and X4LAN_BUBBLE_API.coop.remote[2].mode=='highway')
+   -- Back in normal flight, native velocity resumes only after the mode hold.
+   for k=61,70 do x=x+5;sample(k,100,x,'normal') end
+   assert(countRequest('Velocity')==velocities)
+   for k=71,100 do x=x+5;sample(k,100,x,'normal') end
+   assert(countRequest('Velocity')>velocities and lastRequest('VelocityFence').enabled)
+  """)
+
+ def test_legacy_stream_at_high_speed_is_inferred_fast_and_pose_only(self):
+  l=self.high_speed_remote();l.execute("""
+   local x=1000
+   for k=0,30 do x=x+250;sample(k,5000,x,nil) end
+   assert(countRequest('Velocity')==0 and X4LAN_BUBBLE_API.coop.remote[2].mode=='fast' and positions[42].x>1000)
+  """)
+
+ def test_motion_diagnostics_are_inert_by_default_and_rate_limited_when_enabled(self):
+  def rows(l): return [v for v in l.eval('logs').values() if 'MOTION_DIAG' in v]
+  l=self.high_speed_remote()
+  l.execute("local x=1000;for k=0,40 do x=x+500;sample(k,10000,x,'highway') end")
+  self.assertEqual(rows(l),[])
+  l=self.high_speed_remote('X4LAN_CONFIG.motion_diagnostics=.5')
+  l.execute("local x=1000;for k=0,40 do x=x+500;sample(k,10000,x,'highway') end")
+  found=rows(l);self.assertTrue(2<=len(found)<=5,found)
+  self.assertIn('mode=highway declared=highway',found[-1]);self.assertIn('fences=0',found[-1])

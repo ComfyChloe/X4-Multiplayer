@@ -98,6 +98,13 @@ impl Relay {
             };
             self.received_packets += 1;
             self.received_bytes += count as u64;
+            if buffer[..count].starts_with(b"RTTPING|") {
+                // Measurement only (netprobe.py): answered here, never seen by the session.
+                if let Some(reply) = self.rtt_pong(&buffer[..count], address, now) {
+                    self.send(&reply, address);
+                }
+                continue;
+            }
             for reply in self.session.receive(&buffer[..count], address, now) {
                 self.send(&reply, address);
             }
@@ -108,6 +115,28 @@ impl Relay {
             }
             self.next_tick = now + 1.0 / f64::from(TICK_HZ);
         }
+    }
+
+    /// `RTTPING|1|lease|seq|client_ms|echo|hold` from an authenticated peer ->
+    /// `RTTPONG|1|lease|seq|client_ms|relay_ms` (netprobe.py `handle`, without the NETRTT
+    /// statistics). A ping never refreshes a lease or changes session state.
+    pub fn rtt_pong(&self, raw: &[u8], address: SocketAddr, now: f64) -> Option<Vec<u8>> {
+        let text = std::str::from_utf8(raw).ok().filter(|t| t.is_ascii())?;
+        let f: Vec<&str> = text.split('|').collect();
+        if f.len() != 7 || f[0] != "RTTPING" || f[1] != "1" {
+            return None;
+        }
+        self.session.authenticated(f[2], address)?;
+        let digits = |t: &str, max: usize| !t.is_empty() && t.len() <= max && t.bytes().all(|b| b.is_ascii_digit());
+        let number = |t: &str| match t.split_once('.') {
+            Some((whole, frac)) => digits(whole, 15) && digits(frac, 6),
+            None => digits(t, 15),
+        };
+        if !digits(f[3], 10) || f[3].parse::<u64>().ok()? > u64::from(crate::wire::MAX_SEQ) || !number(f[4]) {
+            return None;
+        }
+        let seq = f[3].parse::<u64>().ok()?;
+        Some(format!("RTTPONG|1|{}|{seq}|{}|{:.3}", f[2], f[4], now * 1000.0).into_bytes())
     }
 
     fn send(&mut self, packet: &[u8], address: SocketAddr) {

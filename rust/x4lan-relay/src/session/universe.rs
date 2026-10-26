@@ -291,6 +291,8 @@ pub struct GuestView {
     delivery: Option<Sender>,
     delivered: Option<u32>,
     position_cursor: usize,
+    /// entity -> motion seq last forwarded to this client (universe.py `forwarded`).
+    forwarded: OrderedMap<u32, u32>,
 }
 
 #[derive(Default)]
@@ -450,6 +452,9 @@ impl Session {
             }
             let ids = &u.entity_ids;
             u.positions.retain(|entity, _| ids.values().any(|set| set.contains(entity)));
+            for view in u.views.values_mut() {
+                view.forwarded.retain(|entity, _| ids.values().any(|set| set.contains(entity)));
+            }
         }
         Ok(vec![format!("UACK|1|{lease}|{}|{}|{ack}", f[3], f[4]).into_bytes()])
     }
@@ -492,18 +497,39 @@ impl Session {
                 out.extend(delivery.packets(guest_lease, now).into_iter().map(|p| (guest_address, p)));
             }
             // Independent, lossy motion cannot create entities or commit a baseline.
-            let live: Vec<&Position> =
-                u.positions.values().filter(|p| p.sector == sector && now - p.at < 0.75).collect();
+            // Samples not yet forwarded go first (oldest arrival first); the remaining budget
+            // repeats latest samples round robin to cover datagram loss (universe.py).
+            let live: Vec<(u32, &Position)> = u
+                .positions
+                .iter()
+                .filter(|(_, p)| p.sector == sector && now - p.at < 0.75)
+                .map(|(k, p)| (*k, p))
+                .collect();
             if !live.is_empty() {
-                for i in 0..MOTION_BUDGET.min(live.len()) {
-                    let entry = live[(view.position_cursor + i) % live.len()];
+                let mut fresh: Vec<(u32, &Position)> =
+                    live.iter().copied().filter(|(k, p)| view.forwarded.get(k) != Some(&p.seq)).collect();
+                // Stable, like Python's sorted(): equal arrival times keep insertion order.
+                fresh.sort_by(|a, b| a.1.at.partial_cmp(&b.1.at).unwrap_or(std::cmp::Ordering::Equal));
+                let mut chosen: Vec<(u32, &Position)> = fresh.into_iter().take(MOTION_BUDGET).collect();
+                if chosen.len() < MOTION_BUDGET {
+                    let rest: Vec<(u32, &Position)> =
+                        live.iter().copied().filter(|(k, _)| !chosen.iter().any(|(c, _)| c == k)).collect();
+                    if !rest.is_empty() {
+                        let take = (MOTION_BUDGET - chosen.len()).min(rest.len());
+                        for i in 0..take {
+                            chosen.push(rest[(view.position_cursor + i) % rest.len()]);
+                        }
+                        view.position_cursor = (view.position_cursor + take) % rest.len();
+                    }
+                }
+                for (entity, entry) in chosen {
+                    view.forwarded.insert(entity, entry.seq);
                     let kind = if entry.kind == MotionKind::Upos { "UPOS" } else { "UMOVE" };
                     out.push((
                         guest_address,
                         format!("{kind}|1|{guest_lease}|{}", entry.fields.join("|")).into_bytes(),
                     ));
                 }
-                view.position_cursor = (view.position_cursor + MOTION_BUDGET) % live.len();
             }
         }
     }

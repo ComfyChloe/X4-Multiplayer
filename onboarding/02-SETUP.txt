@@ -1,5 +1,9 @@
 CHECKOUT AND VERIFICATION — NO GAME INSTALLATION REQUIRED
 
+The 7.4 branch/commit commands below are historical setup examples. Read current
+CONTINUE-HERE.txt and agree a task baseline and PR target with project lead Ferrite
+before using them. Current delivery work is on contrib/astra-7-5-delivery / PR46.
+
 REQUIREMENTS
 Own access to the private repository, Git, Python3.10+, and dependency-download
 access for a fresh virtual environment. The complete suite targets Linux x86_64:

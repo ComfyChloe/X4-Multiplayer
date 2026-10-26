@@ -4,6 +4,11 @@
   instructions, source and evidence by task; read those before the affected work.
   Do not load the entire historical chat, handoff archive or all reports by default.
   `CLAUDE.md` imports these shared instructions.
+- Project lead is Ferrite, as assigned by the project owner on 25 October 2026.
+  Astra / A:primary now contributes under that coordination. Agree new task
+  ownership, shared interfaces and integration with Ferrite; earlier onboarding
+  messages naming Astra as project lead are superseded. Native access remains
+  subject to each machine owner's authorization and current session ownership.
 - Default to internal work. Public packages require an explicit request for that
   release. Public Test 01 is withheld because full shared-universe authority is
   unfinished. The user confirmed basic ordinary cargo/magnet success in 7.1.1;
@@ -11,6 +16,11 @@
 - Speak German with the user. Keep shipped documentation and interfaces English.
 - Write original code. Neresco projects are research references only; do not copy
   or embed their multiplayer sources, binaries or framework.
+- Engine instrumentation (runtime hooks, game-memory offsets, patched engine
+  functions such as RNG or timestep) is permitted as opt-in work under
+  `ENGINE-INSTRUMENTATION.txt`. Never modify or redistribute X4 or Egosoft files;
+  verify the exact build before patching and fail closed on any mismatch. Keep the
+  `x4lan_net` transport free of hooks.
 - A visual NPC replica is not proof of shared combat, inventory or economy. State
   measured limits and distinguish native X4 tests from mocks/synthetic peers.
 - Keep source `extension/x4_lan_lab/ui/config.lua` inert and free of credentials.

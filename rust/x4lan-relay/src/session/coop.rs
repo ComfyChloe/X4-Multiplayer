@@ -17,6 +17,8 @@ use crate::pynum::fmt_f;
 use crate::wire::{bounded, float, is_shot_digest, pose, seq, uint, Atom, Hex32, Parsed, Reject, Ship, Slot};
 
 pub const POSITION_LIMIT: f64 = 50_000_000.0;
+/// coop.py `MOTION_MODES`: NMODE values (coop_game.lua), companion of NAV2.
+pub const MOTION_MODES: [&str; 4] = ["normal", "boost", "travel", "highway"];
 /// Seconds without a pilot frame before a live health generation ends.
 pub const HEALTH_STALE: f64 = 0.75;
 
@@ -61,6 +63,16 @@ impl Navigation {
     pub fn sector(&self) -> &str {
         &self.fields[3]
     }
+}
+
+/// Latest NMODE of a ship: `fields` are entity|epoch|navSeq|sourceTime|mode verbatim.
+#[derive(Clone, Debug)]
+struct MotionMode {
+    lease: Hex32,
+    epoch: u32,
+    seq: u32,
+    at: f64,
+    fields: Vec<String>,
 }
 
 #[derive(Clone, Debug)]
@@ -115,6 +127,7 @@ pub struct Coop {
     pub epochs: Vec<u64>,
     pub crew: OrderedMap<Hex32, Crew>,
     pub navigation: OrderedMap<Ship, Navigation>,
+    motion_modes: OrderedMap<Ship, MotionMode>,
     fire2: OrderedMap<Ship, Fire2>,
     health: OrderedMap<Ship, Health>,
     pub health_gen: Vec<u64>,
@@ -142,6 +155,7 @@ impl Coop {
             epochs: vec![1; n],
             crew: OrderedMap::new(),
             navigation: OrderedMap::new(),
+            motion_modes: OrderedMap::new(),
             fire2: OrderedMap::new(),
             health: OrderedMap::new(),
             health_gen: vec![0; n],
@@ -160,10 +174,11 @@ impl Coop {
     }
 }
 
-const COOP_KINDS: [&str; 14] = [
+const COOP_KINDS: [&str; 15] = [
     "CREW",
     "NAV",
     "NAV2",
+    "NMODE",
     "FIRE2",
     "HEALTH",
     "HACK",
@@ -330,6 +345,7 @@ impl Session {
                 if self.owner(ship) == slot && stale {
                     self.coop.epochs[ship.index()] += 1;
                     self.coop.navigation.remove(&ship);
+                    self.coop.motion_modes.remove(&ship);
                     self.coop.authority_revision += 1;
                 }
             }
@@ -373,6 +389,7 @@ impl Session {
             ("QUEST", 8) if slot == Slot::P1 => self.coop.quest.receive(lease, &f[3..])?,
             ("CREW", 6) => return self.crew(f, slot, lease),
             ("NAV", 15) | ("NAV2", 22) => self.navigation(fields, slot, lease, now)?,
+            ("NMODE", 8) => self.motion_mode(fields, slot, lease, now)?,
             ("FIRE2", 11) => self.fire2(fields, slot, lease, now)?,
             ("HEALTH", 8) => {
                 let (ship, gen, sequence) = (self.ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
@@ -485,6 +502,7 @@ impl Session {
                 self.coop.owners[ship.index()] = slot;
                 self.coop.epochs[ship.index()] += 1;
                 self.coop.navigation.remove(&ship);
+                self.coop.motion_modes.remove(&ship);
                 self.coop.authority_revision += 1;
             }
         }
@@ -535,6 +553,31 @@ impl Session {
         }
         let nav = Navigation { lease, seq: sequence, at: now, fields: fields.tail(3), kind };
         self.coop.navigation.insert(ship, nav);
+        Ok(())
+    }
+
+    /// coop.py NMODE: entity|epoch|navSeq|sourceTime|mode from the ship's movement authority.
+    fn motion_mode(&mut self, fields: &Fields, slot: Slot, lease: Hex32, now: f64) -> Parsed<()> {
+        let f = &fields.f;
+        let (ship, epoch, sequence) = (self.ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
+        let ship = ship.ok_or(Reject)?;
+        if self.owner(ship) != slot || u64::from(epoch) != self.epoch(ship) {
+            return Err(Reject);
+        }
+        let source_time = float(f[6])?;
+        if !source_time.is_finite() || !(0.0..=1e12).contains(&source_time) || !MOTION_MODES.contains(&f[7]) {
+            return Err(Reject);
+        }
+        if let Some(old) = self.coop.motion_modes.get(&ship) {
+            if old.lease == lease && old.epoch == epoch && sequence <= old.seq {
+                return Err(Reject);
+            }
+        }
+        if self.dead(ship) {
+            return Err(Reject);
+        }
+        let mode = MotionMode { lease, epoch, seq: sequence, at: now, fields: fields.tail(3) };
+        self.coop.motion_modes.insert(ship, mode);
         Ok(())
     }
 
@@ -653,6 +696,18 @@ impl Session {
                     &format!("|{}|{}|{}", self.owner(ship).as_str(), self.epoch(ship), pilot_str(self.pilot(ship)));
             }
             out.push((address, authority.into_bytes()));
+            for (ship, mode) in self.coop.motion_modes.iter() {
+                // Forwarded before NAV2 so a receiver knows the mode of the sample it renders.
+                if self.owner(*ship) == slot
+                    || u64::from(mode.epoch) != self.epoch(*ship)
+                    || now - mode.at > 0.75
+                    || self.dead(*ship)
+                {
+                    continue;
+                }
+                let packet = format!("NMODE|1|{lease}|{}|{}", mode.lease, mode.fields.join("|"));
+                out.push((address, packet.into_bytes()));
+            }
             for (ship, nav) in self.coop.navigation.iter() {
                 if self.owner(*ship) == slot || now - nav.at > 0.75 || self.dead(*ship) {
                     continue;

@@ -27,7 +27,7 @@ class InternalSessions(unittest.TestCase):
             self.assertEqual((meta['slot'],cfg['host'],cfg['port']),(slot,address,45841))
             self.assertEqual(cfg['token'],invite['token']);self.assertTrue(cfg['world_sync']);self.assertTrue(cfg['fire2'])
             lua=(folder/'extension/x4_lan_lab/ui/config.lua').read_text()
-            for text in ('world_sync = true','fire2 = true','ship_weapons = 6','ship_ter_s_xperimental_01_a_macro','test_profile = "45841"', 'coop_docks = true', 'pilot_health = true', 'shot_claims = true', 'shot_visual = true', 'shot_capture = true', 'projectile_visuals = true', 'shot_undo = false', 'npc_combat = true', 'faction_missions = true'):
+            for text in ('world_sync = true','fire2 = true','ship_weapons = 6','ship_ter_s_xperimental_01_a_macro','test_profile = "45841"', 'coop_docks = true', 'pilot_health = true', 'shot_claims = true', 'shot_visual = true', 'shot_capture = true', 'projectile_visuals = true', 'shot_undo = false', 'npc_combat = true', 'faction_missions = true', 'npc_motion_diagnostics = 1'):
                 self.assertIn(text,lua)
     def test_dedicated_authority_and_two_guests_have_explicit_ships(self):
         guest2 = self.package('guest2', 'Windows11')

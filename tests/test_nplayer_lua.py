@@ -147,6 +147,42 @@ class FourPlayerCoopTests(unittest.TestCase):
           assert(found)
         ''')
 
+    def test_two_remote_ships_with_jittered_arrival_keep_independent_smooth_tracks(self):
+        l = self.make()
+        l.execute('''
+          local c=X4LAN_BUBBLE_API.coop
+          auth(1,'p3','2','p3','p2','1','p2','p4','2','p4')
+          c.sectors['cluster_14_sector001_macro']=22
+          local function sample(source,entity,epoch,k,x,v,mode)
+            local time=50+k*.05
+            c.receive({'NMODE','1',client.lease,source,tostring(entity),tostring(epoch),tostring(k+1),tostring(time),mode},now)
+            c.receive({'NAV2','1',client.lease,source,tostring(entity),tostring(epoch),tostring(k+1),'cluster_14_sector001_macro',
+              tostring(x),'10000','0','0','0','0','0','0',tostring(time),tostring(v),'0','0','0','0','0'},now)
+          end
+          local p3,p2=string.rep('c',32),string.rep('b',32)
+          local prev={[62]=-math.huge,[63]=-math.huge};local jitter={.018,-.012,.004,-.019,.011,0,-.007,.015}
+          local velocityBefore=countRequest('Velocity')
+          for k=0,80 do
+            -- ship 1 (p3) at highway speed, ship 2 (p2) in normal flight; arrivals jittered +-20 ms,
+            -- and the two streams arrive in alternating order.
+            now=10+k*.05+jitter[k%8+1]
+            if k%2==0 then sample(p3,1,2,k,1000+k*500,10000,'highway');sample(p2,2,1,k,5000+k*5,100,'normal')
+            else sample(p2,2,1,k,5000+k*5,100,'normal');sample(p3,1,2,k,1000+k*500,10000,'highway') end
+            for _=1,2 do
+              frames.onUpdate();now=now+.016
+              for object,old in pairs(prev) do
+                if positions[object] then assert(positions[object].x>=old-1e-6,'ship object '..object..' hopped back at '..k);prev[object]=positions[object].x end
+              end
+            end
+          end
+          assert(c.remote[1].mode=='highway' and c.remote[2].mode=='normal')
+          assert(c.velocity[1]==nil, 'highway replica is pose-only')
+          assert(countRequest('Velocity')>velocityBefore and c.velocity[2], 'normal flight keeps native velocity')
+          for _,r in ipairs(requests) do if r[2]=='Velocity' then assert(r[3].ship==2) end end
+          assert(prev[62]>1000+40*500 and prev[63]>5000+40*5, 'both replicas advanced')
+          assert(c.remote[1].track~=c.remote[2].track, 'one motion track per remote ship')
+        ''')
+
     def test_client_p3_accepts_a_remote_dock_observation_for_ship_two(self):
         l = self.make('p3')
         l.globals().X4LAN_CONFIG.coop_docks = True

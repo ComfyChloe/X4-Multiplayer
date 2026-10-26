@@ -25,6 +25,16 @@ server and MD/log strings such as `SetupHost`/`SetupGuest`.
   Non-dedicated (Python relay) sessions stay at two players; the Python relay refuses
   dedicated or N-player sessions.
 
+### Motion smoothing (7.6.0 proxy-motion / npc-flicker)
+
+The Rust relay carries the 7.6.0 motion work for every client: `NMODE` (normal, boost,
+travel, highway) is accepted from each ship's movement authority and forwarded to every
+other peer ahead of NAV2; clients keep one motion track, render clock and mode per remote
+ship and drive fast replicas by pose only. Universe motion is forwarded fresh-first per
+client (unsent samples oldest first, then round robin). `RTTPING` is answered with
+`RTTPONG` by the relay loop; the relay-side NETRTT statistics of the Python relay are
+not ported.
+
 ### Protocol version
 
 Every new build label carries the protocol tag `np1`; dedicated labels also name the

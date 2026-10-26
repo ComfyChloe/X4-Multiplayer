@@ -1,0 +1,18 @@
+X4 MULTIPLAYER - ENGINE INSTRUMENTATION POLICY
+25 October 2026 | INTERNAL DEVELOPMENT
+
+SCOPE
+
+Until now the project used only supported extension surfaces: Lua UI, Mission
+Director, AI scripts and a hook-free native UDP module. Engine instrumentation is
+now permitted as opt-in work, following discussion with the project owner. It
+covers runtime function hooks, game-memory offsets/signatures and patched engine
+behavior, for example seeding or replacing RNG state, fixing the simulation
+timestep or exposing engine state that the Lua/MD APIs do not provide.
+
+Motivating research: reducing simulation divergence between matched games so a
+hybrid of local simulation plus hash-checked resynchronization can replace full
+replication of distant NPCs. Instrumentation is a tool for that research, . Windows and Linux builds use
+different compilers; do not assume identical floating-point results across them.
+
+Instrumentation changes are reviewed as their own PRs

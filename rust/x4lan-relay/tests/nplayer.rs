@@ -313,3 +313,40 @@ fn dock_rows_reach_every_other_client() {
         assert_eq!(docks(3), vec![format!("CDOCK|1|{}|{}|2|1|1|FREE|0", l[2], l[1])], "{level:?} p3 sees p2");
     }
 }
+
+#[test]
+fn motion_modes_reach_every_other_client_before_nav2() {
+    let (mut s, l) = four(Level::Coop);
+    for (slot, ship, epoch, mode) in [(2u16, 2u32, 1u64, "boost"), (3, 1, 2, "travel"), (4, 3, 2, "highway")] {
+        let lease = &l[usize::from(slot) - 1];
+        s.receive(format!("NMODE|1|{lease}|{ship}|{epoch}|1|11|{mode}").as_bytes(), addr(slot), 0.1);
+        nav2(&mut s, lease, slot, ship, epoch, 1, 1.0, 0.1);
+    }
+    // Wrong epoch and unknown mode are refused.
+    s.receive(format!("NMODE|1|{}|3|1|2|12|highway", l[3]).as_bytes(), addr(4), 0.1);
+    s.receive(format!("NMODE|1|{}|3|2|2|12|warp", l[3]).as_bytes(), addr(4), 0.1);
+    let snap = s.snapshots(0.2);
+    for slot in 2..=4u16 {
+        let rows: Vec<String> =
+            text(&snap, addr(slot)).into_iter().filter(|p| p.starts_with("NMODE|") || p.starts_with("NAV2|")).collect();
+        let modes = rows.iter().filter(|p| p.starts_with("NMODE|")).count();
+        assert_eq!(modes, 2, "p{slot}: {rows:?}");
+        let first_nav = rows.iter().position(|p| p.starts_with("NAV2|")).unwrap();
+        assert!(rows[..first_nav].iter().all(|p| p.starts_with("NMODE|")), "modes precede NAV2");
+        assert!(rows.iter().all(|p| !p.ends_with("|warp")));
+    }
+    assert_eq!(text(&snap, addr(1)).iter().filter(|p| p.starts_with("NMODE|")).count(), 3);
+}
+
+#[test]
+fn rtt_ping_is_answered_for_authenticated_clients_only() {
+    let mut s = dedicated(Level::Coop, "test", 3);
+    let lease = join(&mut s, 3, 0.0);
+    let relay = x4lan_relay::relay::Relay::bind("127.0.0.1", 0, s).unwrap();
+    let ping = format!("RTTPING|1|{lease}|0007|1234.5|-|0");
+    let pong = String::from_utf8(relay.rtt_pong(ping.as_bytes(), addr(3), 2.0).unwrap()).unwrap();
+    assert_eq!(pong, format!("RTTPONG|1|{lease}|7|1234.5|2000.000"));
+    assert!(relay.rtt_pong(ping.as_bytes(), addr(2), 2.0).is_none(), "wrong source address");
+    assert!(relay.rtt_pong(format!("RTTPING|1|{lease}|x|1|-|0").as_bytes(), addr(3), 2.0).is_none());
+    assert!(relay.session.core.peers.len() == 1, "a ping never takes a slot");
+}

@@ -1,6 +1,9 @@
 X4 MULTIPLAYER 7.5.0 — INTERNAL HUMAN TEST DELIVERY
 25 October 2026
 
+This report records delivery-time checks. Subsequent installation recovery is
+recorded in CONTINUE-HERE.txt; human results are in PLAYTEST-7.5.0-20261025.txt.
+
 DELIVERY
 Desktop/X4 Online/Internal Tests/7.5.0-2026-10-25
 Package source4078f44ed271023762f718fc9535c2922bb7b918, stacked on missions019bff1.
