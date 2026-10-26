@@ -1,7 +1,7 @@
 # Experimental Windows engine observer, MoveWorker seed and shared attention
 
-Tasks: Stages 0–1 and the ship/zone slice of Stage 3 of
-`x4-re/DETERMINISM-PLAN.md`; GitHub issue #57. Physics-tick work is separate.
+Tasks: Stages 0–1 and Stage 3 (shared attention) of `x4-re/DETERMINISM-PLAN.md`;
+GitHub issue #57. Physics-tick work is separate.
 Target: Windows X4 9.00, Steam build 23660954 only.
 
 The dependency-free Rust crate is separate from the hook-free UDP transport. It
@@ -13,15 +13,35 @@ additionally reseeds the current MoveWorker TLS RNG stream from the session seed
 and the stable `MoveWorker` role at observer frame 0. Other streams, timestep,
 physics stepping, objects and orders are unchanged.
 
-The shared-attention slice atomically replaces the verified ComputeAttention
-pointer in two Zone and seven Ship primary vtables. The wrappers call the original
-engine function and never lower its result. A live remote proxy raises its
-containing Zone to level 8. The proxy and ships within its engine-computed
-attention radius in an active directly-parented Zone can reach level 9. The
-engine's transform, radius and squared-distance functions supply the proximity
-result. Actual transitions still run through the engine's SetAttention path; the
-module never writes Component+0x1ec. This does not claim camera/adjacent-zone
-parity, deterministic physics or matched RNG sequences.
+Shared attention (`src/attention.rs`) atomically replaces the verified
+ComputeAttention pointer (vtable slot 703) in all 51 primary vtables whose result
+depends on the player: Zone/Highway, Sector, Cluster, seven Ship classes, five
+Controllable classes (Station, Container, Defensible, BuildStorage), 27 Object
+classes (asteroids, mines, satellites, collectables, ...), Gate, four Room classes
+and three WalkableModule classes. Each wrapper calls the original and raises, never
+lowers, its result with the engine's own player rules applied to up to eight remote
+proxies: cluster 3, sector 5 (4 at the end of a superhighway), zone 8 or adjacent
+7/6, objects 9 inside the source's parent chain or within their attention radius in
+an active zone, rooms 11/10, and the walkable-module 1 km gate. The engine's own
+transform, distance, adjacency, defaults and connection functions supply the inputs.
+When the local player or any remote source changes zone, sector or cluster, the
+module recomputes the old and new cluster, sector and zone and the sectors/zones
+below them through SetAttention, identically in both games. Transitions still run
+through SetAttention; the module never writes Component+0x1ec.
+
+The module also wraps `U::Sector::Move` (slot 674). Below attention 5 the engine
+reschedules the sector's periodic pass at `now + 5 + FloatState(TLS+0x318, 1)`.
+When exactly that one generator step happened, the wrapper restores the MoveWorker
+RNG state and writes `now + 5 + j`, where `j` is seeded from the session seed, the
+sector's static position and the previous due time. Any other draw pattern is left
+unchanged and counted as `jitter_skipped`.
+
+Not covered: local render cameras (`Universe+0x2c0`; `camera_offchain` in
+`HOOKS_STATUS` counts cameras anchored outside the local player chain), the
+Positional room-root level 10 of station modules, Ship physics-body eligibility's
+250 km player-distance fallback, cutscene anchors, and the per-object attention
+refresh timer (`0.75 + FloatState(0.5)` s), which stays on the MoveWorker stream.
+See `reports/determinism-attention-parity.md`. This is not native evidence.
 
 Build outputs stay under ignored `.local/` and are not release packages:
 
@@ -60,12 +80,25 @@ counts; its timings are wall time, unlike STATEHASH `gt`/`dt` game time. Individ
 engine calls cannot be preempted, so the budget is a cooperative guard, not a hard
 real-time deadline. See `reports/determinism-hash-performance.md`.
 
-`module.set_remote_attention(decimalComponentId)` registers the remote ship proxy;
-ID `0` clears it. Every use resolves the ID through the generation-checked engine
-registry, so removal or generation reuse withdraws remote attention. Registration
-changes recompute the old and new proxy/Zone through SetAttention(1), including
-already-present proxies in low-attention Zones. The Lua adapter publishes the
-existing NAV2 proxy's current ID and does not change motion or relay messages.
+`module.set_remote_attention_sources({id, ...})` registers up to eight distinct
+remote ship proxies (an empty table clears them); `module.set_remote_attention(id)`
+is the single-proxy form (`"0"` clears). Every use resolves IDs through the
+generation-checked engine registry, so removal or generation reuse withdraws remote
+attention. The Lua adapter publishes `state.proxy` and every ID in `state.proxies`
+and does not change motion or relay messages. `module.attention_level(id)` reads
+Component+0x1ec of any component and `module.attention_status()` returns hook
+counters; both are read-only.
+
+Every complete `STATEHASH` carries an `attention` bucket: sorted rows
+`sector|identity|kind|level` for ships (`s`), stations (`t`) and the sampled sectors
+themselves, plus `attn_rows` and a level histogram `attn_levels` (levels 0..11). The
+combined `h` includes it. `engine_hash_attention_rows = true` additionally logs every
+row as `ATTNROW`, so `dev/compare_divergence.py --statehash` can name the objects whose
+level differs at the first attention mismatch.
+
+In-memory verification treats 8-byte vtable sites as relocated pointers: X4.exe has
+`DYNAMIC_BASE` and the loader rewrites them under ASLR, so they are compared after
+removing the load delta. Code sites contain no relocations.
 
 `reports/determinism-stage-0.md` and `determinism-stage-1.md` record the native
 read-only launches and the limited seeded comparison. The initial RNG matches, but
