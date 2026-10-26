@@ -18,6 +18,9 @@ called offline in a test process, no game running), **static** (reading the bina
 | capture/replay format and replay tool | done (binary + text form) | oracle + synthetic |
 | in-game recorder + shadow (`x4mp_combat.dll`, code patch 0xe1f840) | done: battle-002, 985,687 calls shadowed, 0 mismatches; 300,000-call capture replayed offline exact | native + oracle |
 | switch (Rust authoritative, verified) | done: battle-switch-001, 590,910 calls served by Rust, every call verified against the original, 0 mismatches | native + oracle |
+| joint step as an x4mp-sim system (`src/sim.rs`) | done: same state hash on 1/2/4/16 threads, equal to the serial step | synthetic |
+| combat census (data-only vtable hooks, section 9a) | built and offline-tested; native run pending | oracle (mapped image) + synthetic |
+| scaled battles `battle-200/400/800` (scenario v3) | built, md.xsd-valid; native scaling series pending | offline |
 
 ## 2. Cost picture
 
@@ -291,6 +294,33 @@ lane runs only by `dev/combat_scenario/combat_capture.lua` through the overlay f
   exception flags, no FTZ/DAZ), unchanged during the window; the first 300,000 calls were captured and
   `x4mp-combat-replay` replays them exactly offline. Code restored at window end.
 
+## 9a. Combat census (`x4mp_combat.dll` census mode)
+
+What a parallel walk has to buffer, lock or split for combat, measured per simulation frame in a lane run
+(overlay `capture_overlay.py --mode census`, output `<profile>/x4mp-combatcensus.txt`, lines `COMBATCENSUS`).
+Data-only hooks only (rewrite-coord/hooks.tsv): the vtable entries of slot 674 (Move) of the four weapon
+classes (all 0x8132d0) and of `U::Bullet` (0xd4f090) get pass-through wrappers, slot 998 (FireShot: 0x8185b0
+for Weapon/Turret, 0x609b50 MissileLauncher, 0x60aaf0 MissileTurret) gets signature-free counting thunks
+(`lock inc` + jump to the original). Each entry is verified against the pinned original, swapped with one
+compare-exchange and swapped back at the end; the originals always run with their own arguments.
+
+Per frame (the frame's game time TLS+0x300 delimits frames): weapon calls by class and nesting, controller
+target set, aiming and firing flags, salvos (last shot time +0x310 changed), shots and missile shots, bullet
+calls, flight checks (last check +0x268 became now), hits (+0x280 grew) and ricochet resets, first moves of
+new bullets (last check still equals the creation time +0x278) and how many of those were fired in the same
+frame, thread-RNG steps inside outermost weapon and bullet updates and on the whole thread between frames
+(steps between two TLS+0x318 states with the engine generator `rotr64(s * 6364136223846793005 +
+1442695040888963407, 30)`), rdtsc time in weapon and bullet updates. Static findings it rests on: FireShot
+returns the shot time in xmm0 (index x inter-shot delay + salvo time + a thread-RNG jitter) and `Fire` uses
+it, so a deferred FireShot would have to return that time at once; the bullet setup 0xd50f30 draws the thread
+RNG twice more (spread) and stores the shot time as last check, next check and creation time; bullets are
+removed through posted events, never inside their own Move.
+
+Offline evidence: a synthetic engine behind read-only fake vtable entries (frames, nested calls, RNG steps,
+thunk argument and result pass-through, a foreign thread, restore); on the mapped pinned X4.exe the nine
+entries hold the pinned originals and are swapped and restored; the RNG step equals the original
+`Random::U64State` 0x14ddb30 on 10,000 states.
+
 ## 10. Shadow and switch design for the joint step
 
 - **Shadow:** built into the recorder (section 9): `rotate_toward` on a copy of the pre-state with the same
@@ -315,14 +345,21 @@ lane runs only by `dev/combat_scenario/combat_capture.lua` through the overlay f
 
 ## 11. Combat load scenario (`dev/combat_scenario/`)
 
-Test-only extension `x4mp_combat_scenario` (MD only, `save="false"`). In a fresh `custom_creative` world it
+Test-only extension `x4mp_combat_scenario` (MD only, `save="false"`, version 3). In a fresh `custom_creative` world it
 waits for `$WarmupS`, moves the player ship to a cleared point 10 km above the start sector's plane
 (`get_safe_pos`, radius 8 km; lane worlds: `cluster_14_sector001_macro`), makes the player ship
 invulnerable and neutral to both fleet factions, spawns the fleets 5 km in front of it in the player's zone
 with fixed ship seeds, orders them to attack each other (`Attack`, primary target round robin, the whole
 enemy list as secondary targets, no other targets) and logs `COMBATSCN` markers. Variants: `battle`
 (40 Argon fighters, 2 frigates, 2 destroyers vs 40 Xenon fighters, 2 P, 1 K), `idle` (same layout, both
-Argon, Wait orders: every turret idle), `capitals` (4+4 vs 3+4 capital ships), `smoke` (5+1 vs 5+1).
+Argon, Wait orders: every turret idle), `capitals` (4+4 vs 3+4 capital ships), `smoke` (5+1 vs 5+1), and
+the scaled battles `battle-200` (100 vs 100), `battle-400` (200 vs 200), `battle-800` (400 vs 400) with the
+battle's class mix (shares within 3 %), spawned 25 ships per second (half per side, `$SpawnBatch`) by an
+instantiated `SpawnBatch` cue; `COMBATSCN spawn begin` / `spawn complete` frame the spawning and the
+measurement window starts `$EngageDelayS + $SettleS` after it. `$SpawnBatch` 0 (the other variants) spawns
+in one frame in the version 2 order, seeds and positions. `dev/combat_scenario/scaling.py <runs>` turns
+profile-mode runs into a scaling table (fps, MoveWorker frame and simulation ms, shares, ms per frame per
+system, cost per ship, X4 memory).
 
 ```
 python dev/combat_scenario/install.py stage --variant battle --out .local/evidence-063-withheld
