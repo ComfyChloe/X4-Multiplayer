@@ -7,7 +7,8 @@
  *   - resolves watched stations from their UniverseID through the AutoIDMap layout
  *     (generation-checked, so a destroyed station is dropped, not misread);
  *   - accepts an object only when its primary vtable is the build-pinned one, and checks
- *     every pointer it follows with readable(); any mismatch drops that station (counted).
+ *     every pointer it follows against the readable regions of the frame (VirtualQuery,
+ *     cached per frame); any mismatch drops that station (counted).
  * Production in X4 is caught up lazily (U::Container::UpdateProduction 0x41a910, time stamp
  * at Container+0xa18), so a station's record changes only when something read the station.
  * The sampler writes a station only when one of its captured fields changed.
@@ -92,8 +93,45 @@ static econ_state econ;
 
 /* --- memory helpers (readable() comes from fixedtick.c) ---------------------------------- */
 
+/* Readable regions seen in this frame (VirtualQuery results), so that the sampler does not make
+   one system call per field: a lane run with 12 watched stations spent a quarter of the
+   MoveWorker time in VirtualQuery (stress3). Same acceptance rule as readable(): committed,
+   no guard/no-access, a readable protection, and the range inside one region. Reset at the
+   start of every frame. */
+#define ECON_REGIONS 16
+static struct { uintptr_t base, end; } econ_region[ECON_REGIONS];
+static int econ_nregions, econ_region_next;
+static uint64_t econ_region_queries;
+
+static int econ_readable(const void *p, size_t n) {
+    uintptr_t a = (uintptr_t)p, e = a + n;
+    if (!p || e < a) return 0;
+    for (int i = 0; i < econ_nregions; ++i)
+        if (a >= econ_region[i].base && e <= econ_region[i].end) return 1;
+    MEMORY_BASIC_INFORMATION m;
+    ++econ_region_queries;
+    if (!VirtualQuery(p, &m, sizeof(m))) return 0;
+    if (m.State != MEM_COMMIT || (m.Protect & (PAGE_GUARD | PAGE_NOACCESS))) return 0;
+    DWORD pr = m.Protect & 0xff;
+    if (!(pr == PAGE_READONLY || pr == PAGE_READWRITE || pr == PAGE_WRITECOPY || pr == PAGE_EXECUTE_READ ||
+          pr == PAGE_EXECUTE_READWRITE || pr == PAGE_EXECUTE_WRITECOPY))
+        return 0;
+    uintptr_t base = (uintptr_t)m.BaseAddress, end = base + m.RegionSize;
+    if (e > end) return 0;
+    int slot = econ_region_next++ % ECON_REGIONS;
+    econ_region[slot].base = base;
+    econ_region[slot].end = end;
+    if (econ_nregions < ECON_REGIONS) ++econ_nregions;
+    return 1;
+}
+
+static void econ_regions_reset(void) {
+    econ_nregions = 0;
+    econ_region_next = 0;
+}
+
 static int econ_read(const void *p, void *out, size_t n) {
-    if (!p || !readable(p, n, 0)) return 0;
+    if (!p || !econ_readable(p, n)) return 0;
     memcpy(out, p, n);
     return 1;
 }
@@ -169,7 +207,7 @@ static int econ_list(const unsigned char *list, econ_wa *out, int max) {
     uint64_t cap = econ_q(list + 0x20, &ok), n = econ_q(list + 0x28, &ok);
     if (!ok || n > (uint64_t)max) return -1;
     const unsigned char *data = cap == 2 ? list : (const unsigned char *)(uintptr_t)econ_q(list, &ok);
-    if (!ok || (n && (!data || !readable(data, (size_t)n * 16, 0)))) return -1;
+    if (!ok || (n && (!data || !econ_readable(data, (size_t)n * 16)))) return -1;
     for (uint64_t i = 0; i < n; ++i) {
         const unsigned char *a = data + i * 16;
         uint64_t q;
@@ -325,6 +363,15 @@ static uint64_t econ_hash_bytes(uint64_t h, const void *p, size_t n) {
     return h;
 }
 
+/* Ware amount lists field by field: econ_wa has tail padding that is never written. */
+static uint64_t econ_hash_wa(uint64_t h, const econ_wa *l, int n) {
+    for (int i = 0; i < n; ++i) {
+        h = econ_hash_bytes(h, &l[i].ware, sizeof(l[i].ware));
+        h = econ_hash_bytes(h, &l[i].amount, sizeof(l[i].amount));
+    }
+    return h;
+}
+
 /* Components of a child-container bucket and the following buckets whose primary vtable is
    `vtable_rva` and whose state (+0x68) is 0, in container order. Returns the count or -1. */
 static int econ_children(const unsigned char *container, unsigned first_bucket, uint32_t vtable_rva,
@@ -390,7 +437,7 @@ static int econ_station(econ_watch_entry *w, int force) {
     h = econ_hash_bytes(h, &last, 8);
     h = econ_hash_bytes(h, &a28, 8);
     h = econ_hash_bytes(h, &a30, 8);
-    h = econ_hash_bytes(h, cargo, sizeof(cargo[0]) * (size_t)nc);
+    h = econ_hash_wa(h, cargo, nc);
     unsigned char raw[ECON_MAX_MODULES][0x70];
     for (int m = 0; m < np; ++m) {
         if (!econ_read(prod[m] + 0x388, raw[m], 0x70)) return 0; /* +0x388..+0x3f8 */
@@ -398,7 +445,7 @@ static int econ_station(econ_watch_entry *w, int force) {
         econ_wa pend[ECON_MAX_LIST];
         int npend = econ_list(prod[m] + 0x3f8, pend, ECON_MAX_LIST);
         if (npend < 0) return 0;
-        h = econ_hash_bytes(h, pend, sizeof(pend[0]) * (size_t)npend);
+        h = econ_hash_wa(h, pend, npend);
     }
     /* Offers (Container+0x8f8 / +0x910: vectors of order ids) and reservations (+0x980, 48 bytes). */
     static unsigned char offers[ECON_MAX_OFFERS][0x58];
@@ -533,6 +580,7 @@ static int econ_station(econ_watch_entry *w, int force) {
    TLS+0x318 random state at this point (0 when unknown). */
 static void econcap_frame(double game_time, uint64_t frame, uint64_t rng) {
     if (!econ.armed || !econ.watched) return;
+    econ_regions_reset();
     uint64_t tb;
     memcpy(&tb, &game_time, 8);
     snprintf(econ.frame_marker, sizeof(econ.frame_marker), "F %llu 0x%llx 0x%llx", (unsigned long long)frame,
