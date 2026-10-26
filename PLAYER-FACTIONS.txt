@@ -1,4 +1,6 @@
-PLAYER FACTIONS (config flag player_factions) - INTERNAL, NOT YET NATIVELY TESTED
+PLAYER FACTIONS (config flag player_factions) - INTERNAL
+Native status: engine behaviour verified in ONE real X4 (lane probe, below); a two-client session
+(client 1 + client 2 in one relay session) has NOT run yet.
 
 Each human gets an own faction. Data, MD and Lua only; no engine hooks. Source config is
 inert (player_factions = false); internal packages enable it (session_launcher.py).
@@ -14,8 +16,10 @@ assets belong to x4lan_player1. Mod-prefixed ids suffice; nothing requires a pla
   no "economic" tag; no factionlogic.xml manager, no jobs, no god entries. So no faction AI,
   no economy and no diplomacy agents act for them. Diplomacy stays inactive (vanilla default).
 - Licences: the same basic set the vanilla player starts with (base-game issuers).
-- Relations: allied (0.75; ally range 0.5..1) to "player" and to every other pool faction,
-  neutral to everyone else in the library. At runtime every ASSIGNED pool faction then carries
+- Relations: allied (0.75; ally range 0.5..1) to "player" and to every other pool faction;
+  the player's values to the relation-LOCKED base factions (xenon, khaak, holyorderfanatic,
+  criminal, outlaw, buccaneers, scaleplate), written on both sides in the library because
+  set_faction_relation has no effect on a locked faction at runtime; neutral to the rest. At runtime every ASSIGNED pool faction then carries
   this machine's player relations to all NPC factions (MD RelationMirror, every 10 s, skips
   relation-locked factions): shared reputation, so xenon/pirates are hostile to the other human's
   ships and police friendly, exactly as to the local player.
@@ -128,3 +132,22 @@ NATIVE TEST STEPS (two matched internal packages, new disposable world, profile 
 5. Sector: host claims a sector (or debug set_owner to faction.player) -> guest map shows that
    sector owned by the host's faction within ~5 s.
 6. Save/load the disposable world on one side and repeat 2 (name persistence check).
+
+NATIVE EVIDENCE (single X4 9.00 game, lane b1/b2, new custom_creative world; dev/player_factions_probe.*)
+Runs 2026-10-26 pfprobe-001..003 (logs in .local/lane/runs/, not committed):
+- lookup.faction resolves all 16 pool factions (148 factions in total).
+- set_faction_identity with plain text works at runtime: name/shortname/prefix "Probe Bob", known 0->1,
+  active 0->1. The vanilla UI sees it: GetLibrary("factions") (diplomacy list source) contains
+  x4lan_player2 named "Probe Bob"; GetFactionData name/shortname; GetUIRelation 28 at 0.75.
+- set_faction_relation is absolute and symmetric when written both ways: 0.75 -> -0.5 (ishostileto
+  true) -> 0.75 (false).
+- Mirror: 6 unlocked factions changed; 10 factions are relation-locked and ignore runtime changes
+  (xenon stayed 0 until the library entries above; after them xenon<->pool = -1, xenon hostile).
+- set_owner ship player -> x4lan_player2: owner id/name "Probe Bob", isplayerowned false, UI
+  GetComponentData owner x4lan_player2 / ownername "Probe Bob"; the pilot follows the ship's owner
+  (no overridenpc needed). Unchanged after 8 s; set_owner back to player restores ship and pilot.
+- set_owner sector -> x4lan_player2 stays for 8 s (no engine recompute in that window), restorable.
+- Pool factions have NO own account (hasownaccount 0; .money reads garbage): per-player money
+  cannot use the pool faction's account; it needs a ledger (open).
+Not covered natively yet: the Lua/MD session path (Setup/Assign/Relation via relay), the co-op
+ship owner switch while a remote human flies, and anything with two clients.
