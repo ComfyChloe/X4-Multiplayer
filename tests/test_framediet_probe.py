@@ -152,6 +152,13 @@ class FrameDietProbeTests(unittest.TestCase):
         self.assertEqual(disabled, ['[X4LAN] FEATURE framediet DISABLED reason=phase switch refused: site not installed'])
         self.assertEqual(lua.eval('stops'), 1)
 
+    def test_audit_cycle_toggles_sites_with_mode_prefix(self):
+        lua = self.runtime("X4LAN_FRAMEDIET_MODE='audit';X4LAN_FRAMEDIET_SITES='camera,rng_split';X4LAN_FRAMEDIET_AB_S=60;"
+                           "X4LAN_FRAMEDIET_AB_CYCLE='audit:camera;audit:camera,rng_split';X4LAN_FRAMEDIET_REPORT_S=1000")
+        lua.execute('ui();now=60;ui();now=120;ui()')
+        self.assertEqual(list(lua.eval('sets').values()),
+                         ['audit:camera', 'audit:camera,rng_split', 'audit:camera'])
+
     def test_ab_is_ignored_outside_diet_mode(self):
         lua = self.runtime("X4LAN_FRAMEDIET_MODE='audit';X4LAN_FRAMEDIET_AB_S=30")
         lua.execute('ui();now=31;ui()')

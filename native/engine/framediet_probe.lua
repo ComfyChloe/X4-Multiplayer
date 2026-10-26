@@ -7,9 +7,10 @@
 -- X4LAN_FRAMEDIET_DIGEST      components per digest (default 16384)
 -- X4LAN_FRAMEDIET_REPORT_S    seconds between FRAMEDIET lines (default 10)
 -- X4LAN_FRAMEDIET_AB_S        diet mode: alternate diet/pass every N seconds (A/B in one session)
--- X4LAN_FRAMEDIET_AB_CYCLE    with AB_S: ';'-separated phases to cycle instead, e.g. 'pass;server;all'
---                             ('pass' = wrappers inert, any other entry = diet with those sites, which
---                             X4LAN_FRAMEDIET_SITES must cover)
+-- X4LAN_FRAMEDIET_AB_CYCLE    with AB_S (any mode): ';'-separated phases to cycle instead, e.g.
+--                             'pass;server;all' or 'audit:camera;audit:camera,rng_split'. Entry forms:
+--                             'pass' | 'diet' | 'audit' | '<sites>' (diet) | '<mode>:<sites>'; the sites
+--                             must be covered by X4LAN_FRAMEDIET_SITES (installed at arming)
 -- X4LAN_FRAMEDIET_DELAY_S     seconds after the first UI update before arming (default 0)
 -- X4LAN_FRAMEDIET_PATH        development DLL path
 if not X4LAN_FRAMEDIET_MODE then return end
@@ -26,7 +27,7 @@ local native=initialise()
 local mode=X4LAN_FRAMEDIET_MODE
 local sites=X4LAN_FRAMEDIET_SITES or 'server'
 local reportEvery=X4LAN_FRAMEDIET_REPORT_S or 10
-local abEvery=mode=='diet' and X4LAN_FRAMEDIET_AB_S or nil
+local abEvery=X4LAN_FRAMEDIET_AB_S and (mode=='diet' or X4LAN_FRAMEDIET_AB_CYCLE) and X4LAN_FRAMEDIET_AB_S or nil
 local cycle={}
 for entry in string.gmatch(abEvery and X4LAN_FRAMEDIET_AB_CYCLE or '','[^;]+') do cycle[#cycle+1]=entry end
 local owner,finished,armAt,nextTry,nextReport,nextPhase,phase,cycleIndex
@@ -62,8 +63,11 @@ local function report(s,now)
 end
 -- Phase switch: 'pass' keeps the wrappers inert; any other cycle entry is a diet site set.
 local function enter(entry,now)
+ report(owner:stats(),now)   -- closes the previous phase with its cumulative counters
  local ok,why
- if entry=='pass' or entry=='diet' then ok,why=owner:set(entry)
+ local m,sitesPart=string.match(entry,'^(%a+):(.+)$')
+ if m then ok,why=owner:set(m,sitesPart)
+ elseif entry=='pass' or entry=='diet' or entry=='audit' then ok,why=owner:set(entry)
  else ok,why=owner:set('diet',entry) end
  if not ok then disabled('phase switch refused: '..tostring(why));owner:stop();owner=nil;finished=true;return false end
  phase=entry

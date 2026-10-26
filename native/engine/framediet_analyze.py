@@ -88,6 +88,45 @@ def audit(path: Path) -> tuple:
     return rows, last
 
 
+COUNTERS = ('audited', 'rngCalls', 'rngSteps', 'rngUnknown', 'idCalls', 'ids', 'eventCalls', 'eventsUp',
+            'digests', 'components', 'changed', 'splitCalls', 'splitRenderSteps', 'frames')
+
+
+def audit_phases(path: Path) -> list:
+    """Per-phase deltas of the cumulative audit counters: [(phase, {row: {counter: delta}})].
+    The loader logs a report right before every phase switch, so the last value seen before a
+    `FRAMEDIET phase=` line closes that phase."""
+    current, phase, out = {}, 'start', []
+    base = {}
+
+    def close(name):
+        delta = {}
+        for row, values in current.items():
+            before = base.get(row, {})
+            delta[row] = {k: v - before.get(k, 0.0) for k, v in values.items()}
+        out.append((name, delta))
+        base.clear()
+        base.update({row: dict(values) for row, values in current.items()})
+
+    for _t, body in records(path):
+        if body.startswith('FRAMEDIET phase='):
+            close(phase)
+            phase = fields(body)['phase']
+            continue
+        if body.startswith('FRAMEDIET_AUDIT '):
+            row = 'audit:' + fields(body).get('row', '?')
+        elif body.startswith('FRAMEDIET_FRAMES '):
+            row = 'frames'
+        elif body.startswith('FRAMEDIET mode='):
+            row = 'stats'
+        else:
+            continue
+        f = fields(body)
+        current[row] = {k: number(f, k) for k in COUNTERS if k in f}
+    close(phase)
+    return out[1:] if out and out[0][0] == 'start' and not any(out[0][1].values()) else out
+
+
 def load_names(x4re: Path) -> dict:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from dev.simprof_report import load_labels
@@ -150,6 +189,7 @@ def main(argv=None):
     sub = parser.add_subparsers(dest='cmd', required=True)
     p = sub.add_parser('phases'); p.add_argument('log', type=Path); p.add_argument('--skip', type=int, default=1)
     a = sub.add_parser('audit'); a.add_argument('log', type=Path)
+    a.add_argument('--phases', action='store_true', help='per-phase deltas of the cumulative counters')
     t = sub.add_parser('attribution'); t.add_argument('log', type=Path)
     t.add_argument('--window', action='append', default=[], help='LO:HI log-time range of window ends')
     args = parser.parse_args(argv)
@@ -158,6 +198,12 @@ def main(argv=None):
         for ph, st, n, frames, seconds, ms, p95 in phases(args.log, args.skip):
             fps = frames / seconds if seconds else 0.0
             print(f'{ph:24s} {st:>5s} {n:7d} {frames:7d} {fps:6.1f} {ms:9.3f} {p95:6.2f}')
+    elif args.cmd == 'audit' and args.phases:
+        for name, delta in audit_phases(args.log):
+            print(f'== phase {name}')
+            for row, values in sorted(delta.items()):
+                shown = ' '.join(f'{k}={v:g}' for k, v in values.items() if v)
+                print(f'   {row:18s} {shown or "-"}')
     elif args.cmd == 'audit':
         rows, last = audit(args.log)
         for name in ('ui_scenes', 'ui_render', 'camera', 'control'):

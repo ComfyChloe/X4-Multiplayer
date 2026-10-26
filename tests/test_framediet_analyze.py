@@ -52,6 +52,23 @@ class PhaseTests(unittest.TestCase):
         self.assertIn('row=control', rows['control'])
         self.assertIn('frames=1200', last)
 
+    def test_audit_phases_diff_cumulative_counters(self):
+        log = write([
+            '[=ERROR=] 10.00 [X4LAN] FRAMEDIET_FRAMES audited=600 rngSteps=90000 rngUnknown=0 ids=10',
+            '[=ERROR=] 10.00 [X4LAN] FRAMEDIET_AUDIT row=camera audited=1200 rngCalls=600 rngSteps=90000 ids=10',
+            '[=ERROR=] 10.00 [X4LAN] FRAMEDIET phase=audit:camera,rng_split t=10.000 frames=600',
+            '[=ERROR=] 20.00 [X4LAN] FRAMEDIET_FRAMES audited=1200 rngSteps=95000 rngUnknown=0 ids=12',
+            '[=ERROR=] 20.00 [X4LAN] FRAMEDIET_AUDIT row=camera audited=2400 rngCalls=1200 rngSteps=180000 ids=14',
+            '[=ERROR=] 20.00 [X4LAN] FRAMEDIET mode=audit sites=camera,rng_split phase=x t=20 frames=1200 splitCalls=600 splitRenderSteps=90000',
+        ])
+        phases = dict(fa.audit_phases(log))
+        self.assertEqual(phases['start']['frames']['rngSteps'], 90000)
+        split = phases['audit:camera,rng_split']
+        self.assertEqual(split['frames']['rngSteps'], 5000)        # simulation stream only
+        self.assertEqual(split['audit:camera']['rngSteps'], 90000)  # render stream, measured inside
+        self.assertEqual(split['frames']['ids'], 2)
+        self.assertEqual(split['stats']['splitRenderSteps'], 90000)
+
     def test_attribution_splits_lua_from_presentation(self):
         log = write([
             '[=ERROR=] 9.00 [X4LAN] FRAMEPROBE frames=600 simFrames=100 simMeanMs=10',
