@@ -1864,6 +1864,25 @@ def doctor(paths, fix=False, check_hash=True):
     return out
 
 
+def cmd_canary(args, paths):
+    """Native self-test: one queued run without overlays until the world runs (AUTOSTART READY).
+    Results go to X4Mods/lanes/canary/<time>-<lane> (the last 10 are kept); exit code as for run."""
+    root = paths.lanes / 'canary'
+    root.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    argv = ['run', '--agent', args.agent, '--label', 'canary', '--lane', args.lane, '--timeout', str(args.timeout),
+            '--wait', str(args.wait), '--until', r'\[X4LANE\] AUTOSTART READY',
+            '--expect', r'\[X4LANE\] AUTOSTART INGAME .*match=true', '--collect', str(root / f'{stamp}-{args.lane}')]
+    code = Run(parser().parse_args(argv), paths).execute()
+    runs = sorted(p for p in root.iterdir() if p.is_dir())
+    for old in runs[:-10]:
+        core.check_tree_unlinked(old)
+        shutil.rmtree(old)
+    with open(root / 'canary.log', 'a', encoding='utf-8') as log:
+        log.write(f'{core.now_iso()} lane={args.lane} exit={code} dir={stamp}-{args.lane} {tool_version()}\n')
+    return code
+
+
 def cmd_doctor(args, paths):
     require_windows()
     findings = doctor(paths, fix=args.fix)
@@ -2189,6 +2208,11 @@ def parser():
     q.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S)
     q.add_argument('--allow-workshop', action='store_true')
     q.add_argument('--no-repin', action='store_true', help='keep the 45841 profile gates (default: re-pin per lane)')
+    s = sub.add_parser('canary', help='native self-test run (no overlay, until AUTOSTART READY)')
+    s.add_argument('--lane', default='auto', choices=tuple(core.LANE_PROFILES) + ('auto',))
+    s.add_argument('--agent', default='lane')
+    s.add_argument('--timeout', type=float, default=300.0)
+    s.add_argument('--wait', type=float, default=1800.0)
     s = sub.add_parser('doctor', help='self-check of all lanes; --fix repairs what is safe')
     s.add_argument('--fix', action='store_true')
     s.add_argument('--json', action='store_true')
@@ -2230,7 +2254,8 @@ def main(argv=None):
         return 1
     handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'session': cmd_session,
                 'stop': cmd_stop, 'queue': cmd_queue, 'restore': cmd_restore, 'unlock': cmd_unlock,
-                'make-overlay': cmd_make_overlay, 'publish-release': cmd_publish_release, 'doctor': cmd_doctor}
+                'make-overlay': cmd_make_overlay, 'publish-release': cmd_publish_release, 'doctor': cmd_doctor,
+                'canary': cmd_canary}
     try:
         return handlers[args.command](args, paths)
     except LaneError as error:
