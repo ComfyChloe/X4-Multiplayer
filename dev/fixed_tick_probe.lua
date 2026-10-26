@@ -56,7 +56,8 @@ local function logStats(now)
    s.walkpar_deliver_ms or 0,speedup,s.walkpar_posts or 0,s.walkpar_posts_imm or 0,s.walkpar_posts_rootlevel or 0,
    s.walkpar_cancels or 0,s.walkpar_deliver_calls or 0,s.walkpar_deliver_listeners or 0,s.walkpar_xsector_post or 0,
    s.walkpar_xsector_listener or 0,s.walkpar_creates or 0,s.walkpar_effects or 0,s.walkpar_temp_zones or 0,
-   s.walkpar_hits or 0,s.walkpar_cue_runactions or 0,s.walkpar_request_wakes or 0))
+   s.walkpar_hits or 0,s.walkpar_cue_runactions or 0,s.walkpar_request_wakes or 0)..
+   ' topImm=['..tostring(s.walkpar_top_imm_types or '')..']')
   if (s.walkpar_mode or 0)==2 then
    DebugError(string.format('[X4LAN] WALKREPLAY buffered=%.1f replayed=%.1f dropped=%d degraded=%d',
     s.walkpar_buffered or 0,s.walkpar_replayed or 0,s.walkpar_replay_dropped or 0,s.walkpar_degraded_frames or 0))

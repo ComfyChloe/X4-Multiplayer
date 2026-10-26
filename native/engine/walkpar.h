@@ -45,7 +45,7 @@ enum { WP_READY_IDLE = 0, WP_READY_OK = 1, WP_READY_REFUSED = 2 };
 #define WP_OP_MAX   16384   /* buffered posts+cancels per frame; overflow fails closed */
 #define WP_CMP_MAX  16384   /* listener-visible records per compare log */
 #define WP_TASK_MAX 256     /* tree-order tasks (sectors) tracked for per-task balance */
-#define WP_TYPE_BUCKETS 64  /* post histogram by (type & 63) plus named columns */
+#define WP_TYPE_MAX 1024    /* exact per-type histogram of immediate posts (type ids < 0x400) */
 
 enum { WP_OP_POST = 1, WP_OP_CANCEL = 2 };
 typedef struct {
@@ -79,13 +79,14 @@ typedef struct {
     uint64_t releases_in_walk, cue_runactions, exec_runs, request_wakes;
     /* stage 1 health */
     uint64_t buffered, replayed, replay_dropped, cancels_applied, degraded_frames;
-    /* post histogram by type bucket */
-    uint64_t type_hist[WP_TYPE_BUCKETS];
+    /* exact per-type histogram of immediate posts (the ones replay moves later in the frame) */
+    uint64_t imm_type[WP_TYPE_MAX];
 } wp_window;
 
 /* Injected resolvers. Native sets them at arm; offline tests set them to stubs. When a resolver is
    null the engine behaves conservatively (no buffering / no cross-sector attribution). */
 static uint64_t (*wp_sector_resolver)(void *component);           /* +0x70 walk to U::Sector id, 0 if none */
+static void *(*wp_get_listeners)(void *src, int type, int create);/* GetListenersForType 0x999ae0, 0 if none */
 static void *(*wp_registry_find)(uint64_t id);                    /* ComponentRegistry::Find + cast, null if gone */
 static void (*wp_deliver_post)(void *src, void *event, double t, int imm); /* original PostEvent */
 static void (*wp_deliver_cancel)(void *src, int type, double minTime);     /* original CancelPendingEvents */
@@ -243,7 +244,7 @@ static void wp_walk_end(void) {
     WP_FOLD(buffered); WP_FOLD(replayed); WP_FOLD(replay_dropped); WP_FOLD(cancels_applied);
     WP_FOLD(degraded_frames);
 #undef WP_FOLD
-    for (int i = 0; i < WP_TYPE_BUCKETS; ++i) wp_win.type_hist[i] += wp_frame.type_hist[i];
+    for (int i = 0; i < WP_TYPE_MAX; ++i) wp_win.imm_type[i] += wp_frame.imm_type[i];
     wp_in_walk = 0;
 }
 
@@ -303,8 +304,8 @@ static int wp_post(void *src, void *event, double time, int imm) {
     int type = wp_event_type(event);
     int task = wp_ref_task(src);
     ++wp_frame.posts;
-    if (imm) ++wp_frame.posts_imm; else ++wp_frame.posts_sched;
-    ++wp_frame.type_hist[type & (WP_TYPE_BUCKETS - 1)];
+    if (imm) { ++wp_frame.posts_imm; if (type >= 0 && type < WP_TYPE_MAX) ++wp_frame.imm_type[type]; }
+    else ++wp_frame.posts_sched;
     if (task < 0) ++wp_frame.posts_rootlevel;      /* cluster/highway-level (no sector) */
     else if (wp_cur_sector && wp_sector_resolver) {  /* source outside the explicit scope (rare) */
         uint64_t s = wp_sector_resolver(src);
@@ -397,6 +398,23 @@ static void wp_deliver_listener(void *src, void *event, void *listener, uint64_t
     uint64_t ref = wp_ref_sector(src);
     if (ls && ref && ls != ref) ++wp_frame.xsector_listener;
     wp_record(task, type, 0, wp_id_of(src), lid, rtti, payload);
+}
+
+/* Enumerate the registered listeners of an event and feed each to wp_deliver_listener (census
+   per-listener + the compare log). Reads the sorted per-type listener vector that DeliverEvent
+   itself uses: GetListenersForType(src,type,0) -> entry; begin=*(entry+8), end=*(entry+0x10), each
+   element an EventListener*. Bounded and self-gated; wp_get_listeners is 0 until armed. */
+static void wp_enum_listeners(void *src, void *event) {
+    if (!wp_get_listeners || wp_mode == WP_OFF || !wp_on_thread() || !wp_active()) return;
+    int type = wp_event_type(event);
+    void *entry = wp_get_listeners(src, type, 0);
+    if (!entry) return;
+    void **begin = *(void ***)((char *)entry + 8);
+    void **end = *(void ***)((char *)entry + 0x10);
+    for (int cap = 4096; begin && begin < end && cap > 0; ++begin, --cap) {
+        void *l = *begin;
+        if (l) wp_deliver_listener(src, event, l, 0);
+    }
 }
 
 /* ---- creation / global-path census counters --------------------------------------------------- */
@@ -711,6 +729,7 @@ static void wp_d_cancel(void *src, int type, double minTime) {
 }
 static void wp_d_deliver(void *src, void *event, uint32_t t) {
     wp_deliver_enter(src, event);
+    wp_enum_listeners(src, event);   /* census the pre-delivery listener set (read-only) */
     ((void (*)(void *, void *, uint32_t))wp_det[WPD_DELIVER].tramp)(src, event, t);
     wp_deliver_exit(src, event);
 }
@@ -734,6 +753,7 @@ static int walkpar_arm_native(int mode) {
     if (wp_ready != WP_READY_OK || (mode != WP_CENSUS && mode != WP_REPLAY)) return 0;
     if (wp_det_n) return 1;                            /* already armed */
     wp_sector_resolver = wp_native_sector;             /* enable native cross-sector attribution */
+    wp_get_listeners = (void *(*)(void *, int, int))(image + 0x999ae0u);  /* GetListenersForType */
     wp_det[WPD_POST].detour = (void *)wp_d_post;       wp_det[WPD_POST].sha = x4_walkpar_checks[0].sha;
     wp_det[WPD_CANCEL].detour = (void *)wp_d_cancel;   wp_det[WPD_CANCEL].sha = x4_walkpar_checks[1].sha;
     wp_det[WPD_DELIVER].detour = (void *)wp_d_deliver; wp_det[WPD_DELIVER].sha = x4_walkpar_checks[2].sha;

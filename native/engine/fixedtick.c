@@ -429,6 +429,8 @@ static int active(lua_State *L) {
     return 1;
 }
 
+static void string_field(lua_State *L, const char *name, const char *value);
+
 static void number_field(lua_State *L, const char *name, double value) {
     p_lua_pushnumber(L, value);
     p_lua_setfield(L, -2, name);
@@ -515,6 +517,21 @@ static int stats(lua_State *L) {
         number_field(L, "walkpar_replayed", (double)wp_win.replayed / wf);
         number_field(L, "walkpar_replay_dropped", (double)wp_win.replay_dropped);
         number_field(L, "walkpar_degraded_frames", (double)wp_win.degraded_frames);
+        {   /* top-5 immediate event types by count (review: which listeners the replay shift touches) */
+            char top[160]; size_t at = 0; top[0] = 0;
+            for (int pick = 0; pick < 5; ++pick) {
+                int best = -1; uint64_t bestv = 0;
+                for (int ty = 0; ty < WP_TYPE_MAX; ++ty)
+                    if (wp_win.imm_type[ty] > bestv) { bestv = wp_win.imm_type[ty]; best = ty; }
+                if (best < 0) break;
+                wp_win.imm_type[best] = 0;   /* consumed (wp_win is cleared just below anyway) */
+                int n = snprintf(top + at, sizeof(top) - at, "%s0x%x:%.1f",
+                                 at ? " " : "", (unsigned)best, (double)bestv / wf);
+                if (n < 0 || (size_t)n >= sizeof(top) - at) break;
+                at += (size_t)n;
+            }
+            string_field(L, "walkpar_top_imm_types", top);
+        }
         wp_window_clear();
     }
     o->win_count = 0; o->win_sum_ms = 0.0; o->win_max_ms = 0.0;
