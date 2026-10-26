@@ -40,6 +40,15 @@ for i=1,c.count do c.seq[i],c.shots[i],c.docks[i],c.fire2Seq[i],c.triggerShots[i
 A.coop=c
 -- Correction blend time constant (s) and the velocity hold over refresh gaps (s).
 local BLEND,VELOCITY_HOLD=.1,.25
+-- Frame slip: at the next frame the engine pose differs from the last written sector pose
+-- by more than SLIP_MIN m (or SLIP_SPEED s of rendered speed). SetObjectSectorPos converts
+-- the pose into the ship's current zone and only then re-parents it to the zone at the
+-- target, so a ship whose parent is not that zone lands offset by the difference of the
+-- two zone origins; the engine then files the misplaced ship back into the wrong zone and
+-- every later write repeats the offset (tens of km, parent toggling each frame). A second
+-- write in the same frame starts from the target zone and lands exactly; a slip that
+-- survives SLIP_WARP s is moved with the MD warp, at most once per second.
+local SLIP_MIN,SLIP_SPEED,SLIP_WARP=5000,2,1
 local function admittedSlot(slot)
  local n=tonumber(tostring(slot):match('^p([1-8])$'));return n and n<=R.players
 end
@@ -62,6 +71,15 @@ local function numeric(v,bound)
  local n=tonumber(v);if not n or n~=n or math.abs(n)>bound then return nil end;return n
 end
 local function send(p) if s.client and s.client.lease then s.transport:send(p) end end
+-- Rate-limited: one COOP_FRAME_SLIP row at most every 5 s, with the repairs since the last.
+local slipLog={n=0,next=0}
+local function logSlip(i,slip,action,now)
+ slipLog.n=slipLog.n+1
+ if now>=slipLog.next then
+  log(string.format('COOP_FRAME_SLIP ship=%d slip=%.0f action=%s count=%d',i,slip,action,slipLog.n))
+  slipLog.n=0;slipLog.next=now+5
+ end
+end
 local function clearVelocity(i)
  local v=c.velocity[i]
  if not v then return end
@@ -412,6 +430,16 @@ if cfg.motion_diagnostics then
   if s.client then s.client.drainedMax=0 end
  end
 end
+-- MD warp of a remote replica into the received sector pose, at most once per second.
+local function warp(i,r,sector,value,now)
+ if now<(r.nextWarp or 0) then return false end
+ r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector)
+ if cfg.coop_docks and i<=2 then
+  value.dockGeneration=c.attachmentGeneration and c.attachmentGeneration(i)
+  if c.attachmentWindow then value.dockStamp,value.dockAge=c.attachmentWindow(i,now) end
+ end
+ AddUITriggeredEvent('X4LAN_Coop','SectorMove',value);return true
+end
 function c.frame(now)
  if not c.ready or not s.client or not s.client.lease then c.stopVelocity(false);return end
  local controlled=c.entity(C.GetPlayerControlledShipID());local aboard=c.entity(C.GetPlayerContainerID());c.controlled=controlled
@@ -473,20 +501,22 @@ function c.frame(now)
    if dockAllowed and sector and r.dock==0 and c.docks[i]==0 and GetComponentData(A.id(ship),'isdocked')~=true then
     local value={x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}
     if C.GetContextByClass(ship,'sector',false)~=sector then
-     if now>=(r.nextWarp or 0) then
-      r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector)
-      if cfg.coop_docks and i<=2 then
-       value.dockGeneration=c.attachmentGeneration and c.attachmentGeneration(i)
-       if c.attachmentWindow then value.dockStamp,value.dockAge=c.attachmentWindow(i,now) end
-      end
-      AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
-     end
+     -- The last written pose belongs to the old sector frame; it is no slip reference.
+     if warp(i,r,sector,value,now) then r.applied=nil;r.slipSince=nil end
     elseif now>=(r.nextApply or 0) then
      -- One shared ship per client (at most seven). Correct their native controller
      -- drift on every render frame, including frame rates above 60 FPS.
      r.nextApply=now
      local changed=not r.applied
      if r.applied then for n=1,6 do if math.abs(p[n]-r.applied[n])>(n<=3 and .01 or .0001) then changed=true end end end
+     local slip=0
+     if r.applied then
+      local a=C.GetObjectPositionInSector(ship)
+      slip=math.sqrt((a.x-r.applied[1])^2+(a.y-r.applied[2])^2+(a.z-r.applied[3])^2)
+     end
+     if slip>math.max(SLIP_MIN,SLIP_SPEED*(linear and M.speed(linear) or 0)) then
+      changed=true;r.slipSince=r.slipSince or now
+     else slip=0;r.slipSince=nil end
      if not changed then
       -- The native controller/physics can move or turn a ship even when its
       -- received pose stays constant. Compare the actual engine pose before
@@ -522,7 +552,13 @@ function c.frame(now)
      else r.blend=nil end
      r.lastTarget={p[1],p[2],p[3]};r.lastLinear=linear and {linear[1],linear[2],linear[3]} or nil;r.frameAt=now
      if diagnose then diagnose(i,r,ship,p,linear,changed,now) end
-     if changed then C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));r.applied=written end
+     if changed then
+      local pose=ffi.new('UIPosRot',value);C.SetObjectSectorPos(ship,sector,pose);r.applied=written
+      if slip>0 then
+       if now-r.slipSince>=SLIP_WARP and warp(i,r,sector,value,now) then r.slipSince=nil;logSlip(i,slip,'warp',now)
+       else C.SetObjectSectorPos(ship,sector,pose);logSlip(i,slip,'rewrite',now) end
+      end
+     end
      -- Native velocity only in normal flight. At boost/travel/highway speed the free
      -- replica's own flight model cannot hold the vector; the per-frame pose write is
      -- authoritative (pathing SetOffsetOrder, see reports/PROXY-MOTION-20261025.txt).

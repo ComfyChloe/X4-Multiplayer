@@ -371,3 +371,78 @@ class CoopAdapterTests(unittest.TestCase):
   l.execute("local x=1000;for k=0,40 do x=x+500;sample(k,10000,x,'highway') end")
   found=rows(l);self.assertTrue(2<=len(found)<=5,found)
   self.assertIn('mode=highway declared=highway',found[-1]);self.assertIn('fences=0',found[-1])
+
+ # Engine double of the SetObjectSectorPos zone-frame slip seen in the live MOTION_DIAG
+ # rows (constant drift of 51-84 km at 650 m/s, VelocityFence twice per frame): the pose
+ # is made relative to the current zone, the ship is then re-parented to the zone at the
+ # target keeping that local pose, and the engine later files the ship into the zone at
+ # its actual position. Zone A (origin 20 km) holds 20..60 km, zone B (origin 0) the rest.
+ ZONES="""
+  zoneOrigin={A=20000,B=0};function zoneAt(x) return (x>=20000 and x<60000) and 'A' or 'B' end
+  parent={[42]='B'};slipEngine=true
+  api.SetObjectSectorPos=function(object,sector,p)
+   writes[#writes+1]={object=object,sector=sector,x=p.x,y=p.y,z=p.z}
+   local x=p.x
+   if slipEngine and object==42 then
+    local target=zoneAt(p.x);x=p.x-zoneOrigin[parent[42]]+zoneOrigin[target];parent[42]=target
+   end
+   positions[object]={x=x,y=p.y,z=p.z,yaw=p.yaw*math.pi/180,pitch=p.pitch*math.pi/180,roll=p.roll*math.pi/180}
+  end
+  function rezone() if positions[42] then parent[42]=zoneAt(positions[42].x) end end
+  local base=api.GetContextByClass
+  api.GetContextByClass=function(object,class) if class=='zone' then return parent[object]=='A' and 5 or 6 end;return base(object,class) end
+ """
+ def slipping_remote(self,setup=''):
+  l=self.high_speed_remote(setup);l.execute(self.ZONES+"""
+   api.GetContextByClass=(function(prev) return function(object,class)
+    if class=='highway' then return 0 end;return prev(object,class) end end)(api.GetContextByClass)
+   positions[42]={x=61000,y=10000,z=0,yaw=0,pitch=0,roll=0};parent[42]='B' -- already slipped
+   function run(from,to)
+    for k=from,to do rezone();sample(k,650,41000+k*32.5,'normal') end
+   end
+  """);return l
+
+ def test_zone_frame_slip_is_rewritten_in_the_same_frame(self):
+  l=self.slipping_remote();l.execute("""
+   run(0,2)  -- writes from the wrong zone land 20 km off until the first slip is measured
+   for k=3,40 do
+    rezone();sample(k,650,41000+k*32.5,'normal')
+    assert(math.abs(positions[42].x-writes[#writes].x)<1 and parent[42]=='A', k..' '..positions[42].x)
+   end
+   assert(fenceCount(true)<=3 and countRequest('SectorMove')==0)
+   local found=false;for _,v in ipairs(logs) do if v:find('COOP_FRAME_SLIP ship=2 slip=2',1,true) and v:find('action=rewrite',1,true) then found=true end end
+   assert(found)
+  """)
+
+ def test_without_repair_the_slip_double_repeats_every_frame(self):
+  # Guards the double itself: one write per frame reproduces the live constant offset.
+  l=self.slipping_remote();l.execute("""
+   for k=0,40 do
+    rezone()
+    api.SetObjectSectorPos(42,22,{x=41000+k*32.5,y=10000,z=0,yaw=0,pitch=0,roll=0})
+    assert(math.abs(positions[42].x-(41000+k*32.5)-20000)<1, k)
+   end
+  """)
+
+ def test_persistent_slip_falls_back_to_one_warp_per_second(self):
+  l=self.slipping_remote();l.execute("""
+   -- An engine that ignores the second write as well: only the MD warp remains.
+   local set=api.SetObjectSectorPos
+   api.SetObjectSectorPos=function(object,sector,p) set(object,sector,p);parent[42]='B' end
+   run(0,45)
+   local n=countRequest('SectorMove');assert(n>=1 and n<=2, n)
+   local move=lastRequest('SectorMove');assert(move.ship==2 and tostring(move.sector)=='22')
+   assert(move.x>=41000 and move.x<=41000+45*32.5) -- the received pose, not the slipped readback
+  """)
+
+ def test_ordinary_native_velocity_drift_is_not_a_slip(self):
+  l=self.slipping_remote();l.execute("""
+   slipEngine=false;local n
+   for k=0,40 do
+    rezone();sample(k,650,41000+k*32.5,'normal')
+    if k==5 then n=#writes end
+    positions[42].x=positions[42].x+32.5   -- native velocity between writes
+   end
+   assert(#writes-n==35 and countRequest('SectorMove')==0)
+   for _,v in ipairs(logs) do assert(not v:find('COOP_FRAME_SLIP',1,true)) end
+  """)
