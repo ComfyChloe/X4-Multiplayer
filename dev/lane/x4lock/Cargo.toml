@@ -1,0 +1,10 @@
+[package]
+name = "x4lock"
+version = "0.1.0"
+edition = "2021"
+description = "Releases X4's single-instance mutex (EGOSOFT_X4_INSTANCE) held by a running X4.exe so a second instance can start. Original code, no Egosoft files touched."
+
+[dependencies]
+
+[profile.release]
+opt-level = 2

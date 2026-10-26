@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<content id="x4lane_autostart" name="X4 lane autostart (test only)" description="Test only. Installed by dev/x4lane.py into the native test lane game views: starts a disposable new world with a fixed gamestart and logs [X4LANE] markers. Never part of a mod package." author="X4MP" version="1" date="2026-10-26" save="false">
+  <dependency version="900" />
+</content>
