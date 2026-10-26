@@ -355,6 +355,14 @@ identity trace. Static evidence: FireShot 0x8185b0, Bullet::Move 0xd4f090 and Up
 The analyzer rejects truncated tables, inconsistent row counts/columns, invalid clock calibration
 and non-finite or invalid count values rather than silently summarizing incomplete evidence.
 
+**Native census:** corrected source `36d858b`, run `census-battle-codex-002`: 2,748
+complete frames, 4,042,950 weapon calls, 942,086 bullet calls, 20,042 bullet FireShot
+calls and 3,264 hit increments; no dropped/unknown/foreign/TLS failures. Combat
+accounted for 17.52% of measured thread RNG steps. Hooks restored. The initial run's
+primary-target offset was wrong (+0x18); the pinned getter proves +0x10 and the
+corrected run measured 557,955 calls with a primary target. No idle or timing claim.
+See `reports/COMBAT-CENSUS-20261026.md` for distributions, exact evidence and limits.
+
 ## 10. Shadow and switch design for the joint step
 
 - **Shadow:** built into the recorder (section 9): `rotate_toward` on a copy of the pre-state with the same
