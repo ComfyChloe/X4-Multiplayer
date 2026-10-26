@@ -296,7 +296,7 @@ impl Drop for Image {
 /// # Safety
 /// `call` must not use Rust thread-locals or anything else that reaches the thread's real
 /// TLS (no panics, no allocation through TLS caches, no std I/O) and must not unwind.
-unsafe fn with_tls_slots<R>(slots: *const *mut u8, call: impl FnOnce() -> R) -> R {
+pub(crate) unsafe fn with_tls_slots<R>(slots: *const *mut u8, call: impl FnOnce() -> R) -> R {
     let saved: usize;
     asm!("mov {}, gs:[0x58]", out(reg) saved, options(nostack, preserves_flags, readonly));
     asm!("mov gs:[0x58], {}", in(reg) slots, options(nostack, preserves_flags));

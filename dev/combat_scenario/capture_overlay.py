@@ -1,7 +1,9 @@
-"""Build the lane overlay for the in-game joint-step recorder/shadow (test only).
+"""Build the lane overlay for the in-game combat instrumentation (test only): the joint-step
+recorder/shadow/switch, or the combat census (--mode census, --capacity = frames kept).
 
     python dev/combat_scenario/capture_overlay.py --out .local/lane/overlays/combatcap ^
-        [--dll rust/target/release/x4mp_combat.dll] [--mode both|capture|shadow|switch] [--capacity 200000] [--verify 1]
+        [--dll rust/target/release/x4mp_combat.dll] [--mode both|capture|shadow|switch|census]
+        [--capacity 200000] [--verify 1]
 
 The overlay (for `x4lane.py run --overlay`) adds native/x4mp_combat_64.dll, ui/combat_capture.lua,
 a ui.xml entry and the X4MP_COMBATCAP setting. Use it together with the combat scenario
@@ -20,10 +22,10 @@ MARKER = 'x4lane-overlay.txt'
 
 
 def build(out: Path, dll: Path, mode: str, capacity: int, verify: int = 1) -> Path:
-    if mode not in ('both', 'capture', 'shadow', 'switch'):
+    if mode not in ('both', 'capture', 'shadow', 'switch', 'census'):
         raise ValueError(f'unknown mode {mode!r}')
-    if not 0 < capacity <= 2_000_000:
-        raise ValueError('capacity must be 1..2000000')
+    if not 0 < capacity <= (1_000_000 if mode == 'census' else 2_000_000):
+        raise ValueError('capacity must be 1..2000000 (census: 1..1000000 frames)')
     if not 0 <= verify <= 1_000_000:
         raise ValueError('verify must be 0..1000000')
     if not dll.is_file():
@@ -40,9 +42,14 @@ def build(out: Path, dll: Path, mode: str, capacity: int, verify: int = 1) -> Pa
     (out / 'ui' / 'config.lua.append').write_text(
         f"X4MP_COMBATCAP = {{mode='{mode}', capacity={capacity}, verify={verify}}} -- combat recorder overlay\n",
         encoding='utf-8')
-    (out / MARKER).write_text(
-        'combat agent overlay: joint-step recorder/shadow/switch (code patch at 0xe1f840, restored on stop),\n'
-        f'mode={mode} capacity={capacity} verify={verify}; output <profile>/x4mp-combatcap.txt\n', encoding='utf-8')
+    if mode == 'census':
+        what = ('combat census (data-only vtable hooks: Move of the weapon classes and Bullet, FireShot; '
+                'restored on stop), output <profile>/x4mp-combatcensus.txt')
+    else:
+        what = ('joint-step recorder/shadow/switch (code patch at 0xe1f840, restored on stop), '
+                'output <profile>/x4mp-combatcap.txt')
+    (out / MARKER).write_text(f'combat agent overlay: {what},\nmode={mode} capacity={capacity} verify={verify}\n',
+                              encoding='utf-8')
     return out
 
 

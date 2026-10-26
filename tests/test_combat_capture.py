@@ -32,12 +32,23 @@ STUBS = '''
   handle={stats=function(self) return stats end,
     write=function(self,path) writes[#writes+1]=path;return stats.recorded end,
     stop=function(self) stops=stops+1;return true end}
+  cstats={frames=3,weapon_calls=30,bullet_calls=12,shots=4,missile_shots=1,bullet_checks=5,bullet_hits=2,
+    rng_weapon=4,rng_bullet=3,rng_frame=50,rng_frame_over_cap=0,rng_unmatched=0,foreign=0,uninitialised_tls=0,
+    dropped_frames=0,ticks_per_second=3e9}
+  censuses={}
+  chandle={stats=function(self) return cstats end,summary=function(self) return {'shots mean=1.3','frame_ms mean=20'} end,
+    write=function(self,path) writes[#writes+1]=path;return cstats.frames end,
+    stop=function(self) stops=stops+1;return true end}
   function package.loadlib(path,symbol)
     assert(symbol=='luaopen_x4mp_combat');loaded=path
     return function() return {start=function(capacity,record,shadow,switch,verify)
       starts[#starts+1]={capacity=capacity,record=record,shadow=shadow,switch=switch,verify=verify}
       if refusal then return nil,refusal end
       return handle
+    end,census=function(frames)
+      censuses[#censuses+1]=frames
+      if refusal then return nil,refusal end
+      return chandle
     end} end
   end
   function find(text) for i=1,#logs do if logs[i]:find(text,1,true) then return i end end end
@@ -95,6 +106,28 @@ class CaptureScript(unittest.TestCase):
           events['X4MP.CombatScn'](nil,'end');assert(#writes==0 and stops==1)
         ''')
 
+    def test_census_mode_logs_stats_summary_and_writes_its_table(self):
+        lua = self.runtime("X4MP_COMBATCAP={mode='census',capacity=500,path='C:/p/x4mp-combatcensus.txt'}")
+        lua.execute('''
+          ui();assert(#censuses==0,'no arm before the window')
+          events['X4MP.CombatScn'](nil,'begin');ui()
+          assert(#censuses==1 and censuses[1]==500 and #starts==0)
+          assert(find('FEATURE combatcensus ENABLED frames=500'))
+          now=11;ui()
+          assert(find('COMBATCENSUS stats frames=3 weaponCalls=30 bulletCalls=12 shots=4 missileShots=1 checks=5 hits=2 rngWeapon=4 rngBullet=3 rngFrame=50'))
+          events['X4MP.CombatScn'](nil,'end')
+          assert(find('COMBATCENSUS final frames=3'))
+          assert(find('COMBATCENSUS summary shots mean=1.3') and find('COMBATCENSUS summary frame_ms mean=20'))
+          assert(writes[1]=='C:/p/x4mp-combatcensus.txt' and find('COMBATCENSUS written frames=3 path=C:/p/x4mp-combatcensus.txt'))
+          assert(stops==1 and find('COMBATCENSUS stopped reason=window end'))
+        ''')
+        lua = self.runtime("X4MP_COMBATCAP={mode='census'};refusal='vtable entry differs from the pinned build'")
+        lua.execute('''
+          events['X4MP.CombatScn'](nil,'begin');ui()
+          assert(censuses[1]==20000)
+          assert(find('FEATURE combatcensus DISABLED reason=vtable entry differs from the pinned build'))
+        ''')
+
     def test_refusal_and_failure_are_loud(self):
         lua = self.runtime("X4MP_COMBATCAP={mode='capture',path='x'};refusal='unsupported executable (SHA-256)'")
         lua.execute('''
@@ -124,6 +157,11 @@ class Overlay(unittest.TestCase):
             self.assertIn("mode='switch', capacity=10, verify=7", (switched / 'ui' / 'config.lua.append').read_text())
             with self.assertRaises(ValueError):
                 overlay.build(base / 'sw2', dll, 'switch', 10, -1)
+            census = overlay.build(base / 'cs', dll, 'census', 30000)
+            self.assertIn("mode='census', capacity=30000", (census / 'ui' / 'config.lua.append').read_text())
+            self.assertIn('data-only vtable hooks', (census / 'x4lane-overlay.txt').read_text())
+            with self.assertRaises(ValueError):
+                overlay.build(base / 'cs2', dll, 'census', 1_000_001)
             self.assertEqual((out / 'ui' / 'combat_capture.lua').read_text(), SCRIPT.read_text())
             overlay.build(base / 'ov', dll, 'shadow', 10)  # rebuild over its own output
             with self.assertRaises(ValueError):

@@ -110,7 +110,8 @@ pub struct Session {
     base: *mut u8,
 }
 
-fn verify_process() -> Result<*mut u8, &'static str> {
+/// Check the running executable against the pins; returns its base.
+pub(crate) fn verify_process() -> Result<*mut u8, &'static str> {
     let mut module = std::ptr::null_mut();
     // SAFETY: null name = the process executable; no reference taken.
     if unsafe { GetModuleHandleExW(0x2, std::ptr::null(), &mut module) } == 0 || module.is_null() {
