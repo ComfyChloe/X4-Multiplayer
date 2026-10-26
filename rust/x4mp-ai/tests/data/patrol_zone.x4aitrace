@@ -1,0 +1,137 @@
+# X4AITRACE v1 example: scenario A of tests/patrol_replay.rs (SYNTHETIC, hand-built from the XML;
+# not a native capture). order.fight.patrol, range=class.zone job ship, two legs, nested opaque
+# ResupplyHandler delivery + its interrupt run, gravidar move_to interrupt, Attack order, opaque
+# AttackHandler, orders.base abort.
+X4AITRACE	1	build=23660954	source=handbuilt
+fact	c:0x100	ship	v=c:0x200
+fact	c:0x100	zone	v=c:0x300
+fact	c:0x100	sector	v=c:0x400
+fact	c:0x100	isplayerowned	v=b:0
+fact	c:0x200	class	v=k:ship_m
+fact	c:0x200	zone	v=c:0x300
+fact	c:0x200	sector	v=c:0x400
+fact	c:0x200	jobmainzone	v=c:0x300
+fact	c:0x200	iscommandeered	v=b:0
+fact	c:0x200	isjobship	v=b:1
+fact	c:0x200	jobexpired	v=b:0
+fact	c:0x200	size	v=f:42200000~40
+fact	c:0x200	safesize	v=f:42a00000~80
+fact	c:0x200	maxradarrange	v=f:461c4000~10000
+fact	c:0x200	order	v=o:0x51
+fact	c:0x200	defaultorder	v=o:0x51
+fact	c:0x200	isoperational	v=b:1
+fact	n	id	order=o:0x51	v=s:Patrol
+fact	n	isrunning	order=o:0x51	v=b:1
+fact	c:0x300	class	v=k:zone
+fact	c:0x300	sector	v=c:0x400
+fact	c:0x300	cluster	v=c:0x500
+fact	c:0x300	isnormalzone	v=b:1
+fact	c:0x300	size	v=f:46ea6000~30000
+fact	c:0x301	class	v=k:zone
+fact	c:0x301	sector	v=c:0x400
+fact	c:0x301	cluster	v=c:0x500
+fact	c:0x301	isnormalzone	v=b:1
+fact	c:0x301	size	v=f:46bb8000~24000
+fact	c:0x302	class	v=k:highway
+fact	c:0x302	sector	v=c:0x400
+fact	c:0x400	class	v=k:sector
+fact	c:0x400	cluster	v=c:0x500
+fact	c:0x500	class	v=k:cluster
+fact	n	param.spacereservation.maxduration	v=d:409c200000000000~1800
+start	c:0x100	order.fight.patrol	param.range=k:class.zone	param.debugchance=f:00000000~0
+fx	c:0x100	set_command	command=k:command.patrol
+fx	c:0x100	set_command_action	commandaction=k:commandaction.calculating
+run	c:0x100	order.fight.patrol	t=d:4059000000000000~100	wake=k:start	rng=x:0123456789abcdef
+roll	c:0x100	-	line=i:199	chance=f:00000000~0	pass=b:0
+fx	c:0x100	edit_order_param	order=o:0x51	param=s:space	value=c:0x300
+fx	c:0x100	edit_order_param	order=o:0x51	param=s:space	value=c:0x300
+fx	c:0x100	set_order_syncpoint_reached	order=o:0x51
+rnd	c:0x100	-	line=i:317	v=d:3fe3a98826e978d5~0.6144448051452637
+yield	c:0x100	order.fight.patrol	kind=k:wait	until=d:40592753104dd2f2~100.61444480514527	rng=x:e8c2c7af9d32f5cf
+fact	n	$space	order=o:0x51	v=c:0x300
+run	c:0x100	order.fight.patrol	t=d:405927f6e7581063~100.62444480514527	wake=k:timer	rng=x:1111222233334444
+roll	c:0x100	-	line=i:398	chance=f:00000000~0	pass=b:0
+roll	c:0x100	-	line=i:430	chance=f:00000000~0	pass=b:0
+q	c:0x100	create_position	space=c:0x300	max=f:466a6000~15000	->	pos=p:447a0000,00000000,c4fa0000	draws=i:3
+rnd	c:0x100	-	line=i:485	v=d:c0997e6b20000000~-1631.6046142578125
+q	c:0x100	get_safe_pos	value=p:447a0000,c4cbf359,c4fa0000	zone=c:0x300	radius=f:43700000~240	ignored=c:0x200	allowyaxis=b:0	ignoredangerousregions=b:0	->	pos=p:447b4000,c4cbf359,c4fa0000	draws=i:0
+fx	c:0x100	run_script	name=s:move.seekenemies	param.destination=c:0x300	param.pos=p:447b4000,c4cbf359,c4fa0000	param.pursuetargets=b:0	param.pursuedistance=f:461c4000~10000	param.allowothertargets=b:1	param.targetpurposes=l:[]	param.stayinspace=b:0	param.plunderbasket=l:[]	param.internalorder=b:1	param.engageonlyonline=b:0	param.targetclasses=l:[]	param.checkrelation=b:1	param.debugchance=f:00000000~0
+yield	c:0x100	order.fight.patrol	kind=k:call	script=s:move.seekenemies	rng=x:16ed46021793ca19
+run	c:0x100	move.seekenemies	t=d:405927f6e7581063~100.62444480514527	wake=k:start	rng=x:5555666677778888
+q	c:0x100	create_position_in	space=c:0x400	value=p:447b4000,c4cbf359,c4fa0000	object=c:0x300	->	pos=p:47473d00,c4cbf359,c4fa0000	draws=i:0
+roll	c:0x100	-	line=i:159	chance=f:00000000~0	pass=b:0
+q	c:0x100	get_safe_pos_reserve	value=p:47473d00,c4cbf359,c4fa0000	sector=c:0x400	radius=f:42200000~40	component=c:0x200	duration=d:409c200000000000~1800	->	pos=p:47473d00,c4cbd359,c4fa0000	index=i:7	zone=c:0x300	draws=i:0
+roll	c:0x100	-	line=i:183	chance=f:00000000~0	pass=b:0
+fx	c:0x100	move_to	object=c:0x200	destination=c:0x400	pos=p:47473d00,c4cbd359,c4fa0000	travel=b:0
+yield	c:0x100	move.seekenemies	kind=k:moveto	rng=x:2dccba8efab4c785
+run	c:0x100	move.seekenemies	t=d:406033fb73ac0832~129.6244448051453	wake=k:block	rng=x:9999aaaabbbbcccc
+fx	c:0x100	run_script	name=s:lib.target.selection	param.primarytarget=n	param.secondarytargets=n	param.escort=n	param.pursuedistance=f:461c4000~10000	param.pursuetargets=b:0	param.list_objectstoignore=l:[]	param.allowothertargets=b:1	param.checkrelation=b:1	param.targetpurposes=l:[]	param.targetclasses=l:[k:class.ship_s;k:class.ship_m;k:class.ship_l;k:class.ship_xl;k:class.station]	param.engageonlyonline=b:0	param.radius=n	param.radiusanchorpos=n	param.radiusanchorspace=n	param.debugchance=f:00000000~0
+yield	c:0x100	move.seekenemies	kind=k:call	script=s:lib.target.selection	rng=x:9999aaaabbbbcccc
+run	c:0x100	lib.target.selection	t=d:406033fb73ac0832~129.6244448051453	wake=k:start	rng=x:ddddeeeeffff0000
+yield	c:0x100	lib.target.selection	kind=k:return	target=n	rng=x:2d9109b32129415b
+run	c:0x100	move.seekenemies	t=d:406033fb73ac0832~129.6244448051453	wake=k:return	rng=x:0f0f0f0f0f0f0f0f
+roll	c:0x100	-	line=i:639	chance=f:00000000~0	pass=b:0
+fx	c:0x100	cancel_space_reservation	component=c:0x200	index=i:7	zone=c:0x300
+yield	c:0x100	move.seekenemies	kind=k:return	target=n	list_targets=l:[]	rng=x:35025fc9687b1df1
+run	c:0x100	order.fight.patrol	t=d:406033fb73ac0832~129.6244448051453	wake=k:return	rng=x:13579bdf2468ace0
+rnd	c:0x100	-	line=i:509	v=d:3ff19eaf1a000000~1.1012412086129189
+yield	c:0x100	order.fight.patrol	kind=k:wait	until=d:40605738d1e00832~130.7256860137582	rng=x:a7c412bf19eaf19d
+run	c:0x100	order.fight.patrol	t=d:406057dca8ea45a3~130.74568601375822	wake=k:timer	rng=x:2468ace013579be0
+roll	c:0x100	-	line=i:511	chance=f:41f00000~30	pass=b:1
+roll	c:0x100	-	line=i:512	chance=f:00000000~0	pass=b:0
+fx	c:0x100	signal_objects	object=c:0x200	param=s:resupply	param2=l:[b:0]	param3=f:00000000~0
+ev	c:0x100	event_object_signalled	path=k:global	verdict=s:order.fight.patrol/ResupplyHandler	t=d:406057dca8ea45a3~130.74568601375822	nested=b:1	object=c:0x200	param=s:resupply	param2=l:[b:0]
+roll	c:0x100	-	line=i:430	chance=f:00000000~0	pass=b:0
+q	c:0x100	create_position	space=c:0x300	max=f:466a6000~15000	->	pos=p:c53b8000,00000000,457a0000	draws=i:0
+rnd	c:0x100	-	line=i:485	v=d:c087987180000000~-755.055419921875
+q	c:0x100	get_safe_pos	value=p:c53b8000,c43cc38c,457a0000	zone=c:0x300	radius=f:43700000~240	ignored=c:0x200	allowyaxis=b:0	ignoredangerousregions=b:0	->	pos=p:c53b3000,c43cc38c,457a0000	draws=i:0
+fx	c:0x100	run_script	name=s:move.seekenemies	param.destination=c:0x300	param.pos=p:c53b3000,c43cc38c,457a0000	param.pursuetargets=b:0	param.pursuedistance=f:461c4000~10000	param.allowothertargets=b:1	param.targetpurposes=l:[]	param.stayinspace=b:0	param.plunderbasket=l:[]	param.internalorder=b:1	param.engageonlyonline=b:0	param.targetclasses=l:[]	param.checkrelation=b:1	param.debugchance=f:00000000~0
+yield	c:0x100	order.fight.patrol	kind=k:call	script=s:move.seekenemies	rng=x:1cc451c64fad2c1e
+irun	c:0x100	order.fight.patrol	prog=k:handler	t=d:406057dca8ea45a3~130.74568601375822	rng=x:2222222222222222
+fx	c:0x100	create_order	id=s:Resupply	object=c:0x200
+irend	c:0x100	-	rng=x:baa77403064afc4a
+run	c:0x100	move.seekenemies	t=d:406057dca8ea45a3~130.74568601375822	wake=k:start	rng=x:3333333333333333
+q	c:0x100	create_position_in	space=c:0x400	value=p:c53b3000,c43cc38c,457a0000	object=c:0x300	->	pos=p:47379d00,c43cc38c,457a0000	draws=i:0
+roll	c:0x100	-	line=i:159	chance=f:00000000~0	pass=b:0
+q	c:0x100	get_safe_pos_reserve	value=p:47379d00,c43cc38c,457a0000	sector=c:0x400	radius=f:42200000~40	component=c:0x200	duration=d:409c200000000000~1800	->	pos=p:47379d00,c43c838c,457a0000	index=i:9	zone=c:0x300	draws=i:0
+roll	c:0x100	-	line=i:183	chance=f:00000000~0	pass=b:0
+fx	c:0x100	move_to	object=c:0x200	destination=c:0x400	pos=p:47379d00,c43c838c,457a0000	travel=b:0
+yield	c:0x100	move.seekenemies	kind=k:moveto	rng=x:f9083cb397431ae6
+fact	c:0x900	class	v=k:ship_m
+fact	c:0x900	sector	v=c:0x400
+fact	c:0x900	zone	v=c:0x300
+fact	c:0x901	class	v=k:ship_s
+fact	c:0x901	sector	v=c:0x401
+fact	c:0x200	cansee	v=l:[c:0x900;c:0x901]
+ev	c:0x100	event_gravidar_has_scanned	path=k:global	verdict=k:none	t=d:4060d7dca8ea45a3~134.74568601375822	object=c:0x200
+ev	c:0x100	event_gravidar_has_scanned	path=k:block	verdict=k:matched	t=d:4060d7dca8ea45a3~134.74568601375822	object=c:0x200	detected=l:[c:0x900;c:0x901]
+irun	c:0x100	move.seekenemies	prog=k:block	t=d:4060d7dca8ea45a3~134.74568601375822	rng=x:4444444444444444
+roll	c:0x100	-	line=i:394	chance=f:00000000~0	pass=b:0
+roll	c:0x100	-	line=i:398	chance=f:00000000~0	pass=b:0
+roll	c:0x100	-	line=i:432	chance=f:00000000~0	pass=b:0
+roll	c:0x100	-	line=i:448	chance=f:00000000~0	pass=b:0
+irend	c:0x100	-	outcome=k:block	rng=x:e7596c10a8e11c62
+run	c:0x100	move.seekenemies	t=d:4060d7dca8ea45a3~134.74568601375822	wake=k:block	rng=x:5555555555555555
+fx	c:0x100	run_script	name=s:lib.target.selection	param.primarytarget=n	param.secondarytargets=n	param.escort=n	param.pursuedistance=f:461c4000~10000	param.pursuetargets=b:0	param.list_objectstoignore=l:[]	param.allowothertargets=b:1	param.checkrelation=b:1	param.targetpurposes=l:[]	param.targetclasses=l:[k:class.ship_s;k:class.ship_m;k:class.ship_l;k:class.ship_xl;k:class.station]	param.engageonlyonline=b:0	param.radius=n	param.radiusanchorpos=n	param.radiusanchorspace=n	param.debugchance=f:00000000~0
+yield	c:0x100	move.seekenemies	kind=k:call	script=s:lib.target.selection	rng=x:5555555555555555
+run	c:0x100	lib.target.selection	t=d:4060d7dca8ea45a3~134.74568601375822	wake=k:start	rng=x:6666666666666666
+yield	c:0x100	lib.target.selection	kind=k:return	target=c:0x900	rng=x:7777777777777777
+fact	c:0x900	canbeattacked	v=b:1
+run	c:0x100	move.seekenemies	t=d:4060d7dca8ea45a3~134.74568601375822	wake=k:return	rng=x:8888888888888888
+roll	c:0x100	-	line=i:572	chance=f:00000000~0	pass=b:0
+roll	c:0x100	-	line=i:587	chance=f:00000000~0	pass=b:0
+roll	c:0x100	-	line=i:615	chance=f:00000000~0	pass=b:0
+fx	c:0x100	create_order	id=s:Attack	object=c:0x200	immediate=b:1	param.primarytarget=c:0x900	param.escort=n	param.pursuedistance=f:461c4000~10000	param.pursuetargets=b:0	param.allowothertargets=b:1	param.targetclasses=l:[k:class.ship_s;k:class.ship_m;k:class.ship_l;k:class.ship_xl;k:class.station]	param.disable=b:0	param.radius=n	param.radiusanchorpos=n	param.radiusanchorspace=n	param.internalorder=b:1	param.checkrelation=b:1	param.enforceradius=b:0	param.debugchance=f:00000000~0
+fx	c:0x100	cancel_space_reservation	component=c:0x200	index=i:9	zone=c:0x300
+yield	c:0x100	move.seekenemies	kind=k:return	target=n	list_targets=l:[]	rng=x:fcd2516967ece5aa
+run	c:0x100	order.fight.patrol	t=d:4060d7dca8ea45a3~134.74568601375822	wake=k:return	rng=x:9999999999999999
+rnd	c:0x100	-	line=i:509	v=d:3ff7c1e0a8000000~1.4848333895206451
+yield	c:0x100	order.fight.patrol	kind=k:wait	until=d:406107606a3a45a3~136.23051940327886	rng=x:f29da0d37c1e0a5b
+ev	c:0x100	event_object_attacked	path=k:global	verdict=s:order.fight.patrol/AttackHandler	t=d:4060d7dca8ea45a3~134.74568601375822	object=c:0x200	param=c:0x900
+irun	c:0x100	order.fight.patrol	prog=k:handler	t=d:4060d7dca8ea45a3~134.74568601375822	rng=x:aaaaaaaaaaaaaaaa
+fx	c:0x100	create_order	id=s:Attack	object=c:0x200
+irend	c:0x100	-	rng=x:bc0f5cc76490b82d
+ev	c:0x100	event_object_order_ready	path=k:global	verdict=s:orders.base/inline1	t=d:4060d7dca8ea45a3~134.74568601375822	object=c:0x200
+irun	c:0x100	orders.base	prog=k:orders.base	t=d:4060d7dca8ea45a3~134.74568601375822	rng=x:bbbbbbbbbbbbbbbb
+irend	c:0x100	-	rng=x:bbbbbbbbbbbbbbbb
+abort	c:0x100	loop

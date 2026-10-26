@@ -1,0 +1,11 @@
+[package]
+name = "x4mp-ai"
+description = "Native AI order behaviours for the per-sector rewrite: X4 AI scripts as Rust state machines with exact engine RNG draw order, plus the X4AITRACE capture/replay format"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "x4mp_ai"
+crate-type = ["rlib"]

@@ -18,6 +18,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "x4mp-ai"
+version = "7.5.0"
+
+[[package]]
 name = "x4mp-core"
 version = "7.5.0"
 
