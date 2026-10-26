@@ -172,6 +172,26 @@ class RelayRoster(unittest.TestCase):
         r.snapshots(session.peers, 1)
         self.assertEqual(r.relations, {})
 
+    def test_relation_intents_ignore_duplicates_and_reordering_per_client_lease(self):
+        session, l1, l2 = joined()
+        r = PlayerRoster()
+
+        def request(seq, value, lease=l2, target=1):
+            return r.handle(f'PFREQ|1|{lease}|{seq}|{target}|{value}'.encode(), P2, session.peers, 0)
+
+        self.assertTrue(request(10, '-0.5'))
+        self.assertTrue(request(12, '0.75'))
+        self.assertEqual(request(11, '-0.5'), [])
+        self.assertEqual(request(12, '0'), [])
+        # Invalid targets or values must not consume a later valid request's sequence.
+        self.assertEqual(request(14, '0', target=2), [])
+        self.assertEqual(request(14, '2'), [])
+        self.assertTrue(request(13, '0'))
+        session.peers['p2'].lease = 'e' * 32
+        self.assertTrue(request(1, '0.75', lease='e' * 32))
+        self.assertEqual(request(100, '-0.5'), [])  # old lease cannot poison the fence
+        self.assertTrue(request(2, '0', lease='e' * 32))
+
 
 @unittest.skipUnless(LuaRuntime, 'lupa.luajit21 not installed')
 class LuaCore(unittest.TestCase):
