@@ -2038,6 +2038,58 @@ def doctor(paths, fix=False, check_hash=True):
     return out
 
 
+def cmd_observe(args, paths):
+    """Record the machine while X4 instances run (read-only; touches no process): every interval
+    the X4 list (lane/protected), working sets, available RAM, commit, hard faults, pressure, and
+    for each lane X4 its frame rate (FRAMEPROBE lines) and log silence from its debug log."""
+    require_windows()
+    out = Path(args.out).resolve()
+    out.parent.mkdir(parents=True, exist_ok=True)
+    faults = win().HardFaultCounter()
+    watchers = {}
+    end = time.monotonic() + args.duration
+    with open(out, 'a', encoding='utf-8') as sink:
+        while time.monotonic() < end:
+            procs = x4_processes()
+            working = win().working_sets_gb([p.pid for p in procs])
+            _ram, avail = free_ram_gb()
+            perf = win().system_performance()
+            rows = []
+            for proc in procs:
+                row = {'pid': proc.pid, 'profile': core.profile_from_cmdline(proc.cmdline),
+                       'protected': is_protected(proc), 'ws_gb': working.get(proc.pid)}
+                for name in core.LANE_PROFILES:
+                    lane = paths.lane(name)
+                    if proc.exe and Path(proc.exe) == lane.exe:
+                        row['lane'] = name
+                        watch = watchers.get(name)
+                        if watch is None or watch.path != lane.debug_log:
+                            watch = watchers[name] = core.LogWatcher(lane.debug_log)
+                        before = len(watch.fps)
+                        watch.poll()
+                        new = watch.fps[before:]
+                        row['fps'] = round(sum(new) / len(new), 1) if new else None
+                        row['log_silent_s'] = (round(time.monotonic() - watch.last_line_at, 1)
+                                               if watch.last_line_at else None)
+                rows.append(row)
+            state = None
+            try:
+                state = json.loads(paths.pressure.read_text(encoding='utf-8')).get('state')
+            except (OSError, ValueError):
+                pass
+            sample = {'time': core.now_iso(), 'x4_total': len(procs), 'avail_gb': avail,
+                      'commit_gb': round(perf.CommittedPages * 4096 / 2**30, 1) if perf else None,
+                      'commit_limit_gb': round(perf.CommitLimit * 4096 / 2**30, 1) if perf else None,
+                      'hard_fault_pages_per_s': faults.read(), 'pressure': state, 'x4': rows}
+            sink.write(json.dumps(sample) + '\n')
+            sink.flush()
+            lanes = ' '.join(f"{r['lane']}:{r['ws_gb']}G/{r.get('fps')}fps" for r in rows if 'lane' in r)
+            print(f"{sample['time'][11:19]} x4={len(procs)} avail={avail}G commit={sample['commit_gb']}G "
+                  f"faults={sample['hard_fault_pages_per_s']}/s pressure={state} {lanes}", flush=True)
+            time.sleep(args.interval)
+    return 0
+
+
 def cmd_canary(args, paths):
     """Native self-test: one queued run without overlays until the world runs (AUTOSTART READY).
     Results go to X4Mods/lanes/canary/<time>-<lane> (the last 10 are kept); exit code as for run."""
@@ -2405,6 +2457,10 @@ def parser():
     q.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S)
     q.add_argument('--allow-workshop', action='store_true')
     q.add_argument('--no-repin', action='store_true', help='keep the 45841 profile gates (default: re-pin per lane)')
+    s = sub.add_parser('observe', help='record X4 memory/fps/faults on this PC (read-only)')
+    s.add_argument('--out', required=True, help='JSON-lines file to append to')
+    s.add_argument('--duration', type=float, default=600.0)
+    s.add_argument('--interval', type=float, default=10.0)
     s = sub.add_parser('canary', help='native self-test run (no overlay, until AUTOSTART READY)')
     s.add_argument('--lane', default='auto', choices=tuple(core.LANE_PROFILES) + ('auto',))
     s.add_argument('--agent', default='lane')
@@ -2452,7 +2508,7 @@ def main(argv=None):
     handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'session': cmd_session,
                 'stop': cmd_stop, 'queue': cmd_queue, 'restore': cmd_restore, 'unlock': cmd_unlock,
                 'make-overlay': cmd_make_overlay, 'publish-release': cmd_publish_release, 'doctor': cmd_doctor,
-                'canary': cmd_canary}
+                'canary': cmd_canary, 'observe': cmd_observe}
     try:
         return handlers[args.command](args, paths)
     except LaneError as error:
