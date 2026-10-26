@@ -1,0 +1,191 @@
+{
+  "snapshot_edtime": "2026-10-26T03:20:00-04:00",
+  "status": "draft source review; no integrated release",
+  "base": "1b7e2d3b122f998744d7be93d4b13fc403bfa123",
+  "branches": [
+    {
+      "branch": "contrib/ferrite-architecture-design",
+      "sha": "76987362ea0fece8d5f5c615a5e99048c32b45fb"
+    },
+    {
+      "branch": "contrib/ferrite-attention-load-test",
+      "sha": "5a5ce0d9d10bd521eeb7707444e68b2987da6921"
+    },
+    {
+      "branch": "contrib/ferrite-attention-parity",
+      "sha": "4a4d98965008eaececa038d7a3f108ce28fc34dc"
+    },
+    {
+      "branch": "contrib/ferrite-bucket-resync",
+      "sha": "995c134d0dfd6c6ab1280f96fc256e73f01a2bbc"
+    },
+    {
+      "branch": "contrib/ferrite-build-intents",
+      "sha": "acd0a20e605079d1c853db552e8eaad20733d4ae"
+    },
+    {
+      "branch": "contrib/ferrite-dev-defaults-rules",
+      "sha": "cffbce065474925f0fafffafe69b8b6c7777cf7f"
+    },
+    {
+      "branch": "contrib/ferrite-divergence-probe",
+      "sha": "7c6fc419c282179bc553e77c4aa48ec19715a520"
+    },
+    {
+      "branch": "contrib/ferrite-features-line",
+      "sha": "7726eac178f094f81dced2e330ff57c24e796ad0"
+    },
+    {
+      "branch": "contrib/ferrite-fixed-tick-stage3",
+      "sha": "af37f725c2113be5a89d5d0603d106c7995d9839"
+    },
+    {
+      "branch": "contrib/ferrite-fork-probe",
+      "sha": "a5d7bbcc1095bf9aa9c55996b7421788cd121ac9"
+    },
+    {
+      "branch": "contrib/ferrite-hash-performance",
+      "sha": "9f28ae9ab1ec2ada8bfa6c3c600aa7c20632f16f"
+    },
+    {
+      "branch": "contrib/ferrite-integration-1",
+      "sha": "d2d3872943d585b99f9eafeeee270c53a7429ae7"
+    },
+    {
+      "branch": "contrib/ferrite-linux-client",
+      "sha": "3e669663ce699dc6c7dbb4be0ca5cef939d8a92b"
+    },
+    {
+      "branch": "contrib/ferrite-linux-preload",
+      "sha": "d9cc663f5affac8cf6d46447710910a5942a88e6"
+    },
+    {
+      "branch": "contrib/ferrite-linux-server",
+      "sha": "8543b6ee467c8d583ff91b6222e17cd94ad7a33f"
+    },
+    {
+      "branch": "contrib/ferrite-load-profiler",
+      "sha": "f7b47f27bc80264b0f2af950f33d6f169d321445"
+    },
+    {
+      "branch": "contrib/ferrite-measurement",
+      "sha": "d3d7ee9a96e6467d9b6c468e38b591c259762026"
+    },
+    {
+      "branch": "contrib/ferrite-npc-combat-intent",
+      "sha": "0fdbf8e7377d6316e000153a6c5fe8d62607231a"
+    },
+    {
+      "branch": "contrib/ferrite-npc-flicker",
+      "sha": "b5a8620fa0a42374062d3ac3bbdac3a6c9da395e"
+    },
+    {
+      "branch": "contrib/ferrite-npc-target-diag",
+      "sha": "8c22d59dafbc000e0918dd13cebc250ebc608f51"
+    },
+    {
+      "branch": "contrib/ferrite-nplayer",
+      "sha": "b9f03b4e699fe5d5659db9847d93ed416af9e374"
+    },
+    {
+      "branch": "contrib/ferrite-overhaul",
+      "sha": "ab6c3e6d976d4f3ef00e105aca097288f78bf84f"
+    },
+    {
+      "branch": "contrib/ferrite-player-context",
+      "sha": "240b798f82b27634db6a34017ebf2d60ab9957a9"
+    },
+    {
+      "branch": "contrib/ferrite-player-factions",
+      "sha": "016d5926f3a1c90684591d7278a3f43810bcff00"
+    },
+    {
+      "branch": "contrib/ferrite-proto-v2",
+      "sha": "f95fd597ecc0c975a448f8e3cf9fe8b10cbb24f9"
+    },
+    {
+      "branch": "contrib/ferrite-puppet-client",
+      "sha": "275db625c8b3b687ef2b67ff21d9403a22d1928e"
+    },
+    {
+      "branch": "contrib/ferrite-rewrite-base",
+      "sha": "1b7e2d3b122f998744d7be93d4b13fc403bfa123"
+    },
+    {
+      "branch": "contrib/ferrite-rng-streams",
+      "sha": "47885db0f2f59ad53061b38e08e796617e091661"
+    },
+    {
+      "branch": "contrib/ferrite-rust-core",
+      "sha": "361a217dd261027274584a9b5af24d2ab4dec14e"
+    },
+    {
+      "branch": "contrib/ferrite-rw-ai-driver",
+      "sha": "9b6a028cc5d82b726b2cbd81fa6ed362ddb23ae8"
+    },
+    {
+      "branch": "contrib/ferrite-rw-ai-orders",
+      "sha": "d068cf1e234f07dd95948e351c1f0e49c48ee46e"
+    },
+    {
+      "branch": "contrib/ferrite-rw-combat",
+      "sha": "8340fe43f6f46b150918ced3b9671733cf40e54e"
+    },
+    {
+      "branch": "contrib/ferrite-rw-economy",
+      "sha": "60db4b5cd6729704a735df0531b38bdcb697d68a"
+    },
+    {
+      "branch": "contrib/ferrite-rw-ecs-core",
+      "sha": "62ae50c847f2752f85d7d0cb4f5b53856eed4485"
+    },
+    {
+      "branch": "contrib/ferrite-rw-frame-diet",
+      "sha": "9da12cf27d501599cf577d1d63f11b9afc7f4a17"
+    },
+    {
+      "branch": "contrib/ferrite-rw-lane",
+      "sha": "d7f6decf2c889ac80881b4754e29047a310bda27"
+    },
+    {
+      "branch": "contrib/ferrite-rw-physics",
+      "sha": "96dcfe8a690cb3a7439956eeff8a8c1ed81f934b"
+    },
+    {
+      "branch": "contrib/ferrite-rw-transforms",
+      "sha": "7fc0263b0f6d1ed8c719a9cdb7377b5debdf3257"
+    },
+    {
+      "branch": "contrib/ferrite-rw-walk",
+      "sha": "a60b0584bc3473daad9c76ebf09dfb07d5d715b7"
+    },
+    {
+      "branch": "contrib/ferrite-save-trim",
+      "sha": "bf61baa6f5f7bbd824c0a131562fcc4bf20069e3"
+    },
+    {
+      "branch": "contrib/ferrite-shared-attention",
+      "sha": "35b6882fb3c70efeca75f5ee2f9e355e14ba408f"
+    },
+    {
+      "branch": "contrib/ferrite-sim-decouple",
+      "sha": "37d6218f5e4e808a6b7c28419b2d3f155c2071bd"
+    },
+    {
+      "branch": "contrib/ferrite-simprof",
+      "sha": "d00b8a12721ae915596ffc896a218e8f9fc8dca2"
+    },
+    {
+      "branch": "contrib/ferrite-thread-timing",
+      "sha": "2ee6f37872ee3c94f0cc17807542ca602769a3d8"
+    },
+    {
+      "branch": "contrib/ferrite-walk-avatar",
+      "sha": "7944822c76b7d3907c51ee15936f35c291034c1a"
+    },
+    {
+      "branch": "contrib/kimi-fixed-sim-scheduler",
+      "sha": "6e0e38f607fe56afc4a4ffde1e72faea2b43c754"
+    }
+  ]
+}
