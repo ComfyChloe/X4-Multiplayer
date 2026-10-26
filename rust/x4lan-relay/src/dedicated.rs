@@ -58,9 +58,19 @@ impl Config {
         if display.is_empty() || !display.starts_with(':') || display.contains(['/', '\0']) {
             return Err("display must be a local X11 display such as :0".into());
         }
-        let agent = match root.get("engine_agent") {
-            None => None,
-            Some(value) => {
+        // The launcher regenerates config.json on every start, so an operator may also name
+        // the agent through X4LAN_ENGINE_AGENT (e.g. in the systemd unit).
+        let from_env = std::env::var("X4LAN_ENGINE_AGENT").ok().filter(|t| !t.trim().is_empty());
+        let agent = match (root.get("engine_agent"), from_env) {
+            (None, None) => None,
+            (None, Some(text)) => {
+                let path = PathBuf::from(text.trim());
+                if !path.is_absolute() || !fs::metadata(&path).map(|m| m.is_file()).unwrap_or(false) {
+                    return Err(format!("X4LAN_ENGINE_AGENT is not an absolute regular file: {}", path.display()));
+                }
+                Some(path)
+            }
+            (Some(value), _) => {
                 let text = value.as_str().filter(|t| !t.is_empty()).ok_or("engine_agent must be a non-empty path")?;
                 let path = PathBuf::from(text);
                 let path = if path.is_absolute() { path } else { base.join(path) };
