@@ -31,6 +31,9 @@ GROUPS = [
     ('bullets', ('d4f090', 'd4f240', 'd528f0')),
     ('raycast', ('bc4d0', 'bc750')),   # zone ray casts, all callers
     ('missiles', ('566d20',)),         # U::Explosive::Move
+    ('effects', ('d73e00',)),          # SpawnEffect, all callers (muzzle, impact, explosions: client-only visuals)
+    ('aim', ('7e72b0',)),              # ComputeAimPoint -> intercept solver
+    ('launch_tf', ('81cb80', '81c960')),  # weapon launch-point transform
     ('jolt', ('ba600',)),              # XPhys Scene::Step (Jolt)
     ('ai', ('106d250',)),              # AIDirector::Move (scripts, orders)
     ('md', ('1121f80',)),              # MD scheduler
