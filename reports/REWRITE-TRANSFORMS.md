@@ -317,6 +317,8 @@ Native direct-memory run `xform-005` is queued through the released lane tool (4
 `xform-004` was cancelled while still queued to add the duplicate-visit guard; no game launched.
 The earlier copied-model native run was slower than the original under contention; its timings
 are diagnostic, not an isolated performance result. A lead-granted quiet window is still needed.
+`xform_lane.py --timing` forwards the released tool's quiet-window guard without creating a
+window; the lead must grant `transforms` the window before this option can admit a run.
 
 ## 8. Open questions
 

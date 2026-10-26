@@ -2,7 +2,7 @@
 
     python native/engine/xform_lane.py --zig <zig.exe> --label xform-001 [--count 6] [--first 20]
         [--every 30] [--trace 2] [--shadow N] [--shadow-frames 2000] [--switch THREADS] [--switch-ab 1]
-        [--switch-frames 5000] [--switch-impl 2] [--timeout 900] [--wait 3600] [--replay-only]
+        [--switch-frames 5000] [--switch-impl 2] [--timeout 900] [--wait 3600] [--timing] [--replay-only]
 
 1. builds .local/engine/x4lan_xform_64.dll (native/engine/xform_probe.c, -Wall -Wextra -Werror);
 2. assembles the lane overlay .local/lane/overlays/xform-<label> (DLL, ui/xform_probe.lua, ui.xml.files,
@@ -15,6 +15,8 @@
 4. replays every capture with rust/x4mp-transform (examples/replay_capture.rs) and writes
    .local/lane/runs/<label>-replay.txt.
 Exit status: the lane runner's on failure, else 0 when every capture replays identically.
+--timing forwards the released lane tool's timing guard; it requires a lead-granted quiet window
+for agent transforms and never creates a quiet window itself.
 """
 import argparse
 import os
@@ -111,6 +113,7 @@ def main() -> int:
     ap.add_argument('--switch-impl', type=int, choices=(1, 2), default=2, help='1: copy + model, 2: exact walk')
     ap.add_argument('--timeout', type=int, default=900)
     ap.add_argument('--wait', type=int, default=0)
+    ap.add_argument('--timing', action='store_true', help='require a lead-granted transforms quiet window')
     ap.add_argument('--replay-only', action='store_true')
     args = ap.parse_args()
     runs = ROOT / '.local' / 'lane' / 'runs'
@@ -135,6 +138,8 @@ def main() -> int:
                '--collect', str(collect)]
         if args.wait:
             cmd += ['--wait', str(args.wait)]
+        if args.timing:
+            cmd += ['--timing']
         print(' '.join(cmd), flush=True)
         rc = subprocess.run(cmd).returncode
         if rc != 0:

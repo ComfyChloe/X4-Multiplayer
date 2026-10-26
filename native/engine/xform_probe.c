@@ -20,8 +20,9 @@
  * compared against the expected displacement and read back. Any failure leaves the original
  * code in place (or, if a restore fails, the stubs, which still call the originals; the module
  * is pinned). The hook captures only on the registering thread and never during loading.
- * Engine memory is only read, plus the engine's own IsClass (vtable slot 573) as BuildCache
- * itself calls it.
+ * Capture/shadow read engine memory, plus the engine's own IsClass (vtable slot 573).
+ * The opt-in switch replaces BuildCache with a read-only Rust plan and serial engine calls
+ * on the MoveWorker. A shadow mismatch/error immediately routes later frames to the original.
  */
 #ifndef XFORM_PROBE_EMBED
 #define WIN32_LEAN_AND_MEAN
