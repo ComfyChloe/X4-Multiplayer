@@ -147,6 +147,25 @@ class FourPlayerCoopTests(unittest.TestCase):
           assert(found)
         ''')
 
+    def test_client_p3_accepts_a_remote_dock_observation_for_ship_two(self):
+        l = self.make('p3')
+        l.globals().X4LAN_CONFIG.coop_docks = True
+        l.globals().X4LAN_CONFIG.seed_id = 'd' * 32
+        l.execute((UI / 'coop_dock_game.lua').read_text())
+        l.execute('''
+          local c,d=X4LAN_BUBBLE_API.coop,X4LAN_BUBBLE_API.coopDocks
+          d.ready=true
+          auth(1,'p3','2','p3','p2','1','p2','p1','1','0')
+          local p2=string.rep('b',32)
+          nav2(p2,2,1,7,200)
+          client:receiveExtension({'CDOCK','1',client.lease,p2,'2','1','7','FREE','0'},now)
+          local q=d.goal(2,now)
+          assert(q and q.mode=='FREE' and q.lease==p2, 'p3 must see p2 dock state for ship 2')
+          -- entity beyond the session ship count is ignored, entity 3 is parsed (count=3)
+          client:receiveExtension({'CDOCK','1',client.lease,p2,'4','1','8','FREE','0'},now)
+          assert(d.remote[4]==nil)
+        ''')
+
     def test_each_remote_client_gets_its_own_spacesuit(self):
         l = self.make()
         l.execute('''
@@ -187,6 +206,12 @@ class NPlayerMdContractTests(unittest.TestCase):
         self.assertIn('<do_if value="$v.$ship gt 2"><set_value name="$dockWindow" exact="true"/></do_if>', text)
         life = (self.MD / 'x4lan_life.xml').read_text()
         self.assertIn('<do_all exact="$arena.$ships.count" counter="$i">', life)
+        # The native attachment session starts for every client slot, not only p2
+        # (native finding: p3 stopped coop docks and published UNKNOWN, freezing ship 1/2 replicas).
+        attachment = (self.MD / 'x4lan_coop_attachment.xml').read_text()
+        self.assertIn("(if md.X4LAN_Bubble.Arena.$host then $v.$role == 'p1' else $v.$role != 'p1')", attachment)
+        for name in ('x4lan_trade.xml', 'x4lan_walk.xml'):
+            self.assertNotIn('3 - ', (self.MD / name).read_text(), name)   # ships 3+ make 3-localSlot invalid
         cargo = (self.MD / 'x4lan_cargo.xml').read_text()
         self.assertIn('object="$ships.{2}"', cargo)          # native cargo stays on ships 1/2
 

@@ -21,7 +21,7 @@
     <do_if value="State.$started or State.$stopped">
      <raise_lua_event name="'X4LAN_CoopAttachment.Error'" param="'native attachment session already started or stopped'"/>
     </do_if>
-    <do_elseif value="md.X4LAN_Bubble.Arena.$ships? and $v.$role == (if md.X4LAN_Bubble.Arena.$host then 'p1' else 'p2') and md.X4LAN_Seed.State.$id? and $v.$seed == md.X4LAN_Seed.State.$id and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and $v.$seed == md.X4LAN_SeedDocks.State.$id and md.X4LAN_SeedDocks.State.$version == 1">
+    <do_elseif value="md.X4LAN_Bubble.Arena.$ships? and (if md.X4LAN_Bubble.Arena.$host then $v.$role == 'p1' else $v.$role != 'p1') and md.X4LAN_Seed.State.$id? and $v.$seed == md.X4LAN_Seed.State.$id and md.X4LAN_Seed.State.$loads == 1 and md.X4LAN_SeedDocks.State.$id? and $v.$seed == md.X4LAN_SeedDocks.State.$id and md.X4LAN_SeedDocks.State.$version == 1">
      <set_value name="State.$seed" exact="$v.$seed"/><set_value name="State.$epoch" exact="$v.$epoch"/>
      <set_value name="State.$started" exact="true"/><set_value name="State.$active" exact="true"/>
      <raise_lua_event name="'X4LAN_CoopAttachment.Ready'" param="'%s|%s'.[State.$seed,State.$epoch]"/>

@@ -6,7 +6,7 @@
    <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
    <set_value name="$objects" exact="[$arena.$ships.{1},$arena.$ships.{2},md.X4LAN_Trade.Market.$markets.{1},md.X4LAN_Trade.Market.$markets.{2}]"/>
    <create_cue_actor cue="Session" name="$avatar">
-    <select race="race.argon" tags="tag.aipilot"/><name name="'LAN Player %s'.[3 - $arena.$localSlot]"/><owner exact="faction.player"/>
+    <select race="race.argon" tags="tag.aipilot"/><name name="'LAN Player %s'.[if $arena.$localSlot == 1 then 2 else 1]"/><owner exact="faction.player"/>
    </create_cue_actor>
    <set_entity_traits entity="$avatar" missionactor="true" customhandler="true"/>
    <set_entity_role entity="$avatar" role="entityrole.passenger"/>

@@ -292,3 +292,24 @@ fn identity_covers_every_shared_ship() {
     assert_eq!(rows.len(), 1, "{rows:?}");
     assert!(rows[0].contains("|P|3|"), "ship 3 exists, ship 4 does not: {rows:?}");
 }
+
+#[test]
+fn dock_rows_reach_every_other_client() {
+    for level in [Level::Dock, Level::Universe] {
+        let build = "world1-test";
+        let mut s = dedicated(level, build, 3);
+        let l: Vec<String> = (1..=3).map(|slot| join_build(&mut s, build, slot, 0.0).unwrap()).collect();
+        assert!(crew(&mut s, &l[1], 2, 1, 2, 0.05).is_empty());
+        assert!(crew(&mut s, &l[2], 3, 1, 1, 0.05).is_empty());
+        // p2 flies ship 2 (epoch 1), p3 took ship 1 (epoch 2); both report a free dock state.
+        assert!(s.receive(format!("CDOCK|1|{}|2|1|1|FREE|0", l[1]).as_bytes(), addr(2), 0.1).is_empty());
+        assert!(s.receive(format!("CDOCK|1|{}|1|2|1|FREE|0", l[2]).as_bytes(), addr(3), 0.1).is_empty());
+        let snap = s.snapshots(0.2);
+        let docks = |slot: u16| -> Vec<String> {
+            text(&snap, addr(slot)).into_iter().filter(|p| p.starts_with("CDOCK|")).collect()
+        };
+        assert_eq!(docks(1).len(), 2, "{level:?} server");
+        assert_eq!(docks(2), vec![format!("CDOCK|1|{}|{}|1|2|1|FREE|0", l[1], l[2])], "{level:?} p2 sees p3");
+        assert_eq!(docks(3), vec![format!("CDOCK|1|{}|{}|2|1|1|FREE|0", l[2], l[1])], "{level:?} p3 sees p2");
+    }
+}
