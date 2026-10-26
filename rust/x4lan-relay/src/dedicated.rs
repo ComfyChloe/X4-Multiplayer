@@ -499,11 +499,15 @@ impl Supervisor {
 
     fn spawn(&mut self) -> Result<(), String> {
         let log = self.config.profile.join("x4lan-dedicated-native.log");
-        if log.exists() {
-            let archived = self.config.work.join(format!("previous-{}.log", std::process::id()));
-            fs::copy(&log, archived).map_err(|e| format!("cannot preserve previous native log: {e}"))?;
-        }
         regular_file(&log).or_else(|e| if log.exists() { Err(e) } else { Ok(()) })?;
+        if log.exists() {
+            // Move, not copy: poll_log reads from offset 0, and a stale log would report the
+            // previous run's lines (e.g. its STOPPED reason) before X4 truncates the file.
+            let archived = self.config.work.join(format!("previous-{}.log", std::process::id()));
+            fs::copy(&log, &archived)
+                .and_then(|_| fs::remove_file(&log))
+                .map_err(|e| format!("cannot preserve previous native log: {e}"))?;
+        }
         let stdout = OpenOptions::new()
             .create(true)
             .append(true)

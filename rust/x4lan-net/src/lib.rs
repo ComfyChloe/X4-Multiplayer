@@ -296,6 +296,48 @@ unsafe extern "C-unwind" fn net_open(lua: *mut lua_State) -> c_int {
     }
 }
 
+/// Largest dedicated control file the authority reads.
+const MAX_CONTROL: u64 = 4096;
+
+/// First line of the dedicated supervisor's control file, `None` when it is absent.
+/// X4's UI Lua has no `io` and restricts libc through FFI, so the authority reads its
+/// control record here. Only an absolute path to a small regular `control.txt` is read.
+fn read_control(path: &[u8]) -> Result<Option<Vec<u8>>, &'static CStr> {
+    let text = std::str::from_utf8(path).map_err(|_| c"control path must be UTF-8")?;
+    let path = std::path::Path::new(text);
+    if text.contains('\0') || !path.is_absolute() || path.file_name() != Some("control.txt".as_ref()) {
+        return Err(c"control path must be an absolute path to control.txt");
+    }
+    let Ok(meta) = std::fs::metadata(path) else { return Ok(None) };
+    if !meta.is_file() || meta.len() > MAX_CONTROL {
+        return Err(c"control file must be a small regular file");
+    }
+    let Ok(data) = std::fs::read(path) else { return Ok(None) };
+    let line = data.split(|&b| b == b'\n').next().unwrap_or_default();
+    let line = line.strip_suffix(b"\r").unwrap_or(line);
+    Ok(Some(line.iter().copied().take(257).collect()))
+}
+
+unsafe extern "C-unwind" fn net_read_control(lua: *mut lua_State) -> c_int {
+    let api = api();
+    let mut length = 0usize;
+    let path = (api.checklstring)(lua, 1, &mut length);
+    // Resolve to a plain pointer first so no Rust value is live across luaL_error.
+    let failure = match read_control(std::slice::from_raw_parts(path.cast::<u8>(), length)) {
+        Ok(None) => {
+            (api.pushboolean)(lua, 0);
+            return 1;
+        }
+        Ok(Some(line)) => {
+            (api.pushboolean)(lua, 1);
+            (api.pushlstring)(lua, line.as_ptr().cast(), line.len());
+            return 2;
+        }
+        Err(message) => message.as_ptr(),
+    };
+    (api.error)(lua, failure)
+}
+
 unsafe fn method(lua: *mut lua_State, name: &CStr, function: lua_CFunction) {
     let api = api();
     (api.pushcclosure)(lua, function, 0);
@@ -318,14 +360,31 @@ pub unsafe extern "C-unwind" fn luaopen_x4lan_net(lua: *mut lua_State) -> c_int 
     method(lua, c"close", net_close);
     method(lua, c"__gc", net_close);
     (api.settop)(lua, -2);
-    (api.createtable)(lua, 0, 1);
+    (api.createtable)(lua, 0, 2);
     method(lua, c"open", net_open);
+    method(lua, c"read_control", net_read_control);
     1
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn read_control_accepts_only_small_absolute_control_files() {
+        let dir = std::env::temp_dir().join(format!("x4lan-control-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let file = dir.join("control.txt");
+        let path = file.to_str().unwrap().as_bytes().to_vec();
+        assert_eq!(read_control(&path).unwrap(), None);
+        std::fs::write(&file, b"3|abc|pause\r\nignored\n").unwrap();
+        assert_eq!(read_control(&path).unwrap(), Some(b"3|abc|pause".to_vec()));
+        std::fs::write(&file, vec![b'x'; 5000]).unwrap();
+        assert!(read_control(&path).is_err());
+        assert!(read_control(b"control.txt").is_err());
+        assert!(read_control(dir.join("other.txt").to_str().unwrap().as_bytes()).is_err());
+        std::fs::remove_dir_all(dir).unwrap();
+    }
 
     #[test]
     fn ipv4_follows_inet_pton_rules() {

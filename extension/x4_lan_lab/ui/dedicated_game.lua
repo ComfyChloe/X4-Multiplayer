@@ -30,8 +30,8 @@ local function valid()
 end
 local ok,err=pcall(valid)
 if not ok then stop(err);return end
--- X4's UI Lua has no io library; read the supervisor's control file through libc.
-local stdio_ready=false
+-- X4's UI Lua has no io library and restricts libc through FFI; the native
+-- transport module reads the supervisor's control file (tests supply io).
 local function read_control_line(path)
  if io and io.open then
   local file=io.open(path,'r')
@@ -39,22 +39,7 @@ local function read_control_line(path)
   local line=file:read('*l');file:close()
   return true,line
  end
- if not stdio_ready then
-  pcall(ffi.cdef,[[
-typedef struct x4lan_FILE x4lan_FILE;
-x4lan_FILE* fopen(const char*,const char*);
-char* fgets(char*,int,x4lan_FILE*);
-int fclose(x4lan_FILE*);
-]])
-  stdio_ready=true
- end
- local file=C.fopen(path,'r')
- if file==nil then return false end
- local buffer=ffi.new('char[258]')
- local got=C.fgets(buffer,258,file)
- C.fclose(file)
- if got==nil then return true,nil end
- return true,(ffi.string(buffer):gsub('[\r\n]+$',''))
+ return X4LAN_TRANSPORT.read_control(path)
 end
 local function control()
  local found,line=read_control_line(cfg.dedicated_control_path)
