@@ -65,6 +65,32 @@ pub enum Target {
     Barrier,
 }
 
+/// Kind of a buffered engine event operation.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+#[repr(u8)]
+pub enum EngineOpKind {
+    Post = 0,
+    Cancel = 1,
+}
+
+/// One buffered engine event operation, field for field the op record of the walk agent's
+/// stage-1 buffer (`walkpar.h`: src UniverseID, type, time, imm, task, seq; the event object
+/// itself stays on the engine side). Used when a Rust system has to emit or replay engine
+/// events through the barrier (rewrite-coord Q8).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub struct EngineOp {
+    pub kind: EngineOpKind,
+    pub src: UniverseId,
+    pub event_type: u32,
+    /// Event time (f64 bits, TLS game time domain).
+    pub time_bits: u64,
+    pub imm: bool,
+    /// Task key of the poster (sector or bucket), 0 = no scope.
+    pub task: u64,
+    /// Post order inside the task.
+    pub seq: u32,
+}
+
 /// A routed message.
 pub struct Envelope {
     pub from: SectorIx,

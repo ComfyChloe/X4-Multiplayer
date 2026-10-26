@@ -64,6 +64,11 @@ impl SectorCtx<'_> {
     pub fn rng(&mut self, row: usize) -> &mut EngineLcg {
         self.world.col_mut::<RngState>()[row].lcg()
     }
+
+    /// The inbox messages of type `M`, in delivery order.
+    pub fn messages<'s, M: crate::bus::Message>(&'s self) -> impl Iterator<Item = (&'s Envelope, &'s M)> + 's {
+        self.inbox.iter().filter_map(|e| e.get::<M>().map(|m| (e, m)))
+    }
 }
 
 /// Serial barrier context.

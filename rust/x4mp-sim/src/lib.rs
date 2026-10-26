@@ -39,7 +39,7 @@ pub mod snapshot;
 pub mod universe;
 pub mod world;
 
-pub use bus::{Envelope, Message, Outbox, Target};
+pub use bus::{EngineOp, EngineOpKind, Envelope, Message, Outbox, Target};
 pub use column::Bundle;
 pub use comp::Component;
 pub use id::{EntityId, IdMap, Loc, OrderKey, SectorIx, UniverseId};
