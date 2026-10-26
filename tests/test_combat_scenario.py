@@ -29,6 +29,7 @@ def load(name):
 
 install = load('install')
 markers = load('markers')
+scaling = load('scaling')
 
 
 def library_values(path: Path, library: str) -> dict:
@@ -325,6 +326,28 @@ class Markers(unittest.TestCase):
     def test_profile_without_window_is_empty(self):
         stacks, windows = markers.combat_profile(LOG.splitlines()[:6])
         self.assertEqual((dict(stacks), windows), ({}, []))
+
+
+class ScalingEvidence(unittest.TestCase):
+    def test_growth_refuses_contended_failed_and_unknown_runs(self):
+        good = dict(ships_alive_mean=10, timing_trustworthy=True, verdict='pass')
+        for bad in (
+            dict(ships_alive_mean=20, timing_trustworthy=False, verdict='pass'),
+            dict(ships_alive_mean=20, timing_trustworthy=True, verdict='fail'),
+            dict(ships_alive_mean=20),
+        ):
+            with self.subTest(bad=bad):
+                out = scaling.growth([good, bad])
+                self.assertIn('Scaling slopes unavailable', out)
+                self.assertNotIn('| slope vs ships |', out)
+
+    def test_growth_keeps_quiet_window_measurements(self):
+        rows = [dict(ships_alive_mean=n, timing_trustworthy=True, verdict='pass',
+                     variant=f'battle-{n}', ms_per_frame={name: n * 0.1 for name, _ in scaling.GROUPS})
+                for n in (10, 20)]
+        out = scaling.growth(rows)
+        self.assertIn('| slope vs ships |', out)
+        self.assertIn('| sim | 1.00 | 2.00 | 1.00 |', out)
 
 
 if __name__ == '__main__':

@@ -123,13 +123,14 @@ def analyse(run: Path) -> dict:
         'peak_working_set_gb': memory.get('peak_working_set_gb'),
         'peak_commit_gb': memory.get('peak_commit_gb'),
         'timing_trustworthy': result.get('timing_trustworthy'),
+        'verdict': result.get('verdict'),
     }
 
 
 def table(rows: list[dict]) -> str:
     cols = ['weapons', 'bullets', 'raycast', 'jolt', 'ai', 'events', 'walk']
     head = ('| variant | ships spawned / alive | fps | frame ms (max) | sim ms/frame | walk ms (slowest sector) | game speed | '
-            + ' | '.join(f'{c} %' for c in cols) + ' | sim us/ship | peak working set GB |')
+            + ' | '.join(f'{c} %' for c in cols) + ' | sim us/ship | peak working set GB | timing evidence |')
     out = [head, '|' + '---|' * (head.count('|') - 1)]
     for r in rows:
         out.append(
@@ -137,8 +138,13 @@ def table(rows: list[dict]) -> str:
             f"{r['frame_ms']:.1f} ({r['busy_max_ms']:.0f}) | {r['sim_ms']:.1f} | "
             f"{r['walk_ms']:.1f} ({r['sector_max_ms']:.1f}) | {r['game_speed']:.2f} | "
             + ' | '.join(f"{100 * r['shares'][c]:.1f}" for c in cols)
-            + f" | {r['sim_us_per_ship']} | {r['peak_working_set_gb']} |")
+            + f" | {r['sim_us_per_ship']} | {r['peak_working_set_gb']} | "
+            + ('quiet-window pass' if timing_eligible(r) else 'diagnostic only') + ' |')
     return '\n'.join(out) + '\n'
+
+
+def timing_eligible(row: dict) -> bool:
+    return row.get('timing_trustworthy') is True and row.get('verdict') == 'pass'
 
 
 def growth(rows: list[dict]) -> str:
@@ -148,6 +154,9 @@ def growth(rows: list[dict]) -> str:
     rows = sorted(rows, key=lambda r: r['ships_alive_mean'])
     if len(rows) < 2:
         return ''
+    if not all(timing_eligible(r) for r in rows):
+        return ('Scaling slopes unavailable: every run must be a successful quiet-window measurement. '
+                'Contended or unverified runs are diagnostic observations only.\n')
     names = ['sim'] + [name for name, _ in GROUPS if name != 'sim']
     head = '| system | ' + ' | '.join(f"{r['variant']} ms" for r in rows) + ' | slope vs ships |'
     out = [head, '|' + '---|' * (head.count('|') - 1)]

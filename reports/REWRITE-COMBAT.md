@@ -382,7 +382,9 @@ instantiated `SpawnBatch` cue; `COMBATSCN spawn begin` / `spawn complete` frame 
 measurement window starts `$EngageDelayS + $SettleS` after it. `$SpawnBatch` 0 (the other variants) spawns
 in one frame in the version 2 order, seeds and positions. `dev/combat_scenario/scaling.py <runs>` turns
 profile-mode runs into a scaling table (fps, MoveWorker frame and simulation ms, shares, ms per frame per
-system, cost per ship, X4 memory).
+system, cost per ship, X4 memory). Every row labels its timing evidence; growth slopes are emitted
+only when every compared run both passed and held a trustworthy quiet window. Contended values
+remain diagnostic observations, not an accepted scaling curve.
 
 ```
 python dev/combat_scenario/install.py stage --variant battle --out .local/evidence-063-withheld
