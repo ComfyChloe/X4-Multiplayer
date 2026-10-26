@@ -23,6 +23,8 @@
 #ifndef X4LAN_WALKPAR_H
 #define X4LAN_WALKPAR_H
 
+#include "wpdetour.h"   /* build-pinned, crash-safe entry-detour installer */
+
 enum {
     WP_OFF = 0,     /* not selected */
     WP_CENSUS = 1,  /* stage 0: counters only, never buffers */
@@ -610,5 +612,73 @@ static const wp_api WP_API = {
 };
 
 static const wp_api *walkpar_api(void) { return &WP_API; }
+
+/* ---- native arming: install the entry detours that feed the engine ---------------------------- */
+static int wp_want;     /* requested mode, armed lazily each frame until the thread freeze takes */
+#ifdef X4_HAVE_WALKPAR_SITES
+
+/* One contiguous descriptor array (the installer freezes/patches them together). Census installs
+   the first 3 (post, sector, deliver); replay also installs cancel. */
+enum { WPD_POST = 0, WPD_SECTOR, WPD_DELIVER, WPD_CANCEL, WPD_N };
+static wp_detour wp_det[WPD_N] = {
+    {0x99a3f0, 14, 3, NULL, 32, NULL, {0}, NULL, 0},
+    {0x784230, 15, -1, NULL, 32, NULL, {0}, NULL, 0},
+    {0x99c470, 16, -1, NULL, 32, NULL, {0}, NULL, 0},
+    {0x99a870, 17, -1, NULL, 32, NULL, {0}, NULL, 0},
+};
+static int wp_det_n;    /* how many of wp_det are armed */
+
+static void wp_d_post(void *src, void *event, double time, int imm) {
+    if (wp_post(src, event, time, imm)) return;      /* buffered: skip the original */
+    ((void (*)(void *, void *, double, int))wp_det[WPD_POST].tramp)(src, event, time, imm);
+}
+static void wp_d_cancel(void *src, int type, double minTime) {
+    if (wp_cancel(src, type, minTime)) return;
+    ((void (*)(void *, int, double))wp_det[WPD_CANCEL].tramp)(src, type, minTime);
+}
+static void wp_d_deliver(void *src, void *event, uint32_t t) {
+    wp_deliver_enter(src, event);
+    ((void (*)(void *, void *, uint32_t))wp_det[WPD_DELIVER].tramp)(src, event, t);
+    wp_deliver_exit(src, event);
+}
+static uintptr_t wp_d_sector(void *self) {
+    wp_sector_enter(self);
+    uintptr_t r = ((uintptr_t (*)(void *))wp_det[WPD_SECTOR].tramp)(self);
+    wp_sector_exit(self);
+    return r;
+}
+
+/* Install the entry detours and, on success, enable the engine. Fail closed: if the detours do not
+   all install, the engine stays OFF. Returns 1 when armed; a transient 0 (a thread was inside a
+   patch range) is the caller's retry. */
+static int walkpar_arm_native(int mode) {
+    if (wp_ready != WP_READY_OK || (mode != WP_CENSUS && mode != WP_REPLAY)) return 0;
+    if (wp_det_n) return 1;                            /* already armed */
+    wp_det[WPD_POST].detour = (void *)wp_d_post;       wp_det[WPD_POST].sha = x4_walkpar_checks[0].sha;
+    wp_det[WPD_CANCEL].detour = (void *)wp_d_cancel;   wp_det[WPD_CANCEL].sha = x4_walkpar_checks[1].sha;
+    wp_det[WPD_DELIVER].detour = (void *)wp_d_deliver; wp_det[WPD_DELIVER].sha = x4_walkpar_checks[2].sha;
+    wp_det[WPD_SECTOR].detour = (void *)wp_d_sector;   wp_det[WPD_SECTOR].sha = x4_walk_sites[WK_SECTOR].sha;
+    int n = (mode == WP_REPLAY) ? WPD_N : WPD_N - 1;   /* census: post, sector, deliver */
+    if (!wp_detour_install(wp_det, n)) return 0;
+    wp_det_n = n;
+    walkpar_set_mode(mode);
+    return 1;
+}
+
+static void walkpar_disarm_native(void) {
+    wp_want = 0;
+    if (!wp_det_n) return;
+    wp_detour_uninstall(wp_det, wp_det_n);
+    wp_det_n = 0;
+}
+
+/* Armed lazily once per frame until the thread freeze takes (a Rip clash on a hot function entry is
+   transient); set by start(), cleared on disarm. */
+static void walkpar_tick(void) { if (wp_want && !wp_det_n) walkpar_arm_native(wp_want); }
+#else
+static int walkpar_arm_native(int mode) { (void)mode; return 0; }
+static void walkpar_disarm_native(void) { wp_want = 0; }
+static void walkpar_tick(void) {}
+#endif /* X4_HAVE_WALKPAR_SITES */
 
 #endif /* X4LAN_WALKPAR_H */

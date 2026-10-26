@@ -320,6 +320,7 @@ static void disarm_because(const char *reason) {
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
     walkpar_disarm();
+    walkpar_disarm_native();
     walk_uninstall();
     unregister_sim_hooks();
     if (table_owned())
@@ -337,7 +338,7 @@ static void sim_begin(handler *self) {
     simprof_loop(1);
     LARGE_INTEGER now;
     sim_begin_qpc = (sim_frame_ok() && qpc_read(&now)) ? now.QuadPart : 0;
-    if (sim_begin_qpc) walk_frame_begin();
+    if (sim_begin_qpc) { walk_frame_begin(); if (wp_mode != WP_OFF) wp_walk_begin(); }
 }
 
 static void sim_end(handler *self) {
@@ -357,6 +358,7 @@ static void sim_end(handler *self) {
     unsigned bucket = (unsigned)(ms * 4.0);
     o->win_hist[bucket < SIM_BUCKETS ? bucket : SIM_BUCKETS - 1]++;
     walk_frame_end();
+    if (wp_mode != WP_OFF) wp_walk_end();
 }
 
 /* p95 of the current window in ms (bucket upper edge), then reset the window. */
@@ -381,6 +383,7 @@ static void move(handler *self) {
     if (GetCurrentThreadId() != owner_thread || !table_owned()) { disarm_because("callback ownership lost"); return; }
     if (*(int *)((unsigned char *)registered_table + 0x130)) { ++o->loading_skips; return; }
     if (o->profile) simprof_note_slots(registered_table);
+    walkpar_tick();   /* lazily install the walkpar entry detours once the freeze takes */
     LARGE_INTEGER now;
     if (!qpc_read(&now) || qpc_frequency <= 0) { disarm_because("QPC unavailable"); return; }
     if (o->fixed) {
@@ -583,7 +586,7 @@ static int failure(lua_State *L, const char *reason) {
 }
 
 static int start(lua_State *L) {
-    int fixed = 0, profiling = 0, top = p_lua_gettop(L);
+    int fixed = 0, profiling = 0, census = 0, top = p_lua_gettop(L);
     unsigned interval_us = SP_DEFAULT_INTERVAL_US, depth = SP_DEFAULT_DEPTH;
     if (top >= 1 && p_lua_type(L, 1) == LUA_TSTRING) {
         const char *mode = p_lua_tolstring(L, 1, NULL);
@@ -591,6 +594,7 @@ static int start(lua_State *L) {
         if (!strcmp(mode, "fixed60")) fixed = 1;
         else if (!strcmp(mode, "fixed60catchup")) fixed = 2;
         else if (!strcmp(mode, "profile")) profiling = 1;
+        else if (!strcmp(mode, "walkcensus")) census = 1;   /* stage 0 walk census (entry detours) */
         else return failure(L, "unsupported mode");
         if (top > (profiling ? 3 : 1)) return failure(L, "unsupported mode");
         /* profile[, interval_ms (0.5..10, default 1)[, max stack depth (8..64, default 32)]] */
@@ -680,10 +684,11 @@ static int start(lua_State *L) {
     o->armed = 1;
     /* Component-walk profiling needs the slot 0/15 frame brackets; optional, fail closed. */
     if (o->sim_hooks && !walk_install(1)) o->walk_refused = 1;
-    /* Deferred-event census/replay engine: verify the detour signatures (no code patch here). The
-       native detour layer calls walkpar_set_mode once its in-process hooks are installed. */
+    /* Deferred-event census/replay engine: verify the detour signatures. walkcensus additionally
+       requests the entry detours, installed lazily on the MoveWorker (walkpar_tick in move). */
     walkpar_arm();
     (void)walkpar_api();
+    if (census) wp_want = WP_CENSUS;
     if (profiling) {
         /* A sampler that cannot start leaves the probe running; stats() reports why. */
         o->profile = 1;
