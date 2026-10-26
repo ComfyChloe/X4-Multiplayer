@@ -18,8 +18,9 @@ class StationProbeTests(unittest.TestCase):
           now=3; path='/test/45850/save/'; logs={}; events={}; requests=0
           moduleIds={[0]=201,[1]=202}; moduleMacros={[201]='module_a',[202]='module_b',[203]='module_b'}
           moduleCount=2; operational=true
+          local realffi=require('ffi')
           package.loaded.ffi={cdef=function()end, string=function(s)return s end,
-            new=function()return moduleIds end, C={
+            new=function(kind)if kind=='uint64_t' then return realffi.new('uint64_t',0) end;return moduleIds end, C={
               GetSaveFolderPath=function()return path end, IsPlayerValid=function()return true end,
               GetNumStationModules=function()return moduleCount end,
               GetStationModules=function()return moduleCount end,
@@ -37,7 +38,7 @@ class StationProbeTests(unittest.TestCase):
         return lua
 
     def start(self, lua):
-        lua.execute("tick();events['DLCOR.Station'](nil,{index=1,plan='test_plan',object='101'});now=3.2;tick()")
+        lua.execute("tick();events['DLCOR.Station'](nil,'1|test_plan|0x65');now=3.2;tick()")
 
     def log(self, lua):
         return lua.eval("table.concat(logs,'\\n')")
@@ -67,7 +68,7 @@ class StationProbeTests(unittest.TestCase):
             self.assertIn('FAIL',self.log(lua))
 
     def test_duplicate_station_and_missing_payload_refuse(self):
-        for payload in ("{index=1,plan='test_plan',object='101'}", "'bad'"):
+        for payload in ("'1|test_plan|0x65'", "'bad'", "{index=1,plan='test_plan',object='101'}"):
             lua=self.runtime();self.start(lua)
             lua.execute("events['DLCOR.Station'](nil,"+payload+")")
             self.assertIn('FAIL',self.log(lua))
@@ -83,12 +84,17 @@ class StationProbeTests(unittest.TestCase):
             plans.write_text('<diff><add><plan id="a"><entry macro="module_a"/><entry macro="module_b"/></plan></add></diff>')
             BUILD.build(manifest,plans,out)
             xml=(out/'md/correlation.xml').read_text()
-            self.assertIn('$object=$s',xml)
+            self.assertIn("'%s|%s|%s'.[1,'a',$s]",xml)
             self.assertNotIn('param2=',xml)
             self.assertIn('repeated_start UI_reload',xml)
             with self.assertRaisesRegex(ValueError,'output exists'):BUILD.build(manifest,plans,out)
             manifest.write_text(manifest.read_text().replace('"entries": 2','"entries": 3'))
             with self.assertRaisesRegex(ValueError,'count differ'):BUILD.build(manifest,plans,p/'other')
+
+    def test_large_uid_is_not_rounded_through_double(self):
+        lua=self.runtime()
+        lua.execute("tick();events['DLCOR.Station'](nil,'1|test_plan|0xfffffffffffffff1')")
+        self.assertIn('station=18446744073709551601',self.log(lua))
 
 
 if __name__=='__main__':unittest.main()

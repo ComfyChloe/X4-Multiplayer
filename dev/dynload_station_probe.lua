@@ -52,13 +52,16 @@ end
 RegisterEvent('DLCOR.Station', function(_, value)
   if failed or finished then return end
   local ok, err = pcall(function()
-    if type(value) ~= 'table' then error('station event is not table') end
-    local index = tonumber(value.index or value['$index'])
-    local plan = value.plan or value['$plan']
-    local object = value.object or value['$object']
+    if type(value) ~= 'string' then error('station event is not scalar text') end
+    local rawIndex, plan, object = value:match('^(%d+)|([%w_]+)|(0x[%da-fA-F]+)$')
+    local index = tonumber(rawIndex)
+    if not object or #object > 18 then error('malformed station payload') end
+    -- MD component text is hexadecimal. Keep the entire ID in uint64 arithmetic.
+    local nativeObject = ffi.new('uint64_t', 0)
+    for digit in object:sub(3):gmatch('.') do nativeObject = nativeObject * 16 + tonumber(digit, 16) end
     local row = index and expected[index]
     if not started or not row or seen[index] or plan ~= row.plan then error('station correlation mismatch') end
-    local key, id = uid(object)
+    local key, id = uid(nativeObject)
     if key == '0' or stationIds[key] then error('duplicate/zero station ID') end
     stationIds[key], seen[index] = true, true
     pending[#pending + 1] = {index=index, expect=row, key=key, id=id, t=GetCurRealTime()}

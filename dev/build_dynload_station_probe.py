@@ -38,7 +38,7 @@ def build(manifest, plans_path, out):
           <position x="{50000+i*10000}m" y="0m" z="50000m"/>
         </create_station>
         <do_if value="$s">
-          <raise_lua_event name="'DLCOR.Station'" param="table[$index={i},$plan='{plan}',$object=$s]"/>
+          <raise_lua_event name="'DLCOR.Station'" param="'%s|%s|%s'.[{i},'{plan}',$s]"/>
         </do_if>
         <do_else><debug_text text="'DLCOR FAIL create index={i}'" filter="error"/></do_else>''')
     lua = "DLCOR_EXPECTED = {\n" + ",\n".join(
