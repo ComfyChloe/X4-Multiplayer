@@ -296,6 +296,9 @@ function M.drPush(track,clock,time,p,velocity,arrival,from)
  if track.time and T then current=M.drRender(track,T,arrival) end
  M.drObserve(clock,time,arrival)
  T=M.drTime(clock,arrival)
+ -- The snap limit uses the faster of the old and the new velocity: a hard stop (highway exit)
+ -- is a large but continuous correction, not a teleport.
+ local oldSpeed=track.velocity and M.speed(track.velocity) or 0
  local pp,vv={},{}
  for i=1,6 do pp[i]=p[i];vv[i]=velocity[i] end
  track.time,track.pose,track.velocity,track.err=time,pp,vv,nil
@@ -308,7 +311,7 @@ function M.drPush(track,clock,time,p,velocity,arrival,from)
   e[i]=delta
  end
  local err=math.sqrt(d2)
- if err>math.max(M.dr.snapMin,M.dr.snapTime*M.speed(velocity)) and arrival>=(track.snapAt or -math.huge)+M.dr.snapEvery then
+ if err>math.max(M.dr.snapMin,M.dr.snapTime*math.max(oldSpeed,M.speed(velocity))) and arrival>=(track.snapAt or -math.huge)+M.dr.snapEvery then
   track.snapAt=arrival;return true,err,true
  end
  track.err,track.errAt=e,arrival

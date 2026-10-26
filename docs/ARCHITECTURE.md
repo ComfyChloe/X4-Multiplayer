@@ -42,13 +42,17 @@ radians. Legacy `UPOS` remains readable.
 NPC motion is a shared prediction (`motion.lua` `M.drPredict`): pose plus velocity
 times elapsed source time, with a constant turn rate when the velocity heading matches
 the yaw (turns capped at 90 degrees, then straight). The host reads every published
-NPC each motion tick (one fixed 0.05 s server step), takes its velocity from the
-displacement over that tick (none across a jump above 100 km/s), and sends a sample
-only when the real pose diverges from the prediction of the last sent sample, or as a
-keepalive. Relevance sets thresholds and rates: hot (within 6 km of a player ship, or
-a client's target) 3 m / 0.02 rad, up to 20 Hz, keepalive 1 s; warm (within 25 km)
-25 m / 0.06 rad, up to 5 Hz, keepalive 2 s; cold 150 m / 0.2 rad, up to 2 Hz,
-keepalive 4 s. At most 32 samples per tick, most diverged first. A client reports its
+NPC each motion tick (one fixed 0.05 s server step). Its velocity is the displacement
+over the last 0.2 s of ticks (none across a jump above 100 km/s); its sent yaw rate is
+the measured turn rate of that course when the heading matches the yaw, so a yaw that is
+not the course cannot bend the prediction (Euler rates above 3 rad/s are angle wraps and
+count as 0). A sample is sent only when the real pose diverges from the prediction of
+the last sent sample, or as a keepalive. Relevance sets thresholds and rates: hot
+(within 6 km of a ship a client owns, or a client's target) 3 m / 0.02 rad, up to 20 Hz,
+keepalive 1 s; warm (within 25 km) 25 m / 0.06 rad, up to 5 Hz, keepalive 2 s; cold
+150 m / 0.2 rad, up to 2 Hz, keepalive 4 s. In every tier an error above max(300 m,
+0.1 s of speed) is sent at once. At most 32 samples per tick, most diverged first. Host
+`NPC_DIAG` rows report `players=` (player ships found) and `urgent=`. A client reports its
 selected NPC with `UFOCUS|1|lease|seq|id` (0 = none, refreshed every second); relays
 forward each new sequence to the host (`|clientLease` appended on the dedicated relay),
 which treats it as hot for 3 s. Relays forward samples a client has not received
@@ -59,15 +63,16 @@ Clients dead-reckon on the host's clock. The dedicated server steps a fixed 0.05
 frame at 12-20 fps, so its clock runs at about 0.6-1.1 x wall time; the client estimates
 rate and offset from the least-delayed samples (sliding 3 s window) and slews its render
 clock at most 0.1 s/s. A new sample's error blends out with a 0.3 s time constant; an
-error above max(1 km, 1 s of speed) snaps, at most once per second per replica, logged
-as `NPC_SNAP`. Prediction coasts 8 s past the last sample, then holds. Replicas moving
-at 150 m/s or more, or moving within 6 km of the player, are written every frame (up to
-256); the rest at most 128 per frame no faster than every 15 ms. When the engine pose
-slipped from the last written pose by more than max(5 km, 2 s of speed) (zone-frame
-re-parenting, as for co-op ships), replicas near the player learn the zone offset per
-source zone and compensate later writes; other slips are rewritten, and a slip lasting
-1 s respawns the replica at its pose (`NPC_FRAME_SLIP` counts each action). A baseline pose replaces a live track
-only after 8 s without motion; replicas pause only when the baseline is 15 s old and
+error above max(1 km, 1 s of the faster of the old and new speed) snaps, at most once per
+second per replica, logged as `NPC_SNAP`. Prediction coasts 8 s past the last sample, then
+holds. Replicas moving at 150 m/s or more, or moving within 6 km of the player, are
+written every frame (up to 256); the rest at most 128 per frame no faster than every
+15 ms. When the engine pose slipped from the last written pose by more than max(5 km,
+2 s of speed) (zone-frame re-parenting, as for co-op ships), replicas near the player or
+that slipped in the last 10 s learn the zone offset per source zone and compensate later
+writes; other slips are rewritten, and a slip lasting 1 s respawns the replica at its
+pose (`NPC_FRAME_SLIP` counts each action). A baseline pose replaces a live track only
+after 8 s without motion; replicas pause only when the baseline is 15 s old and
 no motion arrived for 5 s. The co-op `NAV2` path still uses the interpolation buffer
 (minimum-latency offset, 150 ms delay, 350 ms prediction). Engine changes wait for an
 unpaused frame; transport acknowledgement alone is not engine success.

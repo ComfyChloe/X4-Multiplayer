@@ -36,7 +36,8 @@ local function log(v) DebugError('[X4LAN] UNIVERSE '..v) end
 -- A baseline pose replaces a live track only after `hold` s without motion.
 local NPC={stale=2.5,cap=50000,hold=8,fast=150,hotBudget=256,jump=100,suppressEvery=2,
  budget=32,evalBudget=768,hotRange=6000,warmRange=25000,focusHold=3,focusEvery=1,motionLive=5,
- scanHost=4096,scanGuest=1024,slipMin=5000,slipSpeed=2,slipRespawn=1}
+ scanHost=4096,scanGuest=1024,slipMin=5000,slipSpeed=2,slipRespawn=1,slipTrack=10,
+ velWindow=.2,maxRate=3,maxTurn=2,urgentMin=300,urgentTime=.1}
 NPC.tiers={
  hot={name='hot',pos=3,ang=.02,look=.25,min=.05,keep=1,weight=4},
  warm={name='warm',pos=25,ang=.06,look=.5,min=.2,keep=2,weight=2},
@@ -55,7 +56,7 @@ local function peak(name,v) if diagEvery and v>(diag[name] or 0) then diag[name]
 local function sample(list,v) if diagEvery and #list<4096 then list[#list+1]=v end end
 local DIAG_FIELDS={'creates','respawns','removes','hides','shows','suppressed','commits','samples',
  'reset_gap','reset_jump','baseline_snap','writes','hot_writes','jumps','max_jump','max_gap','max_delay',
- 'snaps','slips','sent','sent_hot','sent_warm','sent_cold','first','diverge','keepalive','deferred','focus','paused'}
+ 'snaps','slips','sent','sent_hot','sent_warm','sent_cold','first','urgent','diverge','keepalive','deferred','focus','players','paused'}
 local function percentile(list,q)
  if #list==0 then return nil end
  table.sort(list);return list[math.max(1,math.ceil(q*#list))]
@@ -322,7 +323,8 @@ end
 -- zone-local pose, which then lands offset by the difference of the two zone origins; the
 -- engine files the replica back into the old zone and the next write repeats it. Near the
 -- player the target lies in a zone around the player's ship, so it repeats every frame.
--- For replicas near the player the slip of a re-parenting write is kept per source zone and
+-- For replicas near the player (or that slipped in the last slipTrack s) the slip of a
+-- re-parenting write is kept per source zone and
 -- subtracted from later writes that start there; elsewhere (and when the predicted target
 -- zone is missed) the pose is rewritten. A slip that lasts slipRespawn s respawns the
 -- replica at the target pose, at most once per 2 s. One NPC_FRAME_SLIP row per 5 s at most.
@@ -393,7 +395,7 @@ local function apply(r,now,sector,hot)
   local a=C.GetObjectPositionInSector(r.object)
   dx,dy,dz=a.x-r.applied[1],a.y-r.applied[2],a.z-r.applied[3]
   slip=math.sqrt(dx*dx+dy*dy+dz*dz)
-  if slip>math.max(NPC.slipMin,NPC.slipSpeed*speed) then changed=true;r.slipSince=r.slipSince or now
+  if slip>math.max(NPC.slipMin,NPC.slipSpeed*speed) then changed=true;r.slipSince=r.slipSince or now;r.zoneTrackUntil=now+NPC.slipTrack
   else slip=0;r.slipSince=nil end
  end
  if changed then
@@ -402,7 +404,8 @@ local function apply(r,now,sector,hot)
    local expected=math.max(speed,r.speed or 0)*(now-r.appliedAt)
    if d>NPC.jump+2*expected then count('jumps');peak('max_jump',d) end
   end
-  writePose(r,sector,value,p,slip,dx,dy,dz,now,near);r.appliedAt=now
+  -- Zones are tracked near the player and for slipTrack s after any slip of this replica.
+  writePose(r,sector,value,p,slip,dx,dy,dz,now,near or now<(r.zoneTrackUntil or 0));r.appliedAt=now
   count(hot and 'hot_writes' or 'writes')
  end
  r.speed=speed;r.frame=u.frameNo
@@ -437,22 +440,28 @@ local function render(now,sector)
   end
  end
 end
--- Server: player ship positions per sector (every shared client ship, plus the local player
--- unless this is the dedicated server, whose own player sits in an observer ship).
+-- Server: player ship positions per sector, keyed by key(sector): engine IDs are 64-bit
+-- cdata, and two cdata values that compare equal are still different table keys (live:
+-- every NPC was cold). The dedicated server counts only shared ships a client owns (its
+-- own observer player and unclaimed ships are no players); a two-player host also counts
+-- its local player.
 local function playerShips()
- local out={}
+ local out,n={},0
  local function add(object)
   if object and object~=0 and C.IsComponentOperational(object) then
    local sector=C.GetContextByClass(object,'sector',false)
    if sector~=0 then
-    local p=C.GetObjectPositionInSector(object);local list=out[sector] or {};out[sector]=list
-    list[#list+1]={p.x,p.y,p.z}
+    local p=C.GetObjectPositionInSector(object);local k=key(sector);local list=out[k] or {};out[k]=list
+    list[#list+1]={p.x,p.y,p.z};n=n+1
    end
   end
  end
- for i=1,A.coop.count or 0 do add(A.coop.ships[i]) end
+ local owners=A.coop.owners or {}
+ for i=1,A.coop.count or 0 do
+  if cfg.dedicated~=true or (owners[i] and owners[i]~=cfg.slot) then add(A.coop.ships[i]) end
+ end
  if cfg.dedicated~=true then add(C.GetPlayerContainerID()) end
- return out
+ return out,n
 end
 local function relevance(id,p,players,focus)
  if focus[id] then return NPC.tiers.hot end
@@ -464,17 +473,55 @@ local function relevance(id,p,players,focus)
  if best<=NPC.warmRange^2 then return NPC.tiers.warm end
  return NPC.tiers.cold
 end
--- Velocity over the last motion tick (one fixed server step on the dedicated server). A
--- displacement above 100 km/s (gate, teleport) carries no velocity.
+-- Velocity over the last velWindow s of motion ticks (a single tick amplifies an engine
+-- position that updates in steps). A tick displacement above 100 km/s (gate, teleport)
+-- restarts the history and carries no velocity. Euler rates above maxRate rad/s are angle
+-- wraps (pitch through 90 degrees, roll flips), not rotation, and count as 0.
+-- Turn rate: the shared prediction turns the velocity with the sample's yaw rate when the
+-- velocity heading matches the yaw. The sent yaw rate is then the measured rate of the
+-- velocity heading (in the matched convention), so a yaw that is not the course cannot
+-- bend the predicted path; turns above maxTurn rad/s are clamped.
+local function headingBranch(pose,v)
+ if math.sqrt(v[1]^2+v[3]^2)<1 then return 0 end
+ local heading=math.atan2(v[1],v[3])
+ local a,b=math.abs(M.angle(heading-pose[4])),math.abs(M.angle(heading+pose[4]))
+ if a<M.dr.headingMatch and a<=b+.05 then return 1 elseif b<M.dr.headingMatch then return -1 end
+ return 0
+end
 local function velocityOf(identity,p,now)
- local prev=identity.prev;identity.prev={time=now,pose=p}
- if not prev or now-prev.time<=.001 or now-prev.time>1 then return nil end
- local dt=now-prev.time;local v={}
- for i=1,6 do
-  local d=p[i]-prev.pose[i];if i>3 then d=M.angle(d) end;v[i]=d/dt
+ local h=identity.hist or {};identity.hist=h;local last=h[#h]
+ if last and (now-last.time>1 or now<=last.time) then h={};identity.hist=h;last=nil end
+ if last then
+  local d2=0;for i=1,3 do d2=d2+(p[i]-last.pose[i])^2 end
+  if math.sqrt(d2)/(now-last.time)>100000 then
+   identity.hist={{time=now,pose=p}};return {0,0,0,0,0,0}
+  end
  end
- if M.speed(v)>100000 then return {0,0,0,0,0,0} end
- for i=4,6 do v[i]=math.max(-6.28,math.min(6.28,v[i])) end
+ h[#h+1]={time=now,pose=p}
+ while #h>2 and now-h[2].time>=NPC.velWindow do table.remove(h,1) end
+ local o=h[1];local dt=now-o.time
+ if #h<2 or dt<=.001 then return nil end
+ local v={}
+ for i=1,6 do
+  local d=p[i]-o.pose[i];if i>3 then d=M.angle(d) end;v[i]=d/dt
+  if i>3 and math.abs(v[i])>NPC.maxRate then v[i]=0 end
+ end
+ -- Heading rate of the velocity: the course over the older and the newer half of the window.
+ local m=h[math.max(1,math.floor((#h+1)/2))]
+ local turn=0
+ if m~=o and m~=h[#h] then
+  local h1=math.atan2(m.pose[1]-o.pose[1],m.pose[3]-o.pose[3]);local h2=math.atan2(p[1]-m.pose[1],p[3]-m.pose[3])
+  local d1,d2=(m.pose[1]-o.pose[1])^2+(m.pose[3]-o.pose[3])^2,(p[1]-m.pose[1])^2+(p[3]-m.pose[3])^2
+  if d1>1 and d2>1 then turn=M.angle(h2-h1)/((now-o.time)/2) end
+ end
+ turn=math.max(-NPC.maxTurn,math.min(NPC.maxTurn,turn))
+ -- The window's chord lags a turning course by half the window: rotate it to the present.
+ if turn~=0 then
+  local a=turn*dt/2;local c,s=math.cos(a),math.sin(a)
+  v[1],v[3]=v[1]*c+v[3]*s,v[3]*c-v[1]*s
+ end
+ local branch=headingBranch(p,v)
+ if branch~=0 then v[4]=branch*turn end
  return v
 end
 -- Why and how urgently an NPC is due: never sent, diverged from the shared prediction of its
@@ -490,12 +537,15 @@ local function due(identity,p,v,tier,now)
  for i=4,6 do turn=math.max(turn,math.abs(M.angle(p[i]-q[i]))) end
  local err=math.sqrt(d2)
  local score=math.max(err/tier.pos,turn/tier.ang,math.sqrt(dv)*tier.look/tier.pos)
+ -- Any tier: an error above max(urgentMin m, urgentTime s of speed) is sent at once, so a
+ -- fast ship's error stays below the client's snap limit (min intervals only pace small ones).
+ if err>math.max(NPC.urgentMin,NPC.urgentTime*M.speed(v)) then return 'urgent',err/tier.pos*tier.weight+1e6,err end
  if score>=1 and age>=tier.min then return 'diverge',score*tier.weight,err end
  if age>=tier.keep then return 'keepalive',age/tier.keep*tier.weight*.5,err end
  return nil
 end
 local function publishMotion(now)
- local players=playerShips();local focus={}
+ local players,shipCount=playerShips();local focus={};peak('players',shipCount)
  for who,f in pairs(u.focus) do
   if now-f.at>NPC.focusHold then u.focus[who]=nil elseif f.id>0 then focus[f.id]=true end
  end
@@ -506,18 +556,18 @@ local function publishMotion(now)
   if target and C.IsComponentOperational(entry.object) and C.GetContextByClass(entry.object,'sector',false)==target then
    local p=pose(entry.object);local v=velocityOf(identity,p,now)
    if v then
-    local tier=relevance(entry.id,p,players[target],focus)
+    local tier=relevance(entry.id,p,players[key(target)],focus)
     local why,score,err=due(identity,p,v,tier,now)
     if why then list[#list+1]={entry=entry,p=p,v=v,tier=tier,why=why,score=score,err=err} end
    end
-  else identity.prev=nil end
+  else identity.hist=nil end
  end
  table.sort(list,function(a,b) if a.score~=b.score then return a.score>b.score end;return a.entry.id<b.entry.id end)
  for i=1,math.min(NPC.budget,#list) do
   local c=list[i];local entry=c.entry
   u.motionSeq=u.motionSeq+1;entry.identity.sent={time=now,pose=c.p,vel=c.v}
   count('sent');count('sent_'..c.tier.name);count(c.why)
-  if c.why=='diverge' then sample(errors,c.err) end
+  if c.why~='first' and c.why~='keepalive' then sample(errors,c.err) end
   send('UMOVE|1|'..s.client.lease..'|'..s.client.lease..'|'..entry.id..'|'..u.motionSeq..'|'..entry.sector..'|'..
    string.format('%.6f',now)..'|'..poseFields(c.p):gsub(',','|')..'|'..poseFields(c.v):gsub(',','|'))
  end
@@ -604,7 +654,7 @@ local function frame(now)
   u.scan=nil;u.nextScan=now+2
  end
  if #u.publish>0 and now>=(u.nextMotion or 0) then
-  u.nextMotion=now+.05
+  u.nextMotion=now+.045  -- every 0.05 s server frame (float steps must not skip one)
   publishMotion(now)
  end
  local names={};for name in pairs(u.wanted) do names[#names+1]=name end;table.sort(names)

@@ -155,6 +155,17 @@ class DeadReckoningTests(unittest.TestCase):
           assert(snapped)
         ''')
 
+    def test_hard_stop_blends_instead_of_snapping(self):
+        # Live: about 20 snaps/s, a new sample's (slow) speed set the limit to 1 km although
+        # the replica had been flying at highway speed.
+        l = motion()
+        l.execute('''
+          local clock=M.drClock();local track={}
+          for k=0,5 do M.drPush(track,clock,k*.1,{8000*k*.1,0,0,0,0,0},{8000,0,0,0,0,0},k*.1) end
+          local ok,err,snapped=M.drPush(track,clock,.9,{5600,0,0,0,0,0},{300,0,0,0,0,0},.9)
+          assert(ok and err>1500 and not snapped,err)
+        ''')
+
     def test_prediction_coasts_then_holds(self):
         l = motion()
         l.execute('''
@@ -254,6 +265,106 @@ class ServerSendOnDivergenceTests(unittest.TestCase):
         ''')
         self.assertLess(l.eval('worst[1005]'), 6)     # hot threshold 3 m plus one tick
         self.assertLess(l.eval('worst[1006]'), 300)   # cold threshold 150 m, at most 2 Hz
+
+    BOXED = '''
+      -- Engine IDs are 64-bit cdata: equal values compare equal but are different table keys.
+      local boxes=setmetatable({},{__mode='k'})
+      local mt={__eq=function(a,b) return a.v==b.v end,__tostring=function(a) return tostring(a.v) end}
+      function box(v) return setmetatable({v=v},mt) end
+      local base=api.GetContextByClass
+      api.GetContextByClass=function(id,class) local v=base(id,class);if class=='sector' and type(v)=='number' then return box(v) end;return v end
+    '''
+
+    def test_player_ships_are_found_with_cdata_sector_ids(self):
+        # Live 8-player server: sent_cold only, both players in the NPCs' sector.
+        l = self.host('X4LAN_CONFIG.npc_motion_diagnostics=1')
+        l.execute(self.BOXED)
+        l.execute('''
+          addNpc(1005,-900,500,300,function(t) return 1.2*math.sin(1.7*t) end)
+          start();local from=#sent;hostTick(80)
+          hot=countFor(moves(from),1005)
+          rows={};for _,v in ipairs(logs) do if v:find('role=host',1,true) and v:find(' sent=',1,true) then rows[#rows+1]=v end end
+        ''')
+        self.assertGreaterEqual(l.eval('hot'), 12)
+        last = l.eval('rows[#rows]')
+        self.assertIn('sent_hot=', last)
+        self.assertIn('players=3', last)  # both shared ships and the host's own player
+
+    def test_dedicated_server_counts_only_ships_a_client_owns(self):
+        l = self.host('X4LAN_CONFIG.npc_motion_diagnostics=1')
+        l.execute('''
+          local c=X4LAN_BUBBLE_API.coop
+          -- Ship 1 (near the NPC) is the server's; ship 2 (60 km away) is flown by p2.
+          positions[42]={x=60000,y=0,z=0,yaw=0,pitch=0,roll=0}
+          c.owners={'p1','p2'};c.epochs={1,1}
+          addNpc(1005,-900,500,300,function(t) return 1.2*math.sin(1.7*t) end)
+          start();X4LAN_CONFIG.dedicated=true
+          local from=#sent;hostTick(80);far=countFor(moves(from),1005)
+          c.owners={'p2','p2'};from=#sent;hostTick(80);near=countFor(moves(from),1005)
+        ''')
+        self.assertLessEqual(l.eval('far'), 9)     # cold: the server's own ship is no player
+        self.assertGreaterEqual(l.eval('near'), 12)
+
+    def test_stepped_engine_positions_and_euler_flips_do_not_bend_the_prediction(self):
+        # Velocity over one tick amplifies a position that updates every few frames, and an
+        # Euler yaw that flips by pi (pitch through 90 degrees) is no turn.
+        l = self.host()
+        l.execute('''
+          addNpc(1007,1000,1000,3000)    -- hot, straight at 3 km/s, engine pose every 3rd tick
+          addNpc(1008,-1000,800,2000)    -- hot, straight, yaw flips by pi every 7 ticks
+          start()
+          local held={};local k=0;local seen=#sent;last={};worst={[1007]=0,[1008]=0}
+          local function truth(id) return npcs[id] end
+          local x7,z7=positions[1007].x,positions[1007].z
+          local from=#sent
+          for t=1,200 do
+           k=k+1
+           now=now+.05;step(.05)
+           -- 1007: the engine exposes the pose only every third tick.
+           local p=positions[1007];x7,z7=p.x,p.z
+           if k%3~=0 then p.x,p.z=held.x or p.x,held.z or p.z else held.x,held.z=p.x,p.z end
+           if k%7==0 then positions[1008].yaw=M.angle(positions[1008].yaw+math.pi) end
+           frames.onUpdate()
+           p.x,p.z=x7,z7
+           for _,f in ipairs(moves(seen)) do
+            local pose,vel={},{};for i=1,6 do pose[i]=tonumber(f[8+i]);vel[i]=tonumber(f[14+i]) end
+            last[tonumber(f[5])]={time=tonumber(f[8]),pose=pose,vel=vel}
+           end
+           seen=#sent
+           for _,object in ipairs({1007,1008}) do
+            local s=last[U.identities[tostring(object)].id]
+            if s and t>20 then
+             local q=M.drPredict(s.pose,s.vel,now-s.time);local q0=positions[object]
+             worst[object]=math.max(worst[object],math.sqrt((q[1]-q0.x)^2+(q[3]-q0.z)^2))
+            end
+           end
+          end
+          m=moves(from);n7,n8=countFor(m,1007),countFor(m,1008)
+        ''')
+        # Against the true pose: the engine's own 2-tick hold is already 300 m at 3 km/s.
+        self.assertLess(l.eval('worst[1007]'), 600)
+        self.assertLess(l.eval('worst[1008]'), 30)
+
+    def test_hard_stop_far_away_is_sent_urgently(self):
+        # A cold NPC leaving a highway: 15 km/s to 300 m/s in about 0.8 s. The cold tier's
+        # 0.5 s minimum interval let the live error reach several km before the next sample.
+        l = self.host()
+        l.execute('''
+          addNpc(1009,90000,0,15000);start();hostTick(10)
+          local seen=0;last=nil;worst=0
+          for t=1,60 do
+           local n=npcs[1009];if t>10 then n.s=math.max(300,n.s-18750*.05) end
+           hostTick(1)
+           for _,f in ipairs(moves(seen)) do
+            local pose,vel={},{};for i=1,6 do pose[i]=tonumber(f[8+i]);vel[i]=tonumber(f[14+i]) end
+            last={time=tonumber(f[8]),pose=pose,vel=vel}
+           end
+           seen=#sent
+           local q=M.drPredict(last.pose,last.vel,now-last.time);local p=positions[1009]
+           worst=math.max(worst,math.sqrt((q[1]-p.x)^2+(q[3]-p.z)^2))
+          end
+        ''')
+        self.assertLess(l.eval('worst'), 1200)  # before the urgent rule: 2.1 km
 
     def test_client_focus_makes_a_far_npc_hot(self):
         l = self.host()
@@ -405,16 +516,21 @@ class ClientDeadReckoningTests(unittest.TestCase):
           assert(found)
         ''')
 
-    def test_zone_offset_is_learned_so_a_replica_near_the_player_stops_slipping(self):
+    def test_zone_offset_is_learned_so_a_slipping_replica_stops_slipping(self):
         # Engine double of 43dd063's queued-pose model: a write converts the pose into the
         # replica's current zone, re-parents it to the zone at the target and applies the
         # zone-local pose in the new zone at the end of the frame; the engine then files the
         # replica into the zone at its actual position. Zone A (origin 20 km) holds 20-60 km.
-        l = self.guest('X4LAN_CONFIG.npc_motion_diagnostics=1')
-        l.execute('''
+        # Live: far replicas also slipped (117-135 km, action=rewrite): zones are tracked for
+        # 10 s after a slip, so they learn the offset as well.
+        for player_x in (41500, 100):
+          with self.subTest(player_x=player_x):
+           l = self.guest('X4LAN_CONFIG.npc_motion_diagnostics=1')
+           l.globals().PLAYER_X = player_x
+           l.execute('''
           tick(1);baseline(1,{npcRow(1,41000)},true);tick(2)
           local object=U.replicas[1].object
-          positions[11]={x=41500,y=200,z=300,yaw=0,pitch=0,roll=0}   -- the player is near
+          positions[11]={x=PLAYER_X,y=200,z=300,yaw=0,pitch=0,roll=0}
           origin={A=20000,B=0};function zoneAt(x) return (x>=20000 and x<60000) and 'A' or 'B' end
           parent={[object]='B'};pending=nil;perFrame=0
           local set=api.SetObjectSectorPos
@@ -448,9 +564,9 @@ class ClientDeadReckoningTests(unittest.TestCase):
           logged=false;for _,v in ipairs(logs) do if v:find('NPC_FRAME_SLIP id=1',1,true) then logged=true end end
           zone=logged and U.replicas[1].zoneFix~=nil and next(U.replicas[1].zoneFix)~=nil
         ''')
-        self.assertEqual(l.eval('displaced'), 0)
-        self.assertEqual(l.eval('multi'), 0)
-        self.assertTrue(l.eval('zone'))
+           self.assertEqual(l.eval('displaced'), 0)
+           self.assertEqual(l.eval('multi'), 0)
+           self.assertTrue(l.eval('zone'))
 
     def test_targeted_replica_is_announced_as_focus(self):
         l = self.guest('target=0;api.GetPlayerTargetID=function() return target end')
