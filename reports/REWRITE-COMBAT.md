@@ -245,6 +245,21 @@ absorb first (shield group at +0x290, 0x791760), the remainder plus hull-only da
 (0x51d570), and a damage-reaction counter (+0xc38/+0xc40, settings +0x2b0/+0x2b8) fires a reaction when it
 runs out. Shield level is time-dependent (`GetShieldPercent` 0x51f5b0 evaluates recharge lazily).
 
+**The two unidentified global writes of the hit path** (parallel-walk design, section 2 row 14; static):
+
+- `*(0x6cf1670)` in ApplyHit is the **player statistics** table (entries of 0x120 bytes keyed by FNV-1a
+  hashes of stat names; 0x12f810 adds to a stat, 0x679f30 updates a derived one; the strings next to the calls
+  are `bullets_fired` and `bullets_hit_percent`). It is written only when the shooter is the player's own ship
+  (compared with the controlled object of the player entity at Universe+0x230) on the bullet's first hit. The
+  achievement check (`ACH_OVERKILL`, *(0x6cf1568)) is also player-only. So: player sector (pinned) only.
+- The **std::list append** in PostAttackedEvents (0x51ff10, end of the function) runs when the victim passes
+  `Object::IsInLiveView` 0x6d5900 (live data visible to the player) and the object at *(0x3d19a78)[1]+0x2c0
+  answers its vfunc +0x18 with argument 7: a 0x20-byte node {victim UniverseID, the hit's time argument} is
+  pushed to the list at +0x940 (size +0x948), unlocked. Every hit on a visible object appends one node. In a
+  parallel walk this needs a lock or a per-sector buffer appended at the barrier in sector order; the buffer
+  gives the same list as the serial walk, because the serial walk also visits sectors in tree order. Its
+  consumer (UI side, most likely) is not identified yet.
+
 ## 8. What is shared across entities (parallel hazards)
 
 | stage | writes outside the entity | consequence for per-sector jobs |
@@ -252,11 +267,11 @@ runs out. Shield level is time-dependent (`GetShieldPercent` 0x51f5b0 evaluates 
 | joint step 0xe1f840 | none (joint only) | parallel now (done) |
 | aim point / intercept | reads target poses via view cache | parallel with a snapshot |
 | StartedAiming/StoppedAiming events | immediate PostEvent | buffer, apply at barrier |
-| fire decision LOS ray cast | reads spatial query | parallel read, if the query is thread-safe (open) |
+| fire decision LOS ray cast | reads spatial query | parallel read: the zone ray cast 0xbc4d0 is safe for concurrent readers (physics agent, Q12: locking Jolt query, shared body locks) when the worker's TLS carries +0x300 and a stable +0x314 view cache and no Jolt body is written meanwhile |
 | Fire: bullet creation | UniverseID allocation, component factory, effects | serial apply phase |
 | bullet next-check jitter, ricochet | thread RNG (TLS+0x318) | per-bullet streams or serial order |
-| bullet ray cast | reads zone spatial structure | phase 1 candidate |
-| hit apply, damage, kills | immediate events into MD/AI, kill (deferred), statistics | serial apply phase |
+| bullet ray cast | reads zone spatial structure | concurrent reads are safe under the same conditions (Q12) |
+| hit apply, damage, kills | immediate events into MD/AI, kill (deferred); damage writes the victim (same zone, so same sector) | events buffered; player statistics only for the player's own shots (pinned sector); live-view attacked list: lock or per-sector buffer (section 7) |
 | cross-sector hits | bullets live in their zone; a hit object is in the bullet's zone | through the barrier messages of ecs-core (rewrite-coord/interfaces.md) |
 
 ## 9. In-game recorder and shadow (`x4mp_combat.dll`)
@@ -398,6 +413,8 @@ offline tests enforce all three rules.
 ## Open questions
 
 - Is the sub-stepped joint branch ever active (0x3d19b14)? Only the static initializer writes it (static).
-- Thread safety of the zone spatial query under concurrent readers (0xbc4d0, global 0x6cf1670 in 0xd528f0).
+- The consumer of the live-view attacked list (*(0x3d19a78)[1]+0x2c0, +0x940), section 7.
+- Answered: the zone ray cast 0xbc4d0 is safe for concurrent readers under conditions (physics agent, Q12);
+  0x6cf1670 in 0xd528f0 is the player statistics table (player's own shots only).
 - Answered natively: MoveWorker MXCSR 0x1fbf; turret aiming in a battle is AimAt 0.29 % + StopAiming
   0.32 % of the MoveWorker, the joint step 0.05 %.
