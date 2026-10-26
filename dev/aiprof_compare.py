@@ -51,7 +51,22 @@ def main():
             flag = '  <-- differs'
             flagged += 1
         print(f'{key:14s} {ma:10.3f} {mb:10.3f} {rel:+8.1%}{flag}')
-    print(f'{flagged} structural measure(s) outside +-{tol:.0%} '
+    # population-normalized ratios: stable between runs of one load when the drivers are equivalent
+    def ratio(rows, num, den):
+        n = sum(r.get(num, 0.0) for r in rows)
+        d = sum(r.get(den, 0.0) for r in rows) if isinstance(den, str) else sum(sum(r.get(k, 0.0) for k in den) for r in rows)
+        return n / d if d else 0.0
+    print('ratios (population-normalized):')
+    for label, num, den in [('irq per run', 'irqRuns', 'runs'), ('timed due per run', 'timedDue', 'runs'),
+                            ('ext wakes per run', 'extWakes', 'runs'), ('cue events per run', 'evCue', 'runs'),
+                            ('foreign wake fraction', 'wakeForeign', ('wakeOwn', 'wakeForeign')),
+                            ('runs per sector', 'runs', 'sectors')]:
+        ra, rb = ratio(a, num, den), ratio(b, num, den)
+        rel = (rb / ra - 1.0) if ra else 0.0
+        flag = '  <-- differs' if abs(rel) > tol else ''
+        flagged += bool(flag)
+        print(f'  {label:22s} {ra:9.3f} {rb:9.3f} {rel:+8.1%}{flag}')
+    print(f'{flagged} measure(s) outside +-{tol:.0%} '
           '(loads are not identical between runs: read flags as leads, not verdicts)')
     return 0
 
