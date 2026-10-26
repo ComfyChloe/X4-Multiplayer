@@ -52,7 +52,7 @@ with the log path). Nothing in this report is a native economy result unless mar
 | 8 high-attention sectors (lead, 2026-10-25, `X4-Multiplayer-fixed-tick/.local/evidence-239-withheld`) | ~1.5 % | 1.02 % | - | 0.26 % | 0.11 % | ~0 | AI phase |
 | lane `stress1`: plain custom_creative world (stress MD failed, no clones), game time 30-554 s, 53 windows; **cut short by the PC reservation, not a result**; other X4 instances ran | 1.95 % | 1.02 % | 0.48 % | 0.27 % | 0.24 % | 0.19 % | AI 1.37 %, events 0.25 %, walk 0.27 % |
 | lane `stress2` (b2): ~157 extra factory clones (+16 % of 983 factories), 314 station traders whose trade loop failed (no defence NPC: `trade.find.commander` "Failed to set null.$lookingfortrades"), game time 130-794 s, 67 windows; **ended by an all-lanes stop**; other X4 instances ran | 1.85 % | 0.90 % | 0.54 % | 0.22 % | 0.25 % | 0.19 % | AI 1.30 %, events 0.28 %, walk 0.22 % |
-| **lane `stress3` (b1): 160 factory clones, 160 managers and defence NPCs, 306 working station traders**, game time 90-538 s, 45 windows; **pass**; shares exclude the econcap sampler (slot 5, 26.6 %; fixed in 36750e5); other X4 instances ran | 2.65 % | 1.49 % | 0.69 % | 0.18 % | 0.35 % | 0.27 % | AI phase, events |
+| **lane `stress3` (b1): 160 factory clones, 160 managers and defence NPCs, 306 working station traders**, game time 90-538 s, 45 windows; **pass**; shares exclude the econcap sampler (slot 5, 26.6 %; fixed in 36750e5); other X4 instances ran | 2.65 % | 1.49 % | 0.71 % | 0.18 % | 0.38 % | 0.28 % | AI 2.04 %, events |
 
 All rows are [native] samples of MoveWorker time with untrustworthy timing (shares only). Census:
 `x4-re/scripts/rw-economy/econ_census.py` on the symbolized folded stacks
