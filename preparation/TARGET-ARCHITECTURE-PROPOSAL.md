@@ -125,8 +125,15 @@ they are known (`set_faction_known`), with name, colour, icon and relation.
   the change through the state stream.
 - For player factions, X4's AI diplomacy (agents, embassies, diplomatic events) is
   off: `isdiplomacyactive` / `arediplomacyeventsallowed` false.
-- Open: runtime renaming of non-`player` factions to the player's name
-  (`SetPlayerFactionName` only covers `player`), and a distinct icon/colour per player.
+- Factions cannot be created at runtime (no MD action; the engine imports factions
+  only at load). The mod therefore defines a **pool** `player2` … `player16` in
+  `libraries/factions.xml`, inactive and unknown until a player is assigned a slot.
+  Extension factions are added to existing saves on load, as DLC factions are.
+- On assignment the server uses vanilla actions: `set_faction_identity` (name, short
+  name, prefix, description, icon at runtime), `set_faction_known`,
+  `set_faction_active` and `set_faction_relation`. Colour is not settable at runtime,
+  so each pool slot has its own fixed colour.
+- Clients carry the same pool and map each player to the same slot number.
 
 ### 7b. Hot join (decided: fork snapshots)
 
