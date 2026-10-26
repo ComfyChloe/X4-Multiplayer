@@ -32,7 +32,8 @@ use crate::scenario::{ATTACH_BUCKET, ATTACH_HOLE};
 use std::io;
 
 const OUTSIDE_ITEM: u32 = 0xffff_fffd;
-/// Dirty bits that the attachment refresh (vfunc 622) manages itself; not modelled.
+/// Dirty bits that the attachment refresh (vfunc 622) manages itself, in the written cache and,
+/// through the animation timeline code it runs (0x116a295), in the other cache; not modelled.
 pub const CONNECTION_MANAGED: u32 = 0x8_0000 | 0x10_0000 | 0x40_0000;
 
 /// State of one component after the build.
@@ -397,6 +398,7 @@ pub fn replay(c: &Capture) -> Replay {
             },
             Event::IsClass { .. } => census.is_class += 1,
             Event::Expire { .. } => census.expired += 1,
+            Event::EndLoop { .. } => {}
         }
     }
     for node in &c.tree.nodes[..n] {
@@ -429,7 +431,10 @@ pub fn replay(c: &Capture) -> Replay {
         if m.dirty[idx] & mask != p.dirty[idx] & mask {
             push(Field::Dirty, format!("{:#x}", m.dirty[idx]), format!("{:#x}", p.dirty[idx]));
         }
-        if m.dirty[1 - idx] != p.dirty[1 - idx] {
+        // The attachment getter (vfunc 622) evaluates animations, and the timeline code
+        // (fragment 0x116a295) ORs 0x80000 into both caches and the mask of an animated
+        // component: getter-owned bits, so excluded in both caches where the getter ran.
+        if m.dirty[1 - idx] & mask != p.dirty[1 - idx] & mask {
             push(Field::OtherDirty, format!("{:#x}", m.dirty[1 - idx]), format!("{:#x}", p.dirty[1 - idx]));
         }
         if m.vc_attention != p.vc_attention {

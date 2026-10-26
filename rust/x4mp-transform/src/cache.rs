@@ -239,6 +239,8 @@ pub enum Event {
     Get { node: u32, getter: Getter },
     /// A specification entry of `node` expired and was removed.
     Expire { node: u32, kind: i32 },
+    /// The end-of-subtree loop over `node`'s own entries finished (timers and expiry applied).
+    EndLoop { node: u32 },
 }
 
 /// Engine getters PCF calls (virtual slots of the component).
@@ -496,6 +498,11 @@ impl<'a, S: Store, G: Getters, P: Split> Traversal<'a, S, G, P> {
 
     /// Timer update and expiry of `c`'s own entries after its subtree (0x3d4f5e..0x3d50de).
     fn expire(&mut self, c: usize) {
+        self.expire_entries(c);
+        self.log.push(Event::EndLoop { node: c as u32 });
+    }
+
+    fn expire_entries(&mut self, c: usize) {
         let time = self.time;
         let mut i = 0;
         loop {
