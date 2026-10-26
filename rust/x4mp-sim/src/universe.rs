@@ -340,18 +340,41 @@ impl Universe {
     // --- the frame -----------------------------------------------------------------------
 
     /// Runs one frame: commits staged structure, then for each system a parallel phase over
-    /// all worlds followed by the ordered barrier.
+    /// all worlds followed by the ordered barrier; a multi-pass system
+    /// ([`System::max_passes`]) repeats that until it is quiescent or the bound is reached.
     pub fn step(&mut self, pool: &Pool, systems: &[&dyn System], frame: &FrameInfo) -> FrameReport {
         self.commit();
         let mut report = FrameReport { frame: frame.frame, phases: Vec::new(), errors: Vec::new() };
         for sys in systems {
-            let phase = self.run_phase(pool, *sys, frame, &mut report.errors);
-            report.phases.push(phase);
+            let max = sys.max_passes().max(1);
+            for pass in 0..max {
+                let phase = self.run_phase(pool, *sys, frame, pass, max > 1, &mut report.errors);
+                let more = phase.more;
+                report.phases.push(phase);
+                if !more {
+                    break;
+                }
+            }
         }
         report
     }
 
-    fn run_phase(&mut self, pool: &Pool, sys: &dyn System, frame: &FrameInfo, errors: &mut Vec<String>) -> PhaseReport {
+    /// Multi-pass quiescence: messages for `system` wait in a world or its barrier queue, or a
+    /// sector job asked for another pass. An OR over worlds, so independent of scheduling.
+    fn more_work(&self, system: &str) -> bool {
+        self.worlds.iter().any(|w| w.outbox.pass_requested || w.pending_for(system) > 0)
+            || self.barrier_inboxes.iter().any(|(n, v)| *n == system && !v.is_empty())
+    }
+
+    fn run_phase(
+        &mut self,
+        pool: &Pool,
+        sys: &dyn System,
+        frame: &FrameInfo,
+        pass: u32,
+        multi: bool,
+        errors: &mut Vec<String>,
+    ) -> PhaseReport {
         let phase = self.phase;
         self.snapshot.refresh(&self.worlds, &self.published);
         let mut pinned = Vec::new();
@@ -380,6 +403,7 @@ impl Universe {
                 {
                     let mut ctx = SectorCtx {
                         frame,
+                        pass,
                         sector,
                         world: &mut *w,
                         ids,
@@ -401,6 +425,7 @@ impl Universe {
         let mut rep = PhaseReport {
             system: sys.name(),
             phase,
+            pass,
             sectors: self.worlds.len(),
             parallel_ns,
             sector_sum_ns: self.worlds.iter().map(|w| w.cost_ns).sum(),
@@ -457,8 +482,11 @@ impl Universe {
         rep.route_ns = ns(t_commit, t_route);
         // Barrier 3: the system's serial hook gets everything queued for it, then commit.
         let barrier = std::mem::take(self.barrier_inbox(sys.name()));
-        sys.barrier(&mut BarrierCtx { frame, universe: self, messages: &barrier });
+        let mut ctx = BarrierCtx { frame, pass, universe: self, messages: &barrier, pass_requested: false };
+        sys.barrier(&mut ctx);
+        let hook_more = ctx.pass_requested;
         self.commit();
+        rep.more = multi && (hook_more || self.more_work(sys.name()));
         self.phase += 1;
         self.serial_seq = 0;
         rep.hook_ns = ns(t_route, Instant::now());

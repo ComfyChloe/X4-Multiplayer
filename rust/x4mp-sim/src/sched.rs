@@ -27,7 +27,7 @@ pub struct FrameInfo {
     pub dt: f64,
 }
 
-/// A replaced engine system. `run_sector` runs once per sector per frame, on any thread, in
+/// A replaced engine system. `run_sector` runs once per sector per pass, on any thread, in
 /// any order relative to other sectors; `barrier` runs once afterwards on the calling thread.
 pub trait System: Send + Sync {
     fn name(&self) -> &'static str;
@@ -35,11 +35,25 @@ pub trait System: Send + Sync {
     /// Serial hook after the barrier; receives the `Target::Barrier` messages addressed to
     /// this system in total order (sector order, then emission order).
     fn barrier(&self, _ctx: &mut BarrierCtx<'_>) {}
+    /// Most passes of this system per frame (default 1, one pass per `Universe::step`).
+    ///
+    /// With more, `step` repeats the system pass after pass, each a full phase (snapshot,
+    /// parallel run over every world, ordered barrier, hook), until a pass ends quiescent: no
+    /// message for this system is waiting in any world or in its barrier queue, and no sector
+    /// job or barrier hook called `request_pass`. Messages a pass sends to its own system are
+    /// therefore handled in the next pass of the same frame, like the engine's AIDirector pass
+    /// loop (up to 0x21 passes). When the bound ends the loop with work left, the last pass
+    /// reports `more == true` and the waiting messages are delivered in the next frame.
+    fn max_passes(&self) -> u32 {
+        1
+    }
 }
 
 /// What a sector job may touch.
 pub struct SectorCtx<'a> {
     pub frame: &'a FrameInfo,
+    /// Pass of the running system in this frame (0 = first; see [`System::max_passes`]).
+    pub pass: u32,
     pub sector: SectorIx,
     /// This sector's world (values may be mutated; structure only through `out`).
     pub world: &'a mut World,
@@ -69,14 +83,29 @@ impl SectorCtx<'_> {
     pub fn messages<'s, M: crate::bus::Message>(&'s self) -> impl Iterator<Item = (&'s Envelope, &'s M)> + 's {
         self.inbox.iter().filter_map(|e| e.get::<M>().map(|m| (e, m)))
     }
+
+    /// Asks for another pass of this system in this frame (multi-pass systems only).
+    pub fn request_pass(&mut self) {
+        self.out.request_pass();
+    }
 }
 
 /// Serial barrier context.
 pub struct BarrierCtx<'a> {
     pub frame: &'a FrameInfo,
+    /// Pass of the running system in this frame (0 = first).
+    pub pass: u32,
     pub universe: &'a mut Universe,
     /// `Target::Barrier` messages addressed to this system, in total order.
     pub messages: &'a [Envelope],
+    pub(crate) pass_requested: bool,
+}
+
+impl BarrierCtx<'_> {
+    /// Asks for another pass of this system in this frame (multi-pass systems only).
+    pub fn request_pass(&mut self) {
+        self.pass_requested = true;
+    }
 }
 
 /// Per-phase statistics. Timing fields are informational and never affect results.
@@ -84,6 +113,11 @@ pub struct BarrierCtx<'a> {
 pub struct PhaseReport {
     pub system: &'static str,
     pub phase: u64,
+    /// Pass of the system in this frame (0 = first).
+    pub pass: u32,
+    /// Multi-pass systems: work was left when this pass ended (messages for the system or a
+    /// pass request). On the last pass of a frame, true means `max_passes` ended the loop.
+    pub more: bool,
     pub sectors: usize,
     pub parallel_ns: u64,
     pub barrier_ns: u64,
@@ -118,9 +152,17 @@ impl PhaseReport {
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct FrameReport {
     pub frame: u64,
+    /// One entry per pass of every system, in run order.
     pub phases: Vec<PhaseReport>,
     /// First few command errors (deterministic text).
     pub errors: Vec<String>,
+}
+
+impl FrameReport {
+    /// Passes `system` ran in this frame.
+    pub fn passes(&self, system: &str) -> u32 {
+        self.phases.iter().filter(|p| p.system == system).count() as u32
+    }
 }
 
 // ---------------------------------------------------------------------------------------

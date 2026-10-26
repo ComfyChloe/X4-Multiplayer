@@ -13,7 +13,8 @@
 //!    target world's inbox for that system (an entity target follows a migration applied in
 //!    the same barrier), `Barrier` targets are handed to that system's serial
 //!    [`crate::sched::System::barrier`] hook. A system therefore receives its own messages in
-//!    the next frame, and messages from an earlier system of the same frame in this frame.
+//!    its next pass (multi-pass systems, [`crate::sched::System::max_passes`]) or the next
+//!    frame, and messages from an earlier system of the same frame in this frame.
 //!
 //! **Order keys.** Tree order is the original order of the component walk. Where the
 //! original sequential order is something else (for example the AI director's wake order),
@@ -186,11 +187,12 @@ pub struct Outbox {
     pub(crate) keyed: bool,
     system: &'static str,
     pub(crate) items: Vec<Item>,
+    pub(crate) pass_requested: bool,
 }
 
 impl Outbox {
     pub(crate) fn new(from: SectorIx, system: &'static str) -> Outbox {
-        Outbox { from, seq: 0, order: 0, keyed: false, system, items: Vec::new() }
+        Outbox { from, seq: 0, order: 0, keyed: false, system, items: Vec::new(), pass_requested: false }
     }
 
     pub(crate) fn reset(&mut self, from: SectorIx, system: &'static str) {
@@ -200,6 +202,13 @@ impl Outbox {
         self.keyed = false;
         self.system = system;
         self.items.clear();
+        self.pass_requested = false;
+    }
+
+    /// Asks for another pass of the running system in this frame (multi-pass systems only,
+    /// see [`crate::sched::System::max_passes`]; ignored otherwise).
+    pub fn request_pass(&mut self) {
+        self.pass_requested = true;
     }
 
     /// Sets the order key of everything emitted from now on (see the module docs).

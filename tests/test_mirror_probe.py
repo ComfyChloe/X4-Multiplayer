@@ -68,8 +68,20 @@ class MirrorProbeTests(unittest.TestCase):
           ui()
           assert(#logs==3,#logs)                          -- one check (limit 1), then done
           assert(logs[3]:find('MIRROR done frames=10 dropped=0 partial=0 rows=1234 roots=77 factions=0 bytes=999 walkErrors=2',1,true),logs[3])
-          assert(logs[3]:find('checks=1 regionQueries=0 cacheFull=0 visited=0 walkMs=0.000 serializeMs=0.000 reason=complete',1,true),logs[3])
+          assert(logs[3]:find('checks=1 regionQueries=0 cacheFull=0 visited=0 walkMs=0.000 serializeMs=0.000 walkMsPrefetch=0.000 walkMsPlain=0.000 framesPrefetch=0 reason=complete',1,true),logs[3])
           ui();assert(#logs==3)
+        ''')
+
+    def test_class_histogram_precedes_the_done_line(self):
+        # lane runs end on the done line, so the histogram must be logged first
+        lua = self.runtime("X4LAN_MIRROR_PATH='C:/cap/e.x4cap';X4LAN_MIRROR_DELAY=0;X4LAN_MIRROR_CHECKS=0")
+        lua.execute('''
+          X4LAN_FIXEDTICK_OWNER=owner;ui();ui()
+          stats.frames_written=2;stats.armed=0;stats.visited_by_class='0x58:4,0x76:4'
+          stats.frames_prefetch=1;stats.walk_ms_prefetch=1.5;stats.walk_ms_plain=2.25
+          ui()
+          assert(logs[#logs-1]=='[X4LAN] MIRROR visitedByClass 0x58:4,0x76:4',logs[#logs-1])
+          assert(logs[#logs]:find('walkMsPrefetch=1.500 walkMsPlain=2.250 framesPrefetch=1 reason=complete',1,true),logs[#logs])
         ''')
 
     def test_refusal_is_loud_and_final(self):

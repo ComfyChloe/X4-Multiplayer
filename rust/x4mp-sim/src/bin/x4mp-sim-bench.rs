@@ -3,8 +3,11 @@
 //! ```text
 //! cargo run -p x4mp-sim --release --bin x4mp-sim-bench -- [--entities 10000,50000,200000]
 //!     [--sectors 8,50,200] [--threads 1,2,4,8,16,32] [--frames 60] [--warmup 10] [--work 64]
-//!     [--msg-per-mille 10] [--migrate-per-mille 1] [--quick]
+//!     [--msg-per-mille 10] [--migrate-per-mille 1] [--shape CAPTURE.x4cap] [--csv OUT.csv] [--quick]
 //! ```
+//! `--shape` takes the number of worlds and their relative sizes from the last frame of a mirror
+//! capture (one world per captured root, in capture order) and scales them to each `--entities`
+//! value; `--sectors` is then ignored. Without it the entities are spread evenly.
 //! Workload per entity and frame (one system, every world in parallel): kinematics on the
 //! transform (f32, engine operation order), `--work` rounds of float work seeded from the
 //! entity's engine RNG stream (stands in for per-entity behaviour), a cross-sector message
@@ -72,11 +75,59 @@ impl System for Load {
     }
 }
 
-fn build(entities: u32, sectors: u32) -> Universe {
+/// Entities per world: even split, or `weights` scaled to `entities` (largest remainders get the
+/// rest, ties by world index).
+fn counts(entities: u32, sectors: u32, weights: Option<&[u64]>) -> Vec<u32> {
+    let Some(w) = weights else {
+        return (0..sectors).map(|s| entities / sectors + u32::from(s < entities % sectors)).collect();
+    };
+    let total: u64 = w.iter().sum::<u64>().max(1);
+    let exact: Vec<(u64, u64)> =
+        w.iter().map(|&x| ((x * u64::from(entities)) / total, (x * u64::from(entities)) % total)).collect();
+    let mut out: Vec<u32> = exact.iter().map(|(q, _)| *q as u32).collect();
+    let mut left = entities - out.iter().sum::<u32>();
+    let mut order: Vec<usize> = (0..w.len()).collect();
+    order.sort_by_key(|&i| (std::cmp::Reverse(exact[i].1), i));
+    for &i in order.iter().cycle() {
+        if left == 0 {
+            break;
+        }
+        out[i] += 1;
+        left -= 1;
+    }
+    out
+}
+
+/// Row counts of every root in the last frame of a capture.
+fn shape(path: &str) -> Result<Vec<u64>, String> {
+    let f = std::fs::File::open(path).map_err(|e| format!("{path}: {e}"))?;
+    let mut r =
+        x4mp_sim::capture::CaptureReader::open(std::io::BufReader::new(f)).map_err(|e| format!("{path}: {e}"))?;
+    let mut last = None;
+    while let Some(fr) = r.next_frame().map_err(|e| format!("{path}: {e}"))? {
+        last = Some(fr.sectors.iter().map(|s| u64::from(s.rows)).collect::<Vec<_>>());
+    }
+    last.filter(|v| !v.is_empty()).ok_or_else(|| format!("{path}: no frames"))
+}
+
+/// Speedup bound of per-world jobs with the largest-first schedule (LPT) on `threads` workers.
+fn lpt_bound(counts: &[u32], threads: usize) -> f64 {
+    let mut sorted: Vec<u64> = counts.iter().map(|&c| u64::from(c)).collect();
+    sorted.sort_unstable_by(|a, b| b.cmp(a));
+    let mut load = vec![0u64; threads.max(1)];
+    for c in sorted {
+        let k = (0..load.len()).min_by_key(|&k| (load[k], k)).unwrap_or(0);
+        load[k] += c;
+    }
+    let total: u64 = load.iter().sum();
+    total as f64 / (*load.iter().max().unwrap_or(&1)).max(1) as f64
+}
+
+fn build(per_world: &[u32]) -> Universe {
     let mut u = Universe::new(0xbe9c4);
-    for s in 0..sectors {
+    for (s, &per) in per_world.iter().enumerate() {
+        let s = s as u32;
         let ix = u.add_sector(UniverseId(0x7000_0000 + u64::from(s)), WorldKind::Sector);
-        let per = entities / sectors + u32::from(s < entities % sectors);
         for i in 0..per {
             let mut m = Mat4f::IDENTITY;
             m.0[0] = [i as f32, s as f32, 0.5, 0.0];
@@ -99,11 +150,12 @@ struct Sample {
     messages: u64,
     migrations: u64,
     hash: u64,
+    threads: usize,
 }
 
-fn run(entities: u32, sectors: u32, threads: usize, frames: u64, warmup: u64, load: &Load) -> Sample {
+fn run(per_world: &[u32], threads: usize, frames: u64, warmup: u64, load: &Load) -> Sample {
     let pool = Pool::new(threads);
-    let mut u = build(entities, sectors);
+    let mut u = build(per_world);
     let mut s = Sample {
         frame_ms: vec![],
         parallel_ms: vec![],
@@ -113,6 +165,7 @@ fn run(entities: u32, sectors: u32, threads: usize, frames: u64, warmup: u64, lo
         messages: 0,
         migrations: 0,
         hash: 0,
+        threads: pool.threads(),
     };
     for f in 0..warmup + frames {
         let fi = FrameInfo { frame: f, game_time: f as f64 / 60.0, dt: 1.0 / 60.0 };
@@ -173,34 +226,61 @@ fn main() {
     let work = list(&args, "--work", &[64u32])[0];
     let msg = list(&args, "--msg-per-mille", &[10u32])[0];
     let migrate = list(&args, "--migrate-per-mille", &[1u32])[0];
+    let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
+    let weights = match flag("--shape").map(|p| shape(&p)) {
+        Some(Ok(w)) => Some(w),
+        Some(Err(e)) => {
+            eprintln!("x4mp-sim-bench: {e}");
+            std::process::exit(2);
+        }
+        None => None,
+    };
+    let sectors = match &weights {
+        Some(w) => vec![w.len() as u32],
+        None => sectors,
+    };
+    let mut csv = flag("--csv").map(|p| {
+        let mut f = std::fs::File::create(&p).unwrap_or_else(|e| {
+            eprintln!("x4mp-sim-bench: {p}: {e}");
+            std::process::exit(2)
+        });
+        use std::io::Write as _;
+        let _ = writeln!(
+            f,
+            "entities,worlds,shape,threads,frame_ms_median,frame_ms_p95,parallel_ms,barrier_ms,commands_ms,commit_ms,route_ms,hook_ms,speedup,ideal,lpt_bound,msgs_per_frame,migr_per_frame,hash,same_hash"
+        );
+        f
+    });
     println!(
-        "x4mp-sim-bench: frames={frames} warmup={warmup} work={work} msg/1000={msg} migrate/1000={migrate} cores={}",
-        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0)
+        "x4mp-sim-bench: frames={frames} warmup={warmup} work={work} msg/1000={msg} migrate/1000={migrate} cores={} shape={}",
+        std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0),
+        if weights.is_some() { "capture" } else { "even" }
     );
-    println!("| entities | sectors | threads | frame ms (median) | p95 | parallel ms | barrier ms (cmd/commit/route/hook) | speedup | ideal (sum/max) | msgs/frame | migr/frame | hash |");
-    println!("|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|");
+    println!("| entities | sectors | threads | frame ms (median) | p95 | parallel ms | barrier ms (cmd/commit/route/hook) | speedup | ideal (sum/max) | LPT bound | msgs/frame | migr/frame | hash |");
+    println!("|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---:|---|");
     let mut all_equal = true;
     for &e in &entities {
         for &s in &sectors {
+            let per_world = counts(e, s, weights.as_deref());
             let load = Load { sectors: s, work, msg, migrate };
             let mut base_ms = None;
             let mut base_hash = None;
             for &t in &threads {
-                let r = run(e, s, t, frames, warmup, &load);
+                let r = run(&per_world, t, frames, warmup, &load);
                 let m = median(&r.frame_ms);
                 let b = *base_ms.get_or_insert(m);
                 let h = *base_hash.get_or_insert(r.hash);
                 let same = h == r.hash;
                 all_equal &= same;
+                let split: Vec<f64> =
+                    (0..4).map(|k| median(&r.split_ms.iter().map(|x| x[k]).collect::<Vec<_>>())).collect();
+                let bound = lpt_bound(&per_world, r.threads);
                 println!(
-                    "| {e} | {s} | {t} | {m:.3} | {:.3} | {:.3} | {:.3} ({}) | {:.2}x | {:.1}x | {:.0} | {:.1} | {:016x}{} |",
+                    "| {e} | {s} | {t} | {m:.3} | {:.3} | {:.3} | {:.3} ({}) | {:.2}x | {:.1}x | {bound:.1}x | {:.0} | {:.1} | {:016x}{} |",
                     p95(&r.frame_ms),
                     median(&r.parallel_ms),
                     median(&r.barrier_ms),
-                    (0..4)
-                        .map(|k| format!("{:.2}", median(&r.split_ms.iter().map(|x| x[k]).collect::<Vec<_>>())))
-                        .collect::<Vec<_>>()
-                        .join("/"),
+                    split.iter().map(|v| format!("{v:.2}")).collect::<Vec<_>>().join("/"),
                     b / m.max(1e-9),
                     median(&r.ideal),
                     r.messages as f64 / frames as f64,
@@ -208,6 +288,26 @@ fn main() {
                     r.hash,
                     if same { "" } else { " MISMATCH" }
                 );
+                if let Some(f) = csv.as_mut() {
+                    use std::io::Write as _;
+                    let _ = writeln!(
+                        f,
+                        "{e},{s},{},{t},{m:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.4},{:.3},{:.2},{bound:.2},{:.1},{:.2},{:016x},{same}",
+                        if weights.is_some() { "capture" } else { "even" },
+                        p95(&r.frame_ms),
+                        median(&r.parallel_ms),
+                        median(&r.barrier_ms),
+                        split[0],
+                        split[1],
+                        split[2],
+                        split[3],
+                        b / m.max(1e-9),
+                        median(&r.ideal),
+                        r.messages as f64 / frames as f64,
+                        r.migrations as f64 / frames as f64,
+                        r.hash
+                    );
+                }
             }
         }
     }
