@@ -1,7 +1,9 @@
 {
-  "snapshot_edtime": "2026-10-26T03:40:00-04:00",
+  "snapshot_edtime": "2026-10-26T04:12:00-04:00",
   "status": "draft source review; no integrated release",
   "base": "1b7e2d3b122f998744d7be93d4b13fc403bfa123",
+  "np8_development_source": "d9146450f425a6d2942ad6ccf88cf49f7d82cf7c",
+  "sealed_deployed_source": "8ed861e99297467047bd71cd213d95532cc9c094",
   "newly_published_branch_count_including_index": 47,
   "branches": [
     {
@@ -98,7 +100,7 @@
     },
     {
       "branch": "contrib/ferrite-player-factions",
-      "sha": "970f3bd6409a0b140529c367022af4bd994035a1"
+      "sha": "c8b5f5b6210b8ea48d7da1208c6afc40b694a51a"
     },
     {
       "branch": "contrib/ferrite-proto-v2",
@@ -122,7 +124,7 @@
     },
     {
       "branch": "contrib/ferrite-rw-ai-driver",
-      "sha": "26472bef1d343fe9df96800a8180c4fc1ac60571"
+      "sha": "2cb35696ba656fd96f4684eab1754aee92cfd77c"
     },
     {
       "branch": "contrib/ferrite-rw-ai-orders",
@@ -130,11 +132,11 @@
     },
     {
       "branch": "contrib/ferrite-rw-combat",
-      "sha": "e9c7dc7910b6876183e803b1f8684871d174d1df"
+      "sha": "48198102f5e7f55172bb145a9a5bdb0dcf229e54"
     },
     {
       "branch": "contrib/ferrite-rw-economy",
-      "sha": "fb5b63bfb598adb258c1a1c18332b08c5ee9f7e4"
+      "sha": "30b4226760a91434d79150828a6a6ad9c4f8563c"
     },
     {
       "branch": "contrib/ferrite-rw-ecs-core",
@@ -142,7 +144,7 @@
     },
     {
       "branch": "contrib/ferrite-rw-frame-diet",
-      "sha": "5d77afea5e81cab4bfdedca405b4ffe7ce0c8efb"
+      "sha": "7f2644df3a9fd3334378f17da78dc0a5cde2545e"
     },
     {
       "branch": "contrib/ferrite-rw-lane",
@@ -150,11 +152,11 @@
     },
     {
       "branch": "contrib/ferrite-rw-physics",
-      "sha": "64a400f9f144ad4a1b798e02f214ef774d457751"
+      "sha": "8d6d8389375db8f80d932dd21c72a1e91a1bb9c6"
     },
     {
       "branch": "contrib/ferrite-rw-transforms",
-      "sha": "ae2c02168ad25a0caeb669ff5404798d91aa039b"
+      "sha": "81a6b15e6ba505478ba0e4cd865b57fbd340259e"
     },
     {
       "branch": "contrib/ferrite-rw-walk",
@@ -162,7 +164,7 @@
     },
     {
       "branch": "contrib/ferrite-save-trim",
-      "sha": "89114e889d9bce5c2c14909fc32b912a20b3e9f3"
+      "sha": "d65beda477944f6b955703e6498157543979e8a9"
     },
     {
       "branch": "contrib/ferrite-shared-attention",
