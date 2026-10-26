@@ -3,6 +3,7 @@
 #include <bcrypt.h>
 #include <math.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <string.h>
 #include "fixedtick_signatures.h"
 
@@ -89,6 +90,7 @@ typedef struct {
     uint64_t dropped_ticks;
     unsigned last_steps;
     int sim_hooks;
+    int walk_refused;
     uint64_t sim_frames;
     double sim_total_ms;
     uint64_t win_count;
@@ -215,6 +217,7 @@ static void *end_vtable[] = {(void *)no_op, (void *)sim_end, (void *)no_op};
 static handler hook_begin = {begin_vtable};
 static handler hook_end = {end_vtable};
 static int64_t sim_begin_qpc;
+#include "walkprof.h"
 
 static void **table_now(void) {
     return image ? *(void ***)(image + VBI_RVA) : NULL;
@@ -301,6 +304,7 @@ static void unregister_sim_hooks(void) {
 static void disarm_because(const char *reason) {
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
+    walk_uninstall();
     unregister_sim_hooks();
     if (table_owned())
         InterlockedCompareExchangePointer((void *volatile *)&registered_table[SLOT], NULL, &hook);
@@ -316,6 +320,7 @@ static void sim_begin(handler *self) {
     (void)self;
     LARGE_INTEGER now;
     sim_begin_qpc = (sim_frame_ok() && qpc_read(&now)) ? now.QuadPart : 0;
+    if (sim_begin_qpc) walk_frame_begin();
 }
 
 static void sim_end(handler *self) {
@@ -333,6 +338,7 @@ static void sim_end(handler *self) {
     if (ms > o->win_max_ms) o->win_max_ms = ms;
     unsigned bucket = (unsigned)(ms * 4.0);
     o->win_hist[bucket < SIM_BUCKETS ? bucket : SIM_BUCKETS - 1]++;
+    walk_frame_end();
 }
 
 /* p95 of the current window in ms (bucket upper edge), then reset the window. */
@@ -406,7 +412,7 @@ static void number_field(lua_State *L, const char *name, double value) {
 
 static int stats(lua_State *L) {
     owner *o = p_luaL_checkudata(L, 1, META);
-    p_lua_createtable(L, 0, 34);
+    p_lua_createtable(L, 0, 54);
     number_field(L, "frames", (double)o->frames);
     number_field(L, "loading_skips", (double)o->loading_skips);
     number_field(L, "paused_frames", (double)o->paused_frames);
@@ -436,6 +442,27 @@ static int stats(lua_State *L) {
     number_field(L, "sim_win_mean_ms", o->win_count ? o->win_sum_ms / (double)o->win_count : 0.0);
     number_field(L, "sim_win_p95_ms", take_window_p95(o));
     number_field(L, "sim_win_max_ms", o->win_max_ms);
+    {
+        static const char *names[WK_COUNT] = {"galaxy", "cluster", "sector", "zone", "ship", "station"};
+        double frames = walk_win.frames ? (double)walk_win.frames : 1.0;
+        char key[48];
+        number_field(L, "walk_installed", walk_installed);
+        number_field(L, "walk_refused", o->walk_refused);
+        number_field(L, "walk_frames", (double)walk_win.frames);
+        number_field(L, "walk_mean_ms", walk_win.walk_ms / frames);
+        number_field(L, "walk_max_ms", walk_win.walk_max_ms);
+        number_field(L, "walk_share", o->win_sum_ms > 0.0 ? walk_win.walk_ms / o->win_sum_ms : 0.0);
+        number_field(L, "sector_sum_ms", walk_win.sector_sum_ms / frames);
+        number_field(L, "sector_max_ms", walk_win.sector_max_ms / frames);
+        number_field(L, "ideal_speedup", walk_win.sector_max_ms > 0.0 ? walk_win.sector_sum_ms / walk_win.sector_max_ms : 0.0);
+        for (int k = 0; k < WK_COUNT; ++k) {
+            snprintf(key, sizeof(key), "%s_calls", names[k]);
+            number_field(L, key, (double)walk_win.cls[k].calls / frames);
+            snprintf(key, sizeof(key), "%s_ms", names[k]);
+            number_field(L, key, walk_win.cls[k].ms / frames);
+        }
+        memset(&walk_win, 0, sizeof(walk_win));
+    }
     o->win_count = 0; o->win_sum_ms = 0.0; o->win_max_ms = 0.0;
     memset(o->win_hist, 0, sizeof(o->win_hist));
     if (o->reason) { p_lua_pushlstring(L, o->reason, strlen(o->reason)); p_lua_setfield(L, -2, "reason"); }
@@ -529,6 +556,8 @@ static int start(lua_State *L) {
         }
     }
     o->armed = 1;
+    /* Component-walk profiling needs the slot 0/15 frame brackets; optional, fail closed. */
+    if (o->sim_hooks && !walk_install(1)) o->walk_refused = 1;
     return 1;
 }
 

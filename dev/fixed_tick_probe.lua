@@ -9,6 +9,7 @@ local initialise,message=package.loadlib(X4LAN_FIXEDTICK_PATH or
 assert(initialise,message)
 local native=initialise()
 local owner,reason
+local walkRefusedLogged
 local nextTry=0
 local nextLog=0
 local function logStats(now)
@@ -23,6 +24,15 @@ local function logStats(now)
   s.dropped_ticks or 0,s.last_steps or 0,s.accumulator or 0)..
   string.format(' simHooks=%d simFrames=%d simMeanMs=%.3f simP95Ms=%.2f simMaxMs=%.3f',
   s.sim_hooks or 0,s.sim_win_frames or 0,s.sim_win_mean_ms or 0,s.sim_win_p95_ms or 0,s.sim_win_max_ms or 0))
+ if (s.walk_installed or 0)==1 and (s.walk_frames or 0)>0 then
+  DebugError(string.format('[X4LAN] WALKPROF frames=%d walkMs=%.3f walkMaxMs=%.3f share=%.3f sectors=%.2f sectorSumMs=%.3f sectorMaxMs=%.3f speedup=%.2f zones=%.1f zoneMs=%.3f ships=%.1f shipMs=%.3f stations=%.1f stationMs=%.3f clusterMs=%.3f',
+   s.walk_frames,s.walk_mean_ms or 0,s.walk_max_ms or 0,s.walk_share or 0,s.sector_calls or 0,
+   s.sector_sum_ms or 0,s.sector_max_ms or 0,s.ideal_speedup or 0,s.zone_calls or 0,s.zone_ms or 0,
+   s.ship_calls or 0,s.ship_ms or 0,s.station_calls or 0,s.station_ms or 0,s.cluster_ms or 0))
+ elseif (s.walk_refused or 0)==1 and not walkRefusedLogged then
+  walkRefusedLogged=true
+  DebugError('[X4LAN] FEATURE walkprof DISABLED reason=vtable or signature mismatch')
+ end
  nextLog=now+1
 end
 SetScript('onUpdate',function()

@@ -80,6 +80,19 @@ static void run_catchup(double fps, int frames) {
     for (int i = 0; i < frames; ++i) catchup_frame(1.0 / fps);
 }
 
+static int sector_call;
+static uintptr_t fake_sector_move(void *self) {
+    (void)self;
+    fake_now.QuadPart += 10000 * (int64_t)(1 + sector_call++ % 3); /* 1, 2, 3 ms */
+    return 0;
+}
+static uintptr_t fake_galaxy_move(void *self) {
+    (void)self;
+    fake_now.QuadPart += 5000; /* 0.5 ms of non-sector work */
+    for (int i = 0; i < 3; ++i) walk_sector(NULL);
+    return 0;
+}
+
 static void fixed_frame(void) {
     fake_now.QuadPart += 166667;
     *(double *)(image + GAME_TIME_RVA) += 1.0 / 60.0;
@@ -201,9 +214,46 @@ int main(void) {
     stop(&fake_lua);
     assert(!fake_table[SIM_BEGIN_SLOT] && !fake_table[SIM_END_SLOT] && !fake_table[SLOT]);
 
+    /* Component-walk profiling: wrappers replace the verified vtable entries, time each
+       class per frame, fold sector sum/max into the window and restore on stop. */
+    setup();
+    fake_owner.sim_hooks = 1;
+    fake_table[SIM_BEGIN_SLOT] = &hook_begin; fake_table[SIM_END_SLOT] = &hook_end;
+    for (int k = 0; k < WK_COUNT; ++k)
+        *(void **)(image + x4_walk_sites[k].entry) = image + x4_walk_sites[k].fn;
+    *(void **)(image + x4_walk_sites[WK_ZONE].entry) = image + 1; /* foreign pointer */
+    assert(!walk_install(0) && !walk_installed);
+    *(void **)(image + x4_walk_sites[WK_ZONE].entry) = image + x4_walk_sites[WK_ZONE].fn;
+    assert(walk_install(0) && walk_installed);
+    assert(*(void **)(image + x4_walk_sites[WK_SECTOR].entry) == (void *)walk_sector);
+    walk_orig[WK_GALAXY] = fake_galaxy_move;
+    walk_orig[WK_SECTOR] = fake_sector_move;
+    for (int f = 0; f < 10; ++f) {
+        sim_begin(&hook_begin);
+        ((walk_move_fn)*(void **)(image + x4_walk_sites[WK_GALAXY].entry))(NULL);
+        fake_now.QuadPart += 10000;
+        sim_end(&hook_end);
+    }
+    assert(walk_win.frames == 10 && walk_win.cls[WK_SECTOR].calls == 30);
+    assert(fabs(walk_win.sector_sum_ms / 10.0 - 6.0) < 1e-6);   /* 1 + 2 + 3 ms */
+    assert(fabs(walk_win.sector_max_ms / 10.0 - 3.0) < 1e-6);
+    assert(fabs(walk_win.sector_sum_ms / walk_win.sector_max_ms - 2.0) < 1e-6);
+    assert(fabs(walk_win.walk_ms / 10.0 - 6.5) < 1e-6);
+    ++owner_thread;   /* foreign thread: pass-through, nothing counted */
+    sim_begin(&hook_begin); walk_galaxy(NULL); sim_end(&hook_end);
+    --owner_thread;
+    assert(walk_win.frames == 10);
+    walk_orig[WK_GALAXY] = (walk_move_fn)(image + x4_walk_sites[WK_GALAXY].fn);
+    walk_orig[WK_SECTOR] = (walk_move_fn)(image + x4_walk_sites[WK_SECTOR].fn);
+    stop(&fake_lua);
+    assert(!walk_installed);
+    for (int k = 0; k < WK_COUNT; ++k)
+        assert(*(void **)(image + x4_walk_sites[k].entry) == image + x4_walk_sites[k].fn);
+
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: fixedtick read-only cadence, pause/loading, lifetime and fail-closed guards");
     puts("PASS: fixed60 dt branch patch, per-frame guards and restore on every disarm");
+    puts("PASS: component-walk profiling: verified vtable swap, per-sector sum/max, foreign threads, restore");
     puts("PASS: simulation-cost brackets measure the slot loop, skip loading/foreign threads, unregister on stop");
     puts("PASS: fixed60catchup tracks wall time at 30/60/144/1000 fps, bounded catch-up, Jolt sub-steps, restore");
     return 0;

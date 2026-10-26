@@ -155,6 +155,23 @@ host game view, profile 45841, new custom_creative world, fixed60catchup):
 - Not measured: 144 fps (run interrupted to free the PC) and uncapped.
 - Evidence: .local/evidence-242-withheld, fps60-*.
 
+OVERHAUL MEASUREMENT — COMPONENT-WALK PROFILE (branch contrib/ferrite-overhaul)
+Goal: decide whether a per-sector parallel universe walk is worth building.
+- Six primary-vtable Move entries (slot 674: Galaxy 0x748120, Cluster 0x3b8280,
+  Sector 0x784230, Zone 0x834950, Ship 0x7cc810, Station 0x41a430) are swapped for
+  timing wrappers after checking each entry equals image base + function RVA and
+  each function's first 32 bytes (new pinned sites walk_*_move, no relocations).
+  Installed only with the slot 0/15 brackets; restored on disarm; wrappers pass
+  through on any thread other than the probe's MoveWorker.
+- Per second: WALKPROF frames, walk ms (galaxy Move = whole tree walk), its share
+  of the slot-loop simulation time, sectors walked per frame, per-frame sum and
+  maximum of sector times, ideal speedup = sum/max (upper bound for a per-sector
+  parallel walk), and per-class calls and inclusive ms (zones, ships, stations).
+- Offline: synthetic tests (verified swap, foreign pointer refusal, sum/max,
+  foreign-thread pass-through, restore), Lua probe tests, 16 signatures PASS on the
+  copied and installed X4.exe. Native run pending (single player highway, then the
+  8-sector attention load harness on contrib/ferrite-attention-load-test).
+
 NEXT STAGES (unchanged plan): 3 render continues while simulation is held without
 semaphore misuse; 4 explicit input/UI/Lua cadence and pause/loading/SETA/save/load
 rules; 5 render-only interpolation without feedback into authoritative state.

@@ -27,7 +27,20 @@ FIXEDTICK_SITES = {
     'physics_collision_steps': (0xBA8CE, 39, 'c667e74f191023745d6e737e530ba1753a9dcc02c8b5dc9e70247d8298f3ce8e'),
 }
 
-SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES}
+# Component-walk profiling (overhaul): primary-vtable Move slot 674 per class.
+# (function RVA, vtable entry RVA, SHA-256 of the function's first 32 bytes). The entry is
+# relocated, so it is compared at runtime against image base + function RVA.
+WALK_SITES = {
+    'galaxy': (0x748120, 0x2B17348, '7c0981e988f37f237e70006b1453ce0e444fad8aba53e984c09ecba96e188a86'),
+    'cluster': (0x3B8280, 0x2AA39A8, '51cd721d73d5812394c24f2feaf557276a8cedc867559ea49c7ff15026869e91'),
+    'sector': (0x784230, 0x2B1FF58, '25b24d9be58c6e66ccb588207d0e3b13a8135d4a1d2eb100fd567c5e4cd24858'),
+    'zone': (0x834950, 0x2B67590, '32b67bb8c930181f5eec4953b151d556af8d792652e0c50a967d4690dd75c9bf'),
+    'ship': (0x7CC810, 0x2B85FA8, '809f44f2b8b4712e0ca1a54404595f609dd2c134847e4c884363061a7277649c'),
+    'station': (0x41A430, 0x2B779E8, 'cdf874aac2d43fa934141f7bf472c51a9ac539a6f97b4f8bb57bebcb5c47e986'),
+}
+WALK_CODE_SITES = {f'walk_{name}_move': (fn, 32, sha) for name, (fn, _entry, sha) in WALK_SITES.items()}
+
+SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES}
 
 
 def c_header() -> str:
@@ -44,4 +57,9 @@ def c_header() -> str:
         for rva, length, sha in sites.values():
             lines.append(f'    {{0x{rva:x}, {length}, "{sha}"}},')
         lines.append('};')
+    lines.append('typedef struct { const char *name; size_t fn; size_t entry; ULONG length; const char *sha; } x4_walk_site;')
+    lines.append('static const x4_walk_site x4_walk_sites[] = {')
+    for name, (fn, entry, sha) in WALK_SITES.items():
+        lines.append(f'    {{"{name}", 0x{fn:x}, 0x{entry:x}, 32, "{sha}"}},')
+    lines.append('};')
     return '\n'.join(lines) + '\n'

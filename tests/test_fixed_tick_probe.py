@@ -74,6 +74,29 @@ class FixedTickProbeTests(unittest.TestCase):
           ui();ui();assert(logs[2]:find('simHooks=1 simFrames=60 simMeanMs=4.250 simP95Ms=6.50 simMaxMs=9.125',1,true))
         ''')
 
+    def test_walk_profile_line_is_logged(self):
+        self.runtime().execute('''
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.walk_installed=1;s.walk_frames=60
+            s.walk_mean_ms=9.5;s.walk_max_ms=14;s.walk_share=0.67;s.sector_calls=3;s.sector_sum_ms=8
+            s.sector_max_ms=4;s.ideal_speedup=2;s.zone_calls=40;s.zone_ms=6;s.ship_calls=300;s.ship_ms=5
+            s.station_calls=20;s.station_ms=1.5;s.cluster_ms=0.2;return s end
+          ui();ui()
+          local found
+          for _,l in ipairs(logs) do if l:find('WALKPROF frames=60 walkMs=9.500',1,true) and l:find('speedup=2.00',1,true) then found=true end end
+          assert(found)
+        ''')
+
+    def test_walk_profile_refusal_is_loud(self):
+        self.runtime().execute('''
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.walk_refused=1;return s end
+          ui();ui();ui()
+          local n=0
+          for _,l in ipairs(logs) do if l:find('FEATURE walkprof DISABLED',1,true) then n=n+1 end end
+          assert(n==1)
+        ''')
+
     def test_fixed60_refusal_is_an_error(self):
         with self.assertRaisesRegex(Exception, 'frame-rate limit is not 60'):
             self.runtime().execute('''
