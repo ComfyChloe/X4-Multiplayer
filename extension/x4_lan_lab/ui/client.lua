@@ -2,6 +2,10 @@
 X4LAN_CLIENT = {}
 local CONNECTION_TIMEOUT = 30 -- Matches the relay's player lease timeout.
 local MAX_REMOTES = 7 -- Up to eight players: every other player is one remote.
+-- Datagrams drained per update. The relay sends a client about 1000 packets/s in a busy
+-- sector (universe motion, identity, NPC health, co-op frames); at 20-45 FPS a cap of 32
+-- per frame queued them in the OS buffer (seconds of added latency, then loss).
+local DRAIN = 256
 local function split(packet)
     if #packet > 768 or packet:find("[^%g]") then return {} end
     local fields = {}
@@ -137,11 +141,14 @@ function X4LAN_CLIENT.new(config, transport, nonce, log, resume)
             self.transport:send(table.concat(hello, '|'))
             self.lastHello = now
         end
-        for _ = 1, 32 do
+        local drained = 0
+        for _ = 1, DRAIN do
             local packet = self.transport:receive()
             if not packet then break end
+            drained = drained + 1
             self:receive(packet, now)
         end
+        self.drained, self.drainedMax = drained, math.max(self.drainedMax or 0, drained)
         if self.reset then return false, 'relay-reset' end
         if self.lease and now - self.lastSend >= 0.05 then
             self.sequence = self.sequence + 1

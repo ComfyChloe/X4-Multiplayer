@@ -38,6 +38,8 @@ local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={
  fire2={},fire2Seq={},triggerShots={},velocity={},velocityGeneration=0,modes={},fences={},count=R.ships}
 for i=1,c.count do c.seq[i],c.shots[i],c.docks[i],c.fire2Seq[i],c.triggerShots[i],c.fences[i]=0,0,0,0,{0,0},0 end
 A.coop=c
+-- Correction blend time constant (s) and the velocity hold over refresh gaps (s).
+local BLEND,VELOCITY_HOLD=.1,.25
 local function admittedSlot(slot)
  local n=tonumber(tostring(slot):match('^p([1-8])$'));return n and n<=R.players
 end
@@ -224,7 +226,7 @@ function c.receive(f,now)
   end
   if modern then
    local velocity={};for i=1,6 do velocity[i]=tonumber(f[17+i]) end
-   local track=r.track or {retainClock=true,leak=M.leak,offset=r.clock}
+   local track=r.track or {retainClock=true,leak=M.leak,offset=r.clock,adaptive=true}
    local declared=c.modes[entity];declared=declared and declared.epoch==epoch and declared.lease==f[4] and now-declared.at<=M.stale and declared.mode or nil
    track.mode=declared
    if not M.push(track,tonumber(f[17]),p,velocity,now) then return true end
@@ -300,8 +302,10 @@ local function render(r,now,i)
  if r.track then
   local track=r.track;local last=track.samples and track.samples[#track.samples]
   local mode,profile=M.classify(r.motion,declaredMode(i,r),last and M.speed(last.velocity) or 0,now)
-  r.mode=mode;r.target=M.clock(track,now,profile.delay)
-  return M.renderAt(track,r.target,profile.horizon)
+  track.adaptive=true
+  r.mode=mode;r.delay=M.delayFor(track,profile.delay);r.target=M.clock(track,now,r.delay)
+  -- A widened delay also widens the prediction horizon (bounded at 1 s).
+  return M.renderAt(track,r.target,math.max(profile.horizon,math.min(1,r.delay)))
  end
  if now-r.at>.75 then return nil end
  local target=now-.1;local a,b=r.samples[1],r.samples[#r.samples]
@@ -390,6 +394,7 @@ if cfg.motion_diagnostics then
   -- drift: how far the engine moved the replica away from the last requested pose.
   local drift=r.applied and dist(actual,r.applied) or 0
   q.maxDrift=math.max(q.maxDrift or 0,drift);q.frames=(q.frames or 0)+1;q.writes=(q.writes or 0)+(changed and 1 or 0)
+  q.maxError=math.max(q.maxError or 0,dist(p,actual))
   if now<(q.next or 0) then return end
   q.next=now+interval
   local own=C.GetPlayerContainerID();local range=-1
@@ -397,10 +402,14 @@ if cfg.motion_diagnostics then
    local o=C.GetObjectPositionInSector(own);range=dist({o.x,o.y,o.z},actual)
   end
   local m=c.modes[i];local track=r.track or {}
-  log(string.format('MOTION_DIAG ship=%d mode=%s declared=%s speed=%.1f request=%.2f drift=%.2f maxDrift=%.2f range=%.0f writes=%d/%d fences=%d resets=%d lag=%.3f velocity=%s',
-   i,r.mode or 'legacy',m and m.mode or 'none',linear and M.speed(linear) or 0,r.applied and dist(p,r.applied) or 0,drift,q.maxDrift,range,
-   q.writes,q.frames,c.fences[i],track.resets or 0,(track.lag or 0)-(track.offset or 0),c.velocity[i] and 'native' or 'off'))
-  q.maxDrift,q.frames,q.writes=0,0,0
+  -- request/drift are per-frame travel (speed * frame time) when native velocity runs;
+  -- error is the real target error before this frame's write.
+  log(string.format('MOTION_DIAG ship=%d mode=%s declared=%s speed=%.1f request=%.2f drift=%.2f maxDrift=%.2f error=%.2f maxError=%.2f range=%.0f writes=%d/%d fences=%d resets=%d lag=%.3f delay=%.3f excess=%.3f drainMax=%d velocity=%s',
+   i,r.mode or 'legacy',m and m.mode or 'none',linear and M.speed(linear) or 0,r.applied and dist(p,r.applied) or 0,drift,q.maxDrift,
+   dist(p,actual),q.maxError or 0,range,q.writes,q.frames,c.fences[i],track.resets or 0,(track.lag or 0)-(track.offset or 0),
+   r.delay or 0,track.excess or 0,s.client and s.client.drainedMax or 0,c.velocity[i] and 'native' or 'off'))
+  q.maxDrift,q.frames,q.writes,q.maxError=0,0,0,0
+  if s.client then s.client.drainedMax=0 end
  end
 end
 function c.frame(now)
@@ -489,18 +498,49 @@ function c.frame(now)
        if math.abs(n<=3 and delta or M.angle(delta))>(n<=3 and .01 or .0001) then changed=true;break end
       end
      end
+     -- A late sample or clock slew makes the rendered target hop against its own
+     -- extrapolation (previous target + velocity * frame time). In normal flight a small
+     -- hop is absorbed into an offset that decays over ~BLEND s instead of being written
+     -- in one frame; large hops, pose-only modes and engine-drift repairs stay exact.
+     local written=p
+     local dt=math.max(0,now-(r.frameAt or now))
+     local steady=linear and r.lastLinear and M.speed(linear)>1 and
+      math.sqrt((linear[1]-r.lastLinear[1])^2+(linear[2]-r.lastLinear[2])^2+(linear[3]-r.lastLinear[3])^2)<=.1*M.speed(linear)
+     if c.velocity[i] and (r.mode or 'normal')=='normal' and r.lastTarget and steady and dt>0 and dt<=.25 then
+      local hop={}
+      for n=1,3 do hop[n]=p[n]-(r.lastTarget[n]+r.lastLinear[n]*dt) end
+      local size=math.sqrt(hop[1]^2+hop[2]^2+hop[3]^2);local speed=linear and M.speed(linear) or 0
+      local off=r.blend or {0,0,0};local decay=math.exp(-dt/BLEND)
+      if size>math.max(25,speed*.1) then off={0,0,0}
+      else for n=1,3 do off[n]=(off[n]-(size>.05 and hop[n] or 0))*decay end end
+      if math.abs(off[1])+math.abs(off[2])+math.abs(off[3])<.01 then off={0,0,0} end
+      r.blend=off
+      if off[1]~=0 or off[2]~=0 or off[3]~=0 then
+       written={p[1]+off[1],p[2]+off[2],p[3]+off[3],p[4],p[5],p[6]}
+       value.x,value.y,value.z=written[1],written[2],written[3];changed=true
+      end
+     else r.blend=nil end
+     r.lastTarget={p[1],p[2],p[3]};r.lastLinear=linear and {linear[1],linear[2],linear[3]} or nil;r.frameAt=now
      if diagnose then diagnose(i,r,ship,p,linear,changed,now) end
-     if changed then C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));r.applied=p end
+     if changed then C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));r.applied=written end
      -- Native velocity only in normal flight. At boost/travel/highway speed the free
      -- replica's own flight model cannot hold the vector; the per-frame pose write is
      -- authoritative (pathing SetOffsetOrder, see reports/PROXY-MOTION-20261025.txt).
      if C.GetPlayerControlledShipID()~=ship and linear and (r.mode or 'normal')=='normal' then
-      applyVelocity(i,sector,linear,now);velocityApplied=true
+      applyVelocity(i,sector,linear,now);velocityApplied=true;r.velocityAt=now
      end
     end
    end
   end
-  if not velocityApplied then clearVelocity(i) end
+  -- A frame without a velocity refresh (dock pairing gap, skipped apply) keeps the
+  -- running native vector for VELOCITY_HOLD s; MD's 0.3 s deadline still bounds it.
+  -- Real boundaries (no pose, local pilot, dock, pose-only mode) fence at once.
+  if not velocityApplied then
+   local hold=p and r and r.velocityAt and now-r.velocityAt<=VELOCITY_HOLD and (r.mode or 'normal')=='normal'
+    and r.dock==0 and c.docks[i]==0 and c.owners[i]~=cfg.slot and C.GetPlayerControlledShipID()~=ship
+    and C.IsComponentOperational(ship) and not A.paused()
+   if not hold then clearVelocity(i) end
+  end
   -- Queue physical motion before replaying fire for this rendered pose.
   fire2Frame(i,r,ship,now)
  end
