@@ -23,10 +23,13 @@ but native game evidence is tracked separately in `reports/dedicated-server-wsl.
 | `x4mp-agent/` | Linux `LD_PRELOAD` engine agent: build-pinned VBI slot-13 frame callback that drives `x4mp-core` |
 | `x4mp-core/` | per-frame Rust core (no hooks of its own): build-pinned bindings to X4's exported C functions, frame driver with budgets/`X4MP_CORE COST`, bounded MD action queue + `executor/` stub, read-only player pose probe; see `x4mp-core/FFI-INVENTORY.md` |
 | `x4mp-core-win/` | Windows cdylib exposing `x4mp-core` through a build-pinned C ABI for the slot-12 hooks observer or a Lua `onUpdate` |
+| `x4mp-save/` | offline savegame tool (`analyze`/`trim`/`verify`) for hot join: streaming analysis, per-client trimming by reference closure, optional client job neutralisation; see `x4mp-save/README.md` |
 
-The workspace has **no third-party crates**. Like the Python relay (standard library
-only), it depends on the Rust standard library and the OS (`bcrypt.dll`/`/dev/urandom`
-for leases, `ws2_32` for one socket ioctl, `kernel32`/`libdl` for symbol lookup).
+The runtime crates have **no third-party dependencies**. Like the Python relay (standard
+library only), they depend on the Rust standard library and the OS (`bcrypt.dll`/`/dev/urandom`
+for leases, `ws2_32` for one socket ioctl, `kernel32`/`libdl` for symbol lookup). The offline
+`x4mp-save` tool is the exception: it uses `quick-xml` and `flate2` and is never
+loaded into X4.
 
 ## What is ported
 

@@ -1,5 +1,5 @@
 [workspace]
-members = ["x4lan-net", "x4lan-relay", "x4mp-agent", "x4mp-core", "x4mp-core-win"]
+members = ["x4lan-net", "x4lan-relay", "x4mp-agent", "x4mp-core", "x4mp-core-win", "x4mp-save"]
 resolver = "2"
 
 [workspace.package]
