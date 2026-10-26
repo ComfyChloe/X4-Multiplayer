@@ -1,6 +1,6 @@
 """Build INTERNAL Windows/Linux host-or-guest packages without session secrets."""
 from pathlib import Path
-import argparse, hashlib, json, re, secrets, shutil, tarfile, tempfile, zipfile
+import argparse, hashlib, json, re, secrets, shutil, subprocess, tarfile, tempfile, zipfile
 import importlib.util
 SOURCE = Path(__file__).resolve().parents[1]
 DIST = SOURCE / 'distribution'
@@ -39,7 +39,7 @@ def copy_server_runtime(root):
                  'universe', 'cargo', 'identity', 'npc_combat', 'seed', 'docking', 'projectile_protocol', 'projectile_relay'):
         shutil.copy2(SOURCE / 'x4lan' / (name + '.py'), root / 'x4lan' / (name + '.py'))
 
-def build(destination: Path, runtime_cache: Path | None = None, zig: Path | None = None):
+def build(destination: Path, runtime_cache: Path | None = None, zig: Path | None = None, dedicated=False):
     release = version()
     reports = [SOURCE / f'reports/{name}-{release}-{suffix}.txt'
                for name, suffix in [('automated', 'tests'), ('release', 'checks')]]
@@ -59,13 +59,15 @@ def build(destination: Path, runtime_cache: Path | None = None, zig: Path | None
     destination.mkdir(parents=True, exist_ok=False)
     pair_id = 'internal-dist-' + secrets.token_hex(8)
     folders, archives = [], []
-    for platform in ('Linux', 'Windows11'):
-        root = destination / f'X4-LAN-{release}-{platform}'
+    roles = [('Linux', 'host'), ('Windows11', 'guest'), ('Windows11', 'guest2')] if dedicated else [('Linux', 'host'), ('Windows11', 'guest')]
+    for platform, role in roles:
+        suffix = '-Guest2' if role == 'guest2' else ''
+        root = destination / f'X4-LAN-{release}-{platform}{suffix}'
         root.mkdir(); folders.append(root)
-        package = dict(package_id=None, pair_id=pair_id, slot=None, platform=platform,
+        package = dict(package_id=None, pair_id=pair_id, slot=None, platform=platform, role=role, dedicated=dedicated,
                        release=7, version=release, channel='internal', steam_build=BUILD,
                        game_version='9.00 (611726)', test_profile='45841',
-                       runtime_bundled=bool(runtime_cache), roles=['host', 'guest'])
+                       runtime_bundled=bool(runtime_cache), roles=['host', 'guest'] + (['guest2'] if dedicated else []))
         write(root / 'package.json', json.dumps(package, indent=2) + '\n')
         write(root / 'VERSION.txt', release + '\n')
         extension = root / 'extension/x4_lan_lab'
@@ -86,6 +88,7 @@ def build(destination: Path, runtime_cache: Path | None = None, zig: Path | None
         for name in ('INSTALL.html', 'README.txt', 'CHANGELOG.txt', 'NEXT-TEST.txt'):
             document(DIST / name, root / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
         shutil.copy2(SOURCE / 'VERSIONING.txt', root / 'VERSIONING.txt')
+        if dedicated: shutil.copy2(SOURCE / 'DEDICATED-SERVER.md', root / 'DEDICATED-SERVER.md')
         shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', root / 'WORLD-SYNC-TEST.txt')
         for name in ('HUMAN-DAMAGE-TEST.txt','HUMAN-DOCK-TEST.txt','HUMAN-NPC-MISSION-TEST.txt','HUMAN-TEST-RESULT.txt'):
             document(DIST / name, root / name, release)
@@ -97,6 +100,11 @@ def build(destination: Path, runtime_cache: Path | None = None, zig: Path | None
         shutil.copy2(DIST / 'world_launcher.py', root / 'world_launcher.py')
         shutil.copy2(DIST / 'action.py', root / 'action.py')
         copy_server_runtime(root)
+        if dedicated and role == 'host':
+            subprocess.run(['cargo', 'build', '--release', '--bin', 'x4lan-dedicated'], cwd=SOURCE / 'rust', check=True)
+            subprocess.run(['cargo', 'build', '--release', '-p', 'x4lan-net'], cwd=SOURCE / 'rust', check=True)
+            shutil.copy2(SOURCE / 'rust/target/release/x4lan-dedicated', root / 'x4lan-dedicated')
+            shutil.copy2(SOURCE / 'rust/target/release/libx4lan_net.so', extension / 'native/x4lan_net.so')
         if platform == 'Linux': shutil.copy2(DIST / 'linux_setup.py', root / 'setup_linux.py')
         else: shutil.copy2(DIST / 'windows_setup.ps1', root / 'setup_windows.ps1')
         if runtime_cache:
@@ -152,7 +160,7 @@ def build(destination: Path, runtime_cache: Path | None = None, zig: Path | None
     (destination / 'reports').mkdir()
     shutil.copy2(reports[1], destination / 'reports/RELEASE-CHECKS.txt')
     write(destination / 'VERSION.txt', release + '\n')
-    print('Internal host-or-guest packages created:', destination)
+    print('Internal dedicated-server packages created:' if dedicated else 'Internal host-or-guest packages created:', destination)
     return folders
 
 if __name__ == '__main__':
@@ -160,5 +168,6 @@ if __name__ == '__main__':
     parser.add_argument('destination', type=Path)
     parser.add_argument('--runtime-cache', type=Path, required=True)
     parser.add_argument('--zig', type=Path, help='Zig 0.15.2 (or set X4LAN_ZIG / put zig on PATH)')
+    parser.add_argument('--dedicated', action='store_true')
     args = parser.parse_args()
-    build(args.destination, args.runtime_cache, args.zig)
+    build(args.destination, args.runtime_cache, args.zig, dedicated=args.dedicated)

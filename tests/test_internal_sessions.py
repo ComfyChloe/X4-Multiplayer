@@ -1,6 +1,7 @@
 """Internal Windows/Linux role and invitation boundaries."""
 import importlib.util,json,subprocess,sys,tempfile,unittest
 from pathlib import Path
+from contextlib import nullcontext
 from unittest.mock import patch
 from types import SimpleNamespace
 ROOT=Path(__file__).resolve().parents[1]
@@ -28,6 +29,37 @@ class InternalSessions(unittest.TestCase):
             lua=(folder/'extension/x4_lan_lab/ui/config.lua').read_text()
             for text in ('world_sync = true','fire2 = true','ship_weapons = 6','ship_ter_s_xperimental_01_a_macro','test_profile = "45841"', 'coop_docks = true', 'pilot_health = true', 'shot_claims = true', 'shot_visual = true', 'shot_capture = true', 'projectile_visuals = true', 'shot_undo = false', 'npc_combat = true', 'faction_missions = true'):
                 self.assertIn(text,lua)
+    def test_dedicated_authority_and_two_guests_have_explicit_ships(self):
+        guest2 = self.package('guest2', 'Windows11')
+        for folder, role in ((self.host, 'host'), (self.guest, 'guest'), (guest2, 'guest2')):
+            meta = json.loads((folder / 'package.json').read_text())
+            meta.update(dedicated=True, role=role)
+            (folder / 'package.json').write_text(json.dumps(meta))
+        with patch.object(launcher, 'ROOT', self.host):
+            launcher.configure('host', '192.0.2.109')
+        for folder in (self.guest, guest2):
+            with patch.object(launcher, 'ROOT', folder):
+                launcher.configure('guest', invite=self.host / 'JOIN-SESSION.json')
+        for folder, slot, ship, authority in ((self.host, 'p1', 1, True), (self.guest, 'p2', 2, False), (guest2, 'p3', 1, False)):
+            with patch.object(launcher, 'ROOT', folder):
+                meta, session = launcher.configured()
+            self.assertTrue(session['dedicated'])
+            lua = (folder / 'extension/x4_lan_lab/ui/config.lua').read_text()
+            self.assertIn(f'slot = "{slot}"', lua)
+            self.assertIn(f'local_ship = {ship}', lua)
+            self.assertIn('dedicated_session = true', lua)
+            self.assertIn(f'dedicated = {str(authority).lower()}', lua)
+        self.assertIn('dedicated_control_path', (self.host / 'extension/x4_lan_lab/ui/config.lua').read_text())
+        (self.host / 'installation.json').write_text(json.dumps(dict(game='/game', profile='/profile/45841')))
+        backend = SimpleNamespace(WorldServer=lambda *_: nullcontext(), prepare_play=lambda *_: None)
+        with patch.object(launcher, 'ROOT', self.host), patch.object(launcher, 'backend_module', return_value=backend), \
+                patch.object(launcher.subprocess, 'run') as run:
+            launcher.server(console=True)
+        argv = run.call_args.args[0]
+        self.assertEqual(argv[-1], 'run')
+        config = json.loads((self.host / '.local/dedicated/config.json').read_text())
+        self.assertEqual((config['game'], config['profile'], config['package']), ('/game/X4', '/profile/45841', str(self.host)))
+
     def test_separate_test_groups_get_distinct_keys_and_world_ids(self):
         a=self.configure();other=self.package('other','Windows11')
         with patch.object(launcher,'ROOT',other):launcher.configure('host','192.0.2.202')

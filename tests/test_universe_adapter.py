@@ -77,6 +77,18 @@ class UniverseAdapterTests(unittest.TestCase):
           assert(not U.failed and #removed==0)
         ''')
 
+    def test_host_captures_each_active_guest_sector(self):
+        l=self.make();l.execute('''
+          X4LAN_BUBBLE_API.coop.sectors.cluster_01_sector001_macro=23
+          U.receive({'UINTEREST','1',client.lease,'1','cluster_14_sector001_macro',string.rep('b',32)},now)
+          U.receive({'UINTEREST','1',client.lease,'1','cluster_01_sector001_macro',string.rep('c',32)},now)
+          tick(20);U.sender.done=true;tick(100)
+          assert(U.lastScans.cluster_14_sector001_macro and U.lastScans.cluster_01_sector001_macro)
+          assert(U.publishes.cluster_14_sector001_macro and U.publishes.cluster_01_sector001_macro)
+          assert(U.revision>=2 and not U.failed)
+          assert(#U.publish==3) -- two Argon Prime ships plus one Grand Exchange ship
+        ''')
+
     def test_partial_baseline_never_spawns_or_suppresses_npcs(self):
         l=self.make('p2');l.execute('''
           tick(1);baseline(1,{testRow},false);tick(20)

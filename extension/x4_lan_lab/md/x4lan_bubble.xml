@@ -179,7 +179,7 @@
   <set_value name="$own" exact="$candidate" />
   <raise_lua_event name="'X4LAN_Bubble.PreparedOwn'" param="$candidate" />
   <raise_lua_event name="'X4LAN_Bubble.PreparedProxy'" param="$peer" />
-  <teleport_player object="$own" instant="true" force="true" />
+  <do_if value="$args.$teleport"><teleport_player object="$own" instant="true" force="true" /></do_if>
   <raise_lua_event name="'X4LAN_Bubble.ShipsReady'" />
  </do_else>
 </actions>
