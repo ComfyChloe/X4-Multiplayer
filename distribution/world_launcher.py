@@ -24,6 +24,15 @@ TRANSFER_PORT = 45844
 GAME_ARGS = ['-applaunch', '392160', '-personalfolderid', '45841', '-module',
              'x4lan_internal', '-skipintro', '-debug', 'scripts', '-logfile',
              'x4lan-debug.txt', '-nocputhrottle', '-noworkshopsync']
+# Isolated test profiles: 45841 for the server and player 2, 45839+K for player K.
+TEST_PROFILES = tuple(str(45841 + i) for i in range(8))
+
+
+def package_profile(package):
+    profile = str(package.get('test_profile', '45841'))
+    if profile not in TEST_PROFILES:
+        raise RuntimeError('Unsupported isolated test profile in package.json.')
+    return profile
 
 
 def read(path):
@@ -113,7 +122,7 @@ def owned_installation(root, package):
     state = read(root / 'installation.json')
     profile = Path(state['profile']); game = Path(state['game'])
     target = game / 'extensions/x4_lan_lab'
-    if state.get('package_id') != package['package_id'] or profile.name != '45841':
+    if state.get('package_id') != package['package_id'] or profile.name != package_profile(package):
         raise RuntimeError('Installation belongs to a different package/profile.')
     for path in (profile, profile / 'save', profile / 'config.xml', target, target / 'ui/config.lua'):
         if path.is_symlink():
@@ -215,7 +224,12 @@ def verify_bundle(bundle, identity):
 def launch(state):
     steam = state['steam']
     command = steam if isinstance(steam, list) else [steam]
-    subprocess.run(command + GAME_ARGS, check=True)
+    args = list(GAME_ARGS)
+    profile = Path(state['profile']).name if state.get('profile') else '45841'
+    if profile not in TEST_PROFILES:
+        raise RuntimeError('Unsupported isolated test profile: ' + profile)
+    args[args.index('-personalfolderid') + 1] = profile
+    subprocess.run(command + args, check=True)
 
 
 def game_closed(ensure_closed):

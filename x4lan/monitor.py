@@ -355,6 +355,8 @@ def run(config, logs: Path, version='unversioned'):
     logs.mkdir(parents=True, exist_ok=True)
     status_path = logs / 'server-status.json'
     try:
+        from .host import require_two_players
+        require_two_players(config)
         session_type = CoopSession if config.get('coop') else EconomySession
         if config.get('world_sync'):
             from .universe import UniverseSession

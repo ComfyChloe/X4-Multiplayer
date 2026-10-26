@@ -60,6 +60,55 @@ class InternalSessions(unittest.TestCase):
         config = json.loads((self.host / '.local/dedicated/config.json').read_text())
         self.assertEqual((config['game'], config['profile'], config['package']), ('/game/X4', '/profile/45841', str(self.host)))
 
+    def test_four_player_dedicated_session_declares_players_profiles_and_ships(self):
+        clients = [(self.guest, 'guest'), (self.package('guest2', 'Windows11'), 'guest2'),
+                   (self.package('guest3', 'Windows11'), 'guest3')]
+        for folder, role, profile in ((self.host, 'host', '45841'), (clients[0][0], 'guest', '45841'),
+                                      (clients[1][0], 'guest2', '45842'), (clients[2][0], 'guest3', '45843')):
+            meta = json.loads((folder / 'package.json').read_text())
+            meta.update(dedicated=True, role=role, max_players=4, test_profile=profile)
+            (folder / 'package.json').write_text(json.dumps(meta))
+        with patch.object(launcher, 'ROOT', self.host):
+            launcher.configure('host', '192.0.2.109')
+        invite = json.loads((self.host / 'JOIN-SESSION.json').read_text())
+        self.assertEqual(invite['max_players'], 4)
+        self.assertIn('-np1-p4-', invite['build'])
+        for folder, _ in clients:
+            with patch.object(launcher, 'ROOT', folder):
+                launcher.configure('guest', invite=self.host / 'JOIN-SESSION.json')
+        expected = ((self.host, 'p1', 1, '45841'), (clients[0][0], 'p2', 2, '45841'),
+                    (clients[1][0], 'p3', 1, '45842'), (clients[2][0], 'p4', 3, '45843'))
+        for folder, slot, ship, profile in expected:
+            with patch.object(launcher, 'ROOT', folder):
+                meta, session = launcher.configured()
+            lua = (folder / 'extension/x4_lan_lab/ui/config.lua').read_text()
+            for text in (f'slot = "{slot}"', f'local_ship = {ship}', 'max_players = 4', f'test_profile = "{profile}"',
+                         f'build = "{invite["build"]}"'):
+                self.assertIn(text, lua)
+        # A player-4 package cannot join a three-player session; a mismatched build is refused.
+        late = self.package('late', 'Windows11')
+        meta = json.loads((late / 'package.json').read_text())
+        meta.update(dedicated=True, role='guest3', test_profile='45843')
+        (late / 'package.json').write_text(json.dumps(meta))
+        three = dict(invite, max_players=3, build=launcher.build_label(3))
+        (self.root / 'three.json').write_text(json.dumps(three))
+        with patch.object(launcher, 'ROOT', late), self.assertRaises(RuntimeError):
+            launcher.configure('guest', invite=self.root / 'three.json')
+        for bad in (dict(invite, build=launcher.build_label(3)), dict(invite, max_players=9),
+                    dict(invite, build=launcher.BUILD)):
+            with self.assertRaises(ValueError):
+                launcher.validate_invite(bad)
+        self.assertEqual([launcher.role_slot(r) for r in ('host', 'guest', 'guest2', 'guest7')], ['p1', 'p2', 'p3', 'p8'])
+        with self.assertRaises(RuntimeError):
+            launcher.role_slot('guest8')
+
+    def test_python_relay_refuses_dedicated_and_n_player_sessions(self):
+        from x4lan.host import require_two_players
+        require_two_players({'coop': True})
+        for config in ({'dedicated': True}, {'max_players': 3}):
+            with self.assertRaises(ValueError):
+                require_two_players(config)
+
     def test_separate_test_groups_get_distinct_keys_and_world_ids(self):
         a=self.configure();other=self.package('other','Windows11')
         with patch.object(launcher,'ROOT',other):launcher.configure('host','192.0.2.202')

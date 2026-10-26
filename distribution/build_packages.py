@@ -31,7 +31,21 @@ def copy_server_runtime(root):
                  'universe', 'cargo', 'identity', 'npc_combat', 'seed', 'docking', 'projectile_protocol', 'projectile_relay'):
         shutil.copy2(SOURCE / 'x4lan' / (name + '.py'), root / 'x4lan' / (name + '.py'))
 
-def build(destination: Path, runtime_cache: Path | None = None, dedicated=False):
+def dedicated_roles(max_players):
+    """Server (role host, player 1) plus one Windows client package per further player.
+
+    Role names keep the legacy spelling (guest = player 2, guestK = player K+1). Player K
+    uses isolated profile 45841 for K <= 2, otherwise 45839+K, so clients can share a PC.
+    """
+    if not 2 <= max_players <= 8:
+        raise ValueError('--max-players must be from 2 to 8.')
+    roles = [('Linux', 'host', '45841'), ('Windows11', 'guest', '45841')]
+    for k in range(2, max_players):
+        roles.append(('Windows11', 'guest%d' % k, str(45840 + k)))
+    return roles
+
+
+def build(destination: Path, runtime_cache: Path | None = None, dedicated=False, max_players=3):
     release = version()
     reports = [SOURCE / f'reports/{name}-{release}-{suffix}.txt'
                for name, suffix in [('automated', 'tests'), ('release', 'checks')]]
@@ -48,15 +62,16 @@ def build(destination: Path, runtime_cache: Path | None = None, dedicated=False)
     destination.mkdir(parents=True, exist_ok=False)
     pair_id = 'internal-dist-' + secrets.token_hex(8)
     folders, archives = [], []
-    roles = [('Linux', 'host'), ('Windows11', 'guest'), ('Windows11', 'guest2')] if dedicated else [('Linux', 'host'), ('Windows11', 'guest')]
-    for platform, role in roles:
-        suffix = '-Guest2' if role == 'guest2' else ''
+    roles = dedicated_roles(max_players) if dedicated else [('Linux', 'host', '45841'), ('Windows11', 'guest', '45841')]
+    for platform, role, profile in roles:
+        suffix = '-Guest' + role[5:] if role.startswith('guest') and role != 'guest' else ''
         root = destination / f'X4-LAN-{release}-{platform}{suffix}'
         root.mkdir(); folders.append(root)
         package = dict(package_id=None, pair_id=pair_id, slot=None, platform=platform, role=role, dedicated=dedicated,
                        release=7, version=release, channel='internal', steam_build=BUILD,
-                       game_version='9.00 (611726)', test_profile='45841',
-                       runtime_bundled=bool(runtime_cache), roles=['host', 'guest'] + (['guest2'] if dedicated else []))
+                       game_version='9.00 (611726)', test_profile=profile,
+                       runtime_bundled=bool(runtime_cache), roles=[r[1] for r in roles])
+        if dedicated: package['max_players'] = max_players
         write(root / 'package.json', json.dumps(package, indent=2) + '\n')
         write(root / 'VERSION.txt', release + '\n')
         extension = root / 'extension/x4_lan_lab'
@@ -153,5 +168,9 @@ if __name__ == '__main__':
     parser.add_argument('destination', type=Path)
     parser.add_argument('--runtime-cache', type=Path, required=True)
     parser.add_argument('--dedicated', action='store_true')
+    parser.add_argument('--max-players', type=int, default=3,
+                        help='dedicated only: players including the server slot p1 (2-8, default 3)')
     args = parser.parse_args()
-    build(args.destination, args.runtime_cache, dedicated=args.dedicated)
+    if args.max_players != 3 and not args.dedicated:
+        parser.error('--max-players requires --dedicated')
+    build(args.destination, args.runtime_cache, dedicated=args.dedicated, max_players=args.max_players)

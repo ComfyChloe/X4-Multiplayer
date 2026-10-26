@@ -231,6 +231,18 @@ class Relay:
         self.socket.close()
 
 
+def require_two_players(config) -> None:
+    """The Python relay is deliberately limited to two players (p1/p2).
+
+    Dedicated and N-player sessions (session.json ``dedicated``/``max_players``) are served
+    only by the Rust supervisor ``x4lan-dedicated``; refuse them instead of silently
+    running a two-slot relay for a larger session.
+    """
+    if config.get('dedicated') or config.get('max_players', 2) != 2:
+        raise ValueError('The Python relay serves two-player sessions only; '
+                         'dedicated/N-player sessions use x4lan-dedicated.')
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--bind", default="127.0.0.1")
@@ -246,6 +258,10 @@ def main() -> None:
     if args.session:
         with open(args.session, encoding="utf-8") as stream:
             config = json.load(stream)
+    try:
+        require_two_players(config)
+    except ValueError as exc:
+        parser.error(str(exc))
     token, build = args.token or config.get("token"), args.build or config.get("build")
     if not token or not build:
         parser.error("supply --session or both --token and --build")
