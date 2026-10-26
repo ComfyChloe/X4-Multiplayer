@@ -209,6 +209,22 @@ bytes. Rust covers explicit subset opt-in, stable root mapping, migration, omiss
 roots, initialization/truncation refusals and full-world replay exclusion. LuaJIT covers settings
 and subset statistics. Native round-robin correctness/cost acceptance remains pending.
 
+### Native complete-component census
+
+Inherited run `mirror-census-all` completed on lane b4, capture
+`20261026-032159-b4-ecs-core-77180` (`.local/evidence-087-withheld`). Three frames, 425,941 to 426,073
+components per frame, 282 world roots, zero dropped/truncated frames and zero walk errors. The export checker
+reports EXACT: 192/192 local positions and 9/9 Object sector positions (183 sampled rows are
+non-Objects and intentionally excluded from the latter). This validates this census snapshot,
+not the later round-robin change. Contended run: no timing improvement is claimed.
+
+The final frame contains 153 sector roots and 128 clusters plus the galaxy; 16,381 components
+belong to the default recording classes. Large unrecorded populations include 92,180 turrets,
+76,903 shield generators, 55,566 cargo bays and 54,736 docking bays. The docking-bay class has
+66 recorded descendants, while build modules have 54 and dock areas 3. Pruning those classes
+would lose real entities. Zero recorded descendants in storage or defence modules in these
+three frames is only a candidate for further structural analysis, not proof of a safe skip.
+
 ## 7. How to use it (system agents)
 
 ```rust
