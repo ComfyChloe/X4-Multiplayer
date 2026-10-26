@@ -5,10 +5,8 @@ Own files: `rust/x4mp-sim/`, `native/engine/mirror*`, `native/engine/test_mirror
 `tests/test_mirror_probe.py`, this report. Interface: `rewrite-coord/interfaces.md` (section x4mp-sim).
 Program and method: `reports/REWRITE-PROGRAM.md`.
 
-**Status (2026-10-26):** the crate, the native probe and every tool below are implemented and tested
-**offline only** (synthetic tests, a fake engine tree, a copy of X4.exe for static checks). No native X4
-result exists yet: the lane validation run is queued until the user's live test releases quiet.lock.
-Nothing in this report is a native measurement unless a section says so.
+**Status (2026-10-26):** the crate and tools are implemented and tested offline; the mirror probe has run
+natively on lanes (section 6). Native results are marked **NATIVE**; everything else is synthetic.
 
 ## 1. What the core is
 
@@ -142,15 +140,28 @@ captured frame (unmeasured natively).
 Benchmark (`x4mp-sim-bench`, synthetic load): smoke-tested at 2,000 entities only. The 10k-200k x 8-200
 sector x 1-32 thread matrix needs the quiet window (it would compete with the live client test).
 
-## 6. Native steps (pending)
+## 6. Native results and steps
 
-1. `mirror-validate-1` (queued): lane run with the probe overlay plus `.local/evidence-067-withheld`
-   (10 consecutive frames, 32 checks per frame), waits for `[X4LAN] MIRROR done`. Then
-   `x4mp-capdump info <capture>` and `x4mp-capdump check <capture> <run>/x4lan-debug.txt`.
-   Pass criterion: `MIRROR armed`, no `FEATURE mirror DISABLED`, `verdict EXACT` (local positions equal the
-   captured pose bit for bit; sector positions equal the composition of captured local poses).
-2. Benchmarks in a quiet window (`--timing` is not needed: no X4 involved, but no other load either).
-3. Cross-check with the walk agent's collector order once both run in one lane (Q8).
+Procedure: lane run with the fixed-tick probe overlay plus a mirror overlay (`dev/mirror_probe.lua` and
+`X4LAN_MIRROR_*` settings), wait for `[X4LAN] MIRROR done`, then `x4mp-capdump info <capture>` and
+`x4mp-capdump check <capture> <run>/x4lan-debug.txt`. Pass criterion: `MIRROR armed`, no
+`FEATURE mirror DISABLED`, `verdict EXACT`. All runs are functional only (other X4 instances running).
+
+| run | probe | frames | result |
+|---|---|---|---|
+| **NATIVE** mirror-validate-1 (b4) | 57c2ed2 | 10 x 16.5k objects, 282 roots | walk_errors 0; local 320/320 and Object sector 282/282 bit-identical; 913 ms/capture (old region cache) |
+| **NATIVE** mirror-validate-2 (b3) | f772266 | 60 | walk_errors 0; Object sector 1732/1732 exact; local 1901/1920: the 19 misses are two superhighways (class overrides GetLocalTransform, see below); 262 ms/capture |
+| mirror-validate-3 | 247642b (v1.1) | 60 | queued: highways modelled (class_flags, local_offset) |
+
+Findings from the native data: six classes override GetLocalTransform (slot 648): Explosive, Missile,
+Bomb (0x567aa0), Highway (0x5f79f0: adds the vector at +0x570 to row 0, then the standard step),
+HighwayScene, HighwayBooster. The capture flags them (`class_flags` bit 512) and records the Highway
+offset; `check::local_step` models Highway and refuses the others. Out-of-sector navigation slots are
+updated sparsely: at attention 2, 460k of 583k consecutive-frame samples keep the identical pose with a
+non-zero velocity (`x4mp-capdump kinematics`).
+
+Pending: mirror-validate-3; capture cost (counters in 0a850d2); benchmarks in a quiet window;
+cross-check with the walk agent's collector order once both run in one lane (Q8).
 
 ## 7. How to use it (system agents)
 
