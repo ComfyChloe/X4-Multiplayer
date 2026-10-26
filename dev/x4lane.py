@@ -1930,7 +1930,8 @@ def doctor(paths, fix=False, check_hash=True):
         elif stale:
             note('problem', 'stale lane-launch.lock', stale)
     leftovers = [*paths.coord.glob('*.lock.removing-*')] if paths.coord.is_dir() else []
-    leftovers += [*paths.lanes.glob('release.new-*'), *paths.lanes.glob('release.old-*')]
+    leftovers += [*paths.lanes.glob('release.new-*'), *paths.lanes.glob('release.old-*'),
+                  *paths.lanes.glob('release-*.new-*')]
     for item in leftovers:
         if fix:
             core.check_tree_unlinked(item)
@@ -1979,27 +1980,50 @@ def cmd_publish_release(args, paths):
     the other agents run (so edits in the development worktree never reach a running agent)."""
     commit = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', '--verify', args.commit + '^{commit}'],
                             capture_output=True, text=True, check=True).stdout.strip()
-    target = paths.lanes / 'release'
-    staging = paths.lanes / f'release.new-{os.getpid()}'
-    staging.mkdir(parents=True)
-    archive = subprocess.run(['git', '-C', str(ROOT), 'archive', '--format=tar', commit], capture_output=True,
-                             check=True).stdout
-    import io
-    import tarfile
-    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
-        tar.extractall(staging, filter='data')
-    (staging / 'RELEASE.txt').write_text(f'x4lane release {commit}\nexported {core.now_iso()} from {ROOT}\n'
-                                         'Read only: run python dev\\x4lane.py from here. Do not edit.\n',
-                                         encoding='utf-8')
-    old = paths.lanes / f'release.old-{os.getpid()}'
-    if target.exists():
-        os.replace(target, old)
-    os.replace(staging, target)
-    if old.exists():
-        core.check_tree_unlinked(old)
-        shutil.rmtree(old)
-    print(f'{target} = {commit}')
+    version = paths.lanes / f'release-{commit[:12]}'
+    if not version.exists():
+        staging = paths.lanes / f'release-{commit[:12]}.new-{os.getpid()}'
+        staging.mkdir(parents=True)
+        archive = subprocess.run(['git', '-C', str(ROOT), 'archive', '--format=tar', commit], capture_output=True,
+                                 check=True).stdout
+        import io
+        import tarfile
+        with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+            tar.extractall(staging, filter='data')
+        (staging / 'RELEASE.txt').write_text(f'x4lane release {commit}\nexported {core.now_iso()} from {ROOT}\n'
+                                             'Read only: run python dev\\x4lane.py from here. Do not edit.\n',
+                                             encoding='utf-8')
+        retry(lambda: os.replace(staging, version), f'rename {staging.name}')     # fresh files may be scanned
+    link = paths.lanes / 'release'
+    if os.path.lexists(link) and not core.is_link(link):                          # legacy plain folder
+        legacy = paths.lanes / f'release-legacy-{time.strftime("%Y%m%d-%H%M%S")}'
+        retry(lambda: os.replace(link, legacy), 'move the legacy release folder')
+    if core.is_link(link):
+        os.rmdir(link)                                                           # removes the junction only
+    junction(link, version)                                                      # path is missing for ~ms
+    keep = {version.name}
+    versions = sorted((p for p in paths.lanes.glob('release-*') if p.is_dir() and not core.is_link(p)
+                       and '.new-' not in p.name), key=lambda p: p.stat().st_mtime, reverse=True)
+    for old in versions[3:]:
+        if old.name not in keep:
+            try:
+                core.check_tree_unlinked(old)
+                shutil.rmtree(old)
+            except OSError as error:
+                print(f'note: could not remove {old.name} ({error}); doctor --fix retries later')
+    print(f'{link} -> {version.name} = {commit}')
     return 0
+
+
+def retry(action, what, attempts=60, pause=0.5):
+    """Windows briefly locks fresh files (virus scan, indexer): retry a rename for up to 30 s."""
+    for attempt in range(attempts):
+        try:
+            return action()
+        except PermissionError:
+            if attempt == attempts - 1:
+                raise LaneError(f'could not {what}: access denied for {attempts * pause:g} s')
+            time.sleep(pause)
 
 
 STOP_FILE = 'stop-request.json'
