@@ -1,0 +1,130 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Puppet client (INTERNAL, guest role only). Original code; vanilla scripts are only referenced by cue name.
+     The host/authority never sends 'Activate', so on the host this script only holds inert state.
+     Everything here is a runtime switch: no vanilla script or library is patched, so the host loads
+     unmodified vanilla MD. See reports/PUPPET-CLIENT.md. -->
+<mdscript name="X4LAN_Puppet" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="State" namespace="this" version="1">
+   <actions>
+    <set_value name="$active" exact="false"/>
+    <set_value name="$activations" exact="0"/>
+    <set_value name="$jobsOff" exact="0"/>
+    <set_value name="$jobSpawns" exact="0"/>
+    <set_value name="$removed" exact="0"/>
+    <set_value name="$cancelled" exact="0"/>
+   </actions>
+   <cues>
+    <!-- Sent by ui/puppet_game.lua on the guest only, repeated until acknowledged. -->
+    <cue name="Activate" instantiate="true">
+     <conditions>
+      <event_ui_triggered screen="'X4LAN_Puppet'" control="'Activate'"/>
+     </conditions>
+     <actions>
+      <do_if value="@md.X4LAN_Bubble.Arena.$host">
+       <!-- Defence in depth: the authority never becomes a puppet, whatever the UI sends. -->
+       <debug_text text="'[X4LAN] FEATURE puppet_client DISABLED reason=host_role_md'" filter="error"/>
+       <raise_lua_event name="'X4LAN_Puppet.Refused'" param="'host_role_md'"/>
+      </do_if>
+      <do_else>
+       <set_value name="State.$activations" operation="add"/>
+       <set_value name="State.$active" exact="true"/>
+       <!-- Re-run on every load: vanilla story scripts may re-activate jobs, and a new save version
+            may add jobs. Every step is idempotent. -->
+       <include_actions ref="Suppress"/>
+       <raise_lua_event name="'X4LAN_Puppet.Active'" param="'%s|%s|%s'.[State.$activations,State.$jobsOff,State.$cancelled]"/>
+      </do_else>
+     </actions>
+    </cue>
+    <!-- Census and host-safety query from the UI (both roles). -->
+    <cue name="Query" instantiate="true">
+     <conditions>
+      <event_ui_triggered screen="'X4LAN_Puppet'" control="'Query'"/>
+     </conditions>
+     <actions>
+      <raise_lua_event name="'X4LAN_Puppet.Status'" param="'%s|%s|%s|%s|%s'.[if State.$active then 1 else 0,State.$jobSpawns,State.$removed,State.$jobsOff,State.$cancelled]"/>
+     </actions>
+    </cue>
+    <!-- A job ship that still appears (a job re-activated by a story script, a shipyard finishing a
+         queued job ship, or a spawn between load and activation) is switched off at its job and
+         removed locally. The server streams its own NPCs as replicas, which are not job ships. -->
+    <cue name="JobSpawnGuard" instantiate="true">
+     <conditions>
+      <event_job_ship_activated/>
+      <check_value value="State.$active"/>
+     </conditions>
+     <actions>
+      <set_value name="State.$jobSpawns" operation="add"/>
+      <set_value name="$ship" exact="event.param"/>
+      <do_if value="$ship.isoperational and $ship.isjobship and not $ship.isplayerowned and $ship != player.occupiedship">
+       <set_value name="$job" exact="$ship.job"/>
+       <do_if value="$job">
+        <set_job_active job="$job" activate="false"/>
+       </do_if>
+       <debug_text text="'[X4LAN] PUPPET JOB_SPAWN_REMOVED job=%s owner=%s macro=%s sector=%s'.[$job,$ship.owner.id,$ship.macro.id,@$ship.sector.macro.id]"/>
+       <destroy_object object="$ship" explosion="false"/>
+       <set_value name="State.$removed" operation="add"/>
+      </do_if>
+     </actions>
+    </cue>
+   </cues>
+  </cue>
+
+  <library name="Suppress">
+   <actions>
+    <!-- 1. Generic mission offers: vanilla's own switch (Timelines scenarios set it the same way).
+         Server missions still reach the guest through X4LAN_Missions mirroring. -->
+    <set_value name="md.GenericMissions.Manager.$Disabled" exact="true"/>
+
+    <!-- 2. Engine-side NPC builders on the whole galaxy. Explicit per-space settings in vanilla
+         (e.g. story sectors that allow faction logic) still supersede this. -->
+    <set_space_god_allowed space="player.galaxy" allow="false"/>
+    <set_space_faction_logic_allowed space="player.galaxy" allow="false"/>
+
+    <!-- 3. MD managers that create, order or rebuild NPC objects or drive the NPC economy.
+         Cancelling a cue cancels its sub-cues and running instances. This list is audited
+         against the vanilla scripts by tests/test_puppet_client.py. -->
+    <set_value name="$cues" exact="[
+      md.FactionLogic.FactionLogicManagers,
+      md.FactionGoal_Hold_Space.Start,
+      md.FactionGoal_Invade_Space.Start,
+      md.FactionGoal_PatrolCoordinationService.Start,
+      md.FactionGoal_PatrolCoordinationService.CentralInformationCenter,
+      md.FactionGoal_Plunder.Start,
+      md.FactionGoal_Plunder.PlunderNetwork,
+      md.FactionSubgoal_BuildStation.Start,
+      md.FactionSubgoal_DefendArea.Start,
+      md.FactionSubgoal_PrepareStagingArea.Start,
+      md.FactionSubgoal_Recon.Start,
+      md.Khaak_Activity.Manager,
+      md.Crisis_Manager.Manager,
+      md.Fleet_Reconstitution.Init,
+      md.Drain_Stations.Start
+     ]"/>
+    <do_for_each name="$cue" in="$cues">
+     <do_if value="$cue and $cue.state != cuestate.cancelled">
+      <set_value name="$before" exact="$cue.state"/>
+      <cancel_cue cue="$cue"/>
+      <set_value name="State.$cancelled" operation="add"/>
+      <debug_text text="'[X4LAN] PUPPET CUE_CANCELLED cue=%s before=%s after=%s'.[$cue,$before,$cue.state]"/>
+     </do_if>
+    </do_for_each>
+
+    <!-- 4. Job engine: deactivate every active job of every NPC faction. No new job ship spawns or
+         respawns afterwards; existing ships keep running until the server replaces them. -->
+    <set_value name="$count" exact="0"/>
+    <do_for_each name="$faction" in="lookup.faction.list">
+     <do_if value="$faction != faction.player">
+      <get_suitable_job result="$jobs" faction="$faction" exceedquota="true" force="true" multiple="true"/>
+      <do_for_each name="$job" in="$jobs">
+       <set_job_active job="$job" activate="false"/>
+       <set_value name="$count" operation="add"/>
+      </do_for_each>
+     </do_if>
+    </do_for_each>
+    <set_value name="State.$jobsOff" operation="add" exact="$count"/>
+    <debug_text text="'[X4LAN] PUPPET SUPPRESSED activation=%s jobs_off=%s jobs_off_total=%s cues_cancelled_total=%s generic_missions=off god=off faction_logic=off'.[State.$activations,$count,State.$jobsOff,State.$cancelled]"/>
+   </actions>
+  </library>
+ </cues>
+</mdscript>
