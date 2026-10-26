@@ -186,6 +186,18 @@ impl Stream {
         !(x >= chance)
     }
 
+    /// A condition-level `<debug_text ... debugchance=>` (`Scripts::DebugTextCondition::Check` 0xc4ecc0):
+    /// rolled **only when** the text is set and its debug filter channel is enabled (or the condition is
+    /// marked always); then one `Random::FloatState(100.0)` draw, printed iff the value is below the
+    /// chance. Note the different rounding from [`Stream::chance`] (two f32 multiplications). Returns
+    /// whether it printed; `channel_on = false` makes no draw.
+    pub fn debug_condition(&mut self, channel_on: bool, debugchance: f32) -> bool {
+        if !channel_on {
+            return false;
+        }
+        self.float(100.0) < debugchance
+    }
+
     /// `Random::WithDistribution` 0x14ddd10 `(state, max, dist, samples)`: one `float(max)` draw; if
     /// `samples >= 2` and `dist != 1`, `samples - 1` more draws are summed (f32 adds), divided by
     /// `samples as f32`, and folded around `half = max * 0.5`:
@@ -341,6 +353,17 @@ mod tests {
         let before = s.state();
         let x = ((step(before) as u32) as f32) * CHANCE_SCALE;
         assert_eq!(s.chance(30.0), x < 30.0);
+    }
+
+    #[test]
+    fn debug_condition_draws_only_with_the_channel_on() {
+        let mut s = Stream::from_state(3);
+        assert!(!s.debug_condition(false, 100.0));
+        assert_eq!(s.draws(), 0);
+        let mut t = Stream::from_state(3);
+        let v = t.float(100.0);
+        assert_eq!(s.debug_condition(true, 50.0), v < 50.0);
+        assert_eq!(s.draws(), 1);
     }
 
     #[test]

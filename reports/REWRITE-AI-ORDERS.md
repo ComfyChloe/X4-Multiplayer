@@ -88,6 +88,7 @@ contrib/ferrite-rng-streams are exactly 150 steps apart (unit test `step_matches
 |---|---|---|---|
 | any action with `chance=` | ExecState_Run 0xb58bb0 | **1, always** (also chance 0 and 100) | runs iff `!(f32(low32) * (100*2^-32 f32) >= chance)`; a failed roll skips to the action's sibling, so a failed `<do_if chance>` acts as a false condition |
 | condition child with `chance=` | AIScript_CheckInterruptHandlers 0x1075280 / MultipleCondition 0xc581e0 | 1 when the parent reaches the child (short-circuit), rolled **before** the child is evaluated | same comparison |
+| condition `<debug_text debugchance=>` | DebugTextCondition::Check 0xc4ecc0 | 1 **only if** the text is set and its debug filter channel is enabled (global debug log `*(0x6cf1508)`, per-channel table) | `FloatState(100.0) < debugchance` (other rounding than chance rolls) |
 | `min= max=` (flat) | EvaluateRandomRange 0xc58da0 | 1 if `max-min > 0`, else 0 | `diff` in the type of max (f32 lengths, f64 times); `r = FloatState(f32(diff))`; result `f64(min) + f64(r)` converted to max's type |
 | `profile=`/`scale=` | Random::WithDistribution 0x14ddd10 | `scale` (1 if flat) | sum / scale, folded: 2 increasing, 3 decreasing, 4 bell, 5 inversebell |
 | `<wait exact>` / `<wait min max>` | WaitAction 0x10a5040 | 0 / as range | wake = TLS+0x300 + duration (f64); no duration = infinite wait |
@@ -100,7 +101,9 @@ on control flow through debug lines (dozens per Patrol leg), and every event del
 move.seekenemies's move_to interrupt that the first five conditions do not decide (e.g. every gravidar scan
 without an enemy) draws once for the distress check's `chance="80"`. No global handler condition in base AI
 has a chance; blocking-interrupt conditions with one exist in move.seekenemies, masstraffic.flee and
-masstraffic.police.
+masstraffic.police. Condition-level `debug_text` with `debugchance` (e.g. move.seekenemies L383 and the
+ego_dlc_pirate diff) draws only when X4's debug channel is on, so the debug filter settings are a world input
+(lanes run with debug output on; a player's game usually without).
 
 **Per-entity streams.** In the rewrite each entity's AI scripts draw from their own stream,
 `stream_seed(session, uid, 'AISC')`, in the script's draw order. In replay mode the stream is reset to the
