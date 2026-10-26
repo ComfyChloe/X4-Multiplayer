@@ -136,9 +136,13 @@ def admission(paths, instances, min_free_gb, who):
     """Raise CapReached unless `instances` more X4 may start now: every X4.exe on the PC counts
     towards MAX_X4_TOTAL, MIN_FREE_PER_START GB must be available per start, and no memory
     pressure episode may be active. Returns (x4 total, available GB) when admitted."""
-    total = len(x4_processes())
-    if total + instances > core.MAX_X4_TOTAL:
-        raise CapReached(f'{total} X4 run on this PC; {instances} more would exceed MAX_X4_TOTAL='
+    procs = x4_processes()
+    total = len(procs)
+    reserve = core.read_reserve(paths.reserve)
+    unfilled = core.unfilled_slots(reserve, sum(1 for p in procs if is_protected(p)))
+    held = f' + {unfilled} slot(s) reserved for {reserve.get("owner")}' if unfilled else ''
+    if total + unfilled + instances > core.MAX_X4_TOTAL:
+        raise CapReached(f'{total} X4 run on this PC{held}; {instances} more would exceed MAX_X4_TOTAL='
                          f'{core.MAX_X4_TOTAL} (lanes, protected clients and other sessions all count)')
     _ram, avail = free_ram_gb()
     state = core.observe_pressure(paths.pressure, avail, who)
@@ -146,10 +150,11 @@ def admission(paths, instances, min_free_gb, who):
         raise CapReached(f'memory pressure: available stayed under {core.PRESSURE_LOW_GB:g} GB for more than '
                          f'{core.PRESSURE_HOLD_S} s (now {avail} GB); no new lane starts until it stays at or above '
                          f'{core.MIN_FREE_PER_START:g} GB for {core.PRESSURE_RECOVER_S} s')
-    need = max(core.MIN_FREE_PER_START, min_free_gb) * instances
+    need = max(core.MIN_FREE_PER_START, min_free_gb) * instances + core.RESERVE_SLOT_GB * unfilled
     if avail < need:
         raise CapReached(f'only {avail} GB RAM available (need {need:g} GB: '
-                         f'{max(core.MIN_FREE_PER_START, min_free_gb):g} GB per X4 start)')
+                         f'{max(core.MIN_FREE_PER_START, min_free_gb):g} GB per X4 start'
+                         + (f' + {core.RESERVE_SLOT_GB:g} GB per unfilled reserved slot' if unfilled else '') + ')')
     return total, avail
 
 
@@ -620,8 +625,15 @@ def cmd_status(args, paths):
               if info['instance_mutex_present'] and protected and len(protected) == len(info['x4'])
               else 'present' if info['instance_mutex_present'] else 'free')
     print(f'instance mutex {INSTANCE_MUTEX}: {holder}')
-    print(f"admission: {len(info['x4'])} of MAX_X4_TOTAL={core.MAX_X4_TOTAL} X4 running (all X4.exe count); "
-          f"each start needs MIN_FREE_PER_START={core.MIN_FREE_PER_START:g} GB available")
+    reserve = core.read_reserve(paths.reserve)
+    unfilled = core.unfilled_slots(reserve, sum(1 for e in info['x4'] if e['protected']))
+    print(f"admission: {len(info['x4'])} of MAX_X4_TOTAL={core.MAX_X4_TOTAL} X4 running (all X4.exe count)"
+          + (f" + {unfilled} reserved" if unfilled else '')
+          + f"; each start needs MIN_FREE_PER_START={core.MIN_FREE_PER_START:g} GB available"
+          + (f" + {core.RESERVE_SLOT_GB:g} GB per unfilled reserved slot" if unfilled else ''))
+    if reserve:
+        print(f"reserve: {reserve['slots']} slot(s) for {reserve.get('owner')} until {reserve.get('until') or 'cleared'}"
+              f" ({unfilled} unfilled){': ' + reserve['reason'] if reserve.get('reason') else ''}")
     pressure = info.get('pressure')
     print('memory pressure: ' + (f"{pressure.get('state')} since {pressure.get('since') or pressure.get('low_since')} "
                                  f"(min {pressure.get('min_avail_gb')} GB) -> new lane starts held back"
@@ -2040,6 +2052,35 @@ def doctor(paths, fix=False, check_hash=True):
     return out
 
 
+def cmd_reserve(args, paths):
+    """Reserve X4 slots for the protected clients while they are down (rewrite-coord/reserve.json).
+    Admission counts every reserved slot that no protected X4 fills as occupied, plus RESERVE_SLOT_GB
+    of the free-RAM floor each. Running lanes are never stopped because of it."""
+    import datetime as dt
+    if args.clear:
+        if paths.reserve.exists():
+            paths.reserve.unlink()
+            print('reservation cleared')
+        else:
+            print('no reservation')
+        return 0
+    if args.slots is None or not args.owner:
+        raise UsageError('reserve needs --slots N and --owner NAME (or --clear)')
+    if not 0 <= args.slots <= core.MAX_X4_TOTAL:
+        raise UsageError(f'--slots must be 0..{core.MAX_X4_TOTAL}')
+    if args.minutes is not None and args.minutes <= 0:
+        raise UsageError('--minutes must be positive')
+    until = None
+    if args.minutes:
+        until = (dt.datetime.now().astimezone() + dt.timedelta(minutes=args.minutes)).isoformat(timespec='seconds')
+    data = {'owner': args.owner, 'slots': args.slots, 'reason': args.reason, 'until': until, 'set': core.now_iso()}
+    paths.coord.mkdir(parents=True, exist_ok=True)
+    core.write_json(paths.reserve, data)
+    print(f"reserved {args.slots} X4 slot(s) for {args.owner}" + (f' until {until}' if until else ' until cleared')
+          + f' (each unfilled slot also holds {core.RESERVE_SLOT_GB:g} GB of the free-RAM floor)')
+    return 0
+
+
 def cmd_observe(args, paths):
     """Record the machine while X4 instances run (read-only; touches no process): every interval
     the X4 list (lane/protected), working sets, available RAM, commit, hard faults, pressure, and
@@ -2461,6 +2502,12 @@ def parser():
     q.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S)
     q.add_argument('--allow-workshop', action='store_true')
     q.add_argument('--no-repin', action='store_true', help='keep the 45841 profile gates (default: re-pin per lane)')
+    s = sub.add_parser('reserve', help='reserve X4 slots for the protected clients (or --clear)')
+    s.add_argument('--slots', type=int)
+    s.add_argument('--owner')
+    s.add_argument('--minutes', type=float, help='expires after M minutes (default: until --clear)')
+    s.add_argument('--reason', default='')
+    s.add_argument('--clear', action='store_true')
     s = sub.add_parser('observe', help='record X4 memory/fps/faults on this PC (read-only)')
     s.add_argument('--out', required=True, help='JSON-lines file to append to')
     s.add_argument('--duration', type=float, default=600.0)
@@ -2512,7 +2559,7 @@ def main(argv=None):
     handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'session': cmd_session,
                 'stop': cmd_stop, 'queue': cmd_queue, 'restore': cmd_restore, 'unlock': cmd_unlock,
                 'make-overlay': cmd_make_overlay, 'publish-release': cmd_publish_release, 'doctor': cmd_doctor,
-                'canary': cmd_canary, 'observe': cmd_observe}
+                'canary': cmd_canary, 'observe': cmd_observe, 'reserve': cmd_reserve}
     try:
         return handlers[args.command](args, paths)
     except LaneError as error:

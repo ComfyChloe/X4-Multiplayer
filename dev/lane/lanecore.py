@@ -130,6 +130,10 @@ class Paths:
         return self.coord / 'lane-pressure.json'
 
     @property
+    def reserve(self) -> Path:
+        return self.coord / 'reserve.json'
+
+    @property
     def base(self) -> Path:
         return self.lanes / 'base'
 
@@ -889,6 +893,38 @@ def _remove_lock_dir(path, why):
     for item in graveyard.iterdir():
         item.unlink()
     graveyard.rmdir()
+
+
+# ---------------------------------------------------------------------------------------
+# slot reservation for the protected clients (rewrite-coord/reserve.json)
+
+RESERVE_SLOT_GB = 9.0          # free-RAM floor per reserved slot that no protected X4 fills yet
+
+
+def read_reserve(path, now=None) -> dict | None:
+    """The active reservation, or None (missing, unreadable, zero slots or past its 'until')."""
+    try:
+        data = json.loads(Path(path).read_text(encoding='utf-8'))
+    except (OSError, ValueError):
+        return None
+    try:
+        slots = int(data.get('slots', 0))
+    except (TypeError, ValueError):
+        return None
+    until = data.get('until')
+    if until:
+        try:
+            expires = _dt.datetime.fromisoformat(until)
+            current = _dt.datetime.now(expires.tzinfo) if now is None else _dt.datetime.fromtimestamp(now, expires.tzinfo)
+            if current >= expires:
+                return None
+        except (TypeError, ValueError):
+            return None
+    return dict(data, slots=slots) if slots > 0 else None
+
+
+def unfilled_slots(reserve, protected_running: int) -> int:
+    return max(0, reserve['slots'] - protected_running) if reserve else 0
 
 
 # ---------------------------------------------------------------------------------------

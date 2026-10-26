@@ -1037,6 +1037,50 @@ class AdmissionTests(FakeWindows):
         x4lane.admission(self.paths, 1, 0, 'test')
 
 
+class ReserveTests(AdmissionTests):
+    def protected(self, count):
+        import types
+        exe = r'C:\Program Files (x86)\Steam\steamapps\common\X4 Foundations\X4.exe'
+        return [types.SimpleNamespace(pid=400 + i, exe=exe, cmdline=f'-personalfolderid 4584{1 + i}', created=1)
+                for i in range(count)]
+
+    def test_unfilled_reserved_slots_count_as_running(self):
+        cap = core.MAX_X4_TOTAL
+        self.ram(100)
+        self.assertEqual(self.reserve('--slots', '2', '--owner', 'x4mods-61', '--reason', 'rebuild'), 0)
+        self.others = self.procs(cap - 3)                       # 3 free slots, 2 of them reserved
+        x4lane.admission(self.paths, 1, 0, 'test')
+        with self.assertRaises(x4lane.CapReached) as refused:
+            x4lane.admission(self.paths, 2, 0, 'session')
+        self.assertIn('2 slot(s) reserved for x4mods-61', str(refused.exception))
+        self.others = self.procs(cap - 4) + self.protected(2)   # both clients back: nothing unfilled
+        x4lane.admission(self.paths, 2, 0, 'session')
+        self.assertEqual(self.reserve('--clear'), 0)
+        self.assertFalse(self.paths.reserve.exists())
+
+    def reserve(self, *argv):
+        # never main(): that resolves the live rewrite-coord folder
+        return x4lane.cmd_reserve(x4lane.parser().parse_args(['reserve', *argv]), self.paths)
+
+    def test_ram_floor_counts_unfilled_slots_and_reservations_expire(self):
+        need = core.MIN_FREE_PER_START + core.RESERVE_SLOT_GB * 2
+        self.others = []
+        core.write_json(self.paths.reserve, {'owner': 'x4mods-61', 'slots': 2})
+        self.ram(need - 1)
+        with self.assertRaises(x4lane.CapReached) as refused:
+            x4lane.admission(self.paths, 1, 0, 'test')
+        self.assertIn('per unfilled reserved slot', str(refused.exception))
+        self.ram(need + 1)
+        x4lane.admission(self.paths, 1, 0, 'test')
+        core.write_json(self.paths.reserve, {'owner': 'x4mods-61', 'slots': 2, 'until': '2020-01-01T00:00:00+00:00'})
+        self.assertIsNone(core.read_reserve(self.paths.reserve))   # expired: ignored
+        self.ram(core.MIN_FREE_PER_START + 1)
+        x4lane.admission(self.paths, 1, 0, 'test')
+        with self.assertRaises(core.UsageError):
+            self.reserve('--slots', '99', '--owner', 'x')
+        self.assertEqual(json.loads(self.paths.reserve.read_text())['owner'], 'x4mods-61')   # refused: unchanged
+
+
 class ExitFiveTests(ProtectedTests):
     def test_release_exit_5_next_to_a_protected_client_waits(self):
         self.others = [self.proc(41, self.INSTALL, '45841'), self.proc(60, 'C:/other/save-trim/X4.exe', '45843')]
