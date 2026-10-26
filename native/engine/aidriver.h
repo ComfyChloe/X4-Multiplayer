@@ -130,6 +130,8 @@ typedef struct {
     uint64_t cmp_post_cancel, cmp_wake_absorb;
     uint64_t rng_runs;                /* runs that drew from the interpreter's TLS random stream */
     uint64_t cmp_rng_passes;          /* passes whose drawing runs execute in another relative order */
+    uint64_t wake_reordered;          /* rounds passes whose wakes were put back in the original order */
+    uint64_t wake_order_skipped;      /* ... that could not be (allocation or slot check failed) */
     uint64_t last_hash;
 } ad_window;
 
@@ -1071,6 +1073,8 @@ static int ad_lua_stats(lua_State *L) {
     number_field(L, "cmp_post_cancel", (double)w->cmp_post_cancel / frames);
     number_field(L, "cmp_wake_absorb", (double)w->cmp_wake_absorb / frames);
     number_field(L, "cmp_rng_passes", (double)w->cmp_rng_passes);
+    number_field(L, "wake_reordered", (double)w->wake_reordered);
+    number_field(L, "wake_order_skipped", (double)w->wake_order_skipped);
     number_field(L, "rng_runs", (double)w->rng_runs / frames);
     {
         char hash[24];

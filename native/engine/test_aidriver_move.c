@@ -837,6 +837,47 @@ int main(void) {
             assert(stamp_pos[k] == (m ? pos_rounds : pos_normal)[k] && stamp_pass[k] == pass_all[k]);
         }
     }
+    /* 13. Write-vector order (ecs-core Q5): A1(s0) wakes X, B1(s1) wakes Y, A2(s0) wakes Z, A3(s0)
+           clears X; X Y Z in s2. Rounds appends X Z Y (and nulls X); restored to the original
+           [null, Y, Z], so pass 1 runs Y then Z in both modes, slot indices follow the entries. */
+    for (int m = 0; m < 2; ++m) {
+        static const int wx[] = {STEP(S_WAKE, 4, 0)}, wy[] = {STEP(S_WAKE, 5, 0)}, wz[] = {STEP(S_WAKE, 6, 0)},
+                         cx[] = {STEP(S_CLEAR, 4, 0)}, y[] = {STEP(S_YIELD, 0, 0)};
+        world_reset();
+        void *a1 = mk(0, 0), *b1 = mk(1, 1), *a2 = mk(2, 0), *a3 = mk(3, 0);
+        mk(4, 2); mk(5, 2); mk(6, 2);
+        steps(0, 1, wx); steps(1, 1, wy); steps(2, 1, wz); steps(3, 1, cx);
+        steps(4, 1, y); steps(5, 1, y); steps(6, 1, y);
+        queue(a1, 1); queue(b1, 1); queue(a2, 1); queue(a3, 1);
+        frame(m ? AD_COMPARE : AD_NORMAL);
+        assert(nrun == 6 && run_log[4] == 5 && run_log[5] == 6);
+        assert(stamp_pass[4] == 1 && stamp_pos[4] == 1 && stamp_pos[5] == 2);
+        if (m) assert(ad.win.wake_reordered == 1 && ad.win.wake_order_skipped == 0 && run_log[1] == 2 && run_log[3] == 1);
+        for (int k = 0; k < 7; ++k) assert(I64(CX(k), AD_C_SLOT) == -1 && I64(CX(k), AD_C_SLOT + 8) == -1);
+    }
+    /* same wakers without the reorder would have run Z before Y: the slot check refuses a corrupt
+       entry (fail closed, counted) and leaves the vector as it is */
+    {
+        static const int wx[] = {STEP(S_WAKE, 4, 0)}, wy[] = {STEP(S_WAKE, 5, 0)}, wz[] = {STEP(S_WAKE, 6, 0)}, y[] = {STEP(S_YIELD, 0, 0)};
+        world_reset();
+        void *a1 = mk(0, 0), *b1 = mk(1, 1), *a2 = mk(2, 0);
+        mk(4, 2); mk(5, 2); mk(6, 2);
+        steps(0, 1, wx); steps(1, 1, wy); steps(2, 1, wz); steps(4, 1, y); steps(5, 1, y); steps(6, 1, y);
+        queue(a1, 1); queue(b1, 1); queue(a2, 1);
+        ad_wake_ok = 1;
+        unsigned w = U32(DIR, AD_D_WIDX);       /* simulate a rounds pass's appends: X(0) Z(2) Y(1) */
+        f_request_wake(DIR, CX(4)); f_request_wake(DIR, CX(6)); f_request_wake(DIR, CX(5));
+        size_t base = ad_vec_len(ad_vec(DIR, w)) - 3;
+        ad_wake_note(base, base + 1, 0); ad_wake_note(base + 1, base + 2, 2); ad_wake_note(base + 2, base + 3, 1);
+        I64(CX(6), AD_C_SLOT + 8 * w) = 99;     /* corrupt slot: refused */
+        ad_wake_restore(DIR, w, base);
+        assert(ad.win.wake_order_skipped == 1 && ((void **)ad_vec(DIR, w)[0])[base + 1] == CX(6));
+        I64(CX(6), AD_C_SLOT + 8 * w) = (int64_t)(base + 1);
+        ad_wake_restore(DIR, w, base);
+        assert(ad.win.wake_reordered == 1 && ((void **)ad_vec(DIR, w)[0])[base + 1] == CX(5) &&
+               ((void **)ad_vec(DIR, w)[0])[base + 2] == CX(6) && I64(CX(5), AD_C_SLOT + 8 * w) == (int64_t)(base + 1) &&
+               I64(CX(6), AD_C_SLOT + 8 * w) == (int64_t)(base + 2));
+    }
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: aidriver stage 1 outer loop: flip, timed harvest in time order into the node pool, exit");
     puts("PASS: aidriver stage 1 cleanup, interrupt-restart and attention-block paths match the original call order");
@@ -850,5 +891,6 @@ int main(void) {
     puts("PASS: aidriver stage 1 original-order barrier (pass, wake index, emission): post/cancel and interleaved buckets match the original");
     puts("PASS: aidriver stage 1 compare mode flags passes whose random draws run in another relative order");
     puts("PASS: aidriver stage 1 original-order stamp (pass, read-vector index) in normal and rounds order");
+    puts("PASS: aidriver stage 1 rounds puts the pass's wakes back in the original order (slots follow, corrupt slot refused)");
     return 0;
 }

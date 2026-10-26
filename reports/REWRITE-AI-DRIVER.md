@@ -176,7 +176,12 @@ the pass, before the next flip**. Barrier order (ecs-core's answer to Q5): the o
 the optional `set_order`/`replay_ordered` pair (proposed to walk, Q20; bound under `WP_HAS_ORDER`) each op
 carries its context's key, a cancel kills only buffered posts with a smaller key, and the replay runs by
 (key, emission), so the engine sees posts and cancels in the original order (tests 10f/10h); with today's
-walkpar the replay is per task in bucket order (= rounds execution order). Because cross-sector wakes go into
+walkpar the replay is per task in bucket order (= rounds execution order). The same rule holds for wakes:
+rounds appends a pass's wakes in rounds execution order, so at the end of the pass it puts them back in the
+original order (stable by the waker's read-vector position, emission order inside a run; each context's slot
+index moves with its entry; a slot mismatch skips the reorder, counted) and the next pass reads the
+original's vector (`wakeReordered` passes in AIDRIVE). Not observed: a context woken from two buckets keeps
+the entry of its first waker in rounds order. Because cross-sector wakes go into
 the write vector, they run in the next pass in both orders: rounds keeps the original **pass structure**. Without
 the buffer (this branch alone) rounds only reorders. `compare`: rounds plus these order-equivalence counters,
 which define exactly when a pass's outcome can differ from the original order:
@@ -293,13 +298,15 @@ workers (largest first by the previous pass's time) and a barrier per pass. The 
 original's. What it needs on top of stage 1, with the partition report's blocker numbers:
 1. Per-thread state (B7, B8): `g_CurrentExecState` 0x38f4c60 (5 functions) and the director's current entity
    dir+0x238 (read by AbortScriptsOnEntity) in TLS; TLS game time / role flag copied to the workers.
-2. Wakes (B4): a RequestWake 0x106f910 detour routes worker wakes into per-bucket outboxes merged in bucket
-   order at the barrier. The inline copies need no routing: our driver calls RequestWake itself; the one in
+2. Wakes (B4): a RequestWake 0x106f910 detour routes worker wakes into per-bucket outboxes merged at the
+   barrier in the original order (the waker's (pass, wake index), then emission). The inline copies need no routing: our driver calls RequestWake itself; the one in
    AICallStackContext::HandleScriptEvent 0x1062f70 runs during event delivery, which is deferred to the
    barrier on the main thread; RefreshScripts runs at frame end. ClearWake of a context of another bucket
    writes another worker's read-vector slot: migrate (it is the `cmp_null_lost` interaction anyway).
-3. Events (B3): the walk buffer becomes per worker (thread-local op buffers, merged in bucket order; the walk
-   agent proposes one op-record type, Q8); event values deep-copied at post time (B2 residual).
+3. Events (B3): the walk buffer becomes per worker (thread-local op buffers, merged by the original-order key
+   (pass, wake index, emission) per ecs-core's Q5 answer, which is thread-count invariant; one op-record type,
+   Q8; key support requested from walk, Q20); event values deep-copied at post time (B2 residual). Wakes (item
+   2) merge by the same key.
 4. Script values (B1, B2): the ~14 unlocked live-object lists (104 writer functions) need locked link/unlink
    or serialised value creation; non-atomic refcounts need bucket exclusivity: fleet-root keying plus
    migration of any run that reads or writes a foreign blackboard or `global.$` — detection in the expression

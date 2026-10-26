@@ -690,6 +690,58 @@ static void ad_rounds_scan(size_t n, size_t i) {
     (void)n;
 }
 
+/* Write-vector order (ecs-core Q5: the barrier order is the original sequential order). Wakes made
+   during a rounds pass are appended in rounds execution order; the original appends them in the
+   wake-index order of the wakers. ad_wake_note records the waker's read-vector position for every
+   entry a run appended; ad_wake_restore stably sorts the entries appended in this pass by it (emission
+   order inside one run kept) and moves each context's slot index with its entry, so the next pass
+   reads the original's vector. Not observed: a context woken from two buckets keeps the entry of its
+   first waker in rounds order (a repeated RequestWake of a queued context leaves no trace). */
+static uint64_t *ad_wkey;            /* per write-vector index: waker position << 32 | index */
+static void **ad_wtmp;
+static size_t ad_wcap;
+static int ad_wake_reserve(size_t m) {
+    if (m <= ad_wcap) return 1;
+    size_t cap = ad_wcap ? ad_wcap : 1024;
+    while (cap < m) cap *= 2;
+    uint64_t *k = realloc(ad_wkey, cap * sizeof(uint64_t));
+    if (k) ad_wkey = k;
+    void **t = realloc(ad_wtmp, cap * sizeof(void *));
+    if (t) ad_wtmp = t;
+    if (!k || !t) return 0;
+    ad_wcap = cap;
+    return 1;
+}
+static int ad_wake_ok;               /* every append of this pass has a recorded waker */
+static void ad_wake_note(size_t from, size_t to, size_t pos) {
+    if (to <= from) return;
+    if (!ad_wake_reserve(to)) { ad_wake_ok = 0; return; }
+    for (size_t k = from; k < to; ++k) ad_wkey[k] = ((uint64_t)pos << 32) | (uint64_t)k;
+}
+static int ad_wkey_cmp(const void *a, const void *b) {
+    uint64_t x = *(const uint64_t *)a, y = *(const uint64_t *)b;
+    return x < y ? -1 : x > y;
+}
+static void ad_wake_restore(void *dir, unsigned w, size_t start) {
+    void **vec = ad_vec(dir, w);
+    void **e = (void **)vec[0];
+    size_t len = ((uintptr_t)vec[1] - (uintptr_t)vec[0]) / sizeof(void *);
+    if (len <= start + 1) return;
+    if (!ad_wake_ok || len > ad_wcap || len - start > UINT32_MAX) { ++ad.win.wake_order_skipped; return; }
+    int sorted = 1;
+    for (size_t k = start + 1; k < len && sorted; ++k) sorted = ad_wkey[k] > ad_wkey[k - 1];
+    if (sorted) return;
+    for (size_t k = start; k < len; ++k)   /* fail closed: every live entry must own its slot */
+        if (e[k] && I64(e[k], AD_C_SLOT + 8 * w) != (int64_t)k) { ++ad.win.wake_order_skipped; return; }
+    qsort(ad_wkey + start, len - start, sizeof(uint64_t), ad_wkey_cmp);
+    for (size_t k = start; k < len; ++k) ad_wtmp[k] = e[(uint32_t)ad_wkey[k]];
+    for (size_t k = start; k < len; ++k) {
+        e[k] = ad_wtmp[k];
+        if (e[k]) I64(e[k], AD_C_SLOT + 8 * w) = (int64_t)k;
+    }
+    ++ad.win.wake_reordered;
+}
+
 /* One pass in rounds order. Positions keep their read-vector index (the vector does not grow during
    a pass); entries nulled meanwhile by ClearWake are skipped exactly as in the original. */
 static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int timed, unsigned pass, int compare) {
@@ -726,6 +778,9 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
     size_t last_draw = 0;
     int have_draw = 0, rng_inverted = 0;
     int ordered = ad_evbuf && ad_evbuf->set_order && ad_evbuf->replay_ordered;
+    unsigned w = 1u - r;
+    size_t wstart = ad_vec_len(ad_vec(dir, w));   /* not empty only in pass 0x21 (no flip) */
+    ad_wake_ok = 1;
     size_t k = 0;
     for (uint32_t b = 0; b < nb; ++b) {
         ad_rd.cur_bucket = b;
@@ -736,7 +791,7 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
             ad_rd.cur_pos = i;
             void *ctx = ((void **)vec[0])[i];
             size_t ops0 = ad_evbuf ? ad_evbuf->buffer_count() : 0;
-            void **wvec = ad_vec(dir, 1u - r);
+            void **wvec = ad_vec(dir, w);
             size_t w0 = ((uintptr_t)wvec[1] - (uintptr_t)wvec[0]) / sizeof(void *);
             ad.ctx_drew = 0;
             if (ordered) ad_evbuf->set_order(((uint64_t)pass << 32) | (uint64_t)i);
@@ -745,6 +800,7 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
                 if (have_draw && i < last_draw) rng_inverted = 1;
                 last_draw = i; have_draw = 1;
             }
+            ad_wake_note(w0, ad_vec_len(wvec), i);
             if (ad_evbuf && compare) ad_op_pos_fill(ops0, ad_evbuf->buffer_count(), i);
             ad_rd.done[i] = 1;
             if (compare) ad_rounds_wakes(wvec, w0, i);
@@ -753,6 +809,7 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
         if (ad_evbuf) ad_evbuf->scope_end();
     }
     ad_rd.active = 0;
+    ad_wake_restore(dir, w, wstart);   /* before the barrier replay: its wakes follow the pass's */
     if (ordered) {    /* barrier: this pass's deferred ops in the original order, before the flip */
         ad_evbuf->set_order(0);
         size_t before = ad_evbuf->buffer_count();
