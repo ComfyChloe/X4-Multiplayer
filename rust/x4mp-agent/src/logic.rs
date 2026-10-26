@@ -96,6 +96,7 @@ pub enum Disarm {
     ExportFailed = 8,
     DisarmFile = 9,
     InvalidTime = 10,
+    SchedulerGuard = 11,
 }
 
 impl Disarm {
@@ -113,6 +114,7 @@ impl Disarm {
             ExportFailed,
             DisarmFile,
             InvalidTime,
+            SchedulerGuard,
         ]
         .get(code as usize)
         .copied()
@@ -132,6 +134,7 @@ impl Disarm {
             Disarm::ExportFailed => "export_extension_failed",
             Disarm::DisarmFile => "disarm_file_present",
             Disarm::InvalidTime => "timer_values_invalid",
+            Disarm::SchedulerGuard => "scheduler_guard",
         }
     }
 }
@@ -239,7 +242,7 @@ mod tests {
 
     #[test]
     fn disarm_codes_round_trip() {
-        for code in 0..=10 {
+        for code in 0..=11 {
             assert_eq!(Disarm::from_code(code) as u32, code);
         }
         assert_eq!(Disarm::from_code(99), Disarm::Panic);

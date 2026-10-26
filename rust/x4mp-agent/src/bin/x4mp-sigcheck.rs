@@ -4,7 +4,7 @@
 use std::process::ExitCode;
 
 use x4mp_agent::elf::FileImage;
-use x4mp_agent::pinned;
+use x4mp_agent::pinned::{self, Image};
 use x4mp_agent::sha256::{hex, Sha256};
 
 fn main() -> ExitCode {
@@ -43,6 +43,21 @@ fn main() -> ExitCode {
         Ok(count) => println!("PASS build-id and {count} signature sites"),
         Err(reason) => {
             eprintln!("FAIL {reason}");
+            failures += 1;
+        }
+    }
+    // Scheduler preconditions in the file (the live agent re-checks them before patching).
+    let checks: [(&str, u64, Vec<u8>); 4] = [
+        ("dt_load_original", pinned::DT_LOAD_VA, pinned::DT_LOAD_ORIGINAL.to_vec()),
+        ("dt_min_original", pinned::DT_MIN_VA, pinned::DT_MIN_ORIGINAL.to_vec()),
+        ("one_sixtieth_constant", pinned::ONE_SIXTIETH_CONST, (1.0f64 / 60.0).to_le_bytes().to_vec()),
+        ("main_frame_in_flight_initial", pinned::MAIN_FRAME_IN_FLIGHT, vec![1]),
+    ];
+    for (name, va, want) in checks {
+        if image.read(va, want.len()).as_deref() == Some(&want[..]) {
+            println!("PASS scheduler {name} at 0x{va:x}");
+        } else {
+            eprintln!("FAIL scheduler {name} at 0x{va:x}");
             failures += 1;
         }
     }
