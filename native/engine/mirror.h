@@ -122,7 +122,8 @@ typedef struct {
     int drop_flag;
     uint64_t sample[MIRROR_SAMPLE_MAX]; unsigned nsample;
     unsigned nregions, galaxy_misses;
-    uint64_t region_queries;
+    uint64_t region_queries, region_cache_full, visited, last_visited;
+    double walk_ms_sum, serialize_ms_sum;
     unsigned char *buf; size_t buf_cap, buf_len, fram_at;
     /* writer thread (lock and condition: mirror_cs / mirror_cv, never reset) */
     HANDLE thread;
@@ -197,7 +198,7 @@ static unsigned mirror_region_find(uintptr_t a) {
 static void mirror_region_add(uintptr_t base, uintptr_t end) {
     unsigned i = mirror_region_find(base);
     if (i < ms.nregions && mirror_regions[i].base <= base) return; /* already covered */
-    if (ms.nregions >= MIRROR_REGION_CACHE) return;                /* full: queries keep working */
+    if (ms.nregions >= MIRROR_REGION_CACHE) { ++ms.region_cache_full; return; } /* full: queries keep working */
     memmove(&mirror_regions[i + 1], &mirror_regions[i], (ms.nregions - i) * sizeof(mirror_region));
     mirror_regions[i] = (mirror_region){base, end};
     ++ms.nregions;
@@ -529,6 +530,7 @@ static void mirror_children(const unsigned char *field, uint64_t parent, unsigne
 static int mirror_full;
 
 static void mirror_visit(const unsigned char *comp, uint64_t parent, unsigned root, unsigned depth, unsigned level) {
+    ++ms.visited;
     if (level > MIRROR_MAX_DEPTH || ((uintptr_t)comp & 7) || !mirror_ok(comp, 0x200)) { ++ms.walk_errors; return; }
     uint32_t vt = mirror_rva(*(const uintptr_t *)comp);
     const mirror_class *cls = vt ? mirror_find_class(vt) : NULL;
@@ -870,7 +872,11 @@ static void mirror_frame(uint64_t frame) {
     }
     ms.galaxy_misses = 0;
     unsigned root = mirror_new_root(*(const uint64_t *)(galaxy + MO_ID), 2);
+    uint64_t visited_before = ms.visited;
     mirror_visit(galaxy, 0, root, 0, 0);
+    ms.last_visited = ms.visited - visited_before;
+    LARGE_INTEGER t_walk;
+    qpc_read(&t_walk);
     for (unsigned v = 0; v < mirror_nvisitors; ++v)
         if (mirror_visitors[v]->end_frame) mirror_visitors[v]->end_frame(mirror_visitors[v]->user);
     uint32_t flags = (mirror_full ? 1u : 0u) | (ms.drop_flag ? 2u : 0u);
@@ -889,6 +895,12 @@ static void mirror_frame(uint64_t frame) {
         ms.reason = "out of memory";
         mirror_stop();
         return;
+    }
+    LARGE_INTEGER t_ser;
+    qpc_read(&t_ser);
+    if (qpc_frequency > 0) {
+        ms.walk_ms_sum += (double)(t_walk.QuadPart - t0.QuadPart) * 1000.0 / (double)qpc_frequency;
+        ms.serialize_ms_sum += (double)(t_ser.QuadPart - t_walk.QuadPart) * 1000.0 / (double)qpc_frequency;
     }
     if (mirror_hand_off()) {
         ++ms.frames_written;
@@ -966,6 +978,13 @@ static int l_mirror_stats(lua_State *L) {
     mirror_num(L, "mean_ms", ms.frames_written + ms.frames_dropped ? ms.sum_ms / (double)(ms.frames_written + ms.frames_dropped) : 0);
     mirror_num(L, "visitors", mirror_nvisitors);
     mirror_num(L, "region_queries", (double)ms.region_queries);
+    mirror_num(L, "region_cache_full", (double)ms.region_cache_full);
+    mirror_num(L, "visited", (double)ms.last_visited);
+    {
+        double n = (double)(ms.frames_written + ms.frames_dropped);
+        mirror_num(L, "walk_ms", n > 0 ? ms.walk_ms_sum / n : 0.0);
+        mirror_num(L, "serialize_ms", n > 0 ? ms.serialize_ms_sum / n : 0.0);
+    }
     p_lua_pushlstring(L, MIRROR_LAYOUT_SHA256, strlen(MIRROR_LAYOUT_SHA256));
     p_lua_setfield(L, -2, "layout");
     if (ms.reason) {

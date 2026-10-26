@@ -68,7 +68,7 @@ class MirrorProbeTests(unittest.TestCase):
           ui()
           assert(#logs==3,#logs)                          -- one check (limit 1), then done
           assert(logs[3]:find('MIRROR done frames=10 dropped=0 partial=0 rows=1234 roots=77 factions=0 bytes=999 walkErrors=2',1,true),logs[3])
-          assert(logs[3]:find('checks=1 regionQueries=0 reason=complete',1,true),logs[3])
+          assert(logs[3]:find('checks=1 regionQueries=0 cacheFull=0 visited=0 walkMs=0.000 serializeMs=0.000 reason=complete',1,true),logs[3])
           ui();assert(#logs==3)
         ''')
 
