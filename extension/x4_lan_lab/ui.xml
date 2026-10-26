@@ -8,6 +8,7 @@
     <file name="ui/measure_clock.lua" />
     <file name="ui/net_rtt.lua" />
     <file name="ui/frame_profile.lua" />
+    <file name="ui/framediet.lua" />
     <file name="ui/game.lua" />
     <file name="ui/seed_content.lua" />
     <file name="ui/seed_capture.lua" />
