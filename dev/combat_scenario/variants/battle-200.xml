@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Combat scenario variant "battle-200": the battle's class mix scaled to 200 ships (~100 vs 100) in the
+     same sector: Argon [68, 23, 5, 4] (fighters, heavy fighters, frigates, destroyers) against
+     Xenon [70, 23, 5, 2] (N, M, P, K). Spawned 25 ships per second; the measurement window starts
+     after "COMBATSCN spawn complete". -->
+<mdscript name="X4MP_CombatVariant" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <library name="Config">
+      <actions>
+        <set_value name="$Variant" exact="'battle-200'"/>
+        <set_value name="$SpawnBatch" exact="25"/>
+        <set_value name="$A_Counts" exact="[68, 23, 5, 4]"/>
+        <set_value name="$B_Counts" exact="[70, 23, 5, 2]"/>
+        <set_value name="$Columns" exact="[14, 8, 5, 4]"/>
+        <set_value name="$ViewDistance" exact="5km"/>
+      </actions>
+    </library>
+  </cues>
+</mdscript>

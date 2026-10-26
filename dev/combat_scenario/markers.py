@@ -21,7 +21,7 @@ ROOT = HERE.parents[1]
 sys.path.insert(0, str(ROOT / 'dev'))
 
 MARKER = re.compile(r'COMBATSCN (\w+)((?: [a-z]+(?= |$))?)((?: [A-Za-z_]+=\S*)*)')
-KINDS = {'loaded', 'refused', 'armed', 'spawned', 'engaged', 'tick', 'window', 'done', 'cleaned'}
+KINDS = {'loaded', 'refused', 'armed', 'spawn', 'spawned', 'engaged', 'tick', 'window', 'done', 'cleaned'}
 FOLD = re.compile(r'SIMPROF fold (\S.*) (\d+)\s*$')
 WINDOW = re.compile(r'SIMPROF window (.*)$')
 
@@ -61,8 +61,8 @@ def parse_markers(lines) -> list[Marker]:
 
 
 def summary(markers: list[Marker]) -> dict:
-    out = dict(loaded=None, refused=None, armed=None, spawned={}, engaged=None, window_begin=None,
-               window_end=None, done=None, cleaned=None, ticks=[])
+    out = dict(loaded=None, refused=None, armed=None, spawn_begin=None, spawned={}, spawn_complete=None,
+               engaged=None, window_begin=None, window_end=None, done=None, cleaned=None, ticks=[])
     for marker in markers:
         f = dict(marker.fields)
         if marker.kind == 'spawned':
@@ -71,6 +71,8 @@ def summary(markers: list[Marker]) -> dict:
             out['ticks'].append(f)
         elif marker.kind == 'window':
             out['window_' + (marker.sub or 'begin')] = f
+        elif marker.kind == 'spawn':
+            out['spawn_' + (marker.sub or 'begin')] = f
         else:
             out[marker.kind] = f
     window = out['window_begin'], out['window_end']

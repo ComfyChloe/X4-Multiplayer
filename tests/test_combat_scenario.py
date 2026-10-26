@@ -118,7 +118,30 @@ class ScenarioStructure(unittest.TestCase):
 
 class Variants(unittest.TestCase):
     def test_variants_exist(self):
-        self.assertEqual(set(install.variants()), {'battle', 'idle', 'capitals', 'smoke'})
+        self.assertEqual(set(install.variants()),
+                         {'battle', 'idle', 'capitals', 'smoke', 'battle-200', 'battle-400', 'battle-800'})
+
+    def test_scaled_battles_keep_the_class_mix_and_spawn_in_batches(self):
+        defaults = library_values(MAIN, 'Defaults')
+        self.assertEqual(defaults['$SpawnBatch'], '0', 'existing variants keep the one-frame spawn')
+        base_a = [int(v) for v in list_items(defaults['$A_Counts'])]
+        base_b = [int(v) for v in list_items(defaults['$B_Counts'])]
+        for size in (200, 400, 800):
+            with self.subTest(size=size):
+                values = library_values(install.variants()[f'battle-{size}'], 'Config')
+                self.assertNotIn('$A_Macros', values)
+                self.assertNotIn('$B_Macros', values)
+                self.assertEqual(values['$SpawnBatch'], '25')
+                a = [int(v) for v in list_items(values['$A_Counts'])]
+                b = [int(v) for v in list_items(values['$B_Counts'])]
+                self.assertAlmostEqual(sum(a) + sum(b), size, delta=size * 0.02)
+                self.assertLessEqual(abs(sum(a) - sum(b)), 2)
+                for counts, base in ((a, base_a), (b, base_b)):
+                    share = [n / sum(counts) for n in counts]
+                    base_share = [n / sum(base) for n in base]
+                    for s, s0 in zip(share, base_share):
+                        self.assertAlmostEqual(s, s0, delta=0.03)
+                self.assertTrue(all(n >= 2 for n in a + b), 'every class present, capitals included')
 
     def test_variant_libraries_override_known_values_only(self):
         defaults = library_values(MAIN, 'Defaults')
@@ -152,7 +175,8 @@ def check_config(case, config, name):
         for value in list_items(config[key]):
             case.assertGreater(int(value), 0)
     total = sum(int(v) for v in list_items(config['$A_Counts'])) + sum(int(v) for v in list_items(config['$B_Counts']))
-    case.assertLessEqual(total, 120, f'{name}: {total} ships')
+    case.assertLessEqual(total, 120 if int(config['$SpawnBatch']) <= 0 else 1000, f'{name}: {total} ships')
+    case.assertLess(total, 2000, 'side B seeds start 1000 after side A')
 
 
 ScenarioStructure.check_config = check_config
@@ -234,8 +258,10 @@ LOG = """\
 [X4LAN] SIMPROF window seconds=10.00 samples=10000 rateHz=1000 overheadPct=2.0
 [X4LAN] SIMPROF fold slot3;ef4400;9fdef0 100
 [Scripts] 45.10 *** Context:md.X4MP_CombatScenario.Start: COMBATSCN armed t=45.1 variant=battle sector=cluster_14_sector001_macro zone=tempzone center=0,10000,0
+[Scripts] 48.20 *** Context:md.X4MP_CombatScenario.Start: COMBATSCN spawn begin t=48.2 requested_a=44 requested_b=43 batch=0
 [Scripts] 48.20 *** Context:md.X4MP_CombatScenario.Start: COMBATSCN spawned side=A count=44 requested=44 faction=argon t=48.2
 [Scripts] 48.30 *** Context:md.X4MP_CombatScenario.Start: COMBATSCN spawned side=B count=43 requested=43 faction=xenon t=48.3
+[Scripts] 48.30 *** Context:md.X4MP_CombatScenario.Start: COMBATSCN spawn complete t=48.3 a=44 b=43 batches=1 seconds=0.1
 [Scripts] 50.30 *** Context:md.X4MP_CombatScenario.Start: COMBATSCN engaged t=50.3 hostile=true a=44 b=43
 [X4LAN] SIMPROF window seconds=10.00 samples=10000 rateHz=1000 overheadPct=2.0
 [X4LAN] SIMPROF fold slot3;ef4400;9fdef0 200
@@ -263,6 +289,8 @@ class Markers(unittest.TestCase):
         self.assertEqual(result['loaded']['variant'], 'battle')
         self.assertEqual(result['spawned']['A']['count'], 44)
         self.assertEqual(result['spawned']['B']['faction'], 'xenon')
+        self.assertEqual(result['spawn_begin']['requested_a'], 44)
+        self.assertEqual((result['spawn_complete']['b'], result['spawn_complete']['batches']), (43, 1))
         self.assertEqual(result['window_end']['reason'], 'decided')
         self.assertEqual(result['window_seconds'], 24.7)
         self.assertEqual(result['ticks'][0]['ahull'], 3800.5)

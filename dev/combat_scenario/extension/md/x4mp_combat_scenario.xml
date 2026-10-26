@@ -9,14 +9,20 @@
     COMBATSCN loaded   version=.. variant=.. module=.. t=..
     COMBATSCN refused  reason=.. (module, no_player_ship, player_docked, timeout)
     COMBATSCN armed    t=.. variant=.. sector=.. zone=.. center=x,y,z
-    COMBATSCN spawned  side=A|B count=.. faction=.. t=..
+    COMBATSCN spawn    begin t=.. requested_a=.. requested_b=.. batch=..
+    COMBATSCN spawned  side=A|B count=.. requested=.. faction=.. t=..   (when spawning is complete)
+    COMBATSCN spawn    complete t=.. a=.. b=.. batches=.. seconds=..
     COMBATSCN engaged  t=.. hostile=..
     COMBATSCN tick     t=.. a=.. b=.. ahull=.. bhull=..   (every 10 s while engaged)
     COMBATSCN window   begin|end t=.. a=.. b=.. reason=..
     COMBATSCN done     t=.. a=.. b=..
     COMBATSCN cleaned  t=..
 
-  The measurement window (between "window begin" and "window end") is what a lane profiles.
+  The measurement window (between "window begin" and "window end") is what a lane profiles; it
+  begins $EngageDelayS + $SettleS after "spawn complete". $SpawnBatch 0 spawns every ship in one
+  frame (side A, then side B: the version 2 behaviour of the existing variants); a positive value
+  spawns that many ships per second, half per side, so a large battle builds up without a
+  single-frame spike. Ship order, seeds and positions do not depend on the batching.
   Parameters come from the library md.X4MP_CombatVariant.Config, which the installer copies
   from dev/combat_scenario/variants/. Never install this extension in a normal profile.
 -->
@@ -29,6 +35,7 @@
         <set_value name="$WarmupS" exact="45s"/>
         <set_value name="$ArmTimeoutS" exact="600s"/>
         <set_value name="$SpawnDelayS" exact="3s"/>
+        <set_value name="$SpawnBatch" exact="0"/>
         <set_value name="$EngageDelayS" exact="2s"/>
         <set_value name="$SettleS" exact="20s"/>
         <set_value name="$WindowS" exact="120s"/>
@@ -59,40 +66,136 @@
       </actions>
     </library>
 
-    <!-- Spawn one side into $SpawnList. Inputs: $Side ('A'|'B'), $Faction, $PilotTags, $Macros,
-         $Counts, $Sign (-1: negative x, faces +x; +1: positive x, faces -x). -->
-    <library name="SpawnSide">
+    <!-- Working variables of one side. LoadSide copies side $Side's parameters and spawn cursor
+         ($c class index, $k ship index within the class, $Seq ships requested so far) into
+         $Faction, $PilotTags, $Macros, $Counts, $Sign (-1: negative x, faces +x; +1: positive x,
+         faces -x), $c, $k, $Seq and $SideDone; StoreSide writes the cursor back. -->
+    <library name="LoadSide">
       <actions>
-        <set_value name="$Spawned" exact="0"/>
-        <set_value name="$SpawnList" exact="[]"/>
-        <do_all exact="$Macros.count" counter="$c">
+        <do_if value="$Side == 'A'">
+          <set_value name="$Faction" exact="$A_Faction"/>
+          <set_value name="$PilotTags" exact="$A_PilotTags"/>
+          <set_value name="$Macros" exact="$A_Macros"/>
+          <set_value name="$Counts" exact="$A_Counts"/>
+          <set_value name="$Sign" exact="-1"/>
+          <set_value name="$c" exact="$CursorA_c"/>
+          <set_value name="$k" exact="$CursorA_k"/>
+          <set_value name="$Seq" exact="$RequestedA"/>
+        </do_if>
+        <do_else>
+          <set_value name="$Faction" exact="$B_Faction"/>
+          <set_value name="$PilotTags" exact="$B_PilotTags"/>
+          <set_value name="$Macros" exact="$B_Macros"/>
+          <set_value name="$Counts" exact="$B_Counts"/>
+          <set_value name="$Sign" exact="1"/>
+          <set_value name="$c" exact="$CursorB_c"/>
+          <set_value name="$k" exact="$CursorB_k"/>
+          <set_value name="$Seq" exact="$RequestedB"/>
+        </do_else>
+        <include_actions ref="ScanSide"/>
+      </actions>
+    </library>
+
+    <library name="StoreSide">
+      <actions>
+        <do_if value="$Side == 'A'">
+          <set_value name="$CursorA_c" exact="$c"/>
+          <set_value name="$CursorA_k" exact="$k"/>
+          <set_value name="$RequestedA" exact="$Seq"/>
+          <set_value name="$DoneA" exact="$SideDone"/>
+        </do_if>
+        <do_else>
+          <set_value name="$CursorB_c" exact="$c"/>
+          <set_value name="$CursorB_k" exact="$k"/>
+          <set_value name="$RequestedB" exact="$Seq"/>
+          <set_value name="$DoneB" exact="$SideDone"/>
+        </do_else>
+      </actions>
+    </library>
+
+    <!-- Move the cursor past exhausted classes; $SideDone when no ship is left. -->
+    <library name="ScanSide">
+      <actions>
+        <set_value name="$Scan" exact="true"/>
+        <do_while value="$Scan">
+          <do_if value="$c gt $Macros.count">
+            <set_value name="$Scan" exact="false"/>
+          </do_if>
+          <do_elseif value="$k gt $Counts.{$c}">
+            <set_value name="$c" operation="add" exact="1"/>
+            <set_value name="$k" exact="1"/>
+          </do_elseif>
+          <do_else>
+            <set_value name="$Scan" exact="false"/>
+          </do_else>
+        </do_while>
+        <set_value name="$SideDone" exact="$c gt $Macros.count"/>
+      </actions>
+    </library>
+
+    <!-- Spawn the ship at the loaded side's cursor (class order, row-major grid per class),
+         add it to the side's group and advance the cursor; uses one unit of $Budget. Seeds are
+         $SeedBase + 0 (A) or 1000 (B) + the side's running number. -->
+    <library name="SpawnOne">
+      <actions>
+        <do_if value="not $SideDone">
           <set_value name="$cols" exact="$Columns.{$c}"/>
           <set_value name="$rows" exact="($Counts.{$c} + $cols - 1) / $cols"/>
-          <do_all exact="$Counts.{$c}" counter="$k">
-            <set_value name="$col" exact="($k - 1) % $cols"/>
-            <set_value name="$row" exact="($k - 1 - $col) / $cols"/>
-            <set_value name="$gx" exact="$Sign * ($SideGap / 2 + $Depth.{$c})"/>
-            <set_value name="$gy" exact="($row - ($rows - 1) / 2.0) * $Spacing.{$c}"/>
-            <set_value name="$gz" exact="$ViewDistance + ($col - ($cols - 1) / 2.0) * $Spacing.{$c}"/>
-            <set_value name="$Spawned" operation="add" exact="1"/>
-            <create_ship name="$ship" macro="$Macros.{$c}" zone="player.zone" seed="$SeedBase + (if $Side == 'A' then 0 else 1000) + $Spawned">
-              <owner exact="$Faction" overridenpc="true"/>
-              <loadout>
-                <level exact="$LoadoutLevel"/>
-                <variation exact="0"/>
-              </loadout>
-              <pilot>
-                <select faction="$Faction" tags="$PilotTags"/>
-              </pilot>
-              <position object="player.ship" x="$gx" y="$gy" z="$gz"/>
-              <rotation yaw="if $Sign lt 0 then 90deg else -90deg"/>
-            </create_ship>
-            <do_if value="$ship">
-              <append_to_list name="$SpawnList" exact="$ship"/>
+          <set_value name="$col" exact="($k - 1) % $cols"/>
+          <set_value name="$row" exact="($k - 1 - $col) / $cols"/>
+          <set_value name="$gx" exact="$Sign * ($SideGap / 2 + $Depth.{$c})"/>
+          <set_value name="$gy" exact="($row - ($rows - 1) / 2.0) * $Spacing.{$c}"/>
+          <set_value name="$gz" exact="$ViewDistance + ($col - ($cols - 1) / 2.0) * $Spacing.{$c}"/>
+          <set_value name="$Seq" operation="add" exact="1"/>
+          <create_ship name="$ship" macro="$Macros.{$c}" zone="player.zone" seed="$SeedBase + (if $Side == 'A' then 0 else 1000) + $Seq">
+            <owner exact="$Faction" overridenpc="true"/>
+            <loadout>
+              <level exact="$LoadoutLevel"/>
+              <variation exact="0"/>
+            </loadout>
+            <pilot>
+              <select faction="$Faction" tags="$PilotTags"/>
+            </pilot>
+            <position object="player.ship" x="$gx" y="$gy" z="$gz"/>
+            <rotation yaw="if $Sign lt 0 then 90deg else -90deg"/>
+          </create_ship>
+          <do_if value="$ship">
+            <do_if value="$Side == 'A'">
+              <add_to_group groupname="$GroupA" object="$ship"/>
+              <set_value name="$CreatedA" operation="add" exact="1"/>
             </do_if>
-          </do_all>
-        </do_all>
-        <debug_text text="'COMBATSCN spawned side=%s count=%s requested=%s faction=%s t=%s'.[$Side, $SpawnList.count, $Spawned, $Faction.id, player.age]"/>
+            <do_else>
+              <add_to_group groupname="$GroupB" object="$ship"/>
+              <set_value name="$CreatedB" operation="add" exact="1"/>
+            </do_else>
+          </do_if>
+          <set_value name="$k" operation="add" exact="1"/>
+          <set_value name="$Budget" operation="subtract" exact="1"/>
+          <include_actions ref="ScanSide"/>
+        </do_if>
+      </actions>
+    </library>
+
+    <!-- Spawn up to $Budget ships of side $Side. -->
+    <library name="SpawnSide">
+      <actions>
+        <include_actions ref="LoadSide"/>
+        <do_while value="$Budget gt 0 and not $SideDone">
+          <include_actions ref="SpawnOne"/>
+        </do_while>
+        <include_actions ref="StoreSide"/>
+      </actions>
+    </library>
+
+    <library name="SpawnDone">
+      <actions>
+        <set_value name="$SpawnedA" exact="$GroupA.count"/>
+        <set_value name="$SpawnedB" exact="$GroupB.count"/>
+        <debug_text text="'COMBATSCN spawned side=%s count=%s requested=%s faction=%s t=%s'.['A', $CreatedA, $RequestedA, $A_Faction.id, player.age]"/>
+        <debug_text text="'COMBATSCN spawned side=%s count=%s requested=%s faction=%s t=%s'.['B', $CreatedB, $RequestedB, $B_Faction.id, player.age]"/>
+        <debug_text text="'COMBATSCN spawn complete t=%s a=%s b=%s batches=%s seconds=%s'.[player.age, $GroupA.count, $GroupB.count, $Batches, player.age - $SpawnStart]"/>
+        <set_value name="$Stage" exact="'spawned'"/>
+        <set_value name="$StageAt" exact="player.age"/>
       </actions>
     </library>
 
@@ -138,7 +241,7 @@
         <event_cue_signalled cue="md.Setup.Start"/>
       </conditions>
       <actions>
-        <set_value name="$Version" exact="2"/>
+        <set_value name="$Version" exact="3"/>
         <include_actions ref="Defaults"/>
         <include_actions ref="md.X4MP_CombatVariant.Config"/>
         <set_value name="$Allowed" exact="player.module == 'custom_creative'"/>
@@ -194,26 +297,63 @@
           <actions>
             <create_group groupname="$GroupA"/>
             <create_group groupname="$GroupB"/>
+            <set_value name="$CursorA_c" exact="1"/>
+            <set_value name="$CursorA_k" exact="1"/>
+            <set_value name="$RequestedA" exact="0"/>
+            <set_value name="$CreatedA" exact="0"/>
+            <set_value name="$DoneA" exact="false"/>
+            <set_value name="$CursorB_c" exact="1"/>
+            <set_value name="$CursorB_k" exact="1"/>
+            <set_value name="$RequestedB" exact="0"/>
+            <set_value name="$CreatedB" exact="0"/>
+            <set_value name="$DoneB" exact="false"/>
+            <set_value name="$Batches" exact="0"/>
+            <set_value name="$SpawnStart" exact="player.age"/>
+            <set_value name="$TotalA" exact="0"/>
+            <do_all exact="$A_Counts.count" counter="$i">
+              <set_value name="$TotalA" operation="add" exact="$A_Counts.{$i}"/>
+            </do_all>
+            <set_value name="$TotalB" exact="0"/>
+            <do_all exact="$B_Counts.count" counter="$i">
+              <set_value name="$TotalB" operation="add" exact="$B_Counts.{$i}"/>
+            </do_all>
+            <debug_text text="'COMBATSCN spawn begin t=%s requested_a=%s requested_b=%s batch=%s'.[player.age, $TotalA, $TotalB, $SpawnBatch]"/>
+            <do_if value="$SpawnBatch le 0">
+              <!-- one frame: all of side A, then all of side B -->
+              <set_value name="$Batches" exact="1"/>
+              <set_value name="$Side" exact="'A'"/>
+              <set_value name="$Budget" exact="$TotalA"/>
+              <include_actions ref="SpawnSide"/>
+              <set_value name="$Side" exact="'B'"/>
+              <set_value name="$Budget" exact="$TotalB"/>
+              <include_actions ref="SpawnSide"/>
+              <include_actions ref="SpawnDone"/>
+            </do_if>
+            <do_else>
+              <set_value name="$Stage" exact="'spawning'"/>
+              <set_value name="$StageAt" exact="player.age"/>
+            </do_else>
+          </actions>
+        </cue>
+
+        <!-- One batch per second: half of $SpawnBatch per side, a finished side leaves its
+             share to the other. -->
+        <cue name="SpawnBatch" instantiate="true" checkinterval="1s">
+          <conditions>
+            <check_value value="$Stage == 'spawning'"/>
+          </conditions>
+          <actions>
+            <set_value name="$Batches" operation="add" exact="1"/>
+            <set_value name="$Quota" exact="if $DoneB then $SpawnBatch else ($SpawnBatch + 1) / 2"/>
             <set_value name="$Side" exact="'A'"/>
-            <set_value name="$Faction" exact="$A_Faction"/>
-            <set_value name="$PilotTags" exact="$A_PilotTags"/>
-            <set_value name="$Macros" exact="$A_Macros"/>
-            <set_value name="$Counts" exact="$A_Counts"/>
-            <set_value name="$Sign" exact="-1"/>
+            <set_value name="$Budget" exact="$Quota"/>
             <include_actions ref="SpawnSide"/>
-            <add_to_group groupname="$GroupA" list="$SpawnList"/>
-            <set_value name="$SpawnedA" exact="$GroupA.count"/>
             <set_value name="$Side" exact="'B'"/>
-            <set_value name="$Faction" exact="$B_Faction"/>
-            <set_value name="$PilotTags" exact="$B_PilotTags"/>
-            <set_value name="$Macros" exact="$B_Macros"/>
-            <set_value name="$Counts" exact="$B_Counts"/>
-            <set_value name="$Sign" exact="1"/>
+            <set_value name="$Budget" exact="$SpawnBatch - ($Quota - $Budget)"/>
             <include_actions ref="SpawnSide"/>
-            <add_to_group groupname="$GroupB" list="$SpawnList"/>
-            <set_value name="$SpawnedB" exact="$GroupB.count"/>
-            <set_value name="$Stage" exact="'spawned'"/>
-            <set_value name="$StageAt" exact="player.age"/>
+            <do_if value="$DoneA and $DoneB">
+              <include_actions ref="SpawnDone"/>
+            </do_if>
           </actions>
         </cue>
 
