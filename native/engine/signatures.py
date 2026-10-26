@@ -66,6 +66,16 @@ PHYSICS_MODE_VTABLE_SITES = {
     'job_create_barrier': (0xC5A30, 0x2A2ABB8),
     'job_destroy_barrier': (0xC5A60, 0x2A2ABC0),
 }
+# Flight-model census (physics_flight.h): vtable slot +0x70 (Update) of the six U::Path flight control
+# model classes, order = model type 1..6 (PF_FORCED .. PF_STEERING).
+PHYSICS_FLIGHT_VTABLE_SITES = {
+    'flight_forced': (0xEB04C0, 0x2C4F840),
+    'flight_highway': (0xEB0B70, 0x2C4F760),
+    'flight_linear': (0xEB27C0, 0x2C4F680),
+    'flight_masstraffic': (0xEB3D90, 0x2C4F940),
+    'flight_spline': (0xEB7230, 0x2C4F4F0),
+    'flight_steering': (0xEC7200, 0x2C4EA38),
+}
 # Code whose bytes establish what the probe reads or calls (no base relocations in any range).
 PHYSICS_SITES = {
     'jolt_job_max_concurrency': (0xC5940, 24, 'ea41983c8853e368253719bebeee39612ea260cb5719e633669388722b04aaa6'),
@@ -90,6 +100,12 @@ PHYSICS_SITES = {
     'jolt_job_destroy_barrier': (0xC5A60, 5, 'cfe8e60203df08650126edcd8f93b5e2efa56fc4bf2bb69690910ae46ac126b4'),
     'jolt_job_free': (0xC5B30, 48, '36a288ff020ae17fca8379237d8cea6f9f94acd484f445ca3c44938e29e66cff'),
     'jolt_barrier_on_finished': (0xC5F90, 48, '7090eda16704c9dbd775e4782a1ae134cef80db0517b159402d6e71d24c6da0f'),
+    'flight_forced_update': (0xEB04C0, 32, 'ac3fd226dd09d17861cd229954eec4430efc62e1ecb057d26ea502a8d58cf140'),
+    'flight_highway_update': (0xEB0B70, 32, 'ae9b4c91b0b9044a036bfc52a4f32e5646055a2fb8ccdab2d4751cfa591c9da7'),
+    'flight_linear_update': (0xEB27C0, 32, '8b165474edf0179770752a13fc8ae356301920309db005e001348972fcc0ca44'),
+    'flight_masstraffic_update': (0xEB3D90, 32, 'c4823d987e55c100c512567f3cd5e3b1270fc1f46e38bbd94bb70b3f2f212a5d'),
+    'flight_spline_update': (0xEB7230, 32, 'e2c5918bdc2b26b70ac2ed886652c68c0ab663b79865046b1073fbea42cddb89'),
+    'flight_steering_update': (0xEC7200, 32, '20c822202b85f4ecfcc9892f075241b6fddced6cc71ea149c42c224145ff066b'),
 }
 
 SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **PHYSICS_SITES}
@@ -122,7 +138,8 @@ def c_header() -> str:
         lines.append(f'    {{{classes.index(name)}, 0x{entry:x}}},')
     lines.append('};')
     lines.append('typedef struct { const char *name; size_t fn; size_t entry; } x4_physics_vtable;')
-    for table, sites in (('x4_physics_vtables', PHYSICS_VTABLE_SITES), ('x4_physics_mode_vtables', PHYSICS_MODE_VTABLE_SITES)):
+    for table, sites in (('x4_physics_vtables', PHYSICS_VTABLE_SITES), ('x4_physics_mode_vtables', PHYSICS_MODE_VTABLE_SITES),
+                         ('x4_physics_flight_vtables', PHYSICS_FLIGHT_VTABLE_SITES)):
         lines.append(f'static const x4_physics_vtable {table}[] = {{')
         for name, (fn, entry) in sites.items():
             lines.append(f'    {{"{name}", 0x{fn:x}, 0x{entry:x}}},')

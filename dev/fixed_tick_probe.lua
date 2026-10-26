@@ -8,6 +8,8 @@
 -- (FEATURE joltwait ENABLED once applied; FEATURE joltwait DISABLED reason=... on any refusal, sticky).
 -- X4LAN_PHYSICS_MODE='original' keeps X4's own barrier; 'ab' alternates 'original' and 'joltwait' every
 -- X4LAN_PHYSICS_AB_S seconds (default 20).
+-- X4LAN_FLIGHTPROF=true adds the flight-model census (FLIGHTPROF: Update calls per frame and us per call for
+-- each of the six U::Path flight control models, cheap-mode calls; data-only, refusal FEATURE flightprof DISABLED).
 if not X4LAN_CONFIG or X4LAN_CONFIG.test_profile~='45841' then return end
 if X4LAN_FIXEDTICK_PROBE then return end
 X4LAN_FIXEDTICK_PROBE=true
@@ -19,6 +21,7 @@ local owner,reason
 local walkRefusedLogged
 local physRefusedLogged
 local joltwaitLogged,joltwaitOnLogged
+local flightRequested,flightRefusedLogged
 local physMode,nextPhysMode=nil,0
 local sectorHooks={[0]='pending',[1]='original',[2]='chained',[3]='refused'}
 local nextTry=0
@@ -55,8 +58,8 @@ local function logStats(now)
    s.phys_jobs or 0,s.phys_added or 0,s.phys_persisted or 0,s.phys_removed or 0,s.phys_bodies0 or 0,s.phys_bodies1 or 0,s.phys_bodies_max or 0)..
    string.format(' pairs=%.1f multiPairs=%.2f multiPairsTotal=%d pairOverflow=%d',
    s.phys_pairs or 0,s.phys_multi_pairs or 0,s.phys_multi_pairs_total or 0,s.phys_pair_overflow or 0)..
-   string.format(' pathBatchesA=%d pathBatchesB=%d pathBudgetMs=%.3f pathDt=%.4f pathInflight=%.3f pathPasses=%d pathPassMs=%.3f pathPassMaxMs=%.3f pathJoins=%d pathTightJoins=%d pathSlackMs=%.3f',
-   s.path_batches_a or -1,s.path_batches_b or -1,s.path_budget_ms or 0,s.path_dt or 0,s.path_inflight or 0,s.path_passes or 0,
+   string.format(' pathAgents=%d pathBatchesA=%d pathBatchesB=%d pathBudgetMs=%.3f pathDt=%.4f pathInflight=%.3f pathPasses=%d pathPassMs=%.3f pathPassMaxMs=%.3f pathJoins=%d pathTightJoins=%d pathSlackMs=%.3f',
+   s.path_agents or 0,s.path_batches_a or -1,s.path_batches_b or -1,s.path_budget_ms or 0,s.path_dt or 0,s.path_inflight or 0,s.path_passes or 0,
    s.path_pass_ms or 0,s.path_pass_max_ms or 0,s.path_joins or 0,s.path_tight_joins or 0,s.path_slack_ms or 0)..
    string.format(' jtmWorkers=%d jtmSamples=%d jtmBusy=%.2f jtmBusyMax=%d jtmCat1=%.2f jtmCat2=%.2f jtmOther=%.2f jtmQueue=%.2f jtmQueueMax=%d joltSamples=%d jtmBusyInJolt=%.2f',
    s.jtm_workers or 0,s.jtm_samples or 0,s.jtm_busy or 0,s.jtm_busy_max or 0,s.jtm_cat1 or 0,s.jtm_cat2 or 0,s.jtm_other or 0,
@@ -71,6 +74,19 @@ local function logStats(now)
   elseif (s.phys_mode or 0)==1 and not joltwaitOnLogged then
    joltwaitOnLogged=true
    DebugError('[X4LAN] FEATURE joltwait ENABLED')
+  end
+  if (s.flight_installed or 0)==1 and (s.flight_frames or 0)>0 then
+   local parts={}
+   for _,m in ipairs({'forced','highway','linear','masstraffic','spline','steering'}) do
+    parts[#parts+1]=string.format('%s=%.1f/%.2f',m,s['flight_'..m..'_calls'] or 0,s['flight_'..m..'_us'] or 0)
+   end
+   DebugError(string.format('[X4LAN] FLIGHTPROF frames=%d calls=%.1f callsMax=%d cheap=%.2f ms=%.3f ownerCalls=%d ',
+    s.flight_frames,s.flight_calls or 0,s.flight_calls_max or 0,s.flight_cheap or 0,s.flight_ms or 0,
+    s.flight_owner_calls or 0)..table.concat(parts,' '))
+  end
+  if s.flight_reason and not flightRefusedLogged then
+   flightRefusedLogged=true
+   DebugError('[X4LAN] FEATURE flightprof DISABLED reason='..tostring(s.flight_reason))
   end
  elseif (s.phys_installed or 1)==0 and not physRefusedLogged then
   physRefusedLogged=true
@@ -87,6 +103,15 @@ local function setPhysicsMode(mode,now)
  else
   DebugError('[X4LAN] FEATURE joltwait DISABLED reason='..tostring(why))
   physMode='refused'
+ end
+end
+local function applyFlightCensus()
+ if flightRequested or not X4LAN_FLIGHTPROF or not owner.flight_census then return end
+ flightRequested=true
+ local ok,why=owner:flight_census('on')
+ if not ok and not flightRefusedLogged then
+  flightRefusedLogged=true
+  DebugError('[X4LAN] FEATURE flightprof DISABLED reason='..tostring(why))
  end
 end
 local function applyPhysicsMode(now)
@@ -137,6 +162,7 @@ SetScript('onUpdate',function()
   end
   if now>=nextLog then logStats(now) end
   applyPhysicsMode(now)
+  applyFlightCensus()
   if profiling then
    if now>=nextProfile then logProfile(now) end
    drainFolds()

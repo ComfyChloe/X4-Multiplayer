@@ -10,6 +10,18 @@
 #include "fixedtick.c"
 
 static owner fake_owner;
+static volatile LONG flight_seen, flight_bad_args;
+static void fake_update(void *self, void *slot, float dt, double t, uint8_t cheap, uint8_t p) {
+    if (self != (void *)0x1234 || slot != (void *)0x5678 || dt != 0.25f || t != 12.5 || cheap > 1 || p != 1)
+        InterlockedIncrement(&flight_bad_args);
+    InterlockedIncrement(&flight_seen);
+}
+static DWORD WINAPI flight_worker(LPVOID arg) {
+    int model = (int)(intptr_t)arg;
+    void **entry = (void **)(image + x4_physics_flight_vtables[model].entry);
+    for (int i = 0; i < 100; ++i) ((pf_update_fn)*entry)((void *)0x1234, (void *)0x5678, 0.25f, 12.5, (uint8_t)(i < 10), 1);
+    return 0;
+}
 static void *fake_table[40];
 static LARGE_INTEGER fake_now;
 static BOOL WINAPI fake_qpc(LARGE_INTEGER *value) { *value = fake_now; return TRUE; }
@@ -27,11 +39,12 @@ static void fake_removed(void *s, const void *p) { (void)s; (void)p; ++calls[PP_
 static unsigned char fake_scene[2][0x40], fake_sys[2][0x700], fake_pm[0x300], fake_jtm[0x600];
 static unsigned char fake_batches[0x20 * 7];
 
-typedef struct { const char *name; double value; } captured;
-static captured cap[64];
+typedef struct { char name[48]; double value; } captured;   /* names copied: some are built in a buffer */
+static captured cap[160];
 static int ncap;
 static void capture(lua_State *L, const char *name, double value) {
-    (void)L; assert(ncap < 64); cap[ncap].name = name; cap[ncap].value = value; ++ncap;
+    (void)L; assert(ncap < 160 && strlen(name) < sizeof(cap[0].name));
+    strcpy(cap[ncap].name, name); cap[ncap].value = value; ++ncap;
 }
 static double got(const char *name) {
     for (int i = 0; i < ncap; ++i) if (!strcmp(cap[i].name, name)) return cap[i].value;
@@ -127,6 +140,7 @@ int main(void) {
     *(uintptr_t *)(fake_pm + PP_PM_BATCH_A + 8) = (uintptr_t)(fake_batches + 0x20 * 4);
     *(uintptr_t *)(fake_pm + PP_PM_BATCH_B) = (uintptr_t)(fake_batches + 0x20 * 4);
     *(uintptr_t *)(fake_pm + PP_PM_BATCH_B + 8) = (uintptr_t)(fake_batches + 0x20 * 7);
+    for (int b = 0; b < 7; ++b) *(uint64_t *)(fake_batches + b * 0x20 + 8) = (uint64_t)(b + 1);   /* agents */
     *(float *)(fake_pm + PP_PM_DT) = 1.0f / 60.0f;
     *(double *)(fake_pm + PP_PM_BUDGET) = 0.004;
     *(uint32_t *)(fake_jtm + PP_JTM_COUNT) = 4;
@@ -169,7 +183,7 @@ int main(void) {
         assert(got("phys_installed") == 1 && got("phys_frames") == 10);
         assert(fabs(got("phys_jolt_ms") - 0.5) < 1e-9 && fabs(got("phys_jolt1_ms") - 0.25) < 1e-9);
         assert(got("phys_jobs") == 10 && got("phys_added") == 3 && got("phys_bodies1") == 40);
-        assert(got("path_batches_a") == 4 && got("path_batches_b") == 3);
+        assert(got("path_batches_a") == 4 && got("path_batches_b") == 3 && got("path_agents") == 28);
         assert(fabs(got("path_budget_ms") - 4.0) < 1e-9 && fabs(got("path_dt") - 1.0 / 60.0) < 1e-6);
         assert(got("jtm_samples") >= 1 && got("jtm_workers") == 4);   /* timing depends on PC load */
     }
@@ -308,6 +322,61 @@ int main(void) {
         disarm_because("test");   /* uninstall switches back first */
         assert(!pp_joltwait && *cb == image + x4_physics_mode_vtables[0].fn && *db == image + x4_physics_mode_vtables[1].fn);
     }
+
+    /* Flight-model census: queued, verified, all six slots or none, counts on any thread (cheap-mode calls
+       too), arguments passed through unchanged, folded at frame end, latched refusal, restored on disarm. */
+    {
+        setup();
+        assert(pp_install(0));
+        use_fakes();
+        void **fe[PF_MODELS];
+        for (int i = 0; i < PF_MODELS; ++i) {
+            fe[i] = (void **)(image + x4_physics_flight_vtables[i].entry);
+            *fe[i] = image + x4_physics_flight_vtables[i].fn;
+        }
+        *fe[2] = image + 7;   /* foreign entry: refused, nothing swapped */
+        assert(!pf_request_census(1));
+        pp_frame_end();
+        assert(!pf_installed && pf_reason && !strcmp(pf_reason, "flight vtable entry not original"));
+        assert(*fe[0] == image + x4_physics_flight_vtables[0].fn);
+        assert(pf_request_census(1) == pf_reason);   /* latched */
+        pf_reason = NULL;
+        *fe[2] = image + x4_physics_flight_vtables[2].fn;
+        assert(!pf_request_census(1));
+        pp_frame_end();
+        assert(pf_installed);
+        for (int i = 0; i < PF_MODELS; ++i) { assert(*fe[i] == pf_wrappers[i]); pf_orig[i] = (void *)fake_update; }
+        memset(&pf_win, 0, sizeof(pf_win));
+        HANDLE w[2] = {CreateThread(NULL, 0, flight_worker, (LPVOID)(intptr_t)5, 0, NULL),
+                       CreateThread(NULL, 0, flight_worker, (LPVOID)(intptr_t)2, 0, NULL)};
+        assert(w[0] && w[1] && WaitForMultipleObjects(2, w, TRUE, 5000) == WAIT_OBJECT_0);
+        CloseHandle(w[0]); CloseHandle(w[1]);
+        ((pf_update_fn)*fe[0])((void *)0x1234, (void *)0x5678, 0.25f, 12.5, 0, 1);   /* owner thread */
+        assert(flight_seen == 201 && flight_bad_args == 0);
+        pp_frame_end();
+        assert(pf_win.frames == 1 && pf_win.calls[5] == 100 && pf_win.calls[2] == 100 && pf_win.calls[0] == 1);
+        assert(pf_win.cheap[5] == 10 && pf_win.cheap[2] == 10 && pf_win.owner_calls[0] == 1 && pf_win.owner_calls[5] == 0);
+        assert(pf_win.frame_calls_max == 201);
+        ncap = 0;
+        pp_stats(NULL, capture);
+        assert(got("flight_installed") == 1 && got("flight_frames") == 1 && got("flight_calls") == 201);
+        assert(got("flight_steering_calls") == 100 && got("flight_linear_calls") == 100 && got("flight_cheap") == 20);
+        assert(got("flight_owner_calls") == 1 && got("flight_steering_us") >= 0.0 && got("flight_ms") >= 0.0);
+        assert(pf_win.frames == 0);   /* window reset */
+        /* Removal by request (the uninstall writes pf_orig back), then a re-install and a disarm. */
+        for (int i = 0; i < PF_MODELS; ++i) pf_orig[i] = image + x4_physics_flight_vtables[i].fn;
+        assert(!pf_request_census(0));
+        pp_frame_end();
+        assert(!pf_installed && *fe[5] == image + x4_physics_flight_vtables[5].fn);
+        assert(!pf_request_census(1));
+        pp_frame_end();
+        assert(pf_installed);
+        restore_origs();
+        disarm_because("test");   /* pp_uninstall removes the census (any thread) */
+        for (int i = 0; i < PF_MODELS; ++i) assert(*fe[i] == image + x4_physics_flight_vtables[i].fn);
+        assert(!pf_installed);
+    }
+    puts("PASS: flight census: verified swap of six model slots or none, counts on any thread, arguments unchanged, fold, latched refusal, restore");
 
     /* An entry changed by someone else after install is left alone on uninstall. */
     setup();

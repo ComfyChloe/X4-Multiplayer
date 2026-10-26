@@ -353,12 +353,15 @@ static const char *pp_joltwait_enable(void) {
     return NULL;
 }
 
+#include "physics_flight.h"
+
 /* On the owner thread (between frames: hooks never run inside a Jolt update) everything is restored. A
    disarm on another thread (Lua teardown) may race a Jolt update on the MoveWorker that holds a serial
    barrier, so then joltwait stays installed: barrier entries 3/4 and the WaitForJobs router, which are
    self-contained, exact and live in the pinned module; a later install on the owner thread adopts them.
    The pass-through counting wrappers are always restored. */
 static void pp_uninstall(void) {
+    pf_uninstall();   /* pass-through census wrappers: safe on any thread */
     InterlockedExchange(&pp_mode_request, PP_REQ_NONE);
     int keep_joltwait = pp_joltwait && GetCurrentThreadId() != owner_thread;
     if (keep_joltwait) ++pp_orphaned;
@@ -429,10 +432,19 @@ static void pp_frame_end(void) {
         if (pp_peek((unsigned char *)pm + PP_PM_BATCH_A, &va[0], 16) && pp_peek((unsigned char *)pm + PP_PM_BATCH_B, &va[2], 16)) {
             pp_last_batches[0] = va[1] >= va[0] && va[1] - va[0] < 0x10000 ? (int)((va[1] - va[0]) / 0x20) : -1;
             pp_last_batches[1] = va[3] >= va[2] && va[3] - va[2] < 0x10000 ? (int)((va[3] - va[2]) / 0x20) : -1;
+            /* Agents per pass: each 0x20-byte batch holds its agent count at +8 (UpdateBatch's loop bound). */
+            uint64_t agents = 0;
+            for (int v = 0; v < 2; ++v)
+                for (int b = 0; b < pp_last_batches[v] && b < 64; ++b) {
+                    uint64_t n = 0;
+                    if (pp_peek((unsigned char *)va[2 * v] + (size_t)b * 0x20 + 8, &n, sizeof(n)) && n < 0x100000) agents += n;
+                }
+            pp_last_agents_hint = agents;
         }
         if (pp_peek((unsigned char *)pm + PP_PM_DT, &dt, sizeof(dt))) pp_last_dt = dt;
         if (pp_peek((unsigned char *)pm + PP_PM_BUDGET, &budget, sizeof(budget))) pp_last_budget_ms = budget * 1000.0;
     }
+    pf_frame_end();
 }
 
 /* Verify every site, then install all five entries or none. 1 when installed. */
@@ -544,6 +556,7 @@ static void pp_stats(lua_State *L, void (*field)(lua_State *, const char *, doub
     field(L, "phys_bodies_max", (double)(pp_win.synced_max[0] > pp_win.synced_max[1] ? pp_win.synced_max[0] : pp_win.synced_max[1]));
     field(L, "path_batches_a", pp_last_batches[0]);
     field(L, "path_batches_b", pp_last_batches[1]);
+    field(L, "path_agents", (double)pp_last_agents_hint);
     field(L, "path_budget_ms", pp_last_budget_ms);
     field(L, "path_dt", pp_last_dt);
     pp_sampled s;
@@ -571,4 +584,5 @@ static void pp_stats(lua_State *L, void (*field)(lua_State *, const char *, doub
     field(L, "path_tight_joins", (double)s.tight_joins);
     field(L, "path_slack_ms", s.joins ? s.slack_ms_sum / (double)s.joins : 0.0);
     memset(&pp_win, 0, sizeof(pp_win));
+    pf_stats(L, field);
 }

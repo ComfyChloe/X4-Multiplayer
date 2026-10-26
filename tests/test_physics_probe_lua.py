@@ -127,6 +127,48 @@ class PhysicsProbeLuaTests(unittest.TestCase):
           assert(n==1)
         ''')
 
+    def test_flight_census_requested_and_logged(self):
+        self.runtime().execute('''
+          X4LAN_FLIGHTPROF=true;calls={}
+          handle.flight_census=function(self,m) calls[#calls+1]=m;return true end
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.phys_installed=1;s.phys_frames=60
+            if #calls>0 then s.flight_installed=1;s.flight_frames=60;s.flight_calls=812.5;s.flight_calls_max=900
+              s.flight_cheap=0;s.flight_ms=1.25;s.flight_owner_calls=0;s.flight_steering_calls=700;s.flight_steering_us=1.5
+              s.flight_linear_calls=100.5;s.flight_linear_us=0.75 end
+            return s end
+          ui();ui();now=30;ui();now=31;ui()
+          assert(#calls==1 and calls[1]=='on')
+          local line
+          for _,l in ipairs(logs) do
+            if l:find('FLIGHTPROF frames=60 calls=812.5 callsMax=900 cheap=0.00 ms=1.250',1,true)
+              and l:find('linear=100.5/0.75',1,true) and l:find('steering=700.0/1.50',1,true) then line=true end
+          end
+          assert(line)
+        ''')
+
+    def test_flight_census_refusal_is_loud_once(self):
+        self.runtime().execute('''
+          X4LAN_FLIGHTPROF=true;calls={}
+          handle.flight_census=function(self,m) calls[#calls+1]=m;return nil,'flight vtable entry not original' end
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.phys_installed=1;s.phys_frames=60
+            s.flight_reason='flight vtable entry not original';return s end
+          ui();ui();now=30;ui();now=31;ui()
+          assert(#calls==1)
+          local n=0
+          for _,l in ipairs(logs) do if l:find('FEATURE flightprof DISABLED reason=flight vtable entry not original',1,true) then n=n+1 end end
+          assert(n==1)
+        ''')
+
+    def test_flight_census_not_requested_by_default(self):
+        self.runtime().execute('''
+          calls={}
+          handle.flight_census=function(self,m) calls[#calls+1]=m;return true end
+          ui();ui();now=30;ui()
+          assert(#calls==0)
+        ''')
+
     def test_old_dll_without_physics_mode_is_ignored(self):
         self.runtime().execute('''
           X4LAN_PHYSICS_MODE='joltwait'
