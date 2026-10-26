@@ -192,6 +192,24 @@ class UniverseRelayTests(unittest.TestCase):
         self.publish(Baseline.create(self.a,2,SECTOR,[]))
         self.assertFalse(self.s.positions)
 
+    def test_dense_sector_forwards_new_motion_before_repeats(self):
+        # NPC flicker: a blind round robin over 200 live entities repeated unchanged samples
+        # while new ones waited up to 200/640 s; fresh samples now go first.
+        self.publish(Baseline.create(self.a,1,SECTOR,[row(i) for i in range(1,201)]))
+        self.s.receive(f'UINTEREST|1|{self.b}|1|{SECTOR}'.encode(),P2,.2)
+        def packet(entity,seq,time):
+            return f'UMOVE|1|{self.a}|{self.a}|{entity}|{seq}|{SECTOR}|{time}|10|0|0|0|0|0|100|0|0|0|0|0'.encode()
+        def forwarded(now):
+            return [int(p.decode().split('|')[4]) for a,p in self.s.snapshots(now) if a==P2 and p.startswith(b'UMOVE')]
+        for i in range(1,201): self.s.receive(packet(i,i,1),P1,.2)
+        seen=set()
+        for tick in range(7): seen.update(forwarded(.25+tick*.05))
+        self.assertEqual(seen,set(range(1,201)))  # each fresh sample exactly once first
+        for n,entity in enumerate((150,7,93)): self.s.receive(packet(entity,300+n,2),P1,.6)
+        self.assertEqual(sorted(forwarded(.61)[:3]),[7,93,150])
+        repeats=forwarded(.66)  # nothing fresh: the budget repeats latest samples for loss
+        self.assertEqual(len(repeats),32)
+
 
 @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')
 class UniverseLuaTests(unittest.TestCase):

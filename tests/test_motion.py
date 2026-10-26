@@ -167,3 +167,44 @@ class MotionTests(unittest.TestCase):
           assert(mode=='normal' and profile.delay==M.delay and profile.horizon==M.horizon)
           assert(M.classify({},'warp',100,0)=='normal')
         ''')
+
+    def test_sparse_highway_npc_samples_freeze_and_snap_by_default_but_not_with_npc_track(self):
+        # NPC flicker reproduction: 3 km/s (local highway), one sample per 0.6 s or 0.9 s
+        # (a dense sector sharing 640 UMOVE/s), 50 ms latency, 60 fps rendering.
+        self.lua.execute('''
+          local M=X4LAN_MOTION
+          function highway(gap,npc)
+           local t={};if npc then t.stale,t.cap,t.retainClock,t.leak=2.5,50000,true,M.leak end
+           local nextSample,k=0,0;local frozen,maxStep,back,prev=0,0,0,nil
+           for f=0,600 do
+            local now=f/60
+            while nextSample+.05<=now do
+             M.push(t,nextSample,{nextSample*3000,0,0,0,0,0},{3000,0,0,0,0,0},nextSample+.05)
+             if npc then t.gap=gap end
+             k=k+1;nextSample=k*gap
+            end
+            if t.samples and f>=180 then
+             local p
+             if npc then
+              local delay=math.min(.6,math.max(M.delay,gap*1.1+.05));local horizon=math.min(1,math.max(M.horizon,gap+.25))
+              p=M.renderAt(t,M.clock(t,now,delay),horizon)
+             else p=M.render(t,now) end
+             if prev then
+              local step=p[1]-prev
+              if math.abs(step)<1 then frozen=frozen+1 end
+              if step<-1 then back=back+1 end
+              maxStep=math.max(maxStep,math.abs(step))
+             end
+             prev=p[1]
+            end
+           end
+           return frozen,maxStep,back,t.resets or 0
+          end
+        ''')
+        for gap in (.6, .9):
+            frozen, step, back, resets = self.lua.eval(f'highway({gap},false)')
+            self.assertGreater(frozen, 30, gap)      # default: stands still after the horizon
+            self.assertGreater(step, 300, gap)       # ... then snaps hundreds of metres
+            frozen, step, back, resets = self.lua.eval(f'highway({gap},true)')
+            self.assertEqual((frozen, back, resets), (0, 0, 0), gap)
+            self.assertLess(step, 3000/60*1.2, gap)  # uniform 50 m per frame at 3 km/s

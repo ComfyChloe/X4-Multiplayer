@@ -35,10 +35,12 @@ function M.valid(p, velocity)
  end
  return true
 end
-function M.velocity(previous,p,time)
+-- `stale` (optional) widens the sample gap over which a velocity is still estimated;
+-- sparse NPC publication uses it. Absent, the original M.stale bound applies.
+function M.velocity(previous,p,time,stale)
  local v={0,0,0,0,0,0}
  local dt=previous and time-previous.time or 0
- if dt>.001 and dt<=M.stale then
+ if dt>.001 and dt<=(stale or M.stale) then
   for i=1,6 do
    local delta=p[i]-previous.pose[i]
    if i>3 then delta=M.angle(delta) end
@@ -56,19 +58,24 @@ end
 --  retainClock: a discontinuity resets samples but keeps the clock offset (both peers use
 --   real time, so the mapping survives pauses and teleports of the same source process).
 --  leak: see M.leak.  mode: declared mode of the incoming sample (see M.speedCap).
+--  stale: per-track gap (s) before samples reset, instead of M.stale.
+--  cap: speed allowance cap (m/s) for the incoming velocity, instead of M.speedCap[mode].
+--  lastReset: 'gap' or 'jump', set when a push discards the earlier samples.
 function M.push(track,time,p,velocity,arrival)
  if type(time)~='number' or time~=time or time<0 or time>1e12 or not M.valid(p,velocity) then return false end
  local samples=track.samples or {}
  local last=samples[#samples]
  if last and time<=last.time then return false end
  -- A pause or discontinuity must not interpolate a ship through intervening space.
- local reset=last and time-last.time>M.stale
+ local reset=last and time-last.time>(track.stale or M.stale)
+ if reset then track.lastReset='gap' end
  if last and not reset then
   local d2=0;local speed=M.speed(last.velocity)
   for i=1,3 do d2=d2+(p[i]-last.pose[i])^2 end
-  local cap=M.speedCap[track.mode or 'normal']
+  local cap=track.cap or M.speedCap[track.mode or 'normal']
   if cap then speed=math.max(speed,math.min(cap,M.speed(velocity))) end
   reset=math.sqrt(d2)>10000+speed*(time-last.time)
+  if reset then track.lastReset='jump' end
  end
  if reset then
   samples={};track.resets=(track.resets or 0)+1

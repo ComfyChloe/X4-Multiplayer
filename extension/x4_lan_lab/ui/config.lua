@@ -15,6 +15,7 @@ X4LAN_CONFIG = {
     frame_profile = false, -- Diagnostic only: per-second FRAMECOST wall time of the mod's UI Lua by subsystem.
     net_probe = false, -- Diagnostic only: RTTPING/RTTPONG round trips to the relay, NETRTT every 5 s.
     npc_target_diag = false, -- Diagnostic only: logs NPC orders, targets, attention and radar near the shared ships.
+    npc_motion_diagnostics = false, -- Diagnostic only: per-interval NPC_DIAG replica/motion counts (seconds, or true = 1 s).
     interaction_test = false, -- Destructive fixtures ONLY in the disposable test world.
     motion_diagnostics = false, -- Diagnostic only: rate-limited MOTION_DIAG rows (seconds, or true = 0.5 s) for remote co-op ships.
     test_profile = "45841",

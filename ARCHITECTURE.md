@@ -38,15 +38,22 @@ is limited to 4096 objects. An overflowing enumeration never publishes a prefix.
 `UMOVE` carries host epoch, object ID, sequence, sector, source time, pose and
 linear/angular velocity for known committed IDs. Units are seconds, metres and
 radians. Legacy `UPOS` remains readable. Host and relay each budget 32 motion
-records per tick. The guest visits at most 128 replicas per frame and applies
-changed transforms no faster than every 15 ms. Rates are shared across a sector;
-there is no promise of 20 updates/s per ship in a dense scene.
+records per tick. The host republishes still (<1 m/s) NPCs every 2 s and slow
+(<20 m/s) ones every 0.5 s, so movers share the budget; the relay forwards
+not-yet-forwarded samples first. The guest writes replicas rendered at 150 m/s or
+more every frame (up to 256), and visits at most 128 others per frame no faster
+than every 15 ms. Rates are shared across a sector; there is no promise of
+20 updates/s per ship in a dense scene.
 
 The common `motion.lua` buffer estimates clock offset from the minimum observed
 arrival minus source time, interpolates with a 150 ms delay, predicts for at most
 350 ms and then freezes. Long gaps, discontinuities and ownership changes reset
-tracks. Velocity and time are finite/bounded; orientation follows the shortest
-angular arc. Baselines recover lost motion. Engine changes wait for an unpaused
+tracks. NPC replica tracks tolerate 2.5 s gaps, keep their clock offset, and
+raise the delay to 1.1 x the observed sample gap (max 0.6 s, horizon up to 1 s)
+through a bounded-rate render clock. Velocity and time are finite/bounded;
+orientation follows the shortest angular arc. Baselines recover lost motion; for
+NPC replicas only after 3 s without motion, as a baseline pose is older than live
+motion. See reports/NPC-FLICKER-20261025.txt. Engine changes wait for an unpaused
 frame; transport acknowledgement alone is not engine success.
 
 Guest replica mode removes independent NPCs only in its current sector and only
