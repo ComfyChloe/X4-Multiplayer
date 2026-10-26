@@ -333,16 +333,39 @@ key, sector, seq; the AI driver can set the original order key); the offers are 
 
 - Engine side `native/engine/econcap.h` (in the fixed-tick probe, `X4LAN_ECONCAP=true`): MD raises
   `X4MP.EconWatch` with a station; per frame (slot 5) the sampler resolves it by UniverseID (AutoIDMap,
-  generation-checked), checks vtables, reads the fields of 3.3 and 4, and writes C/M/W/D/F records when
-  something changed (`[X4LAN] ECONCAP ...` in the debug log). Data only: no writes, no engine calls, no
-  new hook site (hooks.tsv row "VBI slot 5 (no new site)"). [synthetic: test_econcap.c PASS]
-- Replay `x4mp-econ-replay <log>`: for each station record whose +0xa18 changed, the model runs the
-  catch-up from the previous record and must reproduce every module field bit for bit and the cargo;
-  classes: exact, exact with recorded draws (one retry draw per module, checked to lie in [0, max)),
-  rng-dependent (several draws), external (cargo changed by something else), mismatched (first
-  difference reported). [synthetic: replay_synthetic.rs PASS]
-- Lab scenario `dev/econ_scenario/x4mp_econ_lab`: 40 isolated factory clones (trade offers disabled, no
-  traders), resources half full or almost empty, cargo read every 7 s (even) / 61 s (odd).
+  generation-checked), checks vtables and writes records when something changed (`[X4LAN] ECONCAP ...`
+  in the debug log): W (ware: id, volume +0xc0, tags +0x100), D (method), F (frame), C (station times,
+  cargo), A (production allocation +0x940 and its valid flag +0x931), S (per operational storage module:
+  capacity and cargo tags of its storage defaults, own contents), O (offers: seller +0x10, buyer +0x18,
+  amounts, unit price, flags), V (reservations; linked entries add the order's amount and flags), M
+  (production modules). Data only: no writes, no engine calls, no new hook site (hooks.tsv row "VBI
+  slot 5 (no new site)"); readable-region checks are cached per frame (a VirtualQuery per field cost a
+  quarter of the MoveWorker in stress3). The format is documented in `capture.rs`. [synthetic:
+  test_econcap.c PASS]
+- Replay `x4mp-econ-replay [--all] <log>`: for each station record whose +0xa18 changed, the model runs
+  the catch-up from the previous record and must reproduce every module field bit for bit and the cargo.
+  Storage decisions use the captured allocation (0x424b90) and storage modules (0x356010: a module
+  accepts a ware when the tag sets intersect, 0x806e10; modules of one tag group pooled); captures
+  without them take the decision from the recording. Classes: exact, exact with the recorded retry draw
+  (one per module, checked to lie in [0, max)), exact with the recorded storage decision (old captures),
+  rng-dependent (several draws in one catch-up: undecidable from two snapshots), external (cargo changed
+  by something else, e.g. trades), mismatched (every difference listed with `--all`). [synthetic:
+  replay_synthetic.rs PASS, incl. allocation and physical-storage scenarios]
+- **Native results** [native, lane runs, timing not trustworthy]:
+
+| capture | catch-ups | exact | + recorded draw | + recorded storage | undecidable | external | mismatched |
+|---|---|---|---|---|---|---|---|
+| stress3 (12 trading clones; no A/S records) | 896 | 579 | 97 | 16 | 140 | 63 | 1: partial store of pending products (allocation) |
+| lab4 (40 isolated clones; A records, no S records) | 1722 | 646 | 387 | - | 517 | 0 | 172: products blocked by full physical storage |
+
+  Every mismatch so far was a storage decision; the production state machine, the catch-up order,
+  the efficiency factors and the retry arithmetic reproduced the engine everywhere else. lab4's
+  storage-full stations (two container wares filled to half of what fits each) led to the S records
+  and the physical check; lab5 (S records, 3 s short-gap readers) and trade1 (the stress scenario
+  with the full capture) are queued.
+- Lab scenario `dev/econ_scenario/x4mp_econ_lab`: 40 isolated factory clones (trade offers disabled,
+  no traders); each resource filled to 1 %, 50 % or 25 % of what fits; cargo read every 3 s (even)
+  and 61 s (odd stations).
 
 ## 10. Tests
 
