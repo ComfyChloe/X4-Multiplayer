@@ -130,6 +130,25 @@ def table(rows: list[dict]) -> str:
     return '\n'.join(out) + '\n'
 
 
+def growth(rows: list[dict]) -> str:
+    """ms per frame per system against ships alive: the log-log slope from the smallest to the largest run
+    (1 = linear in ships, 2 = quadratic) and the per-run values."""
+    import math
+    rows = sorted(rows, key=lambda r: r['ships_alive_mean'])
+    if len(rows) < 2:
+        return ''
+    names = ['sim'] + [name for name, _ in GROUPS if name != 'sim']
+    head = '| system | ' + ' | '.join(f"{r['variant']} ms" for r in rows) + ' | slope vs ships |'
+    out = [head, '|' + '---|' * (head.count('|') - 1)]
+    lo, hi = rows[0], rows[-1]
+    ratio = hi['ships_alive_mean'] / lo['ships_alive_mean'] if lo['ships_alive_mean'] else 0
+    for name in names:
+        a, b = lo['ms_per_frame'][name], hi['ms_per_frame'][name]
+        slope = math.log(b / a) / math.log(ratio) if a > 0 and b > 0 and ratio > 1 else float('nan')
+        out.append(f'| {name} | ' + ' | '.join(f"{r['ms_per_frame'][name]:.2f}" for r in rows) + f' | {slope:.2f} |')
+    return '\n'.join(out) + '\n'
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument('runs', nargs='+', type=Path)
@@ -145,6 +164,8 @@ def main(argv=None) -> int:
         print(json.dumps(rows, indent=2))
     else:
         sys.stdout.write(table(rows))
+        if len(rows) > 1:
+            sys.stdout.write('\n' + growth(rows))
     return 0 if rows else 1
 
 
