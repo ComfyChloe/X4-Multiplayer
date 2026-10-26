@@ -2,7 +2,7 @@
 
 This document contains protocol history as well as still-used interfaces. For
 current acceptance and the 7.4 combat/starting-world paths, begin with
-[the handoff](CONTINUE-HERE.txt) and [current source map](onboarding/03-CODE-AND-STATUS.txt),
+[the handoff](../CONTINUE-HERE.txt) and [current source map](../onboarding/03-CODE-AND-STATUS.txt),
 then inspect the relevant source and dated report. Historical FIRE2 descriptions
 alone do not describe the complete current shot-capture/health/visual stack.
 

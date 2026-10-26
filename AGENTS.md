@@ -19,7 +19,7 @@
   or embed their multiplayer sources, binaries or framework.
 - Engine instrumentation (runtime hooks, game-memory offsets, patched engine
   functions such as RNG or timestep) is permitted as opt-in work under
-  `ENGINE-INSTRUMENTATION.txt`. Never modify or redistribute X4 or Egosoft files;
+  `docs/ENGINE-INSTRUMENTATION.txt`. Never modify or redistribute X4 or Egosoft files;
   verify the exact build before patching and fail closed on any mismatch. Keep the
   `x4lan_net` transport free of hooks.
 - A visual NPC replica is not proof of shared combat, inventory or economy. State

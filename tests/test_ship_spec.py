@@ -85,11 +85,12 @@ class ShipSpecContractTests(unittest.TestCase):
             # fixture reports cannot become production validation records.
             source = Path(temp) / 'source'
             source.mkdir()
-            for name in ('VERSION.txt', 'VERSIONING.txt', 'extension', 'x4lan'):
+            for name in ('VERSION.txt', 'docs/VERSIONING.txt', 'extension', 'x4lan'):
                 if (ROOT / name).is_dir():
                     shutil.copytree(ROOT / name, source / name,
                                     ignore=shutil.ignore_patterns('__pycache__'))
                 else:
+                    (source / name).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(ROOT / name, source / name)
             (source / 'reports').mkdir()
             release = build_packages.version()

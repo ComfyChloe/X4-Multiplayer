@@ -20,10 +20,10 @@ environments. The shared documents are the portable handoff.
 Use this entry path; load additional documents for the assigned task:
 1. AGENTS.md: common project instructions. CLAUDE.md imports this file for Claude.
 2. CONTINUE-HERE.txt: current state, measured evidence and outstanding work.
-3. DEVELOPMENT.txt for setup, commands, packaging or machine changes.
-4. WORLD-SYNC-REQUIREMENTS.txt and relevant ARCHITECTURE.md sections before
+3. docs/DEVELOPMENT.txt for setup, commands, packaging or machine changes.
+4. docs/WORLD-SYNC-REQUIREMENTS.txt and relevant docs/ARCHITECTURE.md sections before
    gameplay/authority changes. Use distribution/NEXT-TEST.txt for the current test.
-5. INTERNET-HOSTING-ANALYSIS.txt when working on transport or dedicated hosting.
+5. docs/INTERNET-HOSTING-ANALYSIS.txt when working on transport or dedicated hosting.
 
 The shared-start implementation transfers one native starting save; acceptance and pending work are
 in CONTINUE-HERE.txt. Shared ongoing universe authority and persistence remain

@@ -32,7 +32,7 @@ built but not run inside Windows X4 at that time.
 All seven original save files retained SHA256, size and modification time. No test
 saves. The game/server stopped and the development fixture was archived. No automatic
 firing fixture is included in user packages. Historical raw logs keep their original
-wording. See TRADE_TESTS.txt for later market and user-reported two-computer evidence.
+wording. See docs/testing/TRADE_TESTS.txt for later market and user-reported two-computer evidence.
 
 This historical release covered one fixed station and energy cells. It did not yet
 integrate the normal trade menu. No full universe economy, cargo magnet, shared NPC
