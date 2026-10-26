@@ -31,6 +31,7 @@
 
 use std::fmt;
 
+pub mod check;
 pub mod mirror;
 pub mod read;
 pub mod write;

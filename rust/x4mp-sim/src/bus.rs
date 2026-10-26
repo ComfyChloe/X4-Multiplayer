@@ -210,7 +210,11 @@ impl Outbox {
     /// Spawns an entity at tree-order position `key`.
     pub fn spawn_at(&mut self, sector: SectorIx, uid: UniverseId, key: OrderKey, bundle: Bundle) {
         let seq = self.next_seq();
-        self.items.push(Item::Cmd { seq, order: self.order, cmd: Command::Spawn { sector, uid, key: Some(key), bundle } });
+        self.items.push(Item::Cmd {
+            seq,
+            order: self.order,
+            cmd: Command::Spawn { sector, uid, key: Some(key), bundle },
+        });
     }
 
     pub fn despawn(&mut self, entity: EntityId) {
