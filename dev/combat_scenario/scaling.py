@@ -79,7 +79,11 @@ def analyse(run: Path) -> dict:
     busy_ms = sum(p.get('simMeanMs', 0) * p.get('simFrames', 0) for p in probe[1:]) / busy_frames if busy_frames else 0.0
     busy_max = max((p.get('simMaxMs', 0) for p in probe[1:]), default=0.0)
     walk_frames = sum(w.get('frames', 0) for w in walk)
-    walk_ms = sum(w.get('walkMs', 0) * w.get('frames', 0) for w in walk) / walk_frames if walk_frames else 0.0
+    weighted = lambda key: sum(w.get(key, 0) * w.get('frames', 0) for w in walk) / walk_frames if walk_frames else 0.0
+    walk_ms = weighted('walkMs')
+    sector_max_ms = weighted('sectorMaxMs')
+    sector_sum_ms = weighted('sectorSumMs')
+    ships_moved = weighted('ships')
     stacks, windows = markers.combat_profile(lines)
     share, samples = shares(stacks)
     alive = [t.get('a', 0) + t.get('b', 0) for t in ticks]
@@ -104,6 +108,9 @@ def analyse(run: Path) -> dict:
         'busy_max_ms': round(busy_max, 1),
         'sim_ms': round(sim_ms, 2),
         'walk_ms': round(walk_ms, 2),
+        'sector_sum_ms': round(sector_sum_ms, 2),
+        'sector_max_ms': round(sector_max_ms, 2),
+        'ships_moved_per_frame': round(ships_moved, 1),
         'sim_us_per_ship': round(1000.0 * sim_ms / ships, 1) if ships else None,
         'profile_windows': len(windows),
         'samples': samples,
@@ -118,13 +125,14 @@ def analyse(run: Path) -> dict:
 
 def table(rows: list[dict]) -> str:
     cols = ['weapons', 'bullets', 'raycast', 'jolt', 'ai', 'events', 'walk']
-    head = ('| variant | ships spawned / alive | fps | frame ms (max) | sim ms/frame | game speed | '
+    head = ('| variant | ships spawned / alive | fps | frame ms (max) | sim ms/frame | walk ms (slowest sector) | game speed | '
             + ' | '.join(f'{c} %' for c in cols) + ' | sim us/ship | peak working set GB |')
     out = [head, '|' + '---|' * (head.count('|') - 1)]
     for r in rows:
         out.append(
             f"| {r['variant']} | {r['spawned']} / {r['ships_alive_mean']:.0f} | {r['fps']:.1f} | "
-            f"{r['frame_ms']:.1f} ({r['busy_max_ms']:.0f}) | {r['sim_ms']:.1f} | {r['game_speed']:.2f} | "
+            f"{r['frame_ms']:.1f} ({r['busy_max_ms']:.0f}) | {r['sim_ms']:.1f} | "
+            f"{r['walk_ms']:.1f} ({r['sector_max_ms']:.1f}) | {r['game_speed']:.2f} | "
             + ' | '.join(f"{100 * r['shares'][c]:.1f}" for c in cols)
             + f" | {r['sim_us_per_ship']} | {r['peak_working_set_gb']} |")
     return '\n'.join(out) + '\n'
