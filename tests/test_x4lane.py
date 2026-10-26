@@ -410,6 +410,18 @@ class HandoffChainTests(Temp):
         self.assertTrue(third.release())
         self.assertFalse(path.exists())
 
+    def test_a_name_twice_in_the_chain_is_consumed_one_entry_at_a_time(self):
+        path = self.window('frame-diet, combat, ecs-core, ecs-core, physics')
+        for run, agent in enumerate(['frame-diet', 'combat', 'ecs-core', 'ecs-core']):
+            lock = core.DirLock.adopt(path, {'agent': agent, 'run': f'r{run}'}, agent)
+            self.assertTrue(core.hand_on(lock, agent))
+        self.assertEqual(core.read_owner(path)['handoff'], 'physics')
+        self.assertEqual(core.read_owner(path)['handed_from'], 'ecs-core')
+        last = core.DirLock.adopt(path, {'agent': 'physics', 'run': 'r4'}, 'physics')
+        self.assertFalse(core.hand_on(last, 'physics'))
+        self.assertTrue(last.release())
+        self.assertFalse(path.exists())
+
     def test_members_that_do_not_adopt_in_time_are_skipped(self):
         path = self.window('frame-diet, combat, physics')
         self.assertIsNone(core.advance_handoff(path, now=10 ** 10))   # the first member is never timed
@@ -1079,6 +1091,71 @@ class ReserveTests(AdmissionTests):
         with self.assertRaises(core.UsageError):
             self.reserve('--slots', '99', '--owner', 'x')
         self.assertEqual(json.loads(self.paths.reserve.read_text())['owner'], 'x4mods-61')   # refused: unchanged
+
+
+class HoldTests(FakeWindows):
+    def setUp(self):
+        super().setUp()
+        import types
+        fake = x4lane.win()
+        fake.KillOnCloseJob = lambda: types.SimpleNamespace(assign=lambda h: None, terminate=lambda c=1: None,
+                                                            close=lambda: None)
+        self.saved_require = x4lane.require_windows
+        x4lane.require_windows = lambda: None
+
+    def tearDown(self):
+        x4lane.require_windows = self.saved_require
+        super().tearDown()
+
+    def window(self, chain):
+        path = self.paths.quiet_lock
+        path.mkdir()
+        (path / 'owner.txt').write_text(''.join(line + chr(10) for line in (
+            'agent: overhaul-lead', 'purpose: batched window', f'handoff: {chain}')))
+        return path
+
+    def hold(self, *argv, minutes='1'):
+        out = self.tmp / 'hold'
+        args = x4lane.parser().parse_args(['hold', '--agent', 'ecs-core', '--minutes', minutes, '--wait', '0',
+                                           '--collect', str(out), '--', sys.executable, '-c', *argv])
+        code = x4lane.cmd_hold(args, self.paths)
+        return code, json.loads((out / 'result.json').read_text())
+
+    def test_hold_runs_in_its_turn_and_hands_on(self):
+        path = self.window('ecs-core, physics')
+        code, result = self.hold("print('bench done')")
+        self.assertEqual((code, result['reason'], result['x4_free'], result['handed_on']), (0, 'completed', True, 'physics'))
+        self.assertIn('bench done', (self.tmp / 'hold' / 'hold-output.log').read_text())
+        owner = core.read_owner(path)
+        self.assertEqual((owner['handoff'], owner['handed_from']), ('physics', 'ecs-core'))
+
+    def test_hold_waits_for_its_turn_and_for_no_x4(self):
+        self.window('physics, ecs-core')
+        code, result = self.hold("print(1)")
+        self.assertEqual((code, result['reason']), (2, 'refused'))
+        self.assertIn('not my turn', result['message'])
+        import types
+        core.read_owner(self.paths.quiet_lock)
+        (self.paths.quiet_lock / 'owner.txt').write_text('agent: lead' + chr(10) + 'handoff: ecs-core' + chr(10))
+        self.others = [types.SimpleNamespace(pid=41, exe='C:/x/X4.exe', cmdline='-personalfolderid 45841', created=1)]
+        code, result = self.hold("print(1)")
+        self.assertEqual(code, 2)
+        self.assertIn('X4 still running', result['message'])
+
+    def test_x4_appearing_is_recorded_and_timeouts_kill_the_command(self):
+        import types
+        self.window('ecs-core')
+        appear = types.SimpleNamespace(pid=77, exe='C:/y/X4.exe', cmdline='-personalfolderid 45850', created=1)
+        calls = {'n': 0}
+
+        def processes(name='X4.exe'):
+            calls['n'] += 1
+            return [appear] if calls['n'] > 2 else []
+        x4lane.win().processes = processes
+        code, result = self.hold('import time; time.sleep(30)', minutes='0.05')
+        self.assertEqual((code, result['reason'], result['x4_free']), (3, 'timeout', False))
+        self.assertEqual(result['x4_seen'][0]['pid'], 77)
+        self.assertFalse(self.paths.quiet_lock.exists())               # last member: removed
 
 
 class ExitFiveTests(ProtectedTests):

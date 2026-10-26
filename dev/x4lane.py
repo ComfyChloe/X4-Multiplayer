@@ -2052,6 +2052,111 @@ def doctor(paths, fix=False, check_hash=True):
     return out
 
 
+HOLD_POLL_S = 10
+
+
+def cmd_hold(args, paths):
+    """Run a CPU-only command inside the quiet window: adopt quiet.lock like a --timing run (only
+    when this agent is first in the handoff chain and no X4.exe of any kind runs), run the command
+    with a time limit, record whether the PC stayed X4-free, then hand the lock on."""
+    require_windows()
+    core.check_agent(args.agent)
+    command = list(args.command)
+    if command and command[0] == '--':
+        command = command[1:]
+    if not command:
+        raise UsageError('hold needs a command after --')
+    if not 0 < args.minutes <= 60:
+        raise UsageError('--minutes must be 0..60')
+    stamp = time.strftime('%Y%m%d-%H%M%S')
+    outdir = Path(args.collect).resolve() if args.collect else paths.lanes / 'holds' / f'{stamp}-{args.agent}'
+    outdir.mkdir(parents=True, exist_ok=True)
+    result = {'tool': 'dev/x4lane.py hold', 'tool_commit': tool_version(), 'agent': args.agent, 'command': command,
+              'minutes': args.minutes, 'requested_at': core.now_iso(), 'x4_free': None, 'x4_seen': [],
+              'exit_code': None, 'reason': None, 'handed_on': None}
+    run = f'hold-{stamp}-{args.agent}-{os.getpid()}'
+    deadline, last, lock = time.monotonic() + max(0.0, args.wait), None, None
+    while lock is None:
+        note = None
+        if not paths.quiet_lock.exists():
+            note = 'no quiet window (quiet.lock) is open'
+        else:
+            core.advance_handoff(paths.quiet_lock)
+            chain = core.handoff_chain(core.read_owner(paths.quiet_lock))
+            running = x4_processes()
+            if not chain or chain[0] != args.agent:
+                note = f'not my turn (handoff: {", ".join(chain) or "-"})'
+            elif running:
+                note = f'{len(running)} X4 still running: {[describe_x4(p) for p in running]}'
+            else:
+                try:
+                    lock = core.DirLock.adopt(paths.quiet_lock, dict(
+                        lock_info(args.agent, f'x4lane hold: {" ".join(command)[:120]}', run),
+                        reason='CPU-only work in the quiet window (no X4)'), args.agent)
+                    break
+                except core.LockBusy as error:
+                    note = str(error)
+        if time.monotonic() + HOLD_POLL_S > deadline:
+            result.update(reason='refused', message=f'--wait elapsed: {note}')
+            core.write_json(outdir / 'result.json', result)
+            print(f'X4LANE HOLD refused: {note}')
+            return core.EXIT['refused']
+        if note != last:
+            print(f'x4lane: waiting ({note})', flush=True)
+            last = note
+        time.sleep(HOLD_POLL_S)
+    result['handed_from'] = lock.info.get('handed_from')
+    result['started_at'] = core.now_iso()
+    t0 = time.monotonic()
+    log = open(outdir / 'hold-output.log', 'wb')
+    job = win().KillOnCloseJob()
+    proc = None
+    try:
+        try:
+            proc = subprocess.Popen(command, stdin=subprocess.DEVNULL, stdout=log, stderr=subprocess.STDOUT)
+        except OSError as error:
+            result.update(reason='error', message=f'could not start the command: {error}')
+        if proc is not None:
+            if hasattr(proc, '_handle'):
+                job.assign(int(proc._handle))                      # its children die with it too
+            next_refresh = 0.0
+            while proc.poll() is None:
+                now = time.monotonic()
+                for x4 in x4_processes():
+                    if x4.pid not in {e['pid'] for e in result['x4_seen']}:
+                        result['x4_seen'].append(dict(describe_x4(x4), seen_s=round(now - t0, 1)))
+                if now >= next_refresh:
+                    next_refresh = now + 60
+                    lock.refresh()
+                if now - t0 > args.minutes * 60:
+                    job.terminate(1)
+                    proc.kill()
+                    proc.wait(timeout=30)
+                    result.update(reason='timeout', message=f'killed after {args.minutes:g} min')
+                    break
+                time.sleep(2)
+            result['exit_code'] = proc.returncode
+            result['reason'] = result['reason'] or 'completed'
+    finally:
+        job.close()
+        log.close()
+        result['finished_at'] = core.now_iso()
+        result['seconds'] = round(time.monotonic() - t0, 1)
+        result['x4_free'] = not result['x4_seen']
+        rest = lock.info.get('then', '')
+        if core.hand_on(lock, args.agent):
+            result['handed_on'] = rest
+        else:
+            lock.release()
+            result['handed_on'] = None
+        core.write_json(outdir / 'result.json', result)
+    print(f"X4LANE HOLD reason={result['reason']} exit={result['exit_code']} x4_free={result['x4_free']} "
+          f"seconds={result['seconds']} handed_on={result['handed_on']} outdir={outdir}")
+    if result['reason'] == 'timeout':
+        return core.EXIT['timeout']
+    return result['exit_code'] if result['exit_code'] is not None else core.EXIT['error']
+
+
 def cmd_reserve(args, paths):
     """Reserve X4 slots for the protected clients while they are down (rewrite-coord/reserve.json).
     Admission counts every reserved slot that no protected X4 fills as occupied, plus RESERVE_SLOT_GB
@@ -2502,6 +2607,12 @@ def parser():
     q.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S)
     q.add_argument('--allow-workshop', action='store_true')
     q.add_argument('--no-repin', action='store_true', help='keep the 45841 profile gates (default: re-pin per lane)')
+    s = sub.add_parser('hold', help='run a CPU-only command in the quiet window (handoff chain member)')
+    s.add_argument('--agent', required=True)
+    s.add_argument('--minutes', type=float, default=15.0, help='time limit; the command is killed after it')
+    s.add_argument('--wait', type=float, default=3600.0, help='seconds to wait for this agent\'s turn')
+    s.add_argument('--collect', help='result folder (default X4Mods/lanes/holds/<time>-<agent>)')
+    s.add_argument('command', nargs=argparse.REMAINDER, help='-- CMD ARGS...')
     s = sub.add_parser('reserve', help='reserve X4 slots for the protected clients (or --clear)')
     s.add_argument('--slots', type=int)
     s.add_argument('--owner')
@@ -2559,7 +2670,7 @@ def main(argv=None):
     handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'session': cmd_session,
                 'stop': cmd_stop, 'queue': cmd_queue, 'restore': cmd_restore, 'unlock': cmd_unlock,
                 'make-overlay': cmd_make_overlay, 'publish-release': cmd_publish_release, 'doctor': cmd_doctor,
-                'canary': cmd_canary, 'observe': cmd_observe, 'reserve': cmd_reserve}
+                'canary': cmd_canary, 'observe': cmd_observe, 'reserve': cmd_reserve, 'hold': cmd_hold}
     try:
         return handlers[args.command](args, paths)
     except LaneError as error:
