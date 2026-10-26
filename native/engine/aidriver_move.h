@@ -523,6 +523,22 @@ typedef struct {
 } ad_event_buffer;
 static const ad_event_buffer *ad_evbuf;
 enum { AD_OP_POST = 1, AD_OP_CANCEL = 2 };   /* walkpar WP_OP_POST / WP_OP_CANCEL */
+/* Task key of a bucket: the sector's UniverseID (walkpar's per-sector task convention); the keyless
+   (serial) bucket gets a reserved key. 0 means "no scope" in walkpar. */
+#define AD_TASK_SERIAL 0xfffffffffffffffeull
+static uint64_t ad_task_key(const void *sector) { return sector ? U64(sector, AD_COMP_ID) : AD_TASK_SERIAL; }
+
+#ifdef X4LAN_WALKPAR_H
+/* Integrated build (walkpar.h is included before this file): bind the walk agent's one buffer. Its
+   scopes defer posts only while walkpar runs in WP_REPLAY (which also defers the walk's own events). */
+static const ad_event_buffer *ad_walkpar_buffer(void) {
+    static ad_event_buffer b;
+    const wp_api *w = walkpar_api();
+    b.scope_begin = w->scope_begin; b.scope_end = w->scope_end; b.replay_tasks = w->replay_tasks;
+    b.buffer_count = w->buffer_count; b.buffer_op = w->buffer_op;
+    return &b;
+}
+#endif
 
 /* Read-vector position of the context that issued each buffered op of the current pass (ops are
    appended in rounds execution order, so the buffer index is the rounds order of the op). */
@@ -694,7 +710,8 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
     size_t k = 0;
     for (uint32_t b = 0; b < nb; ++b) {
         ad_rd.cur_bucket = b;
-        if (ad_evbuf) ad_evbuf->scope_begin((uint64_t)b + 1);
+        ad_rd.tasks[b] = ad_task_key(ad_rd.bkey[b]);
+        if (ad_evbuf) ad_evbuf->scope_begin(ad_rd.tasks[b]);
         for (; k < total && ad_rd.bucket[ad_rd.order[k]] == b; ++k) {
             size_t i = ad_rd.order[k];
             ad_rd.cur_pos = i;
@@ -717,8 +734,7 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
             unsigned c = ad_post_cancel_conflicts(before);
             if (c) { ad.win.cmp_post_cancel += c; ad_rd.pass_dirty = 1; }
         }
-        for (uint32_t b = 0; b < nb; ++b) ad_rd.tasks[b] = (uint64_t)b + 1;
-        ad_evbuf->replay_tasks(ad_rd.tasks, (int)nb);
+        ad_evbuf->replay_tasks(ad_rd.tasks, (int)nb);   /* bucket order = rounds execution order */
         ad.win.deferred += before;
     }
     if (compare) { if (ad_rd.pass_dirty) ++ad.win.cmp_passes_dirty; else ++ad.win.cmp_passes_clean; }

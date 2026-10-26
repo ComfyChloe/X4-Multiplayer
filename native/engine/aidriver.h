@@ -706,6 +706,10 @@ static const char *ad_install(int mode, int verify_code) {
         ad_resolve_engine();
         ad.engine_ok = 1;
     }
+#ifdef X4LAN_WALKPAR_H
+    /* integrated build: rounds defer through the walk agent's one buffer (Q4/Q7) */
+    ad_evbuf = mode >= AD_ROUNDS ? ad_walkpar_buffer() : NULL;
+#endif
     ad.mode = mode;
     ad.driver_reason = NULL;
     return NULL;
