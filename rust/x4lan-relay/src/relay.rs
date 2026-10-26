@@ -22,7 +22,7 @@ pub struct Relay {
 }
 
 #[cfg(windows)]
-fn disable_connreset(socket: &UdpSocket) -> std::io::Result<()> {
+pub(crate) fn disable_connreset(socket: &UdpSocket) -> std::io::Result<()> {
     use std::os::windows::io::AsRawSocket;
     #[link(name = "ws2_32")]
     extern "system" {

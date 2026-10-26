@@ -12,4 +12,5 @@ pub mod pynum;
 pub mod relay;
 pub mod rng;
 pub mod session;
+pub mod v2;
 pub mod wire;

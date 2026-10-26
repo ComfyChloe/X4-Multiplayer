@@ -1,0 +1,11 @@
+[package]
+name = "x4mp-proto"
+description = "X4 multiplayer wire protocol v2: N players, frame-stamped snapshots, owners, sector channels and relevance tiers"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "x4mp_proto"
+crate-type = ["rlib"]

@@ -20,6 +20,8 @@ but native game evidence is tracked separately in `reports/dedicated-server-wsl.
 | `x4lan-relay/src/bin/x4lan-dedicated.rs` | unattended authority CLI (`run/status/pause/resume/stop`) |
 | `x4lan-replay.rs` | deterministic replay driver used by the parity harness |
 | `parity/` | differential harnesses (Python) comparing Python and Rust |
+| `x4mp-proto/` | rlib: wire protocol v2 (N players, frame stamps, owners, sector channels, relevance scheduler); see `x4mp-proto/PROTOCOL-V2.md` |
+| `x4lan-relay/src/v2/` | opt-in v2 relay mode, selected only by `"protocol": "v2"` in session.json; v1 behaviour unchanged |
 
 The workspace has **no third-party crates**. Like the Python relay (standard library
 only), it depends on the Rust standard library and the OS (`bcrypt.dll`/`/dev/urandom`

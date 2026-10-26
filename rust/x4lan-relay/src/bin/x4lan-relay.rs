@@ -8,6 +8,8 @@ use std::time::{Duration, Instant};
 use x4lan_relay::json::Json;
 use x4lan_relay::relay::Relay;
 use x4lan_relay::session::{LeaseSource, Level, Session};
+use x4lan_relay::v2::net::V2Relay;
+use x4lan_relay::v2::{self as v2, V2Session};
 
 const USAGE: &str = "usage: x4lan-relay [-h] [--bind BIND] [--port PORT] [--token TOKEN] [--build BUILD]\n                   [--bubble BUBBLE] [--session SESSION] [--bubble-actions] [--trading]";
 const HELP: &str = "Two-slot UDP relay (Rust port of x4lan.host).
@@ -154,6 +156,12 @@ fn main() -> ExitCode {
         eprintln!("x4lan-relay: port must be 0-65535");
         return ExitCode::from(1);
     };
+    // Protocol v2 is selected only by an explicit `"protocol": "v2"` in session.json;
+    // every other configuration runs the unchanged version-1 relay below.
+    if x4lan_relay::v2::config::selects_v2(&config) {
+        let bind = args.bind.clone().unwrap_or_else(|| "127.0.0.1".into());
+        return run_v2(&config, &token, &build, &bubble, &bind, port);
+    }
     let mut level = if config.get("coop").is_some_and(Json::truthy) {
         Level::Coop
     } else if args.trading {
@@ -204,5 +212,54 @@ fn main() -> ExitCode {
             last_status = status;
         }
         std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// The opt-in protocol-v2 relay (N players, sector channels, intents).
+fn run_v2(config: &Json, token: &str, build: &str, world: &str, bind: &str, port: u16) -> ExitCode {
+    let settings = match v2::config::from_session(config, token, build, world) {
+        Ok(settings) => settings,
+        Err(message) => {
+            eprintln!("x4lan-relay: {message}");
+            return ExitCode::from(1);
+        }
+    };
+    let session = match V2Session::new(settings, v2::LeaseSource::Os) {
+        Ok(session) => session,
+        Err(message) => {
+            eprintln!("x4lan-relay: {message}");
+            return ExitCode::from(1);
+        }
+    };
+    for line in session.feature_report() {
+        println!("{line}");
+    }
+    let max_players = session.config().max_players;
+    let mut relay = match V2Relay::bind(bind, port, session) {
+        Ok(relay) => relay,
+        Err(e) => {
+            eprintln!("OSError: {e}");
+            return ExitCode::from(1);
+        }
+    };
+    println!(
+        "X4 multiplayer relay (protocol v2) on {bind}:{port}; build={build}; world={world}; max_players={max_players}"
+    );
+    let start = Instant::now();
+    let mut last_status = String::new();
+    loop {
+        relay.step(start.elapsed().as_micros() as u64);
+        let s = &relay.session;
+        let players: Vec<String> = s.players().iter().map(|p| p.to_string()).collect();
+        let status = format!(
+            "authority={} players=[{}]",
+            if s.authority_connected() { "connected" } else { "waiting" },
+            players.join(",")
+        );
+        if status != last_status {
+            println!("{status}");
+            last_status = status;
+        }
+        std::thread::sleep(Duration::from_millis(1));
     }
 }

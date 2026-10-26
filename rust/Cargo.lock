@@ -9,7 +9,14 @@ version = "7.5.0"
 [[package]]
 name = "x4lan-relay"
 version = "7.5.0"
+dependencies = [
+ "x4mp-proto",
+]
 
 [[package]]
 name = "x4mp-agent"
+version = "7.5.0"
+
+[[package]]
+name = "x4mp-proto"
 version = "7.5.0"

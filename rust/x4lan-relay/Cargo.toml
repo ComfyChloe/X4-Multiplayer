@@ -6,6 +6,9 @@ edition.workspace = true
 publish.workspace = true
 rust-version.workspace = true
 
+[dependencies]
+x4mp-proto = { path = "../x4mp-proto" }
+
 [lib]
 name = "x4lan_relay"
 
