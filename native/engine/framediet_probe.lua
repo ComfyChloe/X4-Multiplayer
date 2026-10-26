@@ -1,7 +1,7 @@
 -- Opt-in server frame diet (dedicated server mode) for an explicitly isolated test installation.
 -- Inert unless X4LAN_FRAMEDIET_MODE is set; see reports/REWRITE-FRAME-DIET.md.
 -- X4LAN_FRAMEDIET_MODE        'diet' (skip presentation), 'pass' (wrappers inert), 'audit' (measure)
--- X4LAN_FRAMEDIET_SITES       default 'server' (= ui_scenes,draw); also ui_render, camera, all
+-- X4LAN_FRAMEDIET_SITES       default 'server' (= ui_scenes,draw); also ui_render, camera, all, rng_split
 -- X4LAN_FRAMEDIET_PERIOD      every Nth frame presents everything (default 0 = never)
 -- X4LAN_FRAMEDIET_AUDIT_EVERY frames between component digests in audit mode (default 30)
 -- X4LAN_FRAMEDIET_DIGEST      components per digest (default 16384)
@@ -30,7 +30,7 @@ local abEvery=mode=='diet' and X4LAN_FRAMEDIET_AB_S or nil
 local cycle={}
 for entry in string.gmatch(abEvery and X4LAN_FRAMEDIET_AB_CYCLE or '','[^;]+') do cycle[#cycle+1]=entry end
 local owner,finished,armAt,nextTry,nextReport,nextPhase,phase,cycleIndex
-local SITE_NAMES={{1,'ui_scenes'},{2,'ui_render'},{4,'camera'},{8,'draw'}}
+local SITE_NAMES={{1,'ui_scenes'},{2,'ui_render'},{4,'camera'},{8,'draw'},{16,'rng_split'}}
 local function siteText(mask)
  local names={}
  for _,pair in ipairs(SITE_NAMES) do
@@ -43,8 +43,11 @@ local function report(s,now)
   s.mode,siteText(s.sites or 0),phase or s.mode,now,s.frames,s.loading_frames,s.present_frames)..
   string.format(' scenesCalls=%d scenesSkipped=%d uiRenderCalls=%d uiRenderSkipped=%d cameraCalls=%d cameraSkipped=%d drawOwned=%d drawSet=%d drawReapplied=%d',
   s.ui_scenes_calls,s.ui_scenes_skipped,s.ui_render_calls,s.ui_render_skipped,s.camera_calls,s.camera_skipped,
-  s.draw_owned,s.draw_set,s.draw_reapplied))
+  s.draw_owned,s.draw_set,s.draw_reapplied)..
+  string.format(' splitCalls=%d splitRenderSteps=%d',s.split_calls or 0,s.split_render_steps or 0))
  if s.mode~='audit' then return end
+ DebugError(string.format('[X4LAN] FRAMEDIET_FRAMES audited=%d rngSteps=%d rngUnknown=%d ids=%d',
+  s.frame_audited or 0,s.frame_rng_steps or 0,s.frame_rng_unknown or 0,s.frame_ids or 0))
  for _,row in ipairs({'ui_scenes','ui_render','camera','control'}) do
   local function f(k) return s[row..'_'..k] or 0 end
   if f('audited')>0 or f('digests')>0 then

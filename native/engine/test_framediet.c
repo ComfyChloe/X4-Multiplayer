@@ -53,6 +53,14 @@ static uintptr_t fake_client_render(void *self) {
     return 0;
 }
 static uintptr_t fake_camera_render(void *self) { (void)self; ++camera_renders; apply(&camera_fx); return 0; }
+static int game_renders;
+/* GameRender::Move shape: render banks UI and GameClient through their vtable entries. */
+static uintptr_t fake_game_render(void *self) {
+    ++game_renders;
+    ((fd_fn1)*entry_of(VS_UI_RENDER))(self);
+    ((fd_fn1)*entry_of(VS_CLIENT_RENDER))(self);
+    return 0;
+}
 static void fake_spin(double us) { (void)us; ++spins; apply(&control_fx); }
 
 static void register_component(uint64_t slot, unsigned char *component, uint16_t gen) {
@@ -66,7 +74,7 @@ static void register_component(uint64_t slot, unsigned char *component, uint16_t
 static void reset_counts(void) {
     memset(&walk_fx, 0, sizeof(walk_fx)); memset(&camera_fx, 0, sizeof(camera_fx));
     memset(&render_fx, 0, sizeof(render_fx)); memset(&control_fx, 0, sizeof(control_fx));
-    scene_walks = scene_manager_calls = ui_renders = client_renders = camera_renders = spins = 0;
+    scene_walks = scene_manager_calls = ui_renders = client_renders = camera_renders = spins = game_renders = 0;
 }
 
 /* movabs rax, target; jmp rax: the fake image's "engine functions" jump to the fakes. */
@@ -82,7 +90,7 @@ static void setup_engine(void) {
     fake_table[3] = fake_table;  /* GameClient present */
     *(void ***)(image + VBI_RVA) = fake_table;
     void *fakes[VS_COUNT] = {(void *)fake_scene_manager, (void *)fake_scene_walk, (void *)fake_ui_render,
-                             (void *)fake_client_render, (void *)fake_camera_render};
+                             (void *)fake_client_render, (void *)fake_camera_render, (void *)fake_game_render};
     for (int k = 0; k < VS_COUNT; ++k) { stub(x4_framediet_vtables[k].fn, fakes[k]); *entry_of(k) = fn_of(k); }
     FlushInstructionCache(GetCurrentProcess(), image, X4_IMAGE_SIZE);
     *(uint64_t *)(image + RENDER_FLAGS_RVA) = 0x20;          /* noshadows */
@@ -111,12 +119,11 @@ static void disarm_all(void) {
     fd_current = NULL;
 }
 
-/* One MoveWorker frame: slot 2 guard, slot 6 scene update, slot 10 UI and camera render banks. */
+/* One MoveWorker frame: slot 2 guard, slot 6 scene update, slot 10 GameRender::Move (UI and camera banks). */
 static void frame(void) {
     fd_slot_move(&fd_hook);
     ((fd_fn1)*entry_of(VS_SCENE_MANAGER))(NULL);
-    ((fd_fn1)*entry_of(VS_UI_RENDER))(NULL);
-    ((fd_fn1)*entry_of(VS_CLIENT_RENDER))(NULL);
+    ((fd_fn1)*entry_of(VS_GAME_RENDER))(NULL);
 }
 
 static volatile LONG other_done;
@@ -143,6 +150,7 @@ int main(void) {
         assert(parse_sites("server", &s) && s == (FD_UI_SCENES | FD_DRAW));
         assert(parse_sites("ui_scenes,camera", &s) && s == (FD_UI_SCENES | FD_CAMERA));
         assert(parse_sites("all", &s) && s == FD_ALL);
+        assert(parse_sites("all,rng_split", &s) && s == (FD_ALL | FD_RNG_SPLIT));
         assert(parse_sites("", &s) && s == 0);
         assert(!parse_sites("ui_scene", &s) && !parse_sites("draw,bogus", &s));
         assert(parse_mode("diet", &m) && m == FD_DIET && parse_mode("pass", &m) && m == FD_PASS);
@@ -312,6 +320,9 @@ int main(void) {
         assert(r->audited == 8 && r->digests == 2 && r->digest_changed == 0 && r->rng_calls == 0);
         assert(k->digests == 2 && spins == 2 && k->digest_changed == 2 && k->histogram[0x70 / 8] == 2);
         assert(fd_state.st[ST_CAMERA].skipped == 0);
+        /* Whole frames: 7 complete frames measured (the first slot 2 only primes); 10 steps and 4 IDs
+           from the two camera renders per frame. */
+        assert(fd_state.frame_audited == 7 && fd_state.frame_rng_steps == 70 && fd_state.frame_ids == 28);
         char words[128];
         top_words(c, words, sizeof(words));
         assert(!strcmp(words, "0x1e8:2"));
@@ -327,6 +338,43 @@ int main(void) {
     }
     disarm_all();
     puts("PASS: audit measures RNG steps, ID insertions, events and component writes per region, control window");
+
+    /* rng_split: slot 10 runs on a private stream; the simulation stream never sees its draws. */
+    setup_engine();
+    assert(!arm(FD_PASS, FD_CAMERA | FD_RNG_SPLIT, 0, 0, 0));
+    camera_fx.rng_steps = 5;
+    {
+        uint64_t sim = *(uint64_t *)(fake_tls + TLS_RNG);
+        for (int f = 0; f < 4; ++f) frame();
+        assert(*(uint64_t *)(fake_tls + TLS_RNG) == sim);       /* untouched by 40 render draws */
+        assert(game_renders == 4 && camera_renders == 8 && fd_state.split_calls == 4);
+        assert(fd_state.split_render_steps == 40);
+        uint64_t expect = FD_RENDER_RNG_SEED;
+        for (int i = 0; i < 40; ++i) expect = rng_step(expect);
+        assert(fd_render_rng == expect);
+        /* Simulation draws outside slot 10 still advance the simulation stream. */
+        *(uint64_t *)(fake_tls + TLS_RNG) = rng_step(sim);
+        frame();
+        assert(*(uint64_t *)(fake_tls + TLS_RNG) == rng_step(sim));
+        /* diet with camera skipped + split: no render draws at all, simulation stream identical. */
+        fd_state.mode = FD_DIET;
+        uint64_t render = fd_render_rng;
+        frame();
+        assert(fd_render_rng == render && *(uint64_t *)(fake_tls + TLS_RNG) == rng_step(sim));
+        assert(fd_state.st[ST_CAMERA].skipped == 2);
+    }
+    disarm_all();
+    /* Without the split the same frames move the simulation stream. */
+    setup_engine();
+    assert(!arm(FD_PASS, FD_CAMERA, 0, 0, 0));
+    camera_fx.rng_steps = 5;
+    {
+        uint64_t sim = *(uint64_t *)(fake_tls + TLS_RNG);
+        frame();
+        assert(rng_distance(sim, *(uint64_t *)(fake_tls + TLS_RNG)) == 10);
+    }
+    disarm_all();
+    puts("PASS: rng_split keeps view-dependent slot 10 draws off the simulation stream");
 
     /* Histogram summary orders by count and lists at most six words. */
     {

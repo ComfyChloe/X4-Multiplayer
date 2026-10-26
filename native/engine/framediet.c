@@ -23,6 +23,11 @@
  *   draw       RenderFlags bit disable_rendering (0x8000000 of qword 0x6adfa30 and its staged
  *              copy 0x6adfa38), an engine debug flag tested only by the main thread's
  *              RenderPreviousFrame (0xfa007a). Main thread / GPU only, no MoveWorker effect.
+ *   rng_split  GameRender::Move (VBI slot 10, 0x121c1f0) runs with its own thread-RNG state: the
+ *              MoveWorker's TLS+0x318 is swapped with a private render stream around the call, so
+ *              view-dependent draws of the render walk never reach the simulation stream. Applies
+ *              in every mode (it is a determinism fix, not a skip); effect objects the render walk
+ *              creates still take UniverseIDs.
  * The per-frame guard runs in empty VBI slot 2 (before GameClient::Move): it re-verifies the
  * table and every installed entry and disarms everything on any change.
  *
@@ -89,14 +94,14 @@ API(void *, luaL_checkudata, (lua_State *, int, const char *));
 #define RNG_STEP_BOUND 65536u
 #define HISTOGRAM_WORDS (COMPONENT_WINDOW / 8)
 
-enum { FD_UI_SCENES = 1, FD_UI_RENDER = 2, FD_CAMERA = 4, FD_DRAW = 8, FD_ALL = 15 };
+enum { FD_UI_SCENES = 1, FD_UI_RENDER = 2, FD_CAMERA = 4, FD_DRAW = 8, FD_RNG_SPLIT = 16, FD_ALL = 15 };
 enum { FD_PASS = 0, FD_DIET = 1, FD_AUDIT = 2 };
 /* Statistics rows: the three MoveWorker regions plus the control window. */
 enum { ST_UI_SCENES, ST_UI_RENDER, ST_CAMERA, ST_CONTROL, ST_COUNT };
 static const char *const st_names[ST_COUNT] = {"ui_scenes", "ui_render", "camera", "control"};
 /* Wrapped virtuals, in x4_framediet_vtables order (signatures.py FRAMEDIET_VTABLE_ENTRIES). */
-enum { VS_SCENE_MANAGER, VS_SCENE_WALK, VS_UI_RENDER, VS_CLIENT_RENDER, VS_CAMERA_RENDER, VS_COUNT };
-static const int vs_site[VS_COUNT] = {FD_UI_SCENES, FD_UI_SCENES, FD_UI_RENDER, FD_CAMERA, FD_CAMERA};
+enum { VS_SCENE_MANAGER, VS_SCENE_WALK, VS_UI_RENDER, VS_CLIENT_RENDER, VS_CAMERA_RENDER, VS_GAME_RENDER, VS_COUNT };
+static const int vs_site[VS_COUNT] = {FD_UI_SCENES, FD_UI_SCENES, FD_UI_RENDER, FD_CAMERA, FD_CAMERA, FD_RNG_SPLIT};
 
 typedef struct {
     uint64_t calls, skipped, passed;
@@ -111,6 +116,9 @@ typedef struct {
 typedef struct {
     uint64_t generation;
     uint64_t frames, loading_frames, present_frames, draw_set, draw_reapplied;
+    uint64_t split_calls, split_render_steps;   /* rng_split: slot 10 calls, render-stream steps */
+    /* audit: whole MoveWorker frames (slot 2 to slot 2) on the simulation stream and ID map */
+    uint64_t frame_audited, frame_rng_steps, frame_rng_unknown, frame_ids;
     int armed, mode, sites, installed, period, audit_every;
     unsigned digest_max;
     const char *reason;
@@ -137,6 +145,10 @@ static void *fd_wrapper[VS_COUNT];
 static int fd_draw_owned;
 static int fd_ctx_scenes, fd_ctx_camera;
 static int fd_present;           /* this frame runs every presentation site (period) */
+#define FD_RENDER_RNG_SEED 0x52454e4445525631ull   /* "RENDERV1": private slot 10 stream */
+static uint64_t fd_render_rng = FD_RENDER_RNG_SEED;
+static uint64_t fd_frame_rng, fd_frame_ids;   /* audit: values at the previous slot 2 entry */
+static int fd_frame_valid;
 static int fd_digest_row = -1;   /* statistics row whose region gets the digest this frame */
 static unsigned fd_rotation;
 static uint64_t fd_digest_cursor;
@@ -548,6 +560,27 @@ static uintptr_t fd_camera_render(void *self) {
     return original(self);
 }
 
+/* GameRender::Move (VBI slot 10): with rng_split, the whole slot runs on the private render stream. */
+static uintptr_t fd_game_render(void *self) {
+    fd_fn1 original = (fd_fn1)fd_orig[VS_GAME_RENDER];
+    fd_owner *o = fd_engaged_owner();
+    unsigned char *tls;
+    if (!o || !(o->sites & FD_RNG_SPLIT) || !(tls = fd_tls())) return original(self);
+    volatile uint64_t *state = (volatile uint64_t *)(tls + TLS_RNG);
+    uint64_t simulation = *state, render = fd_render_rng;
+    *state = render;
+    uintptr_t r = original(self);
+    uint64_t after = *state;
+    *state = simulation;
+    fd_render_rng = after;
+    ++o->split_calls;
+    if (after != render) {
+        uint64_t n = rng_distance(render, after);
+        if (n <= RNG_STEP_BOUND) o->split_render_steps += n;
+    }
+    return r;
+}
+
 /* VBI slot 2, every MoveWorker frame before GameClient::Move. */
 static void fd_slot_move(fd_handler *self) {
     (void)self;
@@ -557,8 +590,25 @@ static void fd_slot_move(fd_handler *self) {
     for (int k = 0; k < VS_COUNT; ++k)
         if (fd_entry[k] && *fd_entry[k] != fd_wrapper[k]) { fd_disarm("vtable entry changed"); return; }
     fd_ctx_scenes = fd_ctx_camera = 0;
-    if (fd_loading()) { ++o->loading_frames; fd_digest_row = -1; return; }
+    if (fd_loading()) { ++o->loading_frames; fd_digest_row = -1; fd_frame_valid = 0; return; }
     ++o->frames;
+    if (o->mode == FD_AUDIT) {
+        /* Whole previous frame: every simulation-stream draw and ID insertion, for scale. */
+        unsigned char *tls = fd_tls();
+        unsigned char *map = *(unsigned char **)(image + ID_MAP_PTR_RVA);
+        if (tls && map) {
+            uint64_t rng = *(volatile uint64_t *)(tls + TLS_RNG), ids = *(volatile uint64_t *)(map + ID_MAP_INSERTS);
+            if (fd_frame_valid) {
+                uint64_t n = rng_distance(fd_frame_rng, rng);
+                ++o->frame_audited;
+                if (n > RNG_STEP_BOUND) ++o->frame_rng_unknown; else o->frame_rng_steps += n;
+                o->frame_ids += ids - fd_frame_ids;
+            }
+            fd_frame_rng = rng; fd_frame_ids = ids; fd_frame_valid = 1;
+        }
+    } else {
+        fd_frame_valid = 0;
+    }
     fd_present = o->period > 0 && o->frames % (uint64_t)o->period == 0;
     if (fd_present) ++o->present_frames;
     if (o->mode == FD_DIET && (o->sites & FD_DRAW)) fd_draw_hold(o); else fd_draw_release();
@@ -588,7 +638,7 @@ static void fd_slot_move(fd_handler *self) {
 
 static int fd_install(int sites) {
     void *wrappers[VS_COUNT] = {(void *)fd_scene_manager, (void *)fd_scene_walk, (void *)fd_ui_render,
-                                (void *)fd_client_render, (void *)fd_camera_render};
+                                (void *)fd_client_render, (void *)fd_camera_render, (void *)fd_game_render};
     void **entries[VS_COUNT] = {0};
     for (int k = 0; k < VS_COUNT; ++k) {
         if (!(sites & vs_site[k])) continue;
@@ -622,6 +672,7 @@ static int parse_sites(const char *text, int *out) {
         else if (n == 9 && !strncmp(p, "ui_render", n)) sites |= FD_UI_RENDER;
         else if (n == 6 && !strncmp(p, "camera", n)) sites |= FD_CAMERA;
         else if (n == 4 && !strncmp(p, "draw", n)) sites |= FD_DRAW;
+        else if (n == 9 && !strncmp(p, "rng_split", n)) sites |= FD_RNG_SPLIT;
         else if (n == 6 && !strncmp(p, "server", n)) sites |= FD_UI_SCENES | FD_DRAW;   /* behaviour-identical set */
         else if (n == 3 && !strncmp(p, "all", n)) sites |= FD_ALL;
         else if (n) return 0;
@@ -691,6 +742,8 @@ static const char *fd_arm(uint64_t generation, int mode, int sites, int period, 
     fd_digest_row = -1;
     fd_present = 0;
     fd_draw_owned = 0;
+    fd_render_rng = FD_RENDER_RNG_SEED;
+    fd_frame_valid = 0;
     if (InterlockedCompareExchangePointer((void *volatile *)&table[VBI_SLOT], &fd_hook, NULL))
         return "VBI slot changed during registration";
     *o = fresh;
@@ -815,6 +868,12 @@ static int stats(lua_State *L) {
     number_field(L, "draw_owned", o == fd_current && fd_draw_owned);
     number_field(L, "draw_set", (double)o->draw_set);
     number_field(L, "draw_reapplied", (double)o->draw_reapplied);
+    number_field(L, "split_calls", (double)o->split_calls);
+    number_field(L, "split_render_steps", (double)o->split_render_steps);
+    number_field(L, "frame_audited", (double)o->frame_audited);
+    number_field(L, "frame_rng_steps", (double)o->frame_rng_steps);
+    number_field(L, "frame_rng_unknown", (double)o->frame_rng_unknown);
+    number_field(L, "frame_ids", (double)o->frame_ids);
     number_field(L, "digest_max", o->digest_max);
     string_field(L, "mode", modes[o->mode]);
     if (o->reason) string_field(L, "reason", o->reason);

@@ -70,6 +70,8 @@ FRAMEDIET_SITES = {
     'fd_id_map_find': (0xCED70, 64, '99aa931616db6c9f92574b2408563aa3b9f09a452bc5456ce0ec25fa8a9bb9cf'),
     'fd_event_list_push': (0x998430, 112, '39da624a9f2bca0707dfbc5475e3f31b9eb4128a899171b51a165d4b306d29d3'),
     'fd_random_float_state': (0x14DDC90, 24, '99b587b2e3a3e175da228cdcadc902b715ec9fb81f048af19e0d4d7c10afb519'),
+    # GameRender::Move (VBI slot 10 handler): render banks, then the 0x6adfc30 release tail.
+    'fd_game_render_move': (0x121C1F0, 106, '5d20ad384ae9ce74bb15625b923fd33638ad20d3f9e553c5d9cb7d264b20ed6f'),
 }
 # Wrapped virtuals (name, vtable entry RVA, function RVA), in framediet.c VS_* order. The entries
 # hold relocated pointers; they are compared at runtime against image base + function RVA.
@@ -79,6 +81,7 @@ FRAMEDIET_VTABLE_ENTRIES = [
     ('ui_render', 0x2BC07E0, 0xB3BBA0),             # UI::CUIController XVbiHandler slot 2 (Render)
     ('client_render', 0x2C8ABE0, 0x122BFC0),        # X4::GameClient XVbiHandler slot 2 (render bank)
     ('camera_render', 0x2BAE1B8, 0x983160),         # U::Camera slot 3 (Render)
+    ('game_render', 0x2C8AC10, 0x121C1F0),          # X4::GameRender XVbiHandler slot 1 (VBI slot 10 Move)
 ]
 
 SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **FRAMEDIET_SITES}
