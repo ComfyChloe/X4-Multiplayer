@@ -1,0 +1,18 @@
+[package]
+name = "x4mp-combat"
+description = "Engine rewrite, combat: bit-exact reimplementations of X4 weapon/turret code, capture/replay, offline oracle against the pinned X4.exe"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "x4mp_combat"
+crate-type = ["rlib"]
+
+[dependencies]
+x4mp-core = { path = "../x4mp-core" }
+
+[[bin]]
+name = "x4mp-combat-replay"
+path = "src/bin/replay.rs"

@@ -18,6 +18,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "x4mp-combat"
+version = "7.5.0"
+dependencies = [
+ "x4mp-core",
+]
+
+[[package]]
 name = "x4mp-core"
 version = "7.5.0"
 
