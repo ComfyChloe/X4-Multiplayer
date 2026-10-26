@@ -447,7 +447,32 @@ is labelled `unknown`. Older synthetic records without `ctx` retain the entity/s
 cannot establish recursive-frame classification. A synthetic nested-frame regression covers this;
 rechecking patrol-capture-002 leaves its move.generic classes and 5/5 fixed waits unchanged. It deliberately does not predict L616 (highway
 state) or L1022 (ship class/pilot skill) from a bracket that lacks those inputs. A new wider capture
-using `filter=move.generic` is the next validation step; full value capture M2b remains outstanding.
+using `filter=move.generic` is recorded below; full value capture M2b remains outstanding.
+
+### 9c. Wider native movement brackets (26 October, Codex)
+
+`movegeneric-capture-001` completed at 03:39 EDT using released x4lane e04b02a and the existing
+frozen capture-only overlay, `filter=move.generic`, eight tracked entities, 420 seconds. The runner
+reported pass (`until_matched`, capture `failed=0`) and closed its own process gracefully. The two
+sessions contain 248 complete brackets (8 + 240), 603 deliveries, zero unmatched records and zero
+reported drops. At checker commit 2d7a832, move.generic L382 is **26/26 bit-exact** and L920 is
+**2/2 bit-exact**; observed Patrol waits L317 6/6 and L509 2/2 also match. No L1027 or L1237 wait
+was observed, so this run does not extend native coverage to those fixed waits.
+
+The wider movement sample includes sector-change interrupts, short-move completion and subordinate
+recall. Draw classes remain diagnostics: wait@382 -> wait@616 has 1 or 2 draws, wait@1022 ->
+move_to@1051 has 1 or 3, and move_to@1244 -> return has 0 or 1. Captured inputs are needed to
+explain these differences; no constant-count or full replay equivalence is asserted. Context-aware
+classification avoids merging recursive frames, but the older bracket pairing parser does not
+verify an ending record's type/script against its opener. Capture-integrity hardening remains a
+follow-up before treating checker success as full acceptance.
+
+This is functional evidence only: six X4 processes ran concurrently and the runner marks timings
+untrustworthy. Minimum available memory was 9.6 GB; lane coordination confirmed the 14 GB rule is
+an admission threshold, not a running-process termination floor, and no override was used. Logs and
+result metadata remain local under `.local/evidence-089-withheld`; no player logs or
+build outputs are committed. Native value capture/replay, shadow and serial bit-identical RNG
+validation remain required before a live switch.
 
 ## 10. Native steps needed (next stage)
 
