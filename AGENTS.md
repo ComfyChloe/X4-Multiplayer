@@ -56,6 +56,35 @@
   installed ws_ IDs are a historical subscription snapshot. See
   reports/workshop-recovery-20261022.txt; preserve user Workshop subscriptions.
 
+## Code style: readable for human contributors
+
+Human developers review and debug this code by hand. Write every new or changed
+line (Lua, Python, Rust, C, MD XML) for them, not for compactness. This rule
+overrides "match the surrounding code" wherever the surrounding code is dense.
+
+- One statement per line. No `;`-chained statements, and no loop, `if` and
+  `return` packed onto one line. Put the body of `for`, `while`, `if`/`else` and
+  function definitions on their own indented lines.
+- One assignment per line. Do not use multiple assignment
+  (`a, b, c = x, y, z`) except for a function that returns several values, such
+  as `local ok, err = pcall(f)`.
+- Descriptive names. Name variables, parameters and fields for what they hold:
+  `api`, `message`, `state`, `pose`, `velocity`, `sectorName`. No single-letter
+  names, except a loop index (`i`, `j`) or a coordinate (`x`, `y`, `z`). Name
+  module aliases for their meaning: `local API = X4LAN_BUBBLE_API`, not `local A`.
+- Declare locals where they are first needed, each on its own line, not in the
+  middle of a long line.
+- Give magic numbers a named constant, for example
+  `local MAX_COOP_COORDINATE = 50000000`.
+- Write a short comment when a line's intent is not obvious from the code.
+  Explain engine quirks, units and frames (zone or sector, metres or km).
+- Keep functions short enough to read in one screen, and split long
+  expressions across lines.
+- Existing dense code: tidy what you touch. Reformat and rename inside the
+  function you change, with the same behaviour and passing tests, in a separate
+  commit when the reformat is large. Do not mass-reformat whole files on the
+  side; that hides real changes from review and risks behaviour changes.
+
 ## Focused context and verification
 
 - Keep quality first. Read the affected source, interfaces and relevant evidence;
