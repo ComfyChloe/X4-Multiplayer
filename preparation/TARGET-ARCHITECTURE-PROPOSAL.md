@@ -168,6 +168,32 @@ stream; only a refusal rolls back. This absorbs today's `CARGOREQ` pattern and c
 fleet orders (latency is irrelevant for orders that run for seconds to hours),
 docking, missions and purchases.
 
+### 8a. Station and ship construction
+
+Designing stays local; only confirmation crosses the network.
+
+- The vanilla station planner (`menu_station_configuration`, FFI such as
+  `UpdateConstructionMapBuildPlot`, `ShuffleMapConstructionPlan`,
+  `AddFloatingSequenceToConstructionPlan`) runs unchanged on the client against the
+  replicated station state. Saved plans stay per player as XML in the profile
+  (`SaveMapConstructionPlan` / `ExportMapConstructionPlan` / `ImportMapConstructionPlan`);
+  sharing a plan means sending that XML.
+- The planner's confirm is intercepted (Lua menu override): instead of a local
+  `AddBuildTask*`, the client sends an intent "expand station S with plan P, build
+  plot, budget".
+- The server validates ownership of S, blueprints of the sender's faction
+  (`GetMissingConstructionPlanBlueprints`, `requireblueprints`), money, the paid build
+  plot and plan validity (`GetConstructionPlanInvalidPatches`,
+  `CheckConstructionPlanForMacros`), then creates the build natively
+  (`AddBuildTask*` / `add_build_to_expand_station`). Construction runs in the server
+  simulation; new modules reach clients through station replication.
+- Clients never create local build tasks (puppet universe).
+- Blueprints: with shared research/blueprints, the server mirrors them to every
+  player faction (`add_blueprints` / `LearnBlueprint`).
+- Only the owner may modify a station; allied co-building is a later extension.
+- Ship construction and loadouts at shipyards follow the same pattern
+  (`add_build_to_construct_ship`, `apply_loadout`).
+
 ## 9. Runtime split: Rust core, thin MD/Lua
 
 | Layer | Work |
