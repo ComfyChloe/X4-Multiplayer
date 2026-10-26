@@ -334,6 +334,18 @@ enumeration currently omits the source's own event handler: zero registered
 listeners does not mean no handlers executed, and the native comparison log is
 not yet complete evidence of behavioural equivalence.
 
+The reviewed immutable 90cfaed follow-up `codex-replay-abi` passed the bounded
+native smoke at 03:39:24 on lane b3 (restored). Its gate required 30 reporting
+windows with positive replay and no dropped/degraded events. The collected log
+contains 574 reported replay frames across 34 windows, 33 with positive replay,
+zero dropped events and zero degraded frames; buffered/replayed rates match at
+printed precision. DLL SHA-256:
+`f7f2def3cc1cb17f41ce0c8f7c75e559551075d6018f8e2fe4b7b78e2b0a85b3`.
+Evidence: `.local/evidence-079-withheld,walk-summary.json,x4lan-debug.txt}`.
+This supports native wiring and short-run stability only. It does not prove
+same-frame equivalence, long soak stability, scaling or a root cause for the
+earlier AV; concurrent game instances make its timing untrustworthy.
+
 - The DeliverEvent per-listener histogram wants each dispatched listener's RTTI; the cheapest native hook is
   to read GetListenersForType at the Deliver enter (walk src+0x28) rather than a per-listener callback —
   confirm with the first census run.
