@@ -54,6 +54,37 @@ pub struct StationRecord {
     pub times: ContainerTimes,
     pub cargo: Vec<WareAmount>,
     pub modules: Vec<(u64, Module)>,
+    /// Trade offers of the station (`O` records), in list order.
+    pub offers: Vec<OfferRecord>,
+    /// Ware reservations of the station (`R`... `V` records), in engine order.
+    pub reservations: Vec<ReservationRecord>,
+}
+
+/// One trade offer as captured from Container+0x8f8 (list 0) or +0x910 (list 1).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct OfferRecord {
+    pub list: u8,
+    pub trade: u64,
+    pub ware: Option<WareIx>,
+    pub buyer: u64,
+    pub seller: u64,
+    pub amount: i32,
+    pub min_amount: i32,
+    pub desired: i32,
+    /// Unit price in cents.
+    pub unit_price: i64,
+    pub flags: u32,
+}
+
+/// One reservation entry as captured from Container+0x980.
+#[derive(Clone, Debug, PartialEq)]
+pub struct ReservationRecord {
+    pub word: u32,
+    pub reserver: u64,
+    pub order: u64,
+    pub ware: Option<WareIx>,
+    pub amount: u32,
+    pub expiry: f64,
 }
 
 #[derive(Debug)]
@@ -184,7 +215,52 @@ impl Capture {
                         times: ContainerTimes { last_update, a28, a30, a4c },
                         cargo,
                         modules: Vec::new(),
+                        offers: Vec::new(),
+                        reservations: Vec::new(),
                     });
+                }
+                "O" => {
+                    let fr = cap.frames.last_mut().ok_or_else(|| t.err("O before F"))?;
+                    let st = fr.stations.last_mut().ok_or_else(|| t.err("O before C"))?;
+                    let _uid = t.u64()?;
+                    let list = t.u64()? as u8;
+                    let trade = t.u64()?;
+                    let w = t.next()?;
+                    let ware =
+                        if w == "-1" { None } else { Some(WareIx(w.parse::<u16>().map_err(|_| t.err("ware index"))?)) };
+                    let buyer = t.u64()?;
+                    let seller = t.u64()?;
+                    let amount = t.i32()?;
+                    let min_amount = t.i32()?;
+                    let desired = t.i32()?;
+                    let unit_price = t.next()?.parse::<i64>().map_err(|_| t.err("price"))?;
+                    let flags = t.u64()? as u32;
+                    st.offers.push(OfferRecord {
+                        list,
+                        trade,
+                        ware,
+                        buyer,
+                        seller,
+                        amount,
+                        min_amount,
+                        desired,
+                        unit_price,
+                        flags,
+                    });
+                }
+                "V" => {
+                    let fr = cap.frames.last_mut().ok_or_else(|| t.err("V before F"))?;
+                    let st = fr.stations.last_mut().ok_or_else(|| t.err("V before C"))?;
+                    let _uid = t.u64()?;
+                    let word = t.u64()? as u32;
+                    let reserver = t.u64()?;
+                    let order = t.u64()?;
+                    let w = t.next()?;
+                    let ware =
+                        if w == "-1" { None } else { Some(WareIx(w.parse::<u16>().map_err(|_| t.err("ware index"))?)) };
+                    let amount = t.u64()? as u32;
+                    let expiry = t.f64()?;
+                    st.reservations.push(ReservationRecord { word, reserver, order, ware, amount, expiry });
                 }
                 "M" => {
                     let methods = cap.methods.clone();

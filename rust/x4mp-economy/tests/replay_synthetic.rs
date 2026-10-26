@@ -129,6 +129,8 @@ fn synthetic_capture() -> String {
             times,
             cargo: env.cargo.clone(),
             modules: mods.iter().map(|m| (m.addr | 0x1, m.clone())).collect(),
+            offers: Vec::new(),
+            reservations: Vec::new(),
         };
         write_station(&mut out, &rec, &index);
     }
@@ -168,4 +170,21 @@ fn corrupted_record_is_reported() {
 fn nan_times_are_rejected() {
     let text = "X4ECON 1 build=23660954\nF 1 0x7ff8000000000000 0x0\n";
     assert!(Capture::parse(text).is_err());
+}
+
+#[test]
+fn offer_and_reservation_records_parse() {
+    let text = "X4ECON 1 build=23660954
+W refinedmetals 0
+F 7 0x4029000000000000 0x1
+C 0x5 0x4024000000000000 0xbff0000000000000 0xbff0000000000000 0 0 0
+O 0x5 1 0x140003 0 0x0 0x9 600 0 600 17340 0x40
+V 0x5 0x9 0x777 0x0 0 300 0x40ac340000000000
+";
+    let cap = Capture::parse(text).expect("parse");
+    let st = &cap.frames[0].stations[0];
+    assert_eq!(st.offers.len(), 1);
+    assert_eq!((st.offers[0].amount, st.offers[0].unit_price, st.offers[0].flags), (600, 17340, 0x40));
+    assert_eq!(st.reservations[0].amount, 300);
+    assert_eq!(st.reservations[0].expiry, 3610.0);
 }

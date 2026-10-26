@@ -87,6 +87,11 @@
               <do_if value="parent.$FillIndex le parent.$Clones.count">
                 <set_value name="$C" exact="parent.$Clones.{parent.$FillIndex}" />
                 <set_value name="parent.$FillIndex" operation="add" />
+                <do_if value="$C.exists and parent.$FillIndex le 13">
+                  <!-- the first 12 clones also go to the econcap sampler (offers, reservations,
+                       production under trading) when X4LAN_ECONCAP=true; no listener otherwise -->
+                  <raise_lua_event name="'X4MP.EconWatch'" param="$C" />
+                </do_if>
                 <do_if value="$C.exists">
                   <do_if value="not $C.assignedcontrolentity.{controlpost.manager}">
                     <create_control_entity object="$C" post="controlpost.manager">

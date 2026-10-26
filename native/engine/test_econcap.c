@@ -78,7 +78,7 @@ static uint64_t register_id(unsigned char *map, uint64_t slot, uint16_t gen, voi
     memcpy(b + 0x18 + k * 2, &gen, 2);
     uint32_t flags;
     memcpy(&flags, b + 0x1c, 4);
-    flags |= 1u << (16 + 4 * k);
+    flags |= 5u << (16 + 4 * k); /* occupied + the flag ComponentRegistry::Find(.., 4) requires */
     memcpy(b + 0x1c, &flags, 4);
     return (slot + 1) | ((uint64_t)gen << 25);
 }
@@ -179,17 +179,67 @@ int main(void) {
     put_f64(st + 0xa30, 160.0);
     st[0xa4c] = 0;
     uint64_t sid = register_id(map, 4, 7, st);
+    /* Order registry with one sell offer of refinedmetals, and one reservation. */
+    unsigned char *omap = alloc(0x158), *oblock = alloc((size_t)32 * 64);
+    put_ptr(omap + 0x58, oblock);
+    put_ptr(image + ECON_ORDERMAP_PTR_RVA, omap);
+    unsigned char *trade = alloc(0x60);
+    {
+        uint64_t slot = 2, k = slot % 3;
+        unsigned char *b = oblock + (slot / 3) * 32;
+        put_ptr(b + k * 8, trade);
+        uint16_t g = 5;
+        memcpy(b + 0x18 + k * 2, &g, 2);
+        uint32_t fl;
+        memcpy(&fl, b + 0x1c, 4); /* gen[2] shares this word (bits 0..15) */
+        fl |= 3u << (16 + 4 * k);
+        memcpy(b + 0x1c, &fl, 4);
+    }
+    uint64_t tid = (2 + 1) | (5ull << 18);
+    uint64_t q28 = (uint64_t)(uintptr_t)trade ^ (uint64_t)metal, q30 = q28 ^ 17340ull;
+    memcpy(trade + 0x08, &tid, 8);
+    put_ptr(trade + 0x18, st);
+    memcpy(trade + 0x28, &q28, 8);
+    memcpy(trade + 0x30, &q30, 8);
+    uint32_t low = (uint32_t)q28 & 0x7fffffffu, enc;
+    enc = low ^ 600u; memcpy(trade + 0x40, &enc, 4);
+    enc = low ^ 0u; memcpy(trade + 0x44, &enc, 4);
+    enc = low ^ 600u; memcpy(trade + 0x50, &enc, 4);
+    uint32_t tflags = 0x40; memcpy(trade + 0x54, &tflags, 4);
+    unsigned char *sells = alloc(8);
+    memcpy(sells, &tid, 8);
+    put_ptr(st + 0x910, sells);
+    put_ptr(st + 0x918, sells + 8);
+    unsigned char *res = alloc(0x30);
+    uint32_t rword = 0x9; memcpy(res, &rword, 4);
+    uint64_t reserver = 0x777; memcpy(res + 0x08, &reserver, 8);
+    put_ptr(res + 0x18, (void *)ore);
+    uint32_t ramount = 300; memcpy(res + 0x20, &ramount, 4);
+    put_f64(res + 0x28, 3610.0);
+    put_ptr(st + 0x980, res);
+    put_ptr(st + 0x988, res + 0x30);
     memcpy(st + 0x08, &sid, 8);
 
     /* Resolution and decoding. */
     assert(econ_component(sid) == st);
     assert(!econ_component(sid ^ (1ull << 25)));    /* wrong generation */
     assert(!econ_component((sid & ~0x1ffffffull) | 9)); /* free slot */
+    {   /* occupied but without flag 4: not found (as Find(.., 4)) */
+        unsigned char *probe = alloc(16);
+        uint64_t pid = register_id(map, 7, 3, probe);
+        unsigned char *bb = block0 + (7 / 3) * 32;
+        uint32_t fl;
+        memcpy(&fl, bb + 0x1c, 4);
+        fl &= ~(4u << (16 + 4 * (7 % 3)));
+        memcpy(bb + 0x1c, &fl, 4);
+        assert(!econ_component(pid));
+    }
     econ_wa l[4];
     assert(econ_list(sto1 + 0x360, l, 4) == 2 && l[0].ware == ecells && l[0].amount == 810 && l[1].amount == 2160);
     char id[64];
     assert(econ_ware_id(metal, id, sizeof(id)) && !strcmp(id, "refinedmetals"));
 
+    assert(econ_order(tid) == trade && !econ_order(tid ^ (1ull << 18)));
     /* First frame: header, ware/method definitions, frame marker, station and module records. */
     assert(econcap_watch(sid));
     econcap_frame(12.5, 100, 0xabcdef);
@@ -200,6 +250,11 @@ int main(void) {
     assert(count_prefix(lines, n, "D 0 ") == 1);
     assert(count_prefix(lines, n, "F 100 0x4029000000000000 0xabcdef") == 1);
     assert(count_prefix(lines, n, "C 0x") == 1 && count_prefix(lines, n, "M 0x123456789 ") == 1);
+    assert(count_prefix(lines, n, "O ") == 1 && count_prefix(lines, n, "V ") == 1);
+    for (int i = 0; i < n; ++i) {
+        if (!strncmp(lines[i], "O ", 2)) assert(strstr(lines[i], " 1 0x140003 2 0x0 ") && strstr(lines[i], " 600 0 600 17340 0x40"));
+        if (!strncmp(lines[i], "V ", 2)) assert(strstr(lines[i], " 0x9 0x777 0x0 1 300 0x40ac340000000000"));
+    }
     for (int i = 0; i < n; ++i)
         if (!strncmp(lines[i], "C ", 2)) {
             /* cargo of the operational storage module only: energycells 810, ore 2160 */
@@ -218,7 +273,8 @@ int main(void) {
     put_inline_list(sto1 + 0x360, 2, rw, c3);
     econcap_frame(160.0, 102, 0x1);
     n = drain(lines, 256);
-    assert(n == 3 && !strncmp(lines[0], "F 102 ", 6) && !strncmp(lines[1], "C ", 2) && !strncmp(lines[2], "M ", 2));
+    assert(n == 5 && !strncmp(lines[0], "F 102 ", 6) && !strncmp(lines[1], "C ", 2) && !strncmp(lines[2], "O ", 2) &&
+           !strncmp(lines[3], "V ", 2) && !strncmp(lines[4], "M ", 2));
     assert(strstr(lines[1], " 0 720 1 1920") != NULL);
 
     /* Station destroyed (generation changed): dropped once, counted, no partial record. */
@@ -240,6 +296,6 @@ int main(void) {
     assert(count_prefix(lines, n, "C ") == 0 && count_prefix(lines, n, "M ") == 0);
     assert(econ.dropped_stations == 2);
 
-    printf("PASS: econcap resolves stations by UniverseID, decodes XOR ware lists, writes X4ECON records on change, drops stale or unreadable stations\n");
+    printf("PASS: econcap resolves stations and orders by id (generation, Find flags), decodes XOR ware lists, offers and reservations, writes X4ECON records on change, drops stale or unreadable stations\n");
     return 0;
 }

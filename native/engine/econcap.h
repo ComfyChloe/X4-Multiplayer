@@ -32,7 +32,15 @@
  *     amount = ((u32)q & 0x7fffffff) ^ *(u32*)(A + 8).
  *   AutoIDMap at *(image + 0x6cf1500): 32 block pointers at +0x58, 2^20 slots per block,
  *     3 slots per 32-byte bucket {ptr[3]; u16 gen[3] at +0x18; flags u32 at +0x1c, 4 bits per
- *     slot from bit 16, bit 0 = occupied}; id bits 0..24 = slot + 1, bits 25..40 = generation.
+ *     slot from bit 16, bit 0 = occupied, Find requires flag 4}; id bits 0..24 = slot + 1,
+ *     bits 25..40 = generation.
+ *   Offers: Container+0x8f8 and +0x910, vectors of order ids resolved in the order registry
+ *     *(image + 0x6cf1750) (same bucket layout, 8 blocks of 2^15, id bits 0..17 = slot + 1, bits
+ *     18.. = generation, required flag 2). Trade: +0x10 buyer, +0x18 seller (raw), +0x28 ware tag
+ *     (= Trade ^ ware), +0x30 price tag (= tag ^ unit price in cents), +0x40 amount, +0x44 minimum,
+ *     +0x50 desired (each XOR low31(tag)), +0x54 flags.
+ *   Reservations: Container+0x980..+0x988, 48 bytes {u32 word; u64 reserver @8; u64 order @0x10;
+ *     WareClass* @0x18; u32 amount @0x20; f64 expiry @0x28}.
  */
 
 #include <stdarg.h>
@@ -51,6 +59,9 @@
 #define ECON_VT_PRODUCTION_RVA 0x2b2e9c0u
 #define ECON_VT_STORAGE_RVA 0x2b74548u
 #define ECON_RESEARCH_KIND_RVA 0x2f61000u
+#define ECON_ORDERMAP_PTR_RVA 0x6cf1750u
+#define ECON_MAX_OFFERS 256
+#define ECON_MAX_RESERVATIONS 512
 
 typedef struct { uint64_t ware; int32_t amount; } econ_wa;
 
@@ -120,7 +131,33 @@ static unsigned char *econ_component(uint64_t id) {
     memcpy(&gen, b + 0x18 + k * 2, 2);
     uint32_t flags;
     memcpy(&flags, b + 0x1c, 4);
-    if (gen != (uint16_t)((id >> 25) & 0xffffu) || !((flags >> (16 + 4 * k)) & 1u)) return NULL;
+    /* ComponentRegistry::Find 0xced70 as the FFI calls it: occupied (bit 0) and required flag 4. */
+    uint32_t slot_flags = (flags >> (16 + 4 * k)) & 0xfu;
+    if (gen != (uint16_t)((id >> 25) & 0xffffu) || !(slot_flags & 1u) || (slot_flags & 4u) != 4u) return NULL;
+    uintptr_t ptr;
+    memcpy(&ptr, b + k * 8, 8);
+    return (unsigned char *)ptr;
+}
+
+/* Trade/order object for an order id (registry *(0x6cf1750), the lookup 0x33d420 does with
+   required flag 2): 18-bit slot + 1, 16-bit generation from bit 18, 8 blocks of 2^15 slots. */
+static unsigned char *econ_order(uint64_t id) {
+    int ok = 1;
+    unsigned char *map = (unsigned char *)(uintptr_t)econ_q(image + ECON_ORDERMAP_PTR_RVA, &ok);
+    uint64_t slot1 = id & 0x3ffffu;
+    if (!ok || !map || !slot1) return NULL;
+    uint64_t slot = slot1 - 1, block = slot >> 15, within = slot & 0x7fffu, bucket = within / 3, k = within % 3;
+    if (block >= 8) return NULL;
+    unsigned char *blk = (unsigned char *)(uintptr_t)econ_q(map + 0x58 + block * 8, &ok);
+    if (!ok || !blk) return NULL;
+    unsigned char b[32];
+    if (!econ_read(blk + bucket * 32, b, sizeof(b))) return NULL;
+    uint16_t gen;
+    memcpy(&gen, b + 0x18 + k * 2, 2);
+    uint32_t flags;
+    memcpy(&flags, b + 0x1c, 4);
+    uint32_t slot_flags = (flags >> (16 + 4 * k)) & 0xfu;
+    if (gen != (uint16_t)((id >> 18) & 0xffffu) || !(slot_flags & 1u) || (slot_flags & 2u) != 2u) return NULL;
     uintptr_t ptr;
     memcpy(&ptr, b + k * 8, 8);
     return (unsigned char *)ptr;
@@ -363,6 +400,34 @@ static int econ_station(econ_watch_entry *w, int force) {
         if (npend < 0) return 0;
         h = econ_hash_bytes(h, pend, sizeof(pend[0]) * (size_t)npend);
     }
+    /* Offers (Container+0x8f8 / +0x910: vectors of order ids) and reservations (+0x980, 48 bytes). */
+    static unsigned char offers[ECON_MAX_OFFERS][0x58];
+    static uint8_t offer_list[ECON_MAX_OFFERS];
+    static uint64_t offer_id[ECON_MAX_OFFERS];
+    static uintptr_t offer_ptr[ECON_MAX_OFFERS];
+    int no = 0;
+    for (int list = 0; list < 2; ++list) {
+        uint64_t vb = econ_q(st + 0x8f8 + 0x18 * list, &ok), ve = econ_q(st + 0x900 + 0x18 * list, &ok);
+        if (!ok || ve < vb || (ve - vb) % 8 || (ve - vb) / 8 > ECON_MAX_OFFERS) return 0;
+        for (uint64_t e = vb; e < ve; e += 8) {
+            uint64_t tid = econ_q((const unsigned char *)(uintptr_t)e, &ok);
+            if (!ok) return 0;
+            unsigned char *t = tid ? econ_order(tid) : NULL;
+            if (!t) continue;
+            if (no >= ECON_MAX_OFFERS || !econ_read(t, offers[no], 0x58)) return 0;
+            offer_list[no] = (uint8_t)list;
+            offer_id[no] = tid;
+            offer_ptr[no] = (uintptr_t)t;
+            h = econ_hash_bytes(h, offers[no] + 0x08, 0x50);
+            ++no;
+        }
+    }
+    uint64_t rb = econ_q(st + 0x980, &ok), re = econ_q(st + 0x988, &ok);
+    if (!ok || re < rb || (re - rb) % 0x30 || (re - rb) / 0x30 > ECON_MAX_RESERVATIONS) return 0;
+    int nr = (int)((re - rb) / 0x30);
+    static unsigned char resv[ECON_MAX_RESERVATIONS][0x30];
+    if (nr && !econ_read((const unsigned char *)(uintptr_t)rb, resv, (size_t)nr * 0x30)) return 0;
+    h = econ_hash_bytes(h, resv, (size_t)nr * 0x30);
     if (!force && h == w->last_hash) return 1;
     w->last_hash = h;
     econ.len = 0;
@@ -373,6 +438,47 @@ static int econ_station(econ_watch_entry *w, int force) {
     econ_put(" %d %d", a4c ? 1 : 0, np);
     if (!econ_put_list(cargo, nc)) { econ.len = 0; return 0; }
     econ_end_line();
+    for (int i = 0; i < no; ++i) {
+        const unsigned char *t = offers[i];
+        uint64_t q28, q30, buyer, seller;
+        uint32_t d40, d44, d50, flags;
+        memcpy(&buyer, t + 0x10, 8);
+        memcpy(&seller, t + 0x18, 8);
+        memcpy(&q28, t + 0x28, 8);
+        memcpy(&q30, t + 0x30, 8);
+        memcpy(&d40, t + 0x40, 4);
+        memcpy(&d44, t + 0x44, 4);
+        memcpy(&d50, t + 0x50, 4);
+        memcpy(&flags, t + 0x54, 4);
+        /* the tags are relative to the trade object's own address */
+        uintptr_t ware = offer_ptr[i] ^ (uintptr_t)q28;
+        uint32_t low = (uint32_t)q28 & 0x7fffffffu;
+        int wi = ware ? econ_ware_index(ware) : -1;
+        econ.len = 0;
+        econ_put("O 0x%llx %d 0x%llx %d 0x%llx 0x%llx %d %d %d %lld 0x%x", (unsigned long long)w->uid, offer_list[i],
+                 (unsigned long long)offer_id[i], wi, (unsigned long long)buyer, (unsigned long long)seller,
+                 (int32_t)(low ^ d40), (int32_t)(low ^ d44), (int32_t)(low ^ d50), (long long)(q28 ^ q30), flags);
+        econ_end_line();
+    }
+    for (int i = 0; i < nr; ++i) {
+        const unsigned char *r = resv[i];
+        uint32_t word, amount;
+        uint64_t reserver, order;
+        uintptr_t ware;
+        double expiry;
+        memcpy(&word, r, 4);
+        memcpy(&reserver, r + 0x08, 8);
+        memcpy(&order, r + 0x10, 8);
+        memcpy(&ware, r + 0x18, 8);
+        memcpy(&amount, r + 0x20, 4);
+        memcpy(&expiry, r + 0x28, 8);
+        int wi = ware ? econ_ware_index(ware) : -1;
+        econ.len = 0;
+        econ_put("V 0x%llx 0x%x 0x%llx 0x%llx %d %u", (unsigned long long)w->uid, word, (unsigned long long)reserver,
+                 (unsigned long long)order, wi, amount);
+        econ_put_f64(expiry);
+        econ_end_line();
+    }
     for (int m = 0; m < np; ++m) {
         const unsigned char *p = prod[m];
         uint64_t muid = econ_q(p + 0x08, &ok);
