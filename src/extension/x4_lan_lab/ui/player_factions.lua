@@ -27,7 +27,7 @@ local io={send=send,md=function(action,args) AddUITriggeredEvent('X4LAN_PlayerFa
 local function stop(reason)
  if pf.failed then return end
  pf.failed=reason;disabled(reason)
- if pf.coopSent then for i=1,2 do pcall(io.md,'CoopOwner',{ship=i,faction='player'}) end end
+ if pf.coopSent then for i in pairs(pf.coopSent) do pcall(io.md,'CoopOwner',{ship=i,faction='player'}) end end
 end
 local function key(object) return (tostring(object):gsub('ULL$','')) end
 -- Host: player-owned ships existing at session start exist in both worlds (shared fixtures,
@@ -64,7 +64,9 @@ end
 local function coopFrame()
  local c=A.coop;if not c or not c.pilots then return end
  pf.coopSent=pf.coopSent or {}
- for i=1,2 do
+ -- Every shared co-op ship (2 in 7.x sessions, max_players-1 in dedicated 8-player sessions).
+ local count=math.max(tonumber(c.count) or 0,#c.pilots,2)
+ for i=1,count do
   local want=core.coopOwner(c.pilots[i] or '0')
   if pf.coopSent[i]~=want then
    pf.coopSent[i]=want

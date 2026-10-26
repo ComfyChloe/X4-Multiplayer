@@ -615,6 +615,25 @@ class LuaGlue(unittest.TestCase):
         self.assertIn('[X4LAN] FEATURE player_factions DISABLED reason=error', self.logs(g))
         self.assertEqual(coop()[3:], [(1, 'player'), (2, 'player')])
 
+    def test_dedicated_session_switches_every_shared_ship(self):
+        # Dedicated 8-player sessions share max_players-1 ships, not two (user report: every other
+        # human looked like the own faction because ships 3..7 never left `player`).
+        lua, g = self.load(dict(enabled=True, coop=True, slot='p2', player_factions=True))
+        lua.execute("X4LAN_BUBBLE_API.coop={count=7,pilots={'0','0','0','0','0','0','0'}}")
+        pf = g.X4LAN_BUBBLE_API.players
+        pf.frame(0); g.events['X4LAN_PlayerFactions.Ready'](None, '16'); pf.frame(1); pf.frame(2)
+
+        def coop():
+            return [(e.args.ship, e.args.faction) for e in g.ui.values() if e.action == 'CoopOwner']
+        self.assertEqual(coop(), [(i, 'player') for i in range(1, 8)])
+        lua.execute("X4LAN_BUBBLE_API.coop.pilots={'0','p2','p3','0','p5','0','0'}")
+        pf.frame(3)
+        self.assertEqual(coop()[7:], [(3, 'x4lan_player3'), (5, 'x4lan_player5')])
+        root = E.parse(MD).getroot()
+        tick = E.tostring(next(c for c in root.iter('cue') if c.get('name') == 'CoopOwnerTick'), encoding='unicode')
+        self.assertNotIn('count == 2', tick)
+        self.assertIn('exact="$arena.$ships.count"', tick)
+
     def test_small_pool_disables(self):
         _, g = self.load(dict(enabled=True, coop=True, slot='p2', player_factions=True))
         pf = g.X4LAN_BUBBLE_API.players
