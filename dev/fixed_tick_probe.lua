@@ -16,7 +16,7 @@ local native=initialise()
 local owner,reason
 local walkRefusedLogged
 local physRefusedLogged
-local joltwaitLogged
+local joltwaitLogged,joltwaitOnLogged
 local physMode,nextPhysMode=nil,0
 local sectorHooks={[0]='pending',[1]='original',[2]='chained',[3]='refused'}
 local nextTry=0
@@ -59,11 +59,16 @@ local function logStats(now)
    string.format(' jtmWorkers=%d jtmSamples=%d jtmBusy=%.2f jtmBusyMax=%d jtmCat1=%.2f jtmCat2=%.2f jtmOther=%.2f jtmQueue=%.2f jtmQueueMax=%d joltSamples=%d jtmBusyInJolt=%.2f',
    s.jtm_workers or 0,s.jtm_samples or 0,s.jtm_busy or 0,s.jtm_busy_max or 0,s.jtm_cat1 or 0,s.jtm_cat2 or 0,s.jtm_other or 0,
    s.jtm_queue or 0,s.jtm_queue_max or 0,s.jtm_jolt_samples or 0,s.jtm_busy_in_jolt or 0)..
-   string.format(' mode=%d joltwaitJobs=%d joltwaitMaxJobs=%d joltwaitAnomalies=%d',
-   s.phys_mode or 0,s.joltwait_jobs or 0,s.joltwait_max_jobs or 0,s.joltwait_anomalies or 0))
+   string.format(' mode=%d modeFrames=%d joltwaitJobs=%d joltwaitMaxJobs=%d joltwaitAnomalies=%d luaForeign=%d',
+   s.phys_mode or 0,s.phys_mode_frames or 0,s.joltwait_jobs or 0,s.joltwait_max_jobs or 0,s.joltwait_anomalies or 0,
+   s.phys_lua_foreign or 0))
   if s.joltwait_reason and not joltwaitLogged then
    joltwaitLogged=true
+   physMode='refused'
    DebugError('[X4LAN] FEATURE joltwait DISABLED reason='..tostring(s.joltwait_reason))
+  elseif (s.phys_mode or 0)==1 and not joltwaitOnLogged then
+   joltwaitOnLogged=true
+   DebugError('[X4LAN] FEATURE joltwait ENABLED')
   end
  elseif (s.phys_installed or 1)==0 and not physRefusedLogged then
   physRefusedLogged=true
@@ -71,12 +76,12 @@ local function logStats(now)
  end
  nextLog=now+1
 end
--- Physics job mode (between frames: the UI slot runs after the physics step on the MoveWorker).
+-- Physics job mode: the DLL queues the request and switches at the next frame end on the frame
+-- brackets' thread; FEATURE joltwait ENABLED/DISABLED follow from stats().
 local function setPhysicsMode(mode,now)
  local ok,why=owner:physics_mode(mode)
  if ok then
   DebugError(string.format('[X4LAN] PHYSMODE mode=%s t=%.3f',mode,now))
-  if mode=='joltwait' and X4LAN_PHYSICS_MODE=='joltwait' then DebugError('[X4LAN] FEATURE joltwait ENABLED') end
  else
   DebugError('[X4LAN] FEATURE joltwait DISABLED reason='..tostring(why))
   physMode='refused'

@@ -94,7 +94,14 @@ static void *pp_orig[PP_ENTRIES];
 static void **pp_mode_entry[PP_MODE_ENTRIES];
 static void *pp_mode_orig[PP_MODE_ENTRIES];
 static int pp_joltwait;                  /* 1 while slots 3/4 point at the serial barrier */
-static const char *pp_joltwait_reason;
+static const char *pp_joltwait_reason;   /* first refusal or anomaly; latched: no re-enable this session */
+/* Mode requests (Lua, any thread) are applied by the owner thread at the next frame end. */
+#define PP_REQ_NONE 0
+#define PP_REQ_ORIGINAL 1
+#define PP_REQ_JOLTWAIT 2
+static volatile LONG pp_mode_request;
+static uint64_t pp_lua_foreign;          /* requests made from a thread other than the owner thread */
+static uint64_t pp_win_joltwait_frames;  /* frames of the current stats window run in joltwait mode */
 static uint64_t pp_joltwait_seen;        /* anomaly count already accounted */
 static uint64_t pp_joltwait_frames, pp_joltwait_jobs_mark;
 static int pp_installed;
@@ -322,6 +329,7 @@ static void pp_joltwait_disable(const char *reason) {
 static const char *pp_joltwait_enable(void) {
     if (!pp_installed) return "physics probe not installed";
     if (pp_joltwait) return NULL;
+    if (pp_joltwait_reason) return pp_joltwait_reason;
     if (sizeof(x4_physics_mode_vtables) / sizeof(x4_physics_mode_vtables[0]) != PP_MODE_ENTRIES) return "mode table size";
     void *ours[PP_MODE_ENTRIES] = {(void *)pj_sb_create, (void *)pj_sb_destroy};
     for (int k = 0; k < PP_MODE_ENTRIES; ++k) {
@@ -340,12 +348,12 @@ static const char *pp_joltwait_enable(void) {
         return "barrier entry write failed";
     }
     pp_joltwait_seen = pp_joltwait_anomalies();
-    pp_joltwait_reason = NULL;
     pp_joltwait = 1;
     return NULL;
 }
 
 static void pp_uninstall(void) {
+    InterlockedExchange(&pp_mode_request, PP_REQ_NONE);
     pp_joltwait_disable(NULL);
     pp_sampler_stop();
     if (!pp_installed) return;
@@ -360,10 +368,17 @@ static void pp_frame_end(void) {
     if (!pp_installed) return;
     if (pp_joltwait) {
         ++pp_joltwait_frames;
+        ++pp_win_joltwait_frames;
         if (pp_joltwait_anomalies() != pp_joltwait_seen)
             pp_joltwait_disable(pj_sb.alloc_failures ? "job list allocation failed" :
                                 pj_sb.foreign_calls ? "barrier used from another thread" : "no runnable job");
     }
+    /* Between frames on the owner thread: no Jolt update (and no barrier) is in flight. */
+    LONG request = InterlockedExchange(&pp_mode_request, PP_REQ_NONE);
+    if (request == PP_REQ_JOLTWAIT) {
+        const char *why = pp_joltwait_enable();
+        if (why && !pp_joltwait_reason) pp_joltwait_reason = why;
+    } else if (request == PP_REQ_ORIGINAL) pp_joltwait_disable(NULL);
     void *jtm = NULL, *pm = NULL;
     if (readable(image + PP_JTM_RVA, sizeof(void *), 0)) jtm = *(void **)(image + PP_JTM_RVA);
     if (readable(image + PP_PATHING_RVA, sizeof(void *), 0)) pm = *(void **)(image + PP_PATHING_RVA);
@@ -448,19 +463,28 @@ static int pp_install(int verify_code) {
     return 1;
 }
 
-/* Lua owner:physics_mode('joltwait' | 'original') -> true or nil, reason. Runs on the MoveWorker (UI
-   slot), i.e. between two physics steps. */
+/* Any thread: queue a mode for the owner thread's next frame end. NULL when queued. A refusal found
+   there is reported through stats() (joltwait_reason) and latched. */
+static const char *pp_request_mode(const char *mode) {
+    LONG code;
+    if (!pp_installed) return pp_reason ? pp_reason : "physics probe not installed";
+    if (!mode) return "mode required";
+    if (!strcmp(mode, "joltwait")) code = PP_REQ_JOLTWAIT;
+    else if (!strcmp(mode, "original")) code = PP_REQ_ORIGINAL;
+    else return "unsupported physics mode";
+    if (code == PP_REQ_JOLTWAIT && pp_joltwait_reason) return pp_joltwait_reason;
+    if (GetCurrentThreadId() != owner_thread) ++pp_lua_foreign;
+    InterlockedExchange(&pp_mode_request, code);
+    return NULL;
+}
+
+/* Lua owner:physics_mode('joltwait' | 'original') -> true (queued) or nil, reason. X4 may run the UI
+   script on a thread other than the frame brackets' thread (lane battle-ab-001), so the switch itself
+   happens at the owner thread's next frame end. */
 static int pp_lua_mode(lua_State *L) {
     owner *o = p_luaL_checkudata(L, 1, META);
     const char *mode = p_lua_type(L, 2) == LUA_TSTRING ? p_lua_tolstring(L, 2, NULL) : NULL;
-    const char *why = NULL;
-    if (o != current || !o->armed) why = "not the active owner";
-    else if (GetCurrentThreadId() != owner_thread) why = "not the owner thread";
-    else if (registered_table && *(int *)((unsigned char *)registered_table + 0x130)) why = "loading";
-    else if (!mode) why = "mode required";
-    else if (!strcmp(mode, "joltwait")) why = pp_joltwait_enable();
-    else if (!strcmp(mode, "original")) pp_joltwait_disable(NULL);
-    else why = "unsupported physics mode";
+    const char *why = (o != current || !o->armed) ? "not the active owner" : pp_request_mode(mode);
     if (why) {
         p_lua_pushnil(L);
         p_lua_pushlstring(L, why, strlen(why));
@@ -479,7 +503,10 @@ static void pp_stats(lua_State *L, void (*field)(lua_State *, const char *, doub
     field(L, "joltwait_jobs", (double)(pj_sb.jobs_run - pp_joltwait_jobs_mark));
     field(L, "joltwait_max_jobs", (double)pj_sb.max_jobs);
     field(L, "joltwait_anomalies", (double)pp_joltwait_anomalies());
+    field(L, "phys_mode_frames", (double)pp_win_joltwait_frames);
+    field(L, "phys_lua_foreign", (double)pp_lua_foreign);
     pp_joltwait_jobs_mark = pj_sb.jobs_run;
+    pp_win_joltwait_frames = 0;
     double frames = pp_win.frames ? (double)pp_win.frames : 1.0;
     field(L, "phys_frames", (double)pp_win.frames);
     field(L, "phys_updates", (double)pp_win.sum.updates / frames);

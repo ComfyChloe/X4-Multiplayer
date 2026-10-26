@@ -46,6 +46,7 @@
 #include <cstdio>
 #include <cstring>
 #include <deque>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -146,7 +147,52 @@ void pjm_destroy_barrier(void *system, void *barrier);
 void pjm_wait(void *system, void *barrier);
 unsigned long long pjm_jobs_run(void);
 unsigned long long pjm_anomalies(void);
+int pjp_start(int threads, pjm_execute_fn execute);
+void pjp_stop(void);
+int pjp_max_concurrency(void *system);
+void *pjp_create_job(void *system, void **ret, const char *name, uint32_t color, const void *function, uint32_t deps);
+void pjp_queue_job(void *system, void *job);
+void pjp_queue_jobs(void *system, void **jobs, uint32_t n);
+void pjp_free_job(void *system, void *job);
+void *pjp_create_barrier(void *system);
+void pjp_destroy_barrier(void *system, void *barrier);
+void pjp_wait(void *system, void *barrier);
+unsigned long long pjp_stats(int which);
+int pjc_init(void);
+void *pjc_add(uint32_t kind, void *listener, void *body1, void *body2, const void *manifold, const void *settings);
+void pjc_removed(void *listener, const void *pair);
+typedef void (*pjc_contact_fn)(void *listener, void *body1, void *body2, void *manifold, void *settings);
+typedef void (*pjc_removed_fn)(void *listener, const void *pair);
+void pjc_replay(pjc_contact_fn added, pjc_contact_fn persisted, pjc_removed_fn removed);
+unsigned long long pjc_stats(int which);
 }
+// X4-like job system whose every slot is the C pool of physics_pool.h (what the probe's "parallel" mode
+// installs into XJobSystem's vtable).
+class X4PoolJobSystem final : public JobSystem {
+public:
+    explicit X4PoolJobSystem(int inThreads) {
+        if (!pjp_start(inThreads, &sExecute)) { fprintf(stderr, "pool start failed\n"); exit(2); }
+    }
+    ~X4PoolJobSystem() override { pjp_stop(); }
+    int GetMaxConcurrency() const override { return pjp_max_concurrency(const_cast<X4PoolJobSystem *>(this)); }
+    JobHandle CreateJob(const char *inName, ColorArg inColor, const JobFunction &inJobFunction,
+                        uint32 inNumDependencies) override {
+        JobHandle handle;   // a Ref<Job>: one pointer, filled by the C function (reference already taken)
+        pjp_create_job(this, reinterpret_cast<void **>(&handle), inName, inColor.GetUInt32(), &inJobFunction, inNumDependencies);
+        return handle;
+    }
+    Barrier *CreateBarrier() override { return static_cast<Barrier *>(pjp_create_barrier(this)); }
+    void DestroyBarrier(Barrier *inBarrier) override { pjp_destroy_barrier(this, inBarrier); }
+    void WaitForJobs(Barrier *inBarrier) override { pjp_wait(this, inBarrier); }
+
+protected:
+    void QueueJob(Job *inJob) override { pjp_queue_job(this, inJob); }
+    void QueueJobs(Job **inJobs, uint inNumJobs) override { pjp_queue_jobs(this, reinterpret_cast<void **>(inJobs), inNumJobs); }
+    void FreeJob(Job *inJob) override { pjp_free_job(this, inJob); }
+
+private:
+    static uint32_t sExecute(void *inJob) { return static_cast<Job *>(inJob)->Execute(); }
+};
 class X4CJobSystem final : public JobSystem {
 public:
     explicit X4CJobSystem(int inMaxConcurrency) : mMaxConcurrency(inMaxConcurrency) { pjm_set_execute(&sExecute); }
@@ -209,15 +255,61 @@ struct ContactRecord {
     }
 };
 
-// Records every callback (thread safe; callbacks arrive from worker threads in pool configs).
+// Records every callback (thread safe; callbacks arrive from worker threads in pool configs). It also
+// aggregates like X4's listener: per body pair a count and the sum of the manifold points, accumulated in
+// callback order (X4: XContactListener 0xb75a0), which is where the callback order reaches state.
+static uint64_t fnv1a_seed(const void *data, size_t n, uint64_t h);
+struct Aggregate { float count = 0, x = 0, y = 0, z = 0; };
 class RecordingListener final : public ContactListener {
 public:
+    bool mBuffered = false;   // MSVC builds: record into the C buffer, aggregate at the sorted replay
+    void Aggregate1(const Body &a, const Body &b, const ContactManifold &m) {
+        std::lock_guard<std::mutex> lock(mMutex);
+        AggregateUnlocked(a.GetID().GetIndexAndSequenceNumber(), b.GetID().GetIndexAndSequenceNumber(), m);
+    }
+    void AggregateUnlocked(uint32_t a, uint32_t b, const ContactManifold &m) {
+        ::Aggregate &g = mAggregates[((uint64_t)a << 32) | b];
+        float sx = 0, sy = 0, sz = 0;
+        for (uint i = 0; i < m.mRelativeContactPointsOn1.size(); ++i) {
+            sx += m.mRelativeContactPointsOn1[i].GetX();
+            sy += m.mRelativeContactPointsOn1[i].GetY();
+            sz += m.mRelativeContactPointsOn1[i].GetZ();
+        }
+        float n = (float)m.mRelativeContactPointsOn1.size();
+        if (n > 0) { sx /= n; sy /= n; sz /= n; }
+        g.count += 1.0f; g.x += sx; g.y += sy; g.z += sz;
+    }
+    uint64_t TakeAggregateHash() {
+        std::lock_guard<std::mutex> lock(mMutex);
+        uint64_t h = 1469598103934665603ull;
+        for (auto &kv : mAggregates) {
+            h = fnv1a_seed(&kv.first, sizeof(kv.first), h);
+            h = fnv1a_seed(&kv.second, sizeof(kv.second), h);
+        }
+        mAggregates.clear();
+        return h;
+    }
+    std::map<uint64_t, ::Aggregate> mAggregates;
     ValidateResult OnContactValidate(const Body &, const Body &, RVec3Arg, const CollideShapeResult &) override {
         return ValidateResult::AcceptAllContactsForThisBodyPair;  // what X4's listener returns
     }
-    void OnContactAdded(const Body &a, const Body &b, const ContactManifold &m, ContactSettings &) override { add(0, a, b, m); }
-    void OnContactPersisted(const Body &a, const Body &b, const ContactManifold &m, ContactSettings &) override { add(1, a, b, m); }
+    void OnContactAdded(const Body &a, const Body &b, const ContactManifold &m, ContactSettings &s) override { dispatch(0, a, b, m, s); }
+    void OnContactPersisted(const Body &a, const Body &b, const ContactManifold &m, ContactSettings &s) override { dispatch(1, a, b, m, s); }
+    void dispatch(uint32_t kind, const Body &a, const Body &b, const ContactManifold &m, ContactSettings &s) {
+#ifdef _MSC_VER
+        if (mBuffered) { pjc_add(kind, this, (void *)&a, (void *)&b, &m, &s); return; }
+#endif
+        (void)s;
+        add(kind, a, b, m);
+        Aggregate1(a, b, m);
+    }
     void OnContactRemoved(const SubShapeIDPair &p) override {
+#ifdef _MSC_VER
+        if (mBuffered) { pjc_removed(this, &p); return; }
+#endif
+        RecordRemoved(p);
+    }
+    void RecordRemoved(const SubShapeIDPair &p) {
         ContactRecord r{2, p.GetBody1ID().GetIndexAndSequenceNumber(), p.GetBody2ID().GetIndexAndSequenceNumber(),
                         p.GetSubShapeID1().GetValue(), p.GetSubShapeID2().GetValue(), 0, 0, 0, 0, 0, 0, 0};
         std::lock_guard<std::mutex> lock(mMutex);
@@ -230,7 +322,6 @@ public:
         return out;
     }
 
-private:
     void add(uint32_t kind, const Body &a, const Body &b, const ContactManifold &m) {
         RVec3 p = m.GetWorldSpaceContactPointOn1(0);
         ContactRecord r{kind, a.GetID().GetIndexAndSequenceNumber(), b.GetID().GetIndexAndSequenceNumber(),
@@ -240,10 +331,16 @@ private:
         std::lock_guard<std::mutex> lock(mMutex);
         mRecords.push_back(r);
     }
+private:
     std::mutex mMutex;
     std::vector<ContactRecord> mRecords;
 };
 
+static uint64_t fnv1a_seed(const void *data, size_t n, uint64_t h) {
+    const unsigned char *p = (const unsigned char *)data;
+    for (size_t i = 0; i < n; ++i) { h ^= p[i]; h *= 1099511628211ull; }
+    return h;
+}
 static uint64_t fnv1a(const void *data, size_t n, uint64_t h = 1469598103934665603ull) {
     const unsigned char *p = (const unsigned char *)data;
     for (size_t i = 0; i < n; ++i) { h ^= p[i]; h *= 1099511628211ull; }
@@ -329,6 +426,24 @@ static RefConst<Shape> make_asteroid(Rng &r) {
     return s.Create().Get();
 }
 
+#ifdef _MSC_VER
+static void ReplayAdded(void *listener, void *a, void *b, void *m, void *s) {
+    RecordingListener *l = static_cast<RecordingListener *>(listener);
+    (void)s;
+    l->add(0, *(const Body *)a, *(const Body *)b, *(const ContactManifold *)m);
+    l->Aggregate1(*(const Body *)a, *(const Body *)b, *(const ContactManifold *)m);
+}
+static void ReplayPersisted(void *listener, void *a, void *b, void *m, void *s) {
+    RecordingListener *l = static_cast<RecordingListener *>(listener);
+    (void)s;
+    l->add(1, *(const Body *)a, *(const Body *)b, *(const ContactManifold *)m);
+    l->Aggregate1(*(const Body *)a, *(const Body *)b, *(const ContactManifold *)m);
+}
+static void ReplayRemoved(void *listener, const void *pair) {
+    static_cast<RecordingListener *>(listener)->RecordRemoved(*(const SubShapeIDPair *)pair);
+}
+#endif
+
 struct World {
     std::unique_ptr<PhysicsSystem> sys;
     BPInterface bp;
@@ -380,24 +495,26 @@ static void build_world(World &w, const Scenario &sc) {
 }
 
 struct RunResult {
-    std::vector<uint64_t> stateHash, contactSeqHash, contactSetHash;
+    std::vector<uint64_t> stateHash, contactSeqHash, contactSetHash, aggregateHash;
     std::vector<size_t> contacts;
     std::string firstFrameState, lastState;
     double stepUs = 0.0;
     uint64_t jobs = 0;
 };
 
-enum class Exec { X4Serial, JoltSingle, Pool, X4C };
+enum class Exec { X4Serial, JoltSingle, Pool, X4C, X4Pool };
 
-static RunResult run(const Scenario &sc, Exec exec, int param) {
+static RunResult run(const Scenario &sc, Exec exec, int param, bool buffered = false) {
     World w;
     build_world(w, sc);
+    w.listener.mBuffered = buffered;
     std::unique_ptr<JobSystem> js;
     X4StyleJobSystem *x4 = nullptr;
     if (exec == Exec::X4Serial) { x4 = new X4StyleJobSystem(param); js.reset(x4); }
     else if (exec == Exec::JoltSingle) js.reset(new JobSystemSingleThreaded(cMaxPhysicsJobs));
 #ifdef _MSC_VER
     else if (exec == Exec::X4C) js.reset(new X4CJobSystem(param));
+    else if (exec == Exec::X4Pool) js.reset(new X4PoolJobSystem(param));
 #endif
     else js.reset(new JobSystemThreadPool(cMaxPhysicsJobs, cMaxPhysicsBarriers, param));
     TempAllocatorImpl temp(256 * 1024 * 1024);
@@ -421,6 +538,10 @@ static RunResult run(const Scenario &sc, Exec exec, int param) {
         auto t1 = std::chrono::steady_clock::now();
         totalUs += std::chrono::duration<double, std::micro>(t1 - t0).count();
         if (err != EPhysicsUpdateError::None) fprintf(stderr, "WARN update error %u frame %d\n", (unsigned)err, f);
+#ifdef _MSC_VER
+        if (buffered) pjc_replay(&ReplayAdded, &ReplayPersisted, &ReplayRemoved);
+#endif
+        out.aggregateHash.push_back(w.listener.TakeAggregateHash());
         StateRecorderImpl rec;
         w.sys->SaveState(rec, EStateRecorderState::All);
         std::string data = rec.GetData();
@@ -459,6 +580,9 @@ int main(int argc, char **argv) {
     Trace = TraceImpl;
     Factory::sInstance = new Factory();
     RegisterTypes();
+#ifdef _MSC_VER
+    if (!pjc_init()) { fputs("contact buffer allocation failed\n", stderr); return 2; }
+#endif
 
     Scenario scenarios[] = {
         {"swarm", quick ? 120 : 600, 1, 400, 250.0f, 60.0f, 0.4f, false, false},
@@ -478,7 +602,7 @@ int main(int argc, char **argv) {
         printf("SCENARIO %s frames=%d collisionSteps=%d bodies=%d contactCallbacksMean=%.1f max=%zu stateBytes=%zu\n",
                sc.name, sc.frames, sc.collisionSteps, sc.dynamicBodies, (double)sumContacts / sc.frames, maxContacts, ref.lastState.size());
         printf("  config=x4serial-c30 (reference) stepUs=%.1f jobs/frame=%.1f\n", ref.stepUs, (double)ref.jobs / sc.frames);
-        struct Cfg { const char *label; Exec e; int p; int repeats; };
+        struct Cfg { const char *label; Exec e; int p; int repeats; bool buffered = false; };
         std::vector<Cfg> cfgs = {{"x4serial-c30-again", Exec::X4Serial, 30, 1}, {"x4serial-c4", Exec::X4Serial, 4, 1},
                                  {"x4serial-c6", Exec::X4Serial, 6, 1}, {"x4serial-c14", Exec::X4Serial, 14, 1},
                                  {"x4serial-c22", Exec::X4Serial, 22, 1}, {"x4serial-c32", Exec::X4Serial, 32, 1},
@@ -486,26 +610,47 @@ int main(int argc, char **argv) {
 #ifdef _MSC_VER
         cfgs.insert(cfgs.begin(), Cfg{"x4c-c30", Exec::X4C, 30, 1});
         cfgs.insert(cfgs.begin() + 1, Cfg{"x4c-c4", Exec::X4C, 4, 1});
+        // Buffered listener + sorted replay: compared with the buffered serial reference below.
+        cfgs.push_back(Cfg{"BUF x4serial-c30", Exec::X4Serial, 30, 1, true});
+        cfgs.push_back(Cfg{"BUF x4serial-c4", Exec::X4Serial, 4, 1, true});
+        cfgs.push_back(Cfg{"BUF x4pool-1", Exec::X4Pool, 1, poolRepeats, true});
+        cfgs.push_back(Cfg{"BUF x4pool-2", Exec::X4Pool, 2, poolRepeats, true});
+        cfgs.push_back(Cfg{"BUF x4pool-4", Exec::X4Pool, 4, poolRepeats, true});
+        cfgs.push_back(Cfg{"BUF x4pool-8", Exec::X4Pool, 8, poolRepeats, true});
+        cfgs.push_back(Cfg{"BUF pool-4", Exec::Pool, 4, poolRepeats, true});
+        cfgs.push_back(Cfg{"x4pool-4 (direct)", Exec::X4Pool, 4, poolRepeats});
 #endif
         static char labels[16][32];
         int li = 0;
         for (int t : pools) { snprintf(labels[li], sizeof(labels[li]), "pool-%d", t); cfgs.push_back({labels[li], Exec::Pool, t, poolRepeats}); ++li; }
+        RunResult bufref;   // buffered serial reference (first BUF config)
         for (const Cfg &c : cfgs) {
             for (int rep = 0; rep < c.repeats; ++rep) {
-                RunResult r = run(sc, c.e, c.p);
-                int fdState, fdSet, fdSeq;
+                RunResult r = run(sc, c.e, c.p, c.buffered);
+                if (c.buffered && bufref.stateHash.empty()) bufref = r;
+                int fdState, fdSet, fdSeq, fdAgg, fdAggRef;
                 int mState = compare(ref, r, &RunResult::stateHash, &fdState);
                 int mSet = compare(ref, r, &RunResult::contactSetHash, &fdSet);
                 int mSeq = compare(ref, r, &RunResult::contactSeqHash, &fdSeq);
-                bool ok = mState == sc.frames && mSet == sc.frames;
+                int mAggRef = compare(ref, r, &RunResult::aggregateHash, &fdAggRef);
+                int mAgg = c.buffered ? compare(bufref, r, &RunResult::aggregateHash, &fdAgg) : mAggRef;
+                // State and the callback set must match; with the buffer the aggregate must match the
+                // buffered reference (bit-identical listener state for every thread count).
+                bool ok = mState == sc.frames && mSet == sc.frames && (!c.buffered || mAgg == sc.frames);
                 if (!ok) ++failures;
-                printf("  config=%s run=%d stepUs=%.1f state=%d/%d firstDiff=%d contactSet=%d/%d contactOrder=%d/%d%s\n", c.label, rep + 1,
-                       r.stepUs, mState, sc.frames, fdState, mSet, sc.frames, mSeq, sc.frames, ok ? "" : "  MISMATCH");
+                printf("  config=%s run=%d stepUs=%.1f state=%d/%d firstDiff=%d contactSet=%d/%d contactOrder=%d/%d aggregate=%d/%d%s%s\n",
+                       c.label, rep + 1, r.stepUs, mState, sc.frames, fdState, mSet, sc.frames, mSeq, sc.frames, mAgg, sc.frames,
+                       c.buffered ? " (vs buffered reference)" : "", ok ? "" : "  MISMATCH");
+                if (c.buffered && &c == &cfgs[0]) {}
+                if (c.buffered && rep == 0 && !strcmp(c.label, "BUF x4serial-c30"))
+                    printf("    buffered aggregate vs unbuffered original: %d/%d frames equal\n", mAggRef, sc.frames);
             }
         }
     }
 #ifdef _MSC_VER
     printf("C serial barrier: %llu jobs run, %llu anomalies\n", pjm_jobs_run(), pjm_anomalies());
+    printf("C pool: %llu jobs on workers, %llu on the waiter, %llu inline, %llu alloc failures; contacts replayed %llu, lost %llu\n",
+           pjp_stats(0), pjp_stats(1), pjp_stats(2), pjp_stats(3), pjc_stats(0), pjc_stats(1));
 #endif
     printf("VERDICT %s (state = PhysicsSystem::SaveState(All) bytes per frame; contactSet = sorted callback records)\n",
            failures ? "MISMATCH" : "IDENTICAL");

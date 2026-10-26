@@ -40,12 +40,43 @@ class PhysicsProbeLuaTests(unittest.TestCase):
     def test_joltwait_mode_is_requested_once(self):
         self.runtime().execute('''
           X4LAN_PHYSICS_MODE='joltwait';calls={}
+          local applied=0
           handle.physics_mode=function(self,m) calls[#calls+1]=m;return true end
-          ui();ui();now=30;ui();ui()
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.phys_installed=1;s.phys_frames=60
+            s.phys_mode=#calls>0 and 1 or 0;s.phys_mode_frames=#calls>0 and 60 or 0;return s end
+          ui();ui();now=30;ui();now=31;ui();now=32;ui()
           assert(#calls==1 and calls[1]=='joltwait')
-          local on
-          for _,l in ipairs(logs) do if l:find('FEATURE joltwait ENABLED',1,true) then on=true end end
-          assert(on)
+          local on,line=0
+          for _,l in ipairs(logs) do
+            if l:find('FEATURE joltwait ENABLED',1,true) then on=on+1 end
+            if l:find('mode=1 modeFrames=60',1,true) then line=true end
+          end
+          assert(on==1 and line)
+        ''')
+
+    def test_mode_not_applied_logs_no_enabled(self):
+        self.runtime().execute('''
+          X4LAN_PHYSICS_MODE='joltwait'
+          handle.physics_mode=function(self,m) return true end
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.phys_installed=1;s.phys_frames=60;s.phys_mode=0;return s end
+          ui();ui();now=30;ui()
+          for _,l in ipairs(logs) do assert(not l:find('FEATURE joltwait ENABLED',1,true)) end
+        ''')
+
+    def test_refusal_reported_by_stats_stops_ab(self):
+        self.runtime().execute('''
+          X4LAN_PHYSICS_MODE='ab';X4LAN_PHYSICS_AB_S=1;calls={}
+          handle.physics_mode=function(self,m) calls[#calls+1]=m;return true end
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.phys_installed=1;s.phys_frames=60;s.phys_mode=0
+            if #calls>0 then s.joltwait_reason='barrier entry not original' end;return s end
+          ui();ui();now=5;ui();now=10;ui();now=15;ui()
+          assert(#calls==1)
+          local n=0
+          for _,l in ipairs(logs) do if l:find('FEATURE joltwait DISABLED reason=barrier entry not original',1,true) then n=n+1 end end
+          assert(n==1)
         ''')
 
     def test_ab_mode_alternates(self):

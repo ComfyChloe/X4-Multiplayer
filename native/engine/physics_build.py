@@ -80,8 +80,21 @@ def msvc_env():
     return env
 
 
+HARNESS_HEADERS = ('physics_jobs.h', 'physics_pool.h')
+
+
+def up_to_date(src, obj):
+    """Jolt objects depend on their source; the harness's own sources also on its headers."""
+    if not obj.exists():
+        return False
+    newest = src.stat().st_mtime
+    if src.parent == ROOT / 'native' / 'engine':
+        newest = max([newest] + [(src.parent / h).stat().st_mtime for h in HARNESS_HEADERS])
+    return obj.stat().st_mtime >= newest
+
+
 def msvc_compile(env, jolt, src, obj, c_mode=False):
-    if obj.exists() and obj.stat().st_mtime >= src.stat().st_mtime:
+    if up_to_date(src, obj):
         return obj
     obj.parent.mkdir(parents=True, exist_ok=True)
     flags = ['/nologo', '/O2', '/TC'] if c_mode else MSVC_FLAGS
@@ -108,7 +121,7 @@ def build_msvc(jolt, out):
 
 
 def compile_one(zig, jolt, src, obj):
-    if obj.exists() and obj.stat().st_mtime >= src.stat().st_mtime:
+    if up_to_date(src, obj):
         return obj
     obj.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run([zig, 'c++', *FLAGS, '-I', str(jolt), '-c', str(src), '-o', str(obj)], check=True)

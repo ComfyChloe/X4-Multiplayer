@@ -249,7 +249,29 @@ int main(void) {
         assert(!pp_joltwait && pp_joltwait_reason && !strcmp(pp_joltwait_reason, "no runnable job"));
         assert(*cb == image + x4_physics_mode_vtables[0].fn && *db == image + x4_physics_mode_vtables[1].fn);
         pj_sb.stalls = 0;
-        assert(!pp_joltwait_enable() && pp_joltwait);
+        /* The reason is latched: no re-enable in this session, neither directly nor by request. */
+        assert(pp_joltwait_enable() == pp_joltwait_reason && !pp_joltwait);
+        assert(pp_request_mode("joltwait") == pp_joltwait_reason && pp_mode_request == PP_REQ_NONE);
+        /* Requests (any thread) are applied at the owner thread's next frame end. */
+        pp_joltwait_reason = NULL;
+        assert(pp_request_mode("fast") && pp_request_mode(NULL) && pp_mode_request == PP_REQ_NONE);
+        assert(!pp_request_mode("joltwait") && !pp_joltwait);
+        pp_frame_end();
+        assert(pp_joltwait && *cb == (void *)pj_sb_create && *db == (void *)pj_sb_destroy);
+        assert(!pp_request_mode("original") && pp_joltwait);
+        pp_frame_end();
+        assert(!pp_joltwait && *cb == image + x4_physics_mode_vtables[0].fn);
+        /* A refusal at the frame end is latched and reported. */
+        *db = image + 3;
+        assert(!pp_request_mode("joltwait"));
+        pp_frame_end();
+        assert(!pp_joltwait && pp_joltwait_reason && !strcmp(pp_joltwait_reason, "barrier entry not original"));
+        assert(pp_request_mode("joltwait") == pp_joltwait_reason);
+        *db = image + x4_physics_mode_vtables[PP_MODE_DESTROY_BARRIER].fn;
+        pp_joltwait_reason = NULL;
+        assert(!pp_request_mode("joltwait"));
+        pp_frame_end();
+        assert(pp_joltwait);
         restore_origs();
         disarm_because("test");   /* uninstall switches back first */
         assert(!pp_joltwait && *cb == image + x4_physics_mode_vtables[0].fn && *db == image + x4_physics_mode_vtables[1].fn);
