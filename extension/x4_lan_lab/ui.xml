@@ -27,6 +27,7 @@
     <file name="ui/universe_protocol.lua" />
     <file name="ui/universe_game.lua" />
     <file name="ui/npc_combat_game.lua" />
+    <file name="ui/npc_target_diag.lua" />
     <file name="ui/life_game.lua" />
     <file name="ui/walk_game.lua" />
     <file name="ui/trade_protocol.lua" />

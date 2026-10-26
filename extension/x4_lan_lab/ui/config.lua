@@ -14,6 +14,7 @@ X4LAN_CONFIG = {
     npc_combat = false, -- INTERNAL opt-in: host NPC health and acknowledged guest stock-gun hits.
     frame_profile = false, -- Diagnostic only: per-second FRAMECOST wall time of the mod's UI Lua by subsystem.
     net_probe = false, -- Diagnostic only: RTTPING/RTTPONG round trips to the relay, NETRTT every 5 s.
+    npc_target_diag = false, -- Diagnostic only: logs NPC orders, targets, attention and radar near the shared ships.
     interaction_test = false, -- Destructive fixtures ONLY in the disposable test world.
     test_profile = "45841",
     host = "127.0.0.1",

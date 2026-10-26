@@ -138,7 +138,7 @@ def session_config(session, slot, host):
                ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental', ship_weapons=6,
                seed_id=session['bubble'], seed_verified=False, coop_docks=True,
                pilot_health=True, shot_claims=True, shot_visual=True, shot_capture=True,
-               npc_combat=True, faction_missions=True,
+               npc_combat=True, faction_missions=True, npc_target_diag=True,
                projectile_visuals=True, shot_undo=False,
                frame_profile=True, net_probe=True,  # On by default in internal packages (dev rule); set false only if they break.
                slot=slot, mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
