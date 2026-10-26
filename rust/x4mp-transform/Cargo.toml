@@ -1,0 +1,11 @@
+[package]
+name = "x4mp-transform"
+description = "Bit-exact models of X4's component pose math and view-cache build (Component::BuildCache) for the engine rewrite program"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "x4mp_transform"
+crate-type = ["rlib"]
