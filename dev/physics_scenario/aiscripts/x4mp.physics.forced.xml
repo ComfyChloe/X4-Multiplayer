@@ -4,7 +4,15 @@
     <actions>
       <set_flight_control_model object="this.ship" flightcontrolmodel="flightcontrolmodel.forced"/>
       <debug_text text="'PHYSICSSCN forced ship=%s t=%s'.[this.ship, player.age]"/>
-      <wait exact="60s"/>
+      <do_all exact="3" counter="$i">
+        <move_to object="this.ship" destination="this.ship.zone" forcesteering="false">
+          <position object="this.ship" x="$i * 300m" y="$i * 100m" z="1km"/>
+          <rotation yaw="$i * 30deg" pitch="$i * 10deg" roll="$i * 5deg"/>
+          <interrupt_after_time time="4s"/>
+        </move_to>
+        <debug_text text="'PHYSICSSCN move ship=%s step=%s t=%s'.[this.ship, $i, player.age]"/>
+      </do_all>
+      <wait exact="48s"/>
       <set_to_default_flight_control_model object="this.ship"/>
       <debug_text text="'PHYSICSSCN restored ship=%s t=%s'.[this.ship, player.age]"/>
     </actions>

@@ -6,10 +6,12 @@ Never install in the normal game. It is not included in production packages.
 In a new custom_creative world, after15 game seconds, create3 player-owned
 Argon fighters with pilots and differing initial positions/orientations. Each
 pilot runs an original short script selecting the engine's supported forced
-flight-control model for60 seconds, then restores the default model.75 seconds
+flight-control model, requests three distinct nearby targets with at most four
+seconds per move, then waits48 seconds and restores the default model.75 seconds
 after spawning, the fixture removes its ships. The player ship/settings are unchanged.
 
 Pair with `X4LAN_FLIGHTCAP='forced'`, a fresh capture path, enough frames to
 reach the fixture, and checks for PHYSICSSCN spawned/forced and FLIGHTCAP written.
-The model's default target may remain stationary. Report distinct inputs and
+The move requests use supported AI actions; native evidence must establish whether
+they actually reach the forced model. Report distinct inputs and
 outputs; this fixture is not general flight/AI acceptance.
