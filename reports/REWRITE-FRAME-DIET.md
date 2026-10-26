@@ -250,8 +250,16 @@ state and with it the mod. What it does get, without hooks:
    ::Setup 0x128fa60, 0x14e9600, 0x14ea680), so slot 9 should idle. Unmeasured, and to be checked before a server
    uses it: whether voice-line durations (MD `speak`, conversations) depend on loaded audio. Character animation
    may move walking NPCs and attachments (simulation state): not a candidate without RE.
-4. BuildCache (3.7-3.9 ms): if Q11 shows the render-set flag drives render-only cache work, a server without
-   camera rendering would also save BuildCache time (owner transforms).
+4. BuildCache (3.7-3.9 ms): Q11 answered: without camera rendering only the attachment-pose refresh (vfunc 622,
+   0.16-0.27 ms) goes away (owner transforms).
+5. Animation timelines in the simulation walk: `maybe_U::Positional::UpdateAnimationTimelines` 0x1165660 with
+   `AnimationTimeline::SampleCached` 0x1165ee0 (walk agent's labels) cost 0.25 ms per frame at baseline and
+   1.6 + 0.9 ms (inclusive 1.6) under the 8-sector load, all in slot 3 under Positional::Move. Some timelines are
+   cosmetic (lights, rotating parts), others move connections and so attached children (attachment poses depend
+   on animation state, see Q11). Not a presentation site as a whole; a per-timeline split (no connections
+   driven, no attached component) would be needed first, with walk and transforms.
+6. Slot 8 character animation `SCharacterBaseClass::Move` 0x129f370: 0.41 ms per frame under load, ~0 at
+   baseline; may move walking NPCs (see 3).
 
 ## 9. Running it
 
