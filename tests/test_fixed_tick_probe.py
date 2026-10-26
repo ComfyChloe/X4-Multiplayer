@@ -88,6 +88,34 @@ class FixedTickProbeTests(unittest.TestCase):
           assert(found)
         ''')
 
+    def test_walkpar_census_line_is_logged(self):
+        self.runtime().execute('''
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.walkpar_ready=1;s.walkpar_mode=1
+            s.walkpar_frames=60;s.walkpar_sector_ms=8.2;s.walkpar_sector_max_ms=2.04;s.walkpar_deliver_ms=1.1
+            s.walkpar_ideal_speedup=4.02;s.walkpar_posts=120;s.walkpar_posts_imm=90;s.walkpar_deliver_calls=110
+            s.walkpar_deliver_listeners=250;s.walkpar_xsector_listener=3.5;return s end
+          ui();ui()
+          local found
+          for _,l in ipairs(logs) do if l:find('WALKCENSUS mode=census frames=60',1,true) and l:find('speedup=4.02',1,true) then found=true end end
+          assert(found)
+        ''')
+
+    def test_walkpar_replay_line_and_refusal(self):
+        self.runtime().execute('''
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.walkpar_ready=2;s.walkpar_mode=2
+            s.walkpar_frames=1;s.walkpar_buffered=42;s.walkpar_replayed=40;s.walkpar_replay_dropped=2
+            s.walkpar_degraded_frames=0;return s end
+          ui();ui();ui()
+          local refusals,replay=0,false
+          for _,l in ipairs(logs) do
+            if l:find('FEATURE walkpar DISABLED',1,true) then refusals=refusals+1 end
+            if l:find('WALKREPLAY buffered=42.0 replayed=40.0 dropped=2 degraded=0',1,true) then replay=true end
+          end
+          assert(refusals==1 and replay)
+        ''')
+
     def test_walk_profile_refusal_is_loud(self):
         self.runtime().execute('''
           local base=handle.stats

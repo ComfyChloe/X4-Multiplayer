@@ -231,6 +231,7 @@ static handler hook_begin = {begin_vtable};
 static handler hook_end = {end_vtable};
 static int64_t sim_begin_qpc;
 #include "walkprof.h"
+#include "walkpar.h"
 
 static void **table_now(void) {
     return image ? *(void ***)(image + VBI_RVA) : NULL;
@@ -318,6 +319,7 @@ static void disarm_because(const char *reason) {
     simprof_stop(); /* the sampler stops before anything is unregistered */
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
+    walkpar_disarm();
     walk_uninstall();
     unregister_sim_hooks();
     if (table_owned())
@@ -480,6 +482,34 @@ static int stats(lua_State *L) {
             number_field(L, key, walk_win.cls[k].ms / frames);
         }
         memset(&walk_win, 0, sizeof(walk_win));
+    }
+    {
+        double wf = wp_win.frames ? (double)wp_win.frames : 1.0;
+        number_field(L, "walkpar_ready", wp_ready);
+        number_field(L, "walkpar_mode", wp_mode);
+        number_field(L, "walkpar_frames", (double)wp_win.frames);
+        number_field(L, "walkpar_sector_ms", wp_win.sector_ms / wf);
+        number_field(L, "walkpar_sector_max_ms", wp_win.sector_max_ms / wf);
+        number_field(L, "walkpar_deliver_ms", wp_win.deliver_ms / wf);
+        number_field(L, "walkpar_ideal_speedup", wp_ideal_speedup());
+        number_field(L, "walkpar_posts", (double)wp_win.posts / wf);
+        number_field(L, "walkpar_posts_imm", (double)wp_win.posts_imm / wf);
+        number_field(L, "walkpar_cancels", (double)wp_win.cancels / wf);
+        number_field(L, "walkpar_deliver_calls", (double)wp_win.deliver_calls / wf);
+        number_field(L, "walkpar_deliver_listeners", (double)wp_win.deliver_listeners / wf);
+        number_field(L, "walkpar_xsector_post", (double)wp_win.xsector_post / wf);
+        number_field(L, "walkpar_xsector_listener", (double)wp_win.xsector_listener / wf);
+        number_field(L, "walkpar_creates", (double)wp_win.creates / wf);
+        number_field(L, "walkpar_effects", (double)wp_win.effects / wf);
+        number_field(L, "walkpar_temp_zones", (double)wp_win.temp_zones / wf);
+        number_field(L, "walkpar_hits", (double)wp_win.hits / wf);
+        number_field(L, "walkpar_cue_runactions", (double)wp_win.cue_runactions / wf);
+        number_field(L, "walkpar_request_wakes", (double)wp_win.request_wakes / wf);
+        number_field(L, "walkpar_buffered", (double)wp_win.buffered / wf);
+        number_field(L, "walkpar_replayed", (double)wp_win.replayed / wf);
+        number_field(L, "walkpar_replay_dropped", (double)wp_win.replay_dropped);
+        number_field(L, "walkpar_degraded_frames", (double)wp_win.degraded_frames);
+        wp_window_clear();
     }
     o->win_count = 0; o->win_sum_ms = 0.0; o->win_max_ms = 0.0;
     memset(o->win_hist, 0, sizeof(o->win_hist));
@@ -650,6 +680,10 @@ static int start(lua_State *L) {
     o->armed = 1;
     /* Component-walk profiling needs the slot 0/15 frame brackets; optional, fail closed. */
     if (o->sim_hooks && !walk_install(1)) o->walk_refused = 1;
+    /* Deferred-event census/replay engine: verify the detour signatures (no code patch here). The
+       native detour layer calls walkpar_set_mode once its in-process hooks are installed. */
+    walkpar_arm();
+    (void)walkpar_api();
     if (profiling) {
         /* A sampler that cannot start leaves the probe running; stats() reports why. */
         o->profile = 1;

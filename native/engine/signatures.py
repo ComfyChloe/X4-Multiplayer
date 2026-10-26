@@ -49,7 +49,20 @@ WALK_EXTRA_ENTRIES = [
 ]
 WALK_CODE_SITES = {f'walk_{name}_move': (fn, 32, sha) for name, (fn, _entry, sha) in WALK_SITES.items()}
 
-SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES}
+# Component-walk parallelism (rw-walk): stage 0/1 deferred-event hooks. Entry detours on the event
+# functions and the galaxy walk call site; byte-pinned so the native layer's in-process patch fails
+# closed on any build mismatch. First 32 bytes of each function (no base relocations in range); the
+# galaxy call site is the 6-byte `call [rax+0x1510]` at 0x9fdf95 (vtable slot 674 = the whole walk).
+WALKPAR_SITES = {
+    'post_event': (0x99A3F0, 32, 'dd8eca5af59dbc3cdbb685d0a42e5d4324524a1f100fdb9a8e22088eec499df6'),
+    'cancel_pending_events': (0x99A870, 32, '5fa21d29d3814d0caee1959d28b06943cbd80af1ea71d7b3daeedebd44b4c3d3'),
+    'deliver_event': (0x99C470, 32, '68495212139fb6021fef265da1417ea5b63fff7273223d4a66fd7d7c7531c8fd'),
+    'flush_command_queue_wp': (0x99ABE0, 32, '620991e9852f6df27038c7b746fd02825e2e27b177522e608247405445ec1df2'),
+    'galaxy_walk_call': (0x9FDF95, 6, '06fb8e64fd4cfe4e113548c517924cf04284f71137cbf513b861888669b074c5'),
+}
+WALKPAR_GALAXY_CALL_RVA = 0x9FDF95
+
+SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **WALKPAR_SITES}
 
 
 def c_header() -> str:
@@ -77,4 +90,12 @@ def c_header() -> str:
     for name, entry in WALK_EXTRA_ENTRIES:
         lines.append(f'    {{{classes.index(name)}, 0x{entry:x}}},')
     lines.append('};')
+    # Component-walk parallelism detour targets (rw-walk). walkpar.h verifies these before the native
+    # layer installs its entry detours; any miss fails closed.
+    lines.append('static const x4_signature_check x4_walkpar_checks[] = {')
+    for rva, length, sha in WALKPAR_SITES.values():
+        lines.append(f'    {{0x{rva:x}, {length}, "{sha}"}},')
+    lines.append('};')
+    lines.append('#define X4_HAVE_WALKPAR_SITES 1')
+    lines.append(f'#define WP_GALAXY_CALL_RVA 0x{WALKPAR_GALAXY_CALL_RVA:x}u')
     return '\n'.join(lines) + '\n'

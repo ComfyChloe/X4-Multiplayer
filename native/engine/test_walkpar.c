@@ -1,0 +1,293 @@
+/* Offline synthetic tests for the component-walk census (stage 0) and the deferred-event replay
+   (stage 1), in the style of test_fixedtick.c. No X4 process is involved: fake events/components
+   with vtables drive the engine in native/engine/walkpar.h directly. */
+#ifdef NDEBUG
+#undef NDEBUG
+#endif
+#include <assert.h>
+#include <math.h>
+#include <stdio.h>
+#include "fixedtick.c"
+
+struct lua_State { int unused; };
+static LARGE_INTEGER fake_now;
+static BOOL WINAPI fake_qpc(LARGE_INTEGER *v) { *v = fake_now; return TRUE; }
+
+/* ---- fake engine objects ---------------------------------------------------------------------- */
+
+typedef struct FakeComp { void **vt; uint64_t id; uint64_t sector; } FakeComp;
+
+#define MAX_LISTENERS 4
+typedef struct FakeEvent {
+    void **vt;
+    int type;
+    int freed;
+    int n;
+    FakeComp *listener[MAX_LISTENERS];
+    uint64_t payload[MAX_LISTENERS];
+} FakeEvent;
+
+static int fake_event_type(void *e) { return ((FakeEvent *)e)->type; }
+static void fake_event_free(void *e, int drop) { (void)drop; ((FakeEvent *)e)->freed = 1; }
+static void *event_vt[2] = { (void *)fake_event_free, (void *)fake_event_type };
+static void *comp_vt[1] = { 0 };
+
+/* component registry for replay re-resolution; a missing id models a source that died */
+#define MAX_COMP 64
+static FakeComp *g_comp[MAX_COMP];
+static int g_comp_n;
+static int g_resolve_null;   /* when set, fake_find returns NULL (source gone) */
+
+static FakeComp mk_comp(uint64_t id, uint64_t sector) {
+    FakeComp c; c.vt = comp_vt; c.id = id; c.sector = sector;
+    return c;
+}
+static void reg(FakeComp *c) { if (g_comp_n < MAX_COMP) g_comp[g_comp_n++] = c; }
+
+static uint64_t fake_sector(void *comp) { return ((FakeComp *)comp)->sector; }
+static void *fake_find(uint64_t id) {
+    if (g_resolve_null) return NULL;
+    for (int i = 0; i < g_comp_n; ++i) if (g_comp[i]->id == id) return g_comp[i];
+    return NULL;
+}
+
+static int g_cancel_calls;
+static void fake_cancel_original(void *src, int type, double minTime) {
+    (void)src; (void)type; (void)minTime; ++g_cancel_calls;
+}
+
+/* deliver one event to its listeners, timing the delivery for the census */
+static void deliver(void *src, FakeEvent *e) {
+    wp_deliver_enter(src, e);
+    fake_now.QuadPart += 1000;      /* 0.1 ms inside DeliverEvent */
+    for (int i = 0; i < e->n; ++i)
+        wp_deliver_listener(src, e, e->listener[i], e->payload[i]);
+    wp_deliver_exit(src, e);
+}
+
+/* the original PostEvent: immediate events deliver now, scheduled ones only schedule */
+static int g_scheduled;
+static void fake_post_original(void *src, void *event, double time, int imm) {
+    (void)time;
+    if (imm) deliver(src, (FakeEvent *)event);
+    else ++g_scheduled;
+}
+
+/* the detour seam: buffer via wp_post, else run the original */
+static void engine_post(void *src, FakeEvent *e, double time, int imm) {
+    if (!wp_post(src, e, time, imm)) fake_post_original(src, e, time, imm);
+}
+static void engine_cancel(void *src, int type, double minTime) {
+    if (!wp_cancel(src, type, minTime)) fake_cancel_original(src, type, minTime);
+}
+
+static void sector_run(FakeComp *sector, int64_t ns, void (*body)(void)) {
+    wp_sector_enter(sector);
+    fake_now.QuadPart += ns;        /* 10 MHz QPC: ns here are 100ns ticks */
+    if (body) body();
+    wp_sector_exit(sector);
+}
+
+/* ---- shared scenario: two sectors, same-sector + cross-sector immediate posts, one scheduled --- */
+
+static FakeComp S0, S1;             /* sectors */
+static FakeComp o0, o1;             /* objects (posters), one per sector */
+static FakeComp l0, l1;             /* listeners, one per sector */
+static FakeEvent e_same, e_cross, e_sched, e_tz;
+
+static void scene_init(void) {
+    g_comp_n = 0; g_resolve_null = 0; g_scheduled = 0; g_cancel_calls = 0;
+    S0 = mk_comp(100, 100); S1 = mk_comp(101, 101);
+    o0 = mk_comp(200, 100); o1 = mk_comp(201, 101);
+    l0 = mk_comp(300, 100); l1 = mk_comp(301, 101);
+    reg(&S0); reg(&S1); reg(&o0); reg(&o1); reg(&l0); reg(&l1);
+    e_same = (FakeEvent){ event_vt, WP_TYPE_ATTACKED, 0, 1, { &l0 }, { 0xaa } };
+    e_cross = (FakeEvent){ event_vt, WP_TYPE_CHANGED_ATTN, 0, 1, { &l1 }, { 0xbb } };
+    e_sched = (FakeEvent){ event_vt, WP_TYPE_WARP, 0, 1, { &l1 }, { 0xcc } };
+    /* AddTempZoneEvent's listener is the sector itself (Sector::OnAddTempZoneEvent) */
+    e_tz = (FakeEvent){ event_vt, WP_TYPE_ADD_TEMP_ZONE, 0, 1, { &S1 }, { 0xdd } };
+}
+
+static void s0_body(void) {
+    engine_post(&o0, &e_same, 10.0, 1);    /* same-sector immediate */
+    engine_post(&o0, &e_cross, 10.0, 1);   /* cross-sector immediate (-> S1 listener) */
+    engine_post(&o0, &e_sched, 20.0, 0);   /* scheduled (no same-frame delivery) */
+}
+static void s1_body(void) {
+    engine_post(&o1, &e_tz, 10.0, 1);      /* AddTempZone: must stay synchronous */
+}
+
+static void run_scene(void) {
+    wp_walk_begin();
+    sector_run(&S0, 20000, s0_body);       /* 2 ms */
+    sector_run(&S1, 30000, s1_body);       /* 3 ms */
+    wp_walk_end();
+}
+
+/* ---- tests ------------------------------------------------------------------------------------ */
+
+static void engine_setup(int mode) {
+    qpc_read = fake_qpc;
+    qpc_frequency = 10000000;      /* 10 MHz */
+    wp_qpc_hz_cache = qpc_frequency;
+    fake_now.QuadPart = 1000000;
+    wp_sector_resolver = fake_sector;
+    wp_registry_find = fake_find;
+    wp_deliver_post = fake_post_original;
+    wp_deliver_cancel = fake_cancel_original;
+    wp_window_clear();
+    wp_logA_n = wp_logB_n = 0;
+    wp_cue_xor[0] = wp_cue_xor[1] = wp_cue_cnt[0] = wp_cue_cnt[1] = 0;
+    wp_ready = WP_READY_OK;
+    wp_mode = WP_OFF;
+    wp_thread = 0;
+    walkpar_set_mode(mode);
+}
+
+int main(void) {
+    /* fail-closed arm: a blank image fails signature verification -> engine refuses to enable */
+    image = VirtualAlloc(NULL, X4_IMAGE_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+    assert(image);
+    qpc_frequency = 10000000;
+    walkpar_arm();
+    assert(wp_ready == WP_READY_REFUSED);
+    walkpar_set_mode(WP_REPLAY);
+    assert(wp_mode == WP_OFF);              /* refused -> stays off */
+
+    /* Stage 0 census: counters fold into the window, cross-sector flags, sector timing. */
+    engine_setup(WP_CENSUS);
+    scene_init();
+    run_scene();
+    assert(wp_win.frames == 1);
+    assert(wp_win.posts == 4);              /* same, cross, sched (S0) + tz (S1) */
+    assert(wp_win.posts_imm == 3 && wp_win.posts_sched == 1);
+    assert(wp_win.xsector_post == 0);       /* both posters are in their own sector */
+    /* census never buffers */
+    assert(wp_win.buffered == 0 && wp_win.replayed == 0);
+    /* deliveries: e_same, e_cross, e_tz are immediate (3 DeliverEvent calls, 3 listeners) */
+    assert(wp_win.deliver_calls == 3 && wp_win.deliver_listeners == 3);
+    assert(wp_win.xsector_listener == 1);   /* e_cross delivered during S0 to an S1 listener */
+    assert(wp_win.posts_temp_zone_inline == 0); /* only counted while buffering (replay) */
+    /* sector timing: 2 ms + 3 ms = 5 ms, max 3 ms (plus the small deliver time inside each) */
+    assert(wp_win.sector_ms > 5.0 && wp_win.sector_ms < 5.6);
+    assert(wp_win.sector_max_ms > 3.0 && wp_win.sector_max_ms < 3.4);
+    assert(wp_ideal_speedup() > 1.4 && wp_ideal_speedup() < 1.9);
+
+    /* Stage 1 functional: a NORMAL run (log A) and a REPLAY run (log B) of the same scene agree. */
+    engine_setup(WP_CENSUS);     /* normal run: phase off, deliveries inline -> A */
+    scene_init();
+    run_scene();
+    size_t a_records = wp_logA_n;
+    assert(a_records == 3);      /* e_same->l0, e_cross->l1, e_tz->l0 */
+
+    wp_mode = WP_OFF; walkpar_set_mode(WP_REPLAY);  /* replay run: buffer + replay -> B */
+    scene_init();
+    run_scene();
+    assert(wp_win.buffered >= 3);                    /* same, cross, sched buffered (tz stays inline) */
+    assert(wp_frame.posts_temp_zone_inline == 1);    /* AddTempZone delivered inline, not buffered */
+    assert(wp_logB_n == 3);
+    int detail = 0;
+    assert(wp_compare(&detail) == 0);                /* normal vs replay: per-listener sequences equal */
+
+    /* The scheduled post was buffered and replayed as a schedule insert (no listener record). */
+    assert(wp_win.replayed >= 3);
+
+    /* Cancel against the buffer: a cancel removes this task's not-yet-replayed matching posts. */
+    engine_setup(WP_REPLAY);
+    scene_init();
+    wp_walk_begin();
+    wp_sector_enter(&S0);
+    engine_post(&o0, &e_same, 10.0, 1);
+    assert(wp_count == 1);
+    engine_cancel(&o0, WP_TYPE_ATTACKED, -1.0);      /* cancels the buffered e_same */
+    assert(wp_buf[0].dead == 1);
+    wp_sector_exit(&S0);
+    wp_walk_end();
+    assert(wp_logB_n == 0);                           /* the dead post is not replayed */
+    assert(wp_frame.cancels == 1 && wp_frame.cancels_applied == 1);
+
+    /* Replay re-resolves by UniverseID; a gone source drops the event (and frees it). */
+    engine_setup(WP_REPLAY);
+    scene_init();
+    wp_walk_begin();
+    wp_sector_enter(&S0);
+    engine_post(&o0, &e_same, 10.0, 1);
+    wp_sector_exit(&S0);
+    g_resolve_null = 1;                               /* source cannot be found at replay */
+    wp_walk_end();
+    assert(wp_frame.replay_dropped == 1 && wp_frame.replayed == 0);
+    assert(e_same.freed == 1);
+
+    /* Overflow fails closed: once the buffer is full, further posts pass through (not dropped). */
+    engine_setup(WP_REPLAY);
+    scene_init();
+    wp_walk_begin();
+    wp_sector_enter(&S0);
+    for (int i = 0; i < WP_OP_MAX; ++i) engine_post(&o0, &e_same, 10.0, 0);
+    assert(wp_count == WP_OP_MAX);
+    int before = g_scheduled;
+    engine_post(&o0, &e_same, 10.0, 0);               /* overflow -> pass through to the original */
+    assert(g_scheduled == before + 1 && wp_frame.degraded_frames == 1);
+    wp_sector_exit(&S0);
+    wp_walk_end();
+
+    /* Difference detection: an injected divergence is reported with the offending event type. */
+    wp_logA_n = wp_logB_n = 0; wp_task_count = 0;
+    wp_cue_xor[0] = wp_cue_xor[1] = wp_cue_cnt[0] = wp_cue_cnt[1] = 0;
+    wp_task_index(100);
+    wp_logA[wp_logA_n++] = (wp_cmp_rec){ 0, WP_TYPE_ATTACKED, 0, 200, 300, 0, 0xaa };
+    wp_logB[wp_logB_n++] = (wp_cmp_rec){ 0, WP_TYPE_WARP, 0, 200, 300, 0, 0xaa };
+    detail = 0;
+    assert(wp_compare(&detail) == -1 && (detail & 0xffff) == WP_TYPE_ATTACKED);
+
+    /* MD cue activations compare as a multiset; a count/xor mismatch is caught. */
+    wp_logA_n = wp_logB_n = 0; wp_task_count = 0;
+    wp_cue_cnt[0] = 2; wp_cue_xor[0] = 0x11 ^ 0x22;
+    wp_cue_cnt[1] = 2; wp_cue_xor[1] = 0x22 ^ 0x11;  /* same multiset, different order */
+    assert(wp_compare(&detail) == 0);
+    wp_cue_xor[1] = 0x22 ^ 0x33;                      /* different set */
+    assert(wp_compare(&detail) == -1 && (detail & 0xffff) == (WP_REC_CUE & 0xffff));
+
+    /* Shared buffer for the ai-driver AI phase: scopes keyed by bucket, replay in caller order. */
+    engine_setup(WP_REPLAY);
+    scene_init();
+    wp_thread = GetCurrentThreadId();
+    wp_scope_begin(100);                              /* bucket for sector 100 */
+    engine_post(&o0, &e_same, 10.0, 1);              /* buffered under task(100) */
+    wp_scope_end();
+    wp_scope_begin(101);                              /* bucket for sector 101 */
+    engine_post(&o1, &e_cross, 10.0, 1);             /* buffered under task(101) */
+    wp_scope_end();
+    assert(wp_buffer_count() == 2);
+    {
+        uint64_t sid; int tk, ty;
+        assert(wp_buffer_op(0, &sid, &tk, &ty) == WP_OP_POST && sid == 200 && ty == WP_TYPE_ATTACKED);
+        assert(wp_buffer_op(1, &sid, &tk, &ty) == WP_OP_POST && sid == 201);
+    }
+    /* replay bucket 101 before 100: the 101 listener delivery happens first */
+    wp_logB_n = 0;
+    uint64_t order[2] = { 101, 100 };
+    wp_replay_tasks(order, 2);
+    assert(wp_buffer_count() == 0);
+    assert(wp_logB_n == 2 && wp_logB[0].listener_id == 301 && wp_logB[1].listener_id == 300);
+
+    /* Foreign thread: entry points pass through and count nothing. */
+    engine_setup(WP_CENSUS);
+    scene_init();
+    wp_walk_begin();
+    ++wp_thread;                                      /* pretend another thread calls in */
+    assert(wp_post(&o0, &e_same, 10.0, 1) == 0);
+    wp_deliver_listener(&o0, &e_same, &l0, 0xaa);
+    --wp_thread;
+    wp_walk_end();
+    assert(wp_win.posts == 0 && wp_win.deliver_listeners == 0);
+
+    VirtualFree(image, 0, MEM_RELEASE);
+    puts("PASS: stage 0 census counts posts/deliveries/cross-sector flags and sector sum/max time");
+    puts("PASS: stage 1 normal-vs-replay listener comparison is equivalent per listener-sector");
+    puts("PASS: AddTempZoneEvent stays synchronous; source UniverseID stored and re-resolved at replay");
+    puts("PASS: cancel applies to buffered posts; gone source dropped+freed; overflow fails closed");
+    puts("PASS: comparison reports the first differing event type; cue activations compared as a multiset");
+    puts("PASS: foreign-thread entry points pass through and count nothing");
+    return 0;
+}
