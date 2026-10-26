@@ -16,6 +16,17 @@ static void *checkudata(lua_State *L, int index, const char *name) {
     (void)L; assert(index == 1 && !strcmp(name, META)); return &fake_owner;
 }
 static BOOL WINAPI fake_qpc(LARGE_INTEGER *value) { *value = fake_now; return TRUE; }
+static const NT_TIB *volatile helper_tib;
+static DWORD helper_id;
+static volatile LONG helper_stop;
+static volatile uint64_t helper_sink;
+static DWORD WINAPI profile_helper(LPVOID unused) {
+    (void)unused;
+    helper_id = GetCurrentThreadId();
+    helper_tib = (const NT_TIB *)NtCurrentTeb();
+    while (!helper_stop) helper_sink++;
+    return 0;
+}
 
 static void setup(void) {
     memset(fake_table, 0, sizeof(fake_table));
@@ -296,12 +307,36 @@ int main(void) {
         walk_chain_ok = walk_in_hooks_module;
     }
 
+    /* Profile mode: the sampler stops (thread joined, tables freed) before disarm completes. */
+    {
+        HANDLE helper = CreateThread(NULL, 0, profile_helper, NULL, 0, NULL);
+        while (!helper_tib) Sleep(1);
+        setup();
+        fake_table[3] = &hook_begin;
+        fake_owner.profile = 1;
+        sp_params params = {.thread_id = helper_id, .tib = helper_tib, .slot_register = -1,
+                            .interval_us = 1000, .depth = 16};
+        assert(!simprof_start(&params));
+        Sleep(100);
+        assert(sp.state == 1 && sp.thread && sp.win.samples > 0);
+        move(&hook); /* the owner thread snapshots the slot handlers' Move() */
+        assert(sp_slot_vfunc[SLOT] == (uintptr_t)(void *)move && sp_slot_vfunc[3] == (uintptr_t)(void *)sim_begin);
+        stop(&fake_lua);
+        assert(!current && !fake_owner.armed && !sp.thread && !sp.tables && sp.state == 0);
+        assert(SuspendThread(helper) == 0);
+        ResumeThread(helper);
+        helper_stop = 1;
+        assert(WaitForSingleObject(helper, 5000) == WAIT_OBJECT_0);
+        CloseHandle(helper);
+    }
+
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: fixedtick read-only cadence, pause/loading, lifetime and fail-closed guards");
     puts("PASS: fixed60 dt branch patch, per-frame guards and restore on every disarm");
     puts("PASS: component-walk profiling: verified vtable swap, per-sector sum/max, foreign threads, restore");
     puts("PASS: component-walk sector entry: grace, chain on attention hooks, refuse unknown, restore");
     puts("PASS: simulation-cost brackets measure the slot loop, skip loading/foreign threads, unregister on stop");
+    puts("PASS: profile mode: sampler snapshots slot handlers on the owner thread and stops before disarm");
     puts("PASS: fixed60catchup tracks wall time at 30/60/144/1000 fps, bounded catch-up, Jolt sub-steps, restore");
     return 0;
 }
