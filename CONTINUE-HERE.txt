@@ -1,11 +1,22 @@
-X4 MULTIPLAYER — INTERNAL DEVELOPMENT — 25 OCTOBER 2026
+X4 MULTIPLAYER — DEVELOPMENT HANDOFF — 26 OCTOBER 2026
+
+PUBLIC SOURCE POLICY (owner decision, 26 October)
+GitHub development repository is public. LICENSE.md / NOTICE.txt / LICENSING.md
+allow use, modification, forks and redistribution for permitted noncommercial
+purposes; commercial use outside those terms needs the owner's explicit written
+permission and any required contributor permissions. Original write/merge access
+remains restricted to the owner and invited collaborators. Official playable
+packages still require separate release authorization. Older public/private or
+source-inspection statements in historical reports are not the current policy.
+The 7.5.0 delivery below was merged into main through PR46; later experiments
+remain on their task branches. The following gameplay notes retain their dates.
 
 CURRENT CHECKOUT / REQUEST
 work/x4-weapons-7-4, contrib/astra-7-5-delivery, stacked on019bff1 of
-contrib/astra-faction-missions / draftPR45 (NPC base3020f54 / draftPR44).
+contrib/astra-faction-missions / PR45 (NPC base3020f54 / PR44).
 User supplied7.5.0 feedback; human testing continues. Next-version host/guest
 logging tools must record the whole playtest; user explicitly deferred development.
-Delivery draftPR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
+Integrated delivery PR46: https://github.com/Lith7ium/X4-Multiplayer/pull/46
 Delivered7.5.0 from4078f44; report: reports/INTERNAL-7-5-DELIVERY.txt.
 Project lead: Ferrite, assigned by the owner25Oct. Astra / A:primary is now a
 contributor; agree new tasks/interfaces/integration with Ferrite. This supersedes

@@ -1,4 +1,15 @@
-# X4 Multiplayer — internal development
+# X4 Multiplayer — public development
+
+Free to download, build, use, modify and share for purposes permitted by the
+[PolyForm Noncommercial License 1.0.0](LICENSE.md). Commercial use outside those
+purposes requires **Lith7ium's explicit written permission**. See
+[licensing and commercial requests](LICENSING.md) and [required notices](NOTICE.txt).
+This is source-available software with a noncommercial restriction, not an
+OSI-approved open-source project.
+
+Anyone may fork and change their own copy. Only the owner and invited
+collaborators can push to this original repository or merge changes here;
+visitors can propose changes through pull requests.
 
 Experimental two-player co-op for X4 Foundations 9.00, Steam build 23660954.
 The host prepares a native starting save and transfers it to the guest. Selected
@@ -8,9 +19,9 @@ persistence remain unfinished.
 New contributors and coding agents: start with the
 [onboarding packet](onboarding/00-START-HERE.txt), including its pinned code baseline,
 [starter prompt](onboarding/01-AGENT-START-PROMPT.txt) and
-[source map](onboarding/03-CODE-AND-STATUS.txt). Current development is on
-`contrib/astra-7-5-delivery`, stacked on the NPC/mission development branches;
-do not assume `main` has these changes.
+[source map](onboarding/03-CODE-AND-STATUS.txt). The integrated `main` baseline contains the 7.5.0 delivery. Dedicated-server
+and additional-client experiments are on separate development branches; agree
+the actual task baseline with Ferrite before contributing.
 
 Read [AGENTS.md](AGENTS.md) and the short [current handoff](CONTINUE-HERE.txt).
 Use [development setup](DEVELOPMENT.txt) and [contribution rules](CONTRIBUTING.txt)
@@ -39,19 +50,23 @@ enabled in launcher-generated test configurations. Source and unconfigured
 packages remain inert. NPC scope is free-flying S/M main hull/shields with admitted
 stock guns; mission scope is standalone matching-ship kill contracts without
 inventory rewards. Separate native host/guest runs passed within their documented
-scope. Matched human acceptance remains pending; use the
+scope. Subsequent human tests confirmed supported NPC destruction and shared
+kill-contract completion, with intermittent NPC synchronization still unresolved.
+See the [human results](reports/PLAYTEST-7.5.0-20261025.txt) and
 [new NPC/mission procedure](distribution/HUMAN-NPC-MISSION-TEST.txt).
 
 ## Acceptance and remaining work
 
 Human tests have confirmed ordinary cargo/magnet interaction, Cooperative Trial,
 radar, station/asteroid starting alignment, movement and Alt+Tab within their tested
-scope. On 24 October, guest-to-host shield damage was explicitly confirmed on both
-screens. This does not establish full hull/death or arbitrary weapon/NPC acceptance.
+scope. The 25 October human test also confirmed PvP damage, the supported shared
+kill mission and observed docking/ship-exchange sequences. These are bounded
+results, not acceptance of all ships, weapons, missions or docking situations.
 
 Open reports include guest inability to select a correctly moving host ship,
-boarding/occupied-pad cases, captured-ship ownership, NPC combat and faction-fleet
-orders. Complete background economy, progressed-world save/resume and absent-client
+remaining occupied-pad cases, captured-ship ownership and faction-fleet orders.
+NPC targeting/speed/fire remain intermittent, and highway travel can cause
+position jumps. Guest wreck/debris presentation is incomplete. Complete background economy, progressed-world save/resume and absent-client
 catchup remain unfinished. Restarting currently returns to the pristine starting
 world. See [world requirements](WORLD-SYNC-REQUIREMENTS.txt) and the current handoff
 for evidence limits and the relevant native reports.
@@ -65,7 +80,9 @@ integration gates. Documentation changes need reference/diff checks, not gamepla
 Preserve normal saves, settings, Steam subscriptions and sealed packages. Preference
 import is read-only at the source. The withdrawn Workshop-selection writer stays
 withdrawn. Never commit credentials, saves, configured packages or installed
-`config.lua`; source configuration stays inert. Work remains internal; public
-packages or source-mirror updates require an explicit owner request.
+`config.lua`; source configuration stays inert. Source development is public,
+while official playtest packages remain internal unless the owner authorizes a
+public release. The license permits third-party noncommercial builds, but those
+are independent builds and must not be presented as an official project release.
 The current code uses no game-memory offsets or copied assets; engine
 instrumentation is opt-in under `ENGINE-INSTRUMENTATION.txt`.

@@ -1,0 +1,12 @@
+Required Notice: Copyright (c) 2026 Lith7ium and the X4 Multiplayer contributors.
+Required Notice: X4 Multiplayer is an independent project and is not endorsed by Egosoft.
+
+Project: https://github.com/Lith7ium/X4-Multiplayer
+Project license: PolyForm Noncommercial License 1.0.0 (LICENSE.md).
+Ownership of individual contributions remains with their respective rights holders.
+
+X4: Foundations, its executable, game content and trademarks belong to their
+respective rights holders. This project grants no rights to those materials.
+Separately licensed dependencies retain their own licenses and notices; see
+LICENSING.md and distribution/THIRD-PARTY.txt. Preserve the license and required
+notices when sharing this project's source or binaries, including modified copies.

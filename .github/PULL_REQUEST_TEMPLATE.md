@@ -16,3 +16,12 @@ List dependencies or overlapping PRs, required matched client/server updates and
 known limitations. State whether the sealed internal test pair is affected. Record
 durable interface decisions in their owning documentation. Keep generated
 packages, session keys and personal installation data out of this PR.
+
+## Contribution rights
+
+- [ ] I have the rights to submit my original contribution under LICENSE.md
+      (PolyForm Noncommercial 1.0.0), and have identified and preserved any
+      separately licensed material and notices.
+
+Submitting this PR does not transfer copyright or automatically grant commercial
+relicensing rights. See LICENSING.md and CONTRIBUTING.txt.

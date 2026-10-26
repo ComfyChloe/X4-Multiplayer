@@ -1,18 +1,19 @@
 X4 MULTIPLAYER - CONTRIBUTOR AND AGENT HANDOFF
-Updated 25 October 2026 | INTERNAL DEVELOPMENT
+Updated 26 October 2026 | PUBLIC SOURCE / INTERNAL OFFICIAL PLAYTESTS
 
 START HERE
 
+Project owner is Lith7ium, who retains licensing and publication decisions.
 Project lead is Ferrite (owner assignment, 25 October 2026). Astra / A:primary is
 now a contributor; agree new tasks, interfaces and integration with Ferrite.
 New contributors: read CONTINUE-HERE.txt and onboarding/00-START-HERE.txt for current
-evidence, the starter prompt, source map and candidate scopes. Current delivery
-work is on contrib/astra-7-5-delivery, draft PR46, not necessarily main. Historical
+evidence, the starter prompt, source map and candidate scopes. The 7.5.0 delivery
+was integrated into main through PR46; experiments remain on task branches. Historical
 7.4 setup commands are examples; agree the actual task baseline and PR target.
 Generic origin/main examples below apply only when main is that agreed baseline.
 
 Humans using Claude Code, Codex or another coding agent can contribute through
-the same private Git repository. Git shares committed files and history, not
+the same public Git repository. Git shares committed files and history, not
 agent conversations, private memory, credentials, installed games or virtual
 environments. The shared documents are the portable handoff.
 
@@ -31,11 +32,27 @@ The user has chosen to keep primary native X4 testing on their current PC.
 
 GET ACCESS AND CREATE A DEVELOPMENT ENVIRONMENT
 
-The repository owner invites the contributor's GitHub account as a collaborator
-to https://github.com/Lith7ium/X4-Multiplayer. The contributor accepts, then uses
-their own Git credentials. A Claude account alone does not grant repository
-access. Use Claude Code or another coding environment with an actual checkout;
-a normal chat does not automatically edit or push the repository.
+Anyone can clone or fork the public repository without an invitation. For an
+independent contribution, push to your own fork and open a pull request against
+https://github.com/Lith7ium/X4-Multiplayer. A fork does not grant write access to
+the original repository. Only the owner and explicitly invited collaborators can
+push or merge there. Invited collaborators accept the invitation and authenticate
+with their own Git credentials. A coding-agent subscription grants no access by
+itself; use a coding environment with an actual checkout.
+
+LICENSE FOR CONTRIBUTIONS
+
+Original project code uses PolyForm Noncommercial License 1.0.0 in LICENSE.md.
+Read LICENSING.md and preserve NOTICE.txt and any third-party attribution.
+By intentionally submitting an original contribution for inclusion under these
+terms, you offer it under the same license and confirm that you have the rights
+to do so. Identify any separately licensed material and obtain agreement on its
+compatibility before inclusion. Do not submit proprietary game code or assets.
+Copyright remains with each author. This does not automatically transfer rights
+in earlier contributions or grant the owner a commercial license to separately
+owned work. Commercial exceptions need the owner's explicit written approval and
+any additional permissions required from the relevant rights holders.
+
 
 For a new Linux x86_64 checkout:
   git clone https://github.com/Lith7ium/X4-Multiplayer.git X4-Multiplayer
@@ -141,6 +158,9 @@ Commit and publish the task branch, then open a pull request to main:
   git commit -m "Describe the behavior changed"
   git push -u origin contrib/yourname-task
 
+For contributors without original-repository write access, origin must point to
+your OWN fork; use upstream for the original and select it as the pull-request base.
+
 Use .github/PULL_REQUEST_TEMPLATE.md. Explain the problem, resulting behavior,
 validation and remaining limits. If an engine test needs the primary PC, supply
 exact steps and expected observations; mark it pending rather than claiming it
@@ -187,7 +207,7 @@ STARTER PROMPT FOR A NEW AGENT
   <insert task, acceptance criteria and agreed file/interface scope here>.
   Inspect the current Git state and use a separate working directory/branch from
   other active agents. Follow CONTRIBUTING.txt for concurrent work and delivery.
-  Keep changes internal and write original code. Preserve sealed packages and
+  Write original code; official public packages need owner authorization. Preserve sealed packages and
   the prepared human-test installation. Inspect affected source/evidence; run the
   appropriate checks and deliver a commit/PR with evidence and remaining limits.
   Speak German with us; keep documentation and interfaces in English.
@@ -198,5 +218,5 @@ Claude Code project instructions and importing a shared AGENTS.md:
 https://code.claude.com/docs/en/memory#share-one-file-with-other-coding-tools
 Claude Code parallel sessions using separate Git worktrees:
 https://code.claude.com/docs/en/common-workflows#run-parallel-sessions-with-worktrees
-GitHub collaborator access for a private personal repository:
+GitHub collaborator invitations (reading/forking this public repo needs none):
 https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/repository-access-and-collaboration/inviting-collaborators-to-a-personal-repository
