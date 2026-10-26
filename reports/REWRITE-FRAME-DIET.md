@@ -266,6 +266,11 @@ state and with it the mod. What it does get, without hooks:
    driven, no attached component) would be needed first, with walk and transforms.
 6. Slot 8 character animation `SCharacterBaseClass::Move` 0x129f370: 0.41 ms per frame under load, ~0 at
    baseline; may move walking NPCs (see 3).
+7. The game's own HUD Lua inside the Lua dispatch (0.6 / 0.8 ms in total): besides Lua itself, the sampled C calls
+   are HUD work (`SetPointerOverride` 0.10-0.13 ms, `GetTargetElementInfo`, `RegisterMouseInteractions`,
+   `GetWeaponDetails3`, `GetDroneDetails`, ...) plus the harness's own `DebugError` logging (0.08-0.18 ms). The
+   engine side cannot separate them from the mod's scripts; a Lua-side server switch that keeps the HUD menus
+   closed would (mod Lua owners decide).
 
 ## 9. Running it
 
