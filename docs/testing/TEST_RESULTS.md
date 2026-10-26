@@ -2,7 +2,7 @@
 
 X4 9.00 (611726), Steam build 23660954, native Linux. One real X4 creative sandbox,
 isolated profile 45841 with autosave disabled, a local relay and a synthetic peer.
-This report preserves the original movement evidence; see TRADE_TESTS.txt for later work.
+This report preserves the original movement evidence; see [TRADE_TESTS.txt](TRADE_TESTS.txt) for later work.
 
 Actual player movement reached the external peer. A synthetic incoming path created
 and moved one additional ship, confirmed visually by the user. Four deliberate
@@ -30,6 +30,6 @@ autosave stayed disabled. The test game/server stopped and the development exten
 was archived out of the game folder. Windows and two simultaneous games were not
 part of this historical run. Combat, economy, AI and persistence were unproven then.
 
-[Machine-readable results](reports/linux-results.json) and
-[filtered log](reports/private-runtime-log-withheld.txt). `[=ERROR=]` on measurement messages
+[Machine-readable results](../../reports/linux-results.json) and
+[filtered log](../../reports/private-runtime-log-withheld.txt). `[=ERROR=]` on measurement messages
 comes from X4's DebugError output and does not itself mean those messages are errors.

@@ -45,4 +45,4 @@ At 118.25 game seconds the control readback still showed 50 / 50 / 140 energy ce
 All seven original save files retained their SHA256, size and modification time.
 Steam cloud metadata is separate. No test save was created. Test processes stopped
 and the installed development extension was archived out of the game directory.
-[Results](reports/linux-interactions-results.json), [log](reports/private-runtime-log-withheld.txt).
+[Results](../../reports/linux-interactions-results.json), [log](../../reports/private-runtime-log-withheld.txt).

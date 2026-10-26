@@ -89,7 +89,7 @@ Missions and observation:
   tests/test_quests.py, test_monitor.py; distribution/NEXT-TEST.txt.
 
 INTERFACE RULES BEFORE AUTHORITY CHANGES
-Read WORLD-SYNC-REQUIREMENTS.txt and the relevant ARCHITECTURE.md section/source.
+Read docs/WORLD-SYNC-REQUIREMENTS.txt and the relevant docs/ARCHITECTURE.md section/source.
 Engine component handles are local; a matching number across processes is not
 stable identity. Separate entity generation, host/session epoch, pilot authority
 and message sequence. Enqueue-time checks do not protect delayed MD execution;
