@@ -191,6 +191,9 @@ Included by `fixedtick.c` (like walkprof.h) in every mode with the slot 0/15 bra
   (X4 loads the UI script twice at game start and the first instance calls from another thread). A refusal or
   anomaly is latched (`joltwait_reason`, `FEATURE joltwait DISABLED`); `modeFrames` per window tells pure
   windows from mixed ones.
+  A disarm on another thread (Lua teardown) may race a Jolt update holding a serial barrier, so it leaves
+  joltwait installed (entries 3/4 and the WaitForJobs router, pinned module) and the next install adopts it;
+  owner-thread disarms happen between frames and restore everything.
 - Tests: `native/engine/test_physics_probe.c` (synthetic image: verified swap or nothing, owner-thread counting,
   scene attribution, window folding, sampler occupancy/pass/join, loading skip, restore, foreign entries left
   alone), `tests/test_physics_probe_lua.py` (LuaJIT logging).
