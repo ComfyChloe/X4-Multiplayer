@@ -151,3 +151,36 @@ Runs 2026-10-26 pfprobe-001..003 (logs in .local/evidence-075-withheld, not comm
   cannot use the pool faction's account; it needs a ledger (open).
 Not covered natively yet: the Lua/MD session path (Setup/Assign/Relation via relay), the co-op
 ship owner switch while a remote human flies, and anything with two clients.
+
+PROPOSAL: MONEY PER PLAYER (goal 4) - DESIGN ONLY, NOT IMPLEMENTED
+Today (7.x co-op) there is ONE shared wallet: md/x4lan_trade.xml Order debits/credits faction.player
+on the authority for both ships ($account = faction.player when co-op) and checks FUNDS against it;
+client 2 mirrors it (Apply: reward_player money = snapshot money - player.money). Shared faction
+mission rewards are paid once by the stock GM on the authority and reach client 2 the same way.
+Pool factions have no own account (native probe: hasownaccount 0), so faction accounts cannot hold
+per-player money. Proposal: an authority-owned ledger, behind its own flag (player_ledger).
+1. State: md.X4LAN_PlayerFactions.Setup.$ledger = table[$p<K> = integer credits], plus a revision
+   per row. MD variables persist in the authority's save. A human's row is created on first
+   assignment with the session's start balance (the authority's player.money at that moment), so
+   every human starts equal; nothing is minted later except by game rewards.
+2. Writes (authority only), one entry per effect: (rev, K, delta, reason, ref). Trade Order for
+   ship slot K: FUNDS check and debit/credit against ledger K instead of faction.player; the
+   station side stays the station account. Shared mission rewards: credited to the accepting
+   client K (the mission record already carries $client). Kill bounties/other rewards: to the
+   pilot of the ship that earned them (coop pilots), else unassigned (logged).
+   In the 7.x model client 1 is the authority's own player: its row IS player.money there (the
+   authority keeps applying it natively); every other row lives only in the ledger.
+3. Wire: PFMONEY|1|lease|rev|K|balance, authority -> relay -> client K only (cached, resent 1 Hz
+   and on change, new authority lease = new epoch). Client K sets player.money to its row
+   (reward_player delta) and logs PLAYER_FACTIONS MONEY rev balance. This replaces the snapshot
+   money mirror for client 2 when the flag is on.
+4. Local spending on a client (vanilla menus: ship/equipment purchase, crew, plots) is not
+   authoritative today. With the ledger, such spending must become an intent (design section 8:
+   kind, amount, ref) validated against ledger K; until intents exist, the next PFMONEY would
+   silently refund a local purchase, so the flag must stay off for sessions that allow vanilla
+   purchases, or log LEDGER_DIVERGENCE local=... authority=... and keep the authority value.
+5. Server (dedicated): every human is a ledger row; the server's own player.money is unused.
+6. Acceptance (two real clients): a trade by client 2 changes only row p2 and client 2's money,
+   client 1 unchanged; FUNDS refusal independent per client; reconnect republishes the row;
+   save/load on the authority keeps the ledger; a shared mission reward reaches only the
+   accepting client; ordinary cargo/magnet and co-op trade results unchanged.
