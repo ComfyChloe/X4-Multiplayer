@@ -307,6 +307,33 @@ already returned to off and the reporting window is empty. The detour also keeps
 the original PostEvent null-event pass-through. Updated C regressions and 22
 LuaJIT probe tests pass; this does not change the recorded simprof timing failure.
 
+### Corrected wiring smoke failed; two concrete defects removed
+
+The `codex-replay-wiring` native run on immutable source 8190cd8 failed with
+access violation 0xc0000005 after 14 reporting windows (last game time 15.314564).
+All 14 windows reported positive replay with zero dropped/degraded events; the
+30-window gate was not met. The lane was restored. Raw evidence remains at
+`.local/evidence-080-withheld`; no crash stack was recovered, so a precise
+faulting instruction or root cause is not established.
+
+Static review found two definite defects which synthetic tests had missed:
+
+- The DeliverEvent detour declared its third argument as an integer in R8. The
+  pinned caller at 0x99a4df and callee at 0x99c496 use a double time in XMM2. The
+  wrapper now preserves double precision across its census callbacks; a test
+  calls the actual wrapper and requires bit-identical time at the trampoline.
+- Native sector attribution treated generic EventSources/EventListeners as
+  Components and walked their +0x70 field. It now casts the common UniverseID
+  base to Component first and checks each parent range is readable. Non-component
+  and unmapped-parent negative controls return no sector. The cast helper and
+  RTTI names for UniverseID, EventSource and Component are byte-pinned.
+
+These remove concrete ABI/type defects but are not a proven attribution of the
+access violation. A new reviewed immutable smoke is required. Also, listener
+enumeration currently omits the source's own event handler: zero registered
+listeners does not mean no handlers executed, and the native comparison log is
+not yet complete evidence of behavioural equivalence.
+
 - The DeliverEvent per-listener histogram wants each dispatched listener's RTTI; the cheapest native hook is
   to read GetListenersForType at the Deliver enter (walk src+0x28) rather than a per-listener callback —
   confirm with the first census run.

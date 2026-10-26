@@ -62,6 +62,9 @@ WALKPAR_SITES = {
     'walk_registry_find': (0xCED70, 32, 'de126e38d2532250fc386f851f355cdb4812bf6b4507ace0549728e27505f268'),
     'walk_dynamic_cast': (0x19EFB18, 32, 'fd90f2d45c0b2f5e2507ca0c07198bc3572ea03948f1302f226b7048ea3e592f'),
     'walk_get_listeners': (0x999AE0, 32, 'fb18c04c970d8402e8ef0ba5588360b145b99cadfd9210eb324671b6690cf2b4'),
+    'walk_uid_type_name': (0x31FC518, 19, 'df3dfa2eee2df88f9fe315426b53bbabeda257638aef2d28c083c6b7859f0c40'),
+    'walk_source_type_name': (0x3216AA8, 20, '6c913ab1d3a026d269cb858013f24e6479c7580ea1224b20abcf01f1fc39b833'),
+    'walk_component_type_name': (0x31FCF28, 18, '26785d3e666cd811a2055926f14a550544c8ac18970f53ed301630b6701db3b4'),
 }
 WALKPAR_GALAXY_CALL_RVA = 0x9FDF95
 

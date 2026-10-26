@@ -742,8 +742,8 @@ static int wp_want;     /* requested mode, armed lazily each frame until the thr
 /* U::Sector vtable (RVA 0x2b1ea48; slot 674 = Sector::Move 0x784230, verified). The native sector
    resolver walks the +0x70 parent chain (entity.md: +0x70 = parent) to the first component whose
    vtable is the Sector vtable and returns its UniverseID (+8). Sanity-checked raw reads on the live
-   object graph (bounded, aligned, canonical user-space), cached per source per frame; on any doubt
-   it returns 0 (the post counts as rootlevel) and never faults. */
+   object graph (bounded, type-checked, readable), cached per source per frame. Non-components and
+   unreadable parents have no sector attribution. Readability is a snapshot, not lifetime ownership. */
 #define WP_SECTOR_VFTABLE_RVA 0x2b1ea48u
 
 /* Same ID lookup/cast used by FlushCommandQueue (0x99ace0..0x99ad12). Sources
@@ -754,6 +754,7 @@ static int wp_want;     /* requested mode, armed lazily each frame until the thr
 #define WP_DYNAMIC_CAST_RVA 0x19efb18u
 #define WP_UID_TYPE_RVA 0x31fc508u
 #define WP_SOURCE_TYPE_RVA 0x3216a98u
+#define WP_COMPONENT_TYPE_RVA 0x31fcf18u
 static void *wp_native_find(uint64_t id) {
     void *map = *(void **)(image + WP_UIDMAP_RVA);
     if (!map || !id) return NULL;
@@ -777,9 +778,17 @@ static uint64_t wp_native_sector(void *comp) {
     if (wp_scache_key[h] == comp) return wp_scache_val[h];
     void *leaf = comp, *sector_vt = (void *)(image + WP_SECTOR_VFTABLE_RVA);
     uint64_t sid = 0;
+    /* Generic EventSources and EventListeners are not necessarily Components.
+       Their common primary base is UniverseID; only a successful RTTI cast
+       makes the Component parent field meaningful. */
+    if (readable(comp, 16, 0)) {
+        void *(*cast)(void *, int, void *, void *, int) =
+            (void *(*)(void *, int, void *, void *, int))(image + WP_DYNAMIC_CAST_RVA);
+        comp = cast(comp, 0, image + WP_UID_TYPE_RVA, image + WP_COMPONENT_TYPE_RVA, 0);
+    } else comp = NULL;
     for (int i = 0; i < 16 && comp; ++i) {
         uintptr_t p = (uintptr_t)comp;
-        if ((p & 7) || p < 0x10000 || (p >> 47)) break;   /* not a plausible component pointer */
+        if ((p & 7) || p < 0x10000 || (p >> 47) || !readable(comp, 0x78, 0)) break;
         if (*(void **)comp == sector_vt) { sid = *(uint64_t *)((char *)comp + 8); break; }
         comp = *(void **)((char *)comp + 0x70);           /* parent */
     }
@@ -819,10 +828,12 @@ static void wp_d_cancel(void *src, int type, double minTime) {
     if (wp_cancel(src, type, minTime)) return;
     ((void (*)(void *, int, double))wp_det[WPD_CANCEL].tramp)(src, type, minTime);
 }
-static void wp_d_deliver(void *src, void *event, uint32_t t) {
+/* The third argument is time in XMM2, not an integer in R8. The pinned caller
+   (0x99a4df) and callee (0x99c496) both move it as a floating-point register. */
+static void wp_d_deliver(void *src, void *event, double t) {
     wp_deliver_enter(src, event);
     wp_enum_listeners(src, event);   /* census the pre-delivery listener set (read-only) */
-    ((void (*)(void *, void *, uint32_t))wp_det[WPD_DELIVER].tramp)(src, event, t);
+    ((void (*)(void *, void *, double))wp_det[WPD_DELIVER].tramp)(src, event, t);
     wp_deliver_exit(src, event);
 }
 

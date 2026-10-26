@@ -62,12 +62,18 @@ static void *fake_native_find(void *map, uint64_t id, unsigned flags) {
 }
 static void *fake_native_cast(void *base, int delta, void *from, void *to, int is_ref) {
     assert(delta == 0 && is_ref == 0);
-    assert(from == image + WP_UID_TYPE_RVA && to == image + WP_SOURCE_TYPE_RVA);
+    assert(from == image + WP_UID_TYPE_RVA);
+    assert(to == image + WP_SOURCE_TYPE_RVA || to == image + WP_COMPONENT_TYPE_RVA);
     return g_native_cast_missing ? NULL : base;
 }
 static void *fake_native_ref(void *src) {
     assert(src != NULL);
     return g_native_ref_missing ? NULL : g_native_ref;
+}
+static double g_native_delivery_time;
+static void fake_native_deliver(void *src, void *event, double time) {
+    assert(src != NULL && event != NULL);
+    g_native_delivery_time = time;
 }
 
 static int g_cancel_calls;
@@ -257,8 +263,29 @@ int main(void) {
         assert(wp_native_sector(ship) == 777);
         memset(wp_scache_key, 0, sizeof(wp_scache_key));           /* new frame -> recomputed */
         assert(wp_native_sector(ship) == 0);
+        *(void **)((char *)ship + 0x70) = (void *)0x10000; /* canonical but unmapped parent */
+        memset(wp_scache_key, 0, sizeof(wp_scache_key));
+        assert(wp_native_sector(ship) == 0);
+        *(void **)((char *)ship + 0x70) = sec;
+        g_native_cast_missing = 1;                    /* valid non-Component EventSource */
+        memset(wp_scache_key, 0, sizeof(wp_scache_key));
+        assert(wp_native_sector(ship) == 0);
+        g_native_cast_missing = 0;
         wp_sector_resolver = NULL;
     }
+
+    /* Actual native DeliverEvent wrapper must preserve its floating-point ABI
+       across census callbacks, not truncate time to an integer/R8 argument. */
+    engine_setup(WP_CENSUS);
+    scene_init();
+    wp_walk_begin();
+    wp_det[WPD_DELIVER].tramp = (void *)fake_native_deliver;
+    double native_time = 123.456789012345;
+    wp_d_deliver(&o0, &e_same, native_time);
+    assert(memcmp(&g_native_delivery_time, &native_time, sizeof(native_time)) == 0);
+    assert(wp_frame.deliver_calls == 1);
+    wp_det[WPD_DELIVER].tramp = NULL;
+    wp_walk_end();
 
     /* Stage 0 census: counters fold into the window, cross-sector flags, sector timing. */
     engine_setup(WP_CENSUS);
