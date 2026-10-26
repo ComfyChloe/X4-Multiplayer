@@ -152,7 +152,7 @@ class RelayRoster(unittest.TestCase):
         self.assertEqual(r.handle(f'PFREL|1|{l1}|2|1|2|2'.encode(), P1, session.peers, 1), [])   # out of range
         # Guest relation intent goes to the host, tagged with the sender's own index.
         out = r.handle(f'PFREQ|1|{l2}|5|1|-0.5'.encode(), P2, session.peers, 1)
-        self.assertEqual(out, [(P1, f'PFREQ|1|{l1}|2|5|1|-0.5000'.encode())])
+        self.assertEqual(out, [(P1, f'PFREQ|1|{l1}|2|1|1|-0.5000'.encode())])
         self.assertEqual(r.handle(f'PFREQ|1|{l2}|6|2|-0.5'.encode(), P2, session.peers, 1), [])  # self
         # Sectors: host rows cached and forwarded; a guest may only claim for itself.
         out = r.handle(f'PFSEC|1|{l1}|1|cluster_14_sector001_macro|S1'.encode(), P1, session.peers, 1)
@@ -423,6 +423,93 @@ class LuaCore(unittest.TestCase):
         self.assertEqual(rel[-1]['value'], -.5)
         rel = [dict(m.args) for m in g.hio.calls.values() if m.action == 'Relation']
         self.assertEqual((rel[-1]['fa'], rel[-1]['fb'], rel[-1]['value']), ('player', 'x4lan_player2', -.5))
+
+    def test_relation_intents_survive_both_udp_hop_reordering_and_reconnects(self):
+        """Actual Python relay + Lua client lease validation + Lua authority core."""
+        lua = self.runtime()
+        lua.execute((EXT / 'ui/client.lua').read_text(encoding='utf-8'))
+        lua.execute('''
+          authority,aio=make('p1')
+          function attachAuthority(lease)
+            local transport={send=function()end,receive=function()end}
+            local cfg={slot='p1',token=string.rep('a',32),build='test',bubble='test',sector='s'}
+            receiver=X4LAN_CLIENT.new(cfg,transport,string.rep('1',32))
+            receiver:receive('WELCOME|1|'..string.rep('1',32)..'|'..lease..'|20',0)
+            receiver.receiveExtension=function(self,f,now) return authority.receive(self.lease,f,now) end
+          end
+        ''')
+        g = lua.globals()
+        session, authority_lease, client_lease = joined()
+        relay = PlayerRoster()
+        g.attachAuthority(authority_lease)
+        for index in (1, 2):
+            g.authority.receive(authority_lease, g.split(f'PFROSTER|1|{authority_lease}|{index}|41|faction_player|1'), 0)
+
+        def request(seq, value, target=1, lease=None):
+            return relay.handle(f'PFREQ|1|{lease or client_lease}|{seq}|{target}|{value}'.encode(), P2, session.peers, 0)
+
+        def deliver(messages):
+            for address, packet in messages:
+                self.assertEqual(address, P1)
+                g.receiver.receive(g.receiver, packet.decode(), 1)
+
+        def value():
+            return g.authority.applied['1-2'].value
+
+        # First hop: a delayed hostile request cannot override a newer allied request.
+        deliver(request(2, '.75'))
+        self.assertEqual(request(1, '-.5'), [])
+        self.assertEqual(value(), .75)
+        # Second hop: forward both, then deliver newer neutral before older hostile.
+        older, newer = request(3, '-.5'), request(4, '0')
+        deliver(newer); deliver(older); deliver(newer)
+        self.assertEqual(value(), 0)
+        # Invalid ingress must not consume a valid request at that sequence.
+        self.assertEqual(request(5, '0', target=2), [])
+        self.assertEqual(request(5, '0', target=0), [])
+        self.assertEqual(request(5, '0', target=17), [])
+        self.assertEqual(request(5, '2'), [])
+        deliver(request(5, '.75'))
+        self.assertEqual(value(), .75)
+        # Receiver also rejects an invalid high-order envelope without poisoning its fence.
+        deliver([(P1, f'PFREQ|1|{authority_lease}|2|999|2|-.5'.encode())])
+        client_lease = 'e' * 32
+        session.peers['p2'].lease = client_lease
+        after_client_reconnect = request(1, '-.5')
+        deliver(after_client_reconnect)
+        self.assertEqual(value(), -.5)
+        g.authority.receive(authority_lease, g.split(f'PFROSTER|1|{authority_lease}|2|426f62|faction_player|9'), 0)
+        deliver(newer)  # identity/reconnect never resets the receiver fence
+        self.assertEqual(value(), -.5)
+        # New authority lease restarts relay envelope ordering; same core may survive reconnect.
+        old_authority_lease = authority_lease
+        authority_lease = 'f' * 32
+        session.peers['p1'].lease = authority_lease
+        g.attachAuthority(authority_lease)
+        new_epoch = request(2, '0')
+        self.assertEqual(new_epoch[0][1].decode().split('|')[4], '1')
+        deliver(new_epoch)
+        self.assertEqual(value(), 0)
+        deliver(after_client_reconnect)  # outer client rejects previous authority lease
+        self.assertEqual(value(), 0)
+        deliver([(P1, f'PFREQ|1|{old_authority_lease}|2|1000|1|-.5'.encode())])
+        self.assertEqual(value(), 0)
+        # Different target pairs are independent, but opposite endpoints of ONE pair
+        # share a fence. A newer unrelated intent must not discard an older valid pair.
+        from types import SimpleNamespace
+        address3, lease3 = ('192.0.2.3', 3000), 'd' * 32
+        session.peers['p3'] = SimpleNamespace(address=address3, lease=lease3)
+        g.authority.receive(authority_lease, g.split(f'PFROSTER|1|{authority_lease}|3|43|faction_player|1'), 0)
+        different_pair_newer = request(4, '-.5', target=3)
+        different_pair_older = request(3, '.75', target=1)
+        self.assertTrue(different_pair_older)  # reordered FIRST hop, distinct target
+        deliver(different_pair_older); deliver(different_pair_newer)  # reversed SECOND hop
+        self.assertEqual(value(), .75)
+        self.assertEqual(g.authority.applied['2-3'].value, -.5)
+        from2 = request(5, '.75', target=3)
+        from3 = relay.handle(f'PFREQ|1|{lease3}|1|2|0'.encode(), address3, session.peers, 0)
+        deliver(from3); deliver(from2)
+        self.assertEqual(g.authority.applied['2-3'].value, 0)
 
 
 @unittest.skipUnless(LuaRuntime, 'lupa.luajit21 not installed')
