@@ -51,6 +51,18 @@
 #define MIRROR_AB_PREFETCH 4u
 #define MIRROR_FLAGS_ALL 7u
 #define MIRROR_PREFETCH_AHEAD 4u
+/* Round-robin capture (the path to a live mirror): after one complete frame (which counts the
+   sectors), every captured frame walks the galaxy and cluster levels but only `sectors` sectors in
+   rotation (walk order), each set for two captured frames in a row with `pairs` (replay pairs), plus
+   every sector whose attention is >= hot_attention (0 = none). A captured sector is the same walk as
+   in a complete frame, so it is exact for its frame; the others keep their last captured frame.
+   Subset frames carry MIRROR_FRAME_SUBSET in their FRAM flags. No engine pointer survives a frame.
+   This bounds sector count, not time or row count; the first full frame and hot sectors can be
+   expensive. Consumers must explicitly opt into stale, partial mirror updates. */
+#define MIRROR_FRAME_SUBSET 4u
+#define MIRROR_RR_MAX 8192u
+typedef struct { unsigned sectors; int pairs; int32_t hot_attention; } mirror_rr_opts;
+static mirror_rr_opts mirror_rr_next; /* taken (and cleared) by the next arm */
 #define MIRROR_CLASS_SECTOR 0x58u
 #define MIRROR_CLASS_CLUSTER 0x0fu
 #define MIRROR_CLASS_GALAXY 0x2fu
@@ -89,7 +101,7 @@ typedef struct {
     uint16_t class_flags;        /* MF_* of its C++ class */
     uint8_t class_id;
     uint16_t depth;
-    uint32_t root_index;         /* world record index (= SectorIx in x4mp-sim) */
+    uint32_t root_index;         /* world record index; not a stable SectorIx in subset frames */
     uint32_t row_index;          /* row inside the frame (all roots) */
 } mirror_rowinfo;
 typedef struct {
@@ -131,6 +143,10 @@ typedef struct {
     uint64_t region_queries, region_cache_full, visited, last_visited;
     double walk_ms_sum, serialize_ms_sum;
     int prefetch_now;
+    mirror_rr_opts rr;
+    int subset_now;
+    uint32_t rr_start, rr_held, sector_seq, sectors_last;
+    uint64_t frames_subset;
     uint64_t frames_prefetch, frames_plain;
     double walk_ms_prefetch_sum, walk_ms_plain_sum;
     uint64_t visited_by_class[256]; /* components visited per class id, all captured frames */
@@ -557,6 +573,15 @@ static void mirror_children(const unsigned char *field, uint64_t parent, unsigne
 
 static int mirror_full;
 
+/* Round-robin selection of the `seq`-th sector of the walk (see MIRROR_FRAME_SUBSET). */
+static int mirror_rr_selected(uint32_t seq, int32_t attention) {
+    if (ms.rr.hot_attention > 0 && attention >= ms.rr.hot_attention) return 1;
+    uint32_t n = ms.sectors_last ? ms.sectors_last : 1;
+    /* New sectors join the rotation after this frame's census. Do not wrap their sequence
+       numbers onto an old slot and accidentally exceed the configured cold-sector budget. */
+    return seq < n && (seq + n - ms.rr_start % n) % n < ms.rr.sectors;
+}
+
 static void mirror_visit(const unsigned char *comp, uint64_t parent, unsigned root, unsigned depth, unsigned level) {
     ++ms.visited;
     if (level > MIRROR_MAX_DEPTH || ((uintptr_t)comp & 7) || !mirror_ok(comp, 0x200)) { ++ms.walk_errors; return; }
@@ -565,6 +590,10 @@ static void mirror_visit(const unsigned char *comp, uint64_t parent, unsigned ro
     if (!cls) { ++ms.walk_errors; ++ms.visited_by_class[MIRROR_UNKNOWN_CLASS]; return; }
     uint8_t cid = *(const int32_t *)(comp + MO_MODE) ? cls->id1 : cls->id0;
     ++ms.visited_by_class[cid];
+    if (cid == MIRROR_CLASS_SECTOR) {
+        uint32_t seq = ms.sector_seq++;
+        if (ms.subset_now && !mirror_rr_selected(seq, *(const int32_t *)(comp + MO_ATTENTION))) return;
+    }
     uint64_t uid = *(const uint64_t *)(comp + MO_ID);
     if (cid == MIRROR_CLASS_SECTOR || cid == MIRROR_CLASS_CLUSTER) {
         unsigned r = mirror_new_root(uid, cid == MIRROR_CLASS_SECTOR ? 0 : 1);
@@ -659,7 +688,14 @@ static int mirror_write_header(uint64_t session_seed) {
     mirror_put_u64(session_seed);
     mirror_put_u32(ms.interval);
     mirror_put_u32(ms.flags);
-    mirror_put_str("x4lan_fixedtick mirror v1");
+    if (ms.rr.sectors) {
+        char producer[96];
+        snprintf(producer, sizeof producer, "x4lan_fixedtick mirror v1 rr=%u pairs=%d hot=%d", ms.rr.sectors,
+                 ms.rr.pairs ? 1 : 0, (int)ms.rr.hot_attention);
+        mirror_put_str(producer);
+    } else {
+        mirror_put_str("x4lan_fixedtick mirror v1");
+    }
     unsigned ncols = (unsigned)MIRROR_CORE_COLS;
     for (unsigned v = 0; v < mirror_nvisitors; ++v) ncols += mirror_visitors[v]->ncolumns;
     mirror_put_u16((uint16_t)ncols);
@@ -832,6 +868,8 @@ static const char *mirror_arm_unchecked(const wchar_t *path, unsigned interval, 
     free(ms.rows); free(ms.vrows); free(ms.roots); free(ms.order); free(ms.buf);
     for (unsigned i = 0; i < MIRROR_QUEUE; ++i) free(ms.queue[i].buf);
     memset(&ms, 0, sizeof(ms));
+    ms.rr = mirror_rr_next;
+    memset(&mirror_rr_next, 0, sizeof(mirror_rr_next));
     if (!mirror_sync_ready) {
         InitializeCriticalSection(&mirror_cs);
         InitializeConditionVariable(&mirror_cv);
@@ -903,6 +941,8 @@ static void mirror_frame(uint64_t frame) {
     ms.galaxy_misses = 0;
     unsigned root = mirror_new_root(*(const uint64_t *)(galaxy + MO_ID), 2);
     ms.prefetch_now = (ms.flags & MIRROR_AB_PREFETCH) && ((ms.frames_written + ms.frames_dropped) & 1);
+    ms.sector_seq = 0;
+    ms.subset_now = ms.rr.sectors && ms.sectors_last > 0 && ms.frames_written > 0;
     uint64_t visited_before = ms.visited;
     mirror_visit(galaxy, 0, root, 0, 0);
     ms.last_visited = ms.visited - visited_before;
@@ -910,7 +950,17 @@ static void mirror_frame(uint64_t frame) {
     qpc_read(&t_walk);
     for (unsigned v = 0; v < mirror_nvisitors; ++v)
         if (mirror_visitors[v]->end_frame) mirror_visitors[v]->end_frame(mirror_visitors[v]->user);
-    uint32_t flags = (mirror_full ? 1u : 0u) | (ms.drop_flag ? 2u : 0u);
+    uint32_t flags = (mirror_full ? 1u : 0u) | (ms.drop_flag ? 2u : 0u) | (ms.subset_now ? MIRROR_FRAME_SUBSET : 0u);
+    if (ms.rr.sectors) {
+        if (ms.subset_now) {
+            ++ms.frames_subset;
+            if (!ms.rr.pairs || ++ms.rr_held >= 2) {
+                ms.rr_held = 0;
+                ms.rr_start = (ms.rr_start + ms.rr.sectors) % (ms.sector_seq ? ms.sector_seq : 1);
+            }
+        }
+        ms.sectors_last = ms.sector_seq;
+    }
     if (mirror_full) ++ms.partial_frames;
     /* Sample for the Lua cross-check: rows with a captured pose, spread over the frame. */
     ms.nsample = 0;
@@ -984,7 +1034,8 @@ static void mirror_num(lua_State *L, const char *name, double value) {
     p_lua_setfield(L, -2, name);
 }
 
-/* owner:mirror(path, interval, frames[, flags[, min_attention]]) -> true | nil, reason */
+/* owner:mirror(path, interval, frames[, flags[, min_attention[, rr_sectors[, rr_pairs[, hot_attention]]]]])
+   -> true | nil, reason (rr_* and hot_attention: round-robin capture, see MIRROR_FRAME_SUBSET) */
 static int l_mirror(lua_State *L) {
     owner *o = p_luaL_checkudata(L, 1, META);
     const char *why = NULL;
@@ -994,6 +1045,9 @@ static int l_mirror(lua_State *L) {
     double frames = p_lua_type(L, 4) == LUA_TNUMBER ? p_lua_tonumber(L, 4) : -1;
     double flags = p_lua_type(L, 5) == LUA_TNUMBER ? p_lua_tonumber(L, 5) : 0;
     double attention = p_lua_type(L, 6) == LUA_TNUMBER ? p_lua_tonumber(L, 6) : 0;
+    double rr = p_lua_type(L, 7) == LUA_TNUMBER ? p_lua_tonumber(L, 7) : 0;
+    double pairs = p_lua_type(L, 8) == LUA_TNUMBER ? p_lua_tonumber(L, 8) : 0;
+    double hot = p_lua_type(L, 9) == LUA_TNUMBER ? p_lua_tonumber(L, 9) : 0;
     wchar_t wpath[MAX_PATH];
     if (o != current || !o->armed) why = "probe not armed";
     else if (GetCurrentThreadId() != owner_thread) why = "wrong thread";
@@ -1004,7 +1058,14 @@ static int l_mirror(lua_State *L) {
     else if (!(frames >= 1 && frames <= 1e7 && frames == (double)(uint64_t)frames)) why = "invalid frame count";
     else if (!(flags >= 0 && flags <= MIRROR_FLAGS_ALL && flags == (double)(unsigned)flags)) why = "invalid flags";
     else if (!(attention >= 0 && attention <= 11)) why = "invalid min_attention";
-    else why = mirror_arm(wpath, (unsigned)interval, (uint64_t)frames, (unsigned)flags, (int32_t)attention);
+    else if (!(rr >= 0 && rr <= MIRROR_RR_MAX && rr == (double)(unsigned)rr)) why = "invalid rr_sectors";
+    else if (!(pairs == 0 || pairs == 1)) why = "invalid rr_pairs";
+    else if (!(hot >= 0 && hot <= 11)) why = "invalid hot_attention";
+    else {
+        mirror_rr_next = (mirror_rr_opts){(unsigned)rr, pairs != 0, (int32_t)hot};
+        why = mirror_arm(wpath, (unsigned)interval, (uint64_t)frames, (unsigned)flags, (int32_t)attention);
+        memset(&mirror_rr_next, 0, sizeof(mirror_rr_next)); /* also when arming refused */
+    }
     if (why) {
         p_lua_pushnil(L);
         p_lua_pushlstring(L, why, strlen(why));
@@ -1042,6 +1103,9 @@ static int l_mirror_stats(lua_State *L) {
         mirror_num(L, "walk_ms", n > 0 ? ms.walk_ms_sum / n : 0.0);
         mirror_num(L, "serialize_ms", n > 0 ? ms.serialize_ms_sum / n : 0.0);
         mirror_num(L, "frames_prefetch", (double)ms.frames_prefetch);
+        mirror_num(L, "frames_subset", (double)ms.frames_subset);
+        mirror_num(L, "rr_sectors", ms.rr.sectors);
+        mirror_num(L, "sectors", ms.sectors_last);
         mirror_num(L, "frames_plain", (double)ms.frames_plain);
         mirror_num(L, "walk_ms_prefetch", ms.frames_prefetch ? ms.walk_ms_prefetch_sum / (double)ms.frames_prefetch : 0.0);
         mirror_num(L, "walk_ms_plain", ms.frames_plain ? ms.walk_ms_plain_sum / (double)ms.frames_plain : 0.0);

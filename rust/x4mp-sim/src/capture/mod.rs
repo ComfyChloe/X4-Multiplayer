@@ -16,6 +16,8 @@
 //!            | u16 ncols | ncols x (u16 id | u8 elem | u8 0 | u16 count | str name)
 //! DICT    := u8 dict (1 faction) | u8[3] 0 | u32 n | n x (u32 index | str value)
 //! FRAM    := u64 frame | u64 game_time_bits | u32 nsectors | u32 flags
+//!            Flags: 1 = truncated, 2 = earlier writer drop, 4 = selected roots only (subset).
+//!            A subset is not a simultaneous universe snapshot; omitted roots are unknown.
 //!            | nsectors x (u64 root_uid | u8 kind | u8 0 | u16 ncols | u32 nrows
 //!                          | ncols x (u16 id | u16 0 | u32 nbytes | bytes))
 //! STAT    := u64 frames | u64 dropped | u64 bytes | u64 walk_errors
@@ -37,7 +39,7 @@ pub mod read;
 pub mod replay;
 pub mod write;
 
-pub use mirror::{capture_universe, mirror, MirrorReport};
+pub use mirror::{capture_universe, mirror, mirror_subset, MirrorReport};
 pub use read::CaptureReader;
 pub use replay::{replay_frames, CaptureReplayReport, ReplaySetup};
 pub use write::CaptureWriter;
@@ -350,6 +352,13 @@ impl SectorRecord {
         self.columns.iter().find(|c| c.id == id)
     }
 }
+
+/// Frame was truncated by the capture row limit; it is not a complete observation.
+pub const FRAME_TRUNCATED: u32 = 1;
+/// One or more preceding capture attempts were dropped by the writer.
+pub const FRAME_DROPPED_BEFORE: u32 = 2;
+/// Only selected world roots were observed. Omitted roots are unknown, not empty.
+pub const FRAME_SUBSET: u32 = 4;
 
 /// One captured frame.
 #[derive(Debug, Clone, PartialEq)]

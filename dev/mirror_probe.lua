@@ -6,6 +6,9 @@
 -- X4LAN_MIRROR_FLAGS (1 = record every component, 2 = skip the nav cache, 4 = A/B prefetch cost measurement;
 -- default 0),
 -- X4LAN_MIRROR_ATTENTION (skip sector subtrees below this attention, default 0),
+-- X4LAN_MIRROR_RR (round-robin: sectors per captured frame after one complete frame, default 0 = off),
+-- X4LAN_MIRROR_RR_PAIRS (1 = each set twice in a row), X4LAN_MIRROR_HOT (sectors at or above this
+-- attention in every round-robin frame, default 0 = none),
 -- X4LAN_MIRROR_DELAY (seconds after the probe armed, default 20), X4LAN_MIRROR_CHECKS (samples per
 -- captured frame, default 16).
 -- In the UI slot of every frame the probe captured, logs for sampled objects the engine's own
@@ -28,6 +31,9 @@ local interval=X4LAN_MIRROR_INTERVAL or 1
 local frames=X4LAN_MIRROR_FRAMES or 10
 local flags=X4LAN_MIRROR_FLAGS or 0
 local attention=X4LAN_MIRROR_ATTENTION or 0
+local rr=X4LAN_MIRROR_RR or 0
+local rrPairs=X4LAN_MIRROR_RR_PAIRS or 0
+local hot=X4LAN_MIRROR_HOT or 0
 local delay=X4LAN_MIRROR_DELAY or 20
 local checks=X4LAN_MIRROR_CHECKS or 16
 local startAt,armed,done
@@ -43,14 +49,20 @@ SetScript('onUpdate',function()
  if not armed then
   if not startAt then startAt=now+delay;return end
   if now<startAt then return end
-  local ok,why=owner:mirror(X4LAN_MIRROR_PATH,interval,frames,flags,attention)
+  local ok,why
+  if rr>0 then
+   ok,why=owner:mirror(X4LAN_MIRROR_PATH,interval,frames,flags,attention,rr,rrPairs,hot)
+  else
+   ok,why=owner:mirror(X4LAN_MIRROR_PATH,interval,frames,flags,attention)
+  end
   if not ok then
    log('FEATURE mirror DISABLED reason='..tostring(why));done=true;return
   end
   armed=true
   local s=owner:mirror_stats()
   log(string.format('MIRROR armed path=%s interval=%d frames=%d flags=%d attention=%d layout=%s',
-   X4LAN_MIRROR_PATH,interval,frames,flags,attention,tostring(s.layout)))
+   X4LAN_MIRROR_PATH,interval,frames,flags,attention,tostring(s.layout))
+   ..(rr>0 and string.format(' rr=%d pairs=%d hot=%d',rr,rrPairs,hot) or ''))
   return
  end
  local s=owner:mirror_stats()
@@ -73,10 +85,10 @@ SetScript('onUpdate',function()
   done=true
   -- before the done line: lane runs end on it
   if s.visited_by_class and s.visited_by_class~='' then log('MIRROR visitedByClass '..s.visited_by_class) end
-  log(string.format('MIRROR done frames=%d dropped=%d partial=%d rows=%d roots=%d factions=%d bytes=%d walkErrors=%d meanMs=%.3f maxMs=%.3f checks=%d regionQueries=%d cacheFull=%d visited=%d walkMs=%.3f serializeMs=%.3f walkMsPrefetch=%.3f walkMsPlain=%.3f framesPrefetch=%d reason=%s',
+  log(string.format('MIRROR done frames=%d dropped=%d partial=%d rows=%d roots=%d factions=%d bytes=%d walkErrors=%d meanMs=%.3f maxMs=%.3f checks=%d regionQueries=%d cacheFull=%d visited=%d walkMs=%.3f serializeMs=%.3f walkMsPrefetch=%.3f walkMsPlain=%.3f framesPrefetch=%d subsetFrames=%d reason=%s',
    s.frames_written,s.frames_dropped,s.partial_frames,s.rows,s.roots,s.factions,s.bytes,s.walk_errors,
    s.mean_ms,s.max_ms,checked,s.region_queries or 0,s.region_cache_full or 0,s.visited or 0,
    s.walk_ms or 0,s.serialize_ms or 0,s.walk_ms_prefetch or 0,s.walk_ms_plain or 0,s.frames_prefetch or 0,
-   tostring(s.reason or 'complete')))
+   s.frames_subset or 0,tostring(s.reason or 'complete')))
  end
 end)

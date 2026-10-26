@@ -68,7 +68,7 @@ class MirrorProbeTests(unittest.TestCase):
           ui()
           assert(#logs==3,#logs)                          -- one check (limit 1), then done
           assert(logs[3]:find('MIRROR done frames=10 dropped=0 partial=0 rows=1234 roots=77 factions=0 bytes=999 walkErrors=2',1,true),logs[3])
-          assert(logs[3]:find('checks=1 regionQueries=0 cacheFull=0 visited=0 walkMs=0.000 serializeMs=0.000 walkMsPrefetch=0.000 walkMsPlain=0.000 framesPrefetch=0 reason=complete',1,true),logs[3])
+          assert(logs[3]:find('checks=1 regionQueries=0 cacheFull=0 visited=0 walkMs=0.000 serializeMs=0.000 walkMsPrefetch=0.000 walkMsPlain=0.000 framesPrefetch=0 subsetFrames=0 reason=complete',1,true),logs[3])
           ui();assert(#logs==3)
         ''')
 
@@ -81,7 +81,19 @@ class MirrorProbeTests(unittest.TestCase):
           stats.frames_prefetch=1;stats.walk_ms_prefetch=1.5;stats.walk_ms_plain=2.25
           ui()
           assert(logs[#logs-1]=='[X4LAN] MIRROR visitedByClass 0x58:4,0x76:4',logs[#logs-1])
-          assert(logs[#logs]:find('walkMsPrefetch=1.500 walkMsPlain=2.250 framesPrefetch=1 reason=complete',1,true),logs[#logs])
+          assert(logs[#logs]:find('walkMsPrefetch=1.500 walkMsPlain=2.250 framesPrefetch=1 subsetFrames=0 reason=complete',1,true),logs[#logs])
+        ''')
+
+    def test_round_robin_settings_are_passed_and_logged(self):
+        lua = self.runtime("X4LAN_MIRROR_PATH='C:/cap/f.x4cap';X4LAN_MIRROR_DELAY=0;X4LAN_MIRROR_RR=3;"
+                           "X4LAN_MIRROR_RR_PAIRS=1;X4LAN_MIRROR_HOT=8")
+        lua.execute('''
+          X4LAN_FIXEDTICK_OWNER=owner;ui();ui()
+          local c=calls[1];assert(#c==8 and c[6]==3 and c[7]==1 and c[8]==8,#c)
+          assert(logs[1]:find(' rr=3 pairs=1 hot=8',1,true),logs[1])
+          stats.frames_written=4;stats.armed=0;stats.frames_subset=3
+          ui()
+          assert(logs[#logs]:find('subsetFrames=3 reason=complete',1,true),logs[#logs])
         ''')
 
     def test_refusal_is_loud_and_final(self):

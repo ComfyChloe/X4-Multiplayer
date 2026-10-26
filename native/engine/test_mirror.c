@@ -371,6 +371,73 @@ int main(int argc, char **argv) {
     assert(!memcmp(ab_bytes + head_end(ab_bytes), bytes + head_end(bytes), n - head_end(bytes)));
     assert(memcmp(ab_bytes, bytes, head_end(bytes)) != 0); /* the flags differ */
 
+    /* Round-robin visits only selected sector subtrees; galaxy/cluster objects remain current.
+       A full initial frame establishes root identity; two-frame holds support later local replay.
+       Sector selection never holds an engine pointer between frames. */
+    build_scene();
+    wchar_t rr[MAX_PATH];
+    swprintf(rr, MAX_PATH, L"%ls\\test_mirror_rr.x4cap", exe);
+    DeleteFileW(rr);
+    mirror_rr_next = (mirror_rr_opts){1, 1, 0};
+    assert(!mirror_arm_unchecked(rr, 1, 5, 0, 0));
+    assert(!mirror_rr_next.sectors && ms.rr.sectors == 1);
+    mirror_frame(1);
+    assert(!ms.subset_now && ms.sectors_last == 2 && ms.nroots == 4);
+    uint64_t full_visited = ms.last_visited;
+    for (unsigned fnum = 2; fnum <= 5; ++fnum) {
+        mirror_frame(fnum);
+        assert(ms.subset_now && ms.nroots == 3 && ms.sectors_last == 2);
+        assert(ms.roots[0].uid == 1 && ms.roots[1].uid == 2);
+        assert(ms.roots[2].uid == (fnum <= 3 ? 3 : 13));
+        assert(ms.last_visited < full_visited);
+        int galaxy_object = 0, cluster_object = 0;
+        for (size_t i = 0; i < ms.nrows; ++i) {
+            if (ms.rows[i].uid == 17) galaxy_object = 1;
+            if (ms.rows[i].uid == 16) cluster_object = 1;
+            assert(ms.rows[i].uid != (fnum <= 3 ? 15 : 5));
+        }
+        assert(galaxy_object && cluster_object);
+    }
+    assert(!ms.armed && ms.frames_written == 5 && ms.frames_subset == 4);
+    size_t rrn = 0;
+    unsigned char *rrbytes = read_file(rr, &rrn);
+    assert(check_records(rrbytes, rrn, &stat_frames) == 5 && stat_frames == 5);
+    unsigned frame_ix = 0;
+    for (size_t at = 16; at < rrn;) {
+        uint32_t len;
+        memcpy(&len, rrbytes + at + 4, 4);
+        if (!memcmp(rrbytes + at, "FRAM", 4)) {
+            uint32_t flags;
+            memcpy(&flags, rrbytes + at + 8 + 20, 4);
+            assert(flags == (frame_ix++ ? MIRROR_FRAME_SUBSET : 0));
+        }
+        at += 16 + len;
+    }
+    free(rrbytes);
+
+    /* Hot-sector inclusion is additive, and rotation wraps without starving the cold sector. */
+    DeleteFileW(rr);
+    mirror_rr_next = (mirror_rr_opts){1, 0, 5};
+    assert(!mirror_arm_unchecked(rr, 1, 4, 0, 0));
+    mirror_frame(1);
+    mirror_frame(2);
+    assert(ms.nroots == 3 && ms.roots[2].uid == 3);
+    mirror_frame(3);
+    assert(ms.nroots == 4 && ms.roots[2].uid == 3 && ms.roots[3].uid == 13);
+    mirror_frame(4);
+    assert(ms.nroots == 3 && ms.roots[2].uid == 3 && ms.rr_start == 1);
+    /* Sector births cannot alias an old rotation slot and exceed the cold-sector budget. */
+    ms.rr.hot_attention = 0;
+    assert(mirror_rr_selected(1, 2));
+    assert(!mirror_rr_selected(0, 2));
+    assert(!mirror_rr_selected(3, 2));
+
+    /* A new ordinary arm cannot accidentally inherit the previous round-robin setting. */
+    DeleteFileW(rr);
+    assert(!mirror_arm_unchecked(rr, 1, 1, 0, 0));
+    mirror_frame(1);
+    assert(!ms.rr.sectors && !ms.subset_now && ms.nroots == 4);
+
     printf("test_mirror: all passed (%zu bytes, layout %s)\n", n, MIRROR_LAYOUT_SHA256);
     return 0;
 }

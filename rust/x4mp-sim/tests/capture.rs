@@ -7,8 +7,8 @@ use std::io::Cursor;
 
 use common::{build_universe, frame, Traffic};
 use x4mp_sim::capture::{
-    capture_universe, col, core_schema, mirror, BuildPin, CapError, CaptureReader, CaptureWriter, ColumnData, Dict,
-    FrameRecord, Header, SectorRecord,
+    capture_universe, col, core_schema, mirror, mirror_subset, BuildPin, CapError, CaptureReader, CaptureWriter,
+    ColumnData, Dict, FrameRecord, Header, SectorRecord, FRAME_SUBSET, FRAME_TRUNCATED,
 };
 use x4mp_sim::comp::{Attention, ClassId, Controller, CtrlKind, Hull, Owner, Transform, Tree};
 use x4mp_sim::shadow::{Comparator, Policy};
@@ -70,6 +70,54 @@ fn frames() -> Vec<FrameRecord> {
         },
         FrameRecord { frame: 12, game_time: 1.75, flags: 0, sectors: vec![sector(0xa0, &[]), sector(0xa1, &[5, 4])] },
     ]
+}
+
+#[test]
+fn subset_updates_preserve_omitted_roots_and_resolve_roots_by_uid() {
+    let mut u = Universe::new(77);
+    mirror(&frames()[0], &[], &mut u).unwrap();
+    let old1 = u.ids().by_uid(UniverseId(1)).unwrap();
+    let old2 = u.ids().by_uid(UniverseId(2)).unwrap();
+    let f = FrameRecord { frame: 11, game_time: 1.5, flags: FRAME_SUBSET, sectors: vec![sector(0xa1, &[4, 1, 5])] };
+    // Explicit opt-in is required, and rejection leaves the mirror alone.
+    let before = u.state_hash();
+    assert!(mirror(&f, &[], &mut u).is_err());
+    assert_eq!(before, u.state_hash());
+    let r = mirror_subset(&f, &[], &mut u).unwrap();
+    assert!(r.subset);
+    assert_eq!(r.updated_sectors, vec![SectorIx(1)]);
+    assert_eq!((r.spawned, r.migrated, r.despawned), (1, 1, 0));
+    assert_eq!(u.ids().by_uid(UniverseId(1)), Some(old1));
+    assert_eq!(u.ids().by_uid(UniverseId(2)), Some(old2));
+    assert_eq!(u.world(SectorIx(0)).uids(), &[UniverseId(2), UniverseId(3)]);
+    assert_eq!(u.world(SectorIx(1)).uids(), &[UniverseId(4), UniverseId(1), UniverseId(5)]);
+
+    // An observed empty root removes its rows; an omitted root keeps its last observation.
+    let empty = FrameRecord { frame: 12, game_time: 1.75, flags: FRAME_SUBSET, sectors: vec![sector(0xa1, &[])] };
+    let r = mirror_subset(&empty, &[], &mut u).unwrap();
+    assert_eq!(r.despawned, 3);
+    assert_eq!(u.world(SectorIx(0)).uids(), &[UniverseId(2), UniverseId(3)]);
+    assert!(u.check().is_ok());
+}
+
+#[test]
+fn subset_requires_initialized_roots_and_refuses_truncation_before_mutation() {
+    let mut u = Universe::new(77);
+    let mut f = frames()[0].clone();
+    f.flags = FRAME_SUBSET;
+    assert!(mirror_subset(&f, &[], &mut u).is_err());
+    assert_eq!(u.sector_count(), 0);
+    mirror(&frames()[0], &[], &mut u).unwrap();
+    let before = u.state_hash();
+    f.sectors.push(sector(0xa2, &[9]));
+    assert!(mirror_subset(&f, &[], &mut u).is_err());
+    assert_eq!(before, u.state_hash());
+    f = frames()[1].clone();
+    f.flags = FRAME_TRUNCATED;
+    assert!(mirror(&f, &[], &mut u).is_err());
+    f.flags |= FRAME_SUBSET;
+    assert!(mirror_subset(&f, &[], &mut u).is_err());
+    assert_eq!(before, u.state_hash());
 }
 
 #[test]

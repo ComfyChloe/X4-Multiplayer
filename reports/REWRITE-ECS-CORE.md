@@ -181,6 +181,33 @@ classes and prefetching; the A/B flag measures prefetching inside one run.
 Pending: capture cost (histogram, A/B); benchmarks in the quiet window (x4lane hold);
 cross-check with the walk agent's collector order once both run in one lane (Q8).
 
+### Bounded sector capture (26 October, Codex continuation)
+
+The opt-in round-robin capture starts with one full frame, then walks the galaxy/cluster levels
+and up to `rr_sectors` cold sector subtrees in rotation. `rr_pairs=1` holds the same selection
+for two capture attempts; `hot_attention>0` additionally captures every sector at or above that
+attention. Settings: `X4LAN_MIRROR_RR`, `X4LAN_MIRROR_RR_PAIRS`, `X4LAN_MIRROR_HOT` in the existing
+mirror Lua driver. Defaults are zero, retaining the full capture path and its golden bytes.
+No engine pointer persists between frames. Newly discovered sectors enter the next rotation.
+This bounds cold-sector count, not milliseconds: the first full frame, a large selected sector,
+or many hot sectors can still be expensive. It is a diagnostic capture, not a live authority.
+
+Subset FRAM records have flag 4. Their root indices are local to that record, not stable ECS
+SectorIx values. `mirror()` rejects subset records (and truncated records) before mutation;
+full-world replay skips those pairs. Call `mirror_subset()` explicitly after a full mirror to
+refresh known roots by UID. Its report identifies `updated_sectors`; omitted roots retain stale
+values. Missing entities are removed only from observed roots. Migration into an observed root
+preserves handles; migration from an observed root to an omitted destination is indistinguishable
+from deletion until the destination is observed, so handle continuity is not guaranteed there.
+Do not feed this mixed-age mirror into authoritative simulation or label it a full-world snapshot.
+Pair capture does not by itself justify isolated sector replay with cross-sector dependencies.
+
+Offline validation: C synthetic tree covers rotation, wraparound, two-frame holds, additive hot
+sectors, new-sector budgeting, root IDs, serialized subset flags and unchanged full-frame golden
+bytes. Rust covers explicit subset opt-in, stable root mapping, migration, omission versus empty
+roots, initialization/truncation refusals and full-world replay exclusion. LuaJIT covers settings
+and subset statistics. Native round-robin correctness/cost acceptance remains pending.
+
 ## 7. How to use it (system agents)
 
 ```rust

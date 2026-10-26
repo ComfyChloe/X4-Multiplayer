@@ -16,7 +16,8 @@
 //! ```
 //! Only consecutive frame pairs (frame k, k+1) are replayed, with `FrameInfo { frame: k+1,
 //! game_time: t(k+1), dt: t(k+1) - t(k) }`, which is the engine's TLS+0x300 - TLS+0x328 for frame
-//! k+1. Other pairs are counted as skipped.
+//! k+1. Other pairs, and any pair containing a subset or truncated frame, are counted as
+//! skipped. Replaying an isolated subset would omit cross-sector dependencies.
 
 use super::{mirror, FrameRecord};
 use crate::sched::{FrameInfo, Pool, System};

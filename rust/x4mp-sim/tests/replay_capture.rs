@@ -106,3 +106,16 @@ fn non_consecutive_pairs_are_skipped() {
     assert_eq!((rep.pairs, rep.skipped), (4, 1));
     assert!(rep.is_clean());
 }
+
+#[test]
+fn subset_and_truncated_frames_never_count_as_full_world_replay() {
+    use x4mp_sim::capture::{FRAME_SUBSET, FRAME_TRUNCATED};
+    for flag in [FRAME_SUBSET, FRAME_TRUNCATED] {
+        let mut frames = engine_frames(2);
+        frames[1].flags = flag;
+        frames[1].sectors.truncate(1);
+        let rep = replay_frames(&frames, &[], &setup(&[&Kinematics], Policy::exact()), &Pool::new(1));
+        assert_eq!((rep.pairs, rep.skipped), (0, 2));
+        assert!(!rep.is_clean());
+    }
+}

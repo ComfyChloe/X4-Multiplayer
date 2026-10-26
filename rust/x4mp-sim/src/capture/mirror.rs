@@ -9,7 +9,7 @@
 
 use std::collections::HashSet;
 
-use super::{col, CapError, ColumnData, FrameRecord, SectorRecord};
+use super::{col, CapError, ColumnData, FrameRecord, SectorRecord, FRAME_SUBSET, FRAME_TRUNCATED};
 use crate::comp::{
     Attention, ClassFlags, ClassId, Controller, CtrlKind, EngineFlags, FactionIx, Hull, LocalOffset, Mat4f, NavCache,
     OrderState, Owner, PoseRef, Transform, Tree, Vel, Velocity, VtableRva,
@@ -22,6 +22,10 @@ use crate::Bundle;
 /// What [`mirror`] changed.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct MirrorReport {
+    /// Only these worlds were refreshed; other worlds retain their previous observations.
+    pub updated_sectors: Vec<SectorIx>,
+    /// This was an explicitly requested subset update, not a simultaneous universe snapshot.
+    pub subset: bool,
     pub sectors: usize,
     pub rows: usize,
     pub added_sectors: usize,
@@ -41,7 +45,35 @@ fn uids_of(s: &SectorRecord, frame: u64) -> Result<Vec<u64>, CapError> {
 
 /// Loads `frame` into `u`. `factions` is the capture's faction dictionary (index, id string).
 pub fn mirror(frame: &FrameRecord, factions: &[(u32, &str)], u: &mut Universe) -> Result<MirrorReport, CapError> {
-    let mut rep = MirrorReport { sectors: frame.sectors.len(), ..MirrorReport::default() };
+    if frame.flags & FRAME_SUBSET != 0 {
+        return Err(CapError::Schema("subset frame requires explicit mirror_subset; not a full snapshot".into()));
+    }
+    mirror_impl(frame, factions, u)
+}
+
+/// Refresh only the roots in a subset frame, after a full [`mirror`] initialized `u`.
+/// Missing entities in observed roots are removed; unobserved roots retain stale values.
+/// A migration into an observed root keeps its EntityId even if its old root was not observed.
+/// A migration out of an observed root into an unobserved one cannot be distinguished from a
+/// despawn until that destination is captured. This is diagnostic state, not authoritative state
+/// or a simultaneous snapshot. `updated_sectors` identifies which worlds are current.
+pub fn mirror_subset(
+    frame: &FrameRecord,
+    factions: &[(u32, &str)],
+    u: &mut Universe,
+) -> Result<MirrorReport, CapError> {
+    if frame.flags & FRAME_SUBSET == 0 {
+        return Err(CapError::Schema("mirror_subset requires a subset frame".into()));
+    }
+    mirror_impl(frame, factions, u)
+}
+
+fn mirror_impl(frame: &FrameRecord, factions: &[(u32, &str)], u: &mut Universe) -> Result<MirrorReport, CapError> {
+    if frame.flags & FRAME_TRUNCATED != 0 {
+        return Err(CapError::Schema("truncated frame cannot replace mirror state".into()));
+    }
+    let subset = frame.flags & FRAME_SUBSET != 0;
+    let mut rep = MirrorReport { sectors: frame.sectors.len(), subset, ..MirrorReport::default() };
     let mut frame_uids: Vec<Vec<u64>> = Vec::with_capacity(frame.sectors.len());
     let mut all: HashSet<u64> = HashSet::new();
     for s in &frame.sectors {
@@ -54,8 +86,25 @@ pub fn mirror(frame: &FrameRecord, factions: &[(u32, &str)], u: &mut Universe) -
         rep.rows += uids.len();
         frame_uids.push(uids);
     }
-    // Sector list: identical prefix required; new records are appended.
+    // Resolve all subset roots before any mutation. Their record indices are not SectorIx.
+    let mut seen_roots = HashSet::new();
+    for s in &frame.sectors {
+        if !seen_roots.insert(s.root_uid) {
+            return Err(CapError::Schema(format!("frame {}: duplicated root {:#x}", frame.frame, s.root_uid)));
+        }
+        if subset {
+            let ix =
+                u.worlds().iter().position(|w| w.root_uid().0 == s.root_uid && w.kind() as u8 == s.kind).ok_or_else(
+                    || CapError::Schema(format!("subset root {:#x} is absent from the initialized mirror", s.root_uid)),
+                )?;
+            rep.updated_sectors.push(SectorIx(ix as u32));
+        }
+    }
+    // Full sector list: identical prefix required; new records are appended.
     for (i, s) in frame.sectors.iter().enumerate() {
+        if subset {
+            continue;
+        }
         match u.worlds().get(i) {
             Some(w) if w.root_uid().0 == s.root_uid => {}
             Some(w) => {
@@ -71,8 +120,9 @@ pub fn mirror(frame: &FrameRecord, factions: &[(u32, &str)], u: &mut Universe) -
                 rep.added_sectors += 1;
             }
         }
+        rep.updated_sectors.push(SectorIx(i as u32));
     }
-    if u.sector_count() != frame.sectors.len() {
+    if !subset && u.sector_count() != frame.sectors.len() {
         return Err(CapError::Schema(format!(
             "frame {}: universe has {} sectors, capture {}",
             frame.frame,
@@ -82,7 +132,10 @@ pub fn mirror(frame: &FrameRecord, factions: &[(u32, &str)], u: &mut Universe) -
     }
     // Despawn what is gone.
     let mut gone: Vec<EntityId> = Vec::new();
-    for w in u.worlds() {
+    for (si, w) in u.worlds().iter().enumerate() {
+        if subset && !rep.updated_sectors.contains(&SectorIx(si as u32)) {
+            continue;
+        }
         for (r, uid) in w.uids().iter().enumerate() {
             if !all.contains(&uid.0) {
                 gone.push(w.entities()[r]);
@@ -95,7 +148,7 @@ pub fn mirror(frame: &FrameRecord, factions: &[(u32, &str)], u: &mut Universe) -
     }
     // Spawn new, migrate moved.
     for (si, uids) in frame_uids.iter().enumerate() {
-        let s = SectorIx(si as u32);
+        let s = rep.updated_sectors[si];
         for (row, uid) in uids.iter().enumerate() {
             let uid = UniverseId(*uid);
             match u.ids().by_uid(uid) {
@@ -118,7 +171,7 @@ pub fn mirror(frame: &FrameRecord, factions: &[(u32, &str)], u: &mut Universe) -
     u.commit();
     // Rows into record order.
     for (si, uids) in frame_uids.iter().enumerate() {
-        let s = SectorIx(si as u32);
+        let s = rep.updated_sectors[si];
         {
             let w = u.world_mut(s);
             let mut by_uid: IdHashMap<UniverseId, usize> = IdHashMap::default();
@@ -139,7 +192,7 @@ pub fn mirror(frame: &FrameRecord, factions: &[(u32, &str)], u: &mut Universe) -
     }
     // Values.
     for (si, rec) in frame.sectors.iter().enumerate() {
-        let w = u.world_mut(SectorIx(si as u32));
+        let w = u.world_mut(rep.updated_sectors[si]);
         fill(w, rec, &mut rep.unmapped_columns);
     }
     rep.unmapped_columns.sort_unstable();
