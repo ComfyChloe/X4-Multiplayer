@@ -77,6 +77,25 @@ def phases(path: Path, skip: int = 1) -> list:
     return out
 
 
+def compare(rows: list, reference: str) -> list:
+    """Per step: each phase's MoveWorker ms/frame and fps against the reference phase."""
+    out = []
+    by_step = collections.OrderedDict()
+    for ph, st, n, frames, seconds, ms, p95 in rows:
+        by_step.setdefault(st, {})[ph] = (ms, frames / seconds if seconds else 0.0, n)
+    for st, phases_ in by_step.items():
+        if reference not in phases_:
+            continue
+        ref_ms, ref_fps, _ = phases_[reference]
+        for ph, (ms, fps, n) in phases_.items():
+            if ph == reference:
+                continue
+            saved = ref_ms - ms
+            out.append(f'step {st}: {ph} vs {reference}: {ms:.3f} vs {ref_ms:.3f} ms/frame, saved {saved:.3f} ms '
+                       f'({saved / ref_ms * 100 if ref_ms else 0:.1f} %), fps {fps:.1f} vs {ref_fps:.1f} (n={n})')
+    return out
+
+
 def audit(path: Path) -> tuple:
     rows, last = {}, None
     for _t, body in records(path):
@@ -188,6 +207,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest='cmd', required=True)
     p = sub.add_parser('phases'); p.add_argument('log', type=Path); p.add_argument('--skip', type=int, default=1)
+    p.add_argument('--reference', default='pass', help='phase the others are compared with, per step')
     a = sub.add_parser('audit'); a.add_argument('log', type=Path)
     a.add_argument('--phases', action='store_true', help='per-phase deltas of the cumulative counters')
     t = sub.add_parser('attribution'); t.add_argument('log', type=Path)
@@ -195,9 +215,12 @@ def main(argv=None):
     args = parser.parse_args(argv)
     if args.cmd == 'phases':
         print(f'{"phase":24s} {"step":>5s} {"samples":>7s} {"frames":>7s} {"fps":>6s} {"ms/frame":>9s} {"p95":>6s}')
-        for ph, st, n, frames, seconds, ms, p95 in phases(args.log, args.skip):
+        rows = phases(args.log, args.skip)
+        for ph, st, n, frames, seconds, ms, p95 in rows:
             fps = frames / seconds if seconds else 0.0
             print(f'{ph:24s} {st:>5s} {n:7d} {frames:7d} {fps:6.1f} {ms:9.3f} {p95:6.2f}')
+        for line in compare(rows, args.reference):
+            print(line)
     elif args.cmd == 'audit' and args.phases:
         for name, delta in audit_phases(args.log):
             print(f'== phase {name}')

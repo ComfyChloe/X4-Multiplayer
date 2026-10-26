@@ -40,6 +40,14 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(rows[('server', '8')][:2], (1, 40))
         self.assertAlmostEqual(rows[('server', '8')][4], 24.0)
 
+    def test_compare_reports_saving_per_step(self):
+        rows = [('pass', '0', 10, 600, 10.0, 10.0, 12.0), ('server', '0', 10, 600, 10.0, 8.0, 10.0),
+                ('pass', '8', 10, 400, 10.0, 25.0, 30.0), ('all', '8', 10, 480, 10.0, 20.0, 24.0)]
+        lines = fa.compare(rows, 'pass')
+        self.assertEqual(len(lines), 2)
+        self.assertIn('step 0: server vs pass: 8.000 vs 10.000 ms/frame, saved 2.000 ms (20.0 %), fps 60.0 vs 60.0', lines[0])
+        self.assertIn('step 8: all vs pass: 20.000 vs 25.000 ms/frame, saved 5.000 ms (20.0 %), fps 48.0 vs 40.0', lines[1])
+
     def test_audit_keeps_last_row_per_region(self):
         log = write([
             '[=ERROR=] 10.00 [X4LAN] FRAMEDIET_AUDIT row=camera audited=20 rngCalls=1',
