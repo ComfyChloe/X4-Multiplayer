@@ -182,6 +182,25 @@ class FixedTickProbeTests(unittest.TestCase):
           assert(n==1)
         ''')
 
+    def test_aidriver_alternate_switches_mode_every_window(self):
+        self.runtime().execute('''
+          X4LAN_AIDRIVER='alternate'
+          cur='off';requested={}
+          handle.aidriver=function(self,mode) cur=mode;requested[#requested+1]=mode;return true end
+          handle.aistats=function(self) return {installed=1,mode=cur,frames=30,driver_frames=cur=='normal' and 30 or 0} end
+          ui();assert(requested[1]=='normal')
+          local en for _,l in ipairs(logs) do if l=='[X4LAN] FEATURE aidriver ENABLED mode=normal' then en=true end end
+          assert(en)
+          now=1;ui();now=2;ui();now=3;ui()
+          assert(requested[2]=='census' and requested[3]=='normal' and requested[4]=='census',table.concat(requested,','))
+          local census,normal=0,0
+          for _,l in ipairs(logs) do
+            if l:find('AIPROF mode=census frames=',1,true) then census=census+1 end
+            if l:find('AIPROF mode=normal frames=',1,true) then normal=normal+1 end
+          end
+          assert(census>=1 and normal>=1)
+        ''')
+
     def test_aidriver_absent_by_default(self):
         self.runtime().execute('''
           handle.aidriver=function() error('unexpected') end

@@ -2,23 +2,30 @@
 against the original (census mode) on the same load. Prints per-frame means side by side with the
 relative difference and flags structural measures that differ by more than the tolerance.
 usage: python aiprof_compare.py <debug-A> <debug-B> [--skip-a N] [--skip-b N] [--tol 0.15]
+       python aiprof_compare.py <debug> --modes census,normal [--skip-a N] [--tol 0.15]
+         (one 'alternate' run: windows of the two modes interleaved on the same world)
 Timing columns (ms, share) are shown but never flagged: lane runs share the PC."""
 import re
 import statistics as st
 import sys
 
 KV = re.compile(r'(\w+)=(-?\d+\.?\d*)')
+MODE = re.compile(r'AIPROF mode=(\w+)')
 STRUCTURAL = ['runs', 'irqRuns', 'passes', 'extWakes', 'timedDue', 'wakeOwn', 'wakeForeign',
               'evOwn', 'evForeign', 'evCue', 'hazard', 'keyless', 'sectors']
 TIMING = ['ms', 'share', 'secMaxMs', 'speedup']
 
 
-def windows(path, skip):
+def windows(path, skip, mode=None):
     rows = []
     for line in open(path, encoding='utf-8', errors='replace'):
         if 'AIPROF mode=' in line and ' frames=' in line:
-            rows.append({k: float(v) for k, v in KV.findall(line.split('AIPROF', 1)[1])})
-    return rows[skip:]
+            row = {k: float(v) for k, v in KV.findall(line.split('AIPROF', 1)[1])}
+            m = MODE.search(line)
+            row['_mode'] = m.group(1) if m else ''
+            rows.append(row)
+    rows = rows[skip:]
+    return [r for r in rows if mode is None or r['_mode'] == mode]
 
 
 def arg(name, default):
@@ -28,11 +35,18 @@ def arg(name, default):
 
 
 def main():
-    paths = [a for a in sys.argv[1:] if not a.startswith('--') and not a.replace('.', '').isdigit()]
-    if len(paths) != 2:
+    values = {sys.argv[i + 1] for i, x in enumerate(sys.argv[:-1]) if x.startswith('--')}
+    paths = [a for a in sys.argv[1:] if not a.startswith('--') and a not in values]
+    modes = arg('--modes', '')
+    if modes and len(paths) == 1:
+        ma, mb = modes.split(',')
+        a, b = windows(paths[0], arg('--skip-a', 0), ma), windows(paths[0], arg('--skip-a', 0), mb)
+        paths = [f'{paths[0]} [{ma}]', f'{paths[0]} [{mb}]']
+    elif len(paths) == 2:
+        a, b = windows(paths[0], arg('--skip-a', 0)), windows(paths[1], arg('--skip-b', 0))
+    else:
         print(__doc__)
         return 2
-    a, b = windows(paths[0], arg('--skip-a', 0)), windows(paths[1], arg('--skip-b', 0))
     tol = arg('--tol', 0.15)
     if not a or not b:
         print('no AIPROF windows in one of the logs')

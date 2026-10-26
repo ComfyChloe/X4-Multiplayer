@@ -22,10 +22,12 @@ local profileDisabled=false
 -- X4LAN_AIDRIVER='census' arms the AI phase census (aidriver.h) once the probe is armed and logs an
 -- AIPROF line each second. 'normal' / 'rounds' / 'compare' run the stage-1 driver (our AIDirector::Move,
 -- aidriver_move.h) and add an AIDRIVE line; a refused or failed driver mode falls back to the census
--- with a loud FEATURE aidriver DISABLED line. Opt-in; absent = no AI hooks.
+-- with a loud FEATURE aidriver DISABLED line. 'alternate' switches every window between the original
+-- Move (census) and ours (normal) on the same world, for an interleaved A/B. Opt-in; absent = no AI hooks.
 local aidriver=false
 local aiRefusedLogged=false
 local aiDriverRefusedLogged=false
+local aiAlternate=false
 local function logStats(now)
  local s=owner:stats()
  DebugError(string.format('[X4LAN] FRAMEPROBE frames=%d wallDt=%.6f maxWallDt=%.6f gameDt=%.9f realDt=%.9f gameTime=%.6f realTime=%.6f speed=%.3f paused=%d loadingSkips=%d regressions=%d',
@@ -75,6 +77,10 @@ local function logStats(now)
    if a.driver_reason and not aiDriverRefusedLogged then
     aiDriverRefusedLogged=true
     DebugError('[X4LAN] FEATURE aidriver DISABLED reason='..tostring(a.driver_reason)..' (census continues)')
+   end
+   -- 'alternate': next window in the other mode (original Move = census, ours = normal), same world
+   if aiAlternate and not a.driver_reason then
+    pcall(owner.aidriver,owner,a.mode=='census' and 'normal' or 'census')
    end
   elseif (a.refused or 0)==1 and not aiRefusedLogged then
    aiRefusedLogged=true
@@ -137,8 +143,9 @@ SetScript('onUpdate',function()
   owner=result;nextLog=0
   DebugError('[X4LAN] FRAMEPROBE armed in MoveWorker slot 5 mode='..(X4LAN_FIXEDTICK_MODE or 'probe'))
   aidriver=false;aiRefusedLogged=false;aiDriverRefusedLogged=false
+  aiAlternate=X4LAN_AIDRIVER=='alternate'
   if X4LAN_AIDRIVER and owner.aidriver then
-   local okai,res,whyai=pcall(owner.aidriver,owner,X4LAN_AIDRIVER)
+   local okai,res,whyai=pcall(owner.aidriver,owner,aiAlternate and 'normal' or X4LAN_AIDRIVER)
    local a=okai and owner:aistats() or {}
    if okai and res and (a.installed or 0)==1 then
     aidriver=true
