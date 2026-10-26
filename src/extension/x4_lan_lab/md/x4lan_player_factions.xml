@@ -139,7 +139,8 @@
      <conditions><event_ui_triggered screen="'X4LAN_PlayerFactions'" control="'CoopOwner'"/><check_value value="Setup.$ready"/></conditions>
      <actions>
       <set_value name="$a" exact="event.param3"/>
-      <do_if value="typeof $a.$ship == datatype.integer and $a.$ship ge 1 and $a.$ship le 8 and ($a.$faction == 'player' or @Setup.$isPool.{'$' + $a.$faction})">
+      <!-- Lua numbers arrive as floats: compare by value, never by datatype. -->
+      <do_if value="$a.$ship ge 1 and $a.$ship le 8 and ($a.$faction == 'player' or @Setup.$isPool.{'$' + $a.$faction})">
        <set_value name="Setup.$coopWant.{$a.$ship}" exact="$a.$faction"/>
        <!-- Lua's ship numbering (coop AUTH) is not the arena list order on every slot (dedicated p3):
             the exact object comes from Lua. -->

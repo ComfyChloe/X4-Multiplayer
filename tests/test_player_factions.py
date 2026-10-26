@@ -633,6 +633,9 @@ class LuaGlue(unittest.TestCase):
         tick = E.tostring(next(c for c in root.iter('cue') if c.get('name') == 'CoopOwnerTick'), encoding='unicode')
         self.assertNotIn('count == 2', tick)
         self.assertIn('exact="$arena.$ships.count"', tick)
+        # Lua numbers reach MD as floats: a datatype.integer check refused every request (8p build).
+        coop_cue = E.tostring(next(c for c in root.iter('cue') if c.get('name') == 'CoopOwner'), encoding='unicode')
+        self.assertNotIn('datatype.integer', coop_cue)
 
     def test_small_pool_disables(self):
         _, g = self.load(dict(enabled=True, coop=True, slot='p2', player_factions=True))
