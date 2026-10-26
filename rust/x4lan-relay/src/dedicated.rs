@@ -26,6 +26,8 @@ pub struct Config {
     pub startup_timeout: u64,
     pub shutdown_timeout: u64,
     pub heartbeat_timeout: u64,
+    /// Optional engine agent (`libx4mp_agent.so`), preloaded only when configured.
+    pub agent: Option<PathBuf>,
 }
 
 impl Config {
@@ -56,7 +58,20 @@ impl Config {
         if display.is_empty() || !display.starts_with(':') || display.contains(['/', '\0']) {
             return Err("display must be a local X11 display such as :0".into());
         }
+        let agent = match root.get("engine_agent") {
+            None => None,
+            Some(value) => {
+                let text = value.as_str().filter(|t| !t.is_empty()).ok_or("engine_agent must be a non-empty path")?;
+                let path = PathBuf::from(text);
+                let path = if path.is_absolute() { path } else { base.join(path) };
+                if !fs::metadata(&path).map(|m| m.is_file()).unwrap_or(false) {
+                    return Err(format!("engine_agent is not a regular file: {}", path.display()));
+                }
+                Some(path)
+            }
+        };
         Ok(Config {
+            agent,
             game: required("game")?,
             profile: required("profile")?,
             package: required("package")?,
@@ -482,6 +497,7 @@ impl Supervisor {
             .env("DISPLAY", &self.config.display)
             .env("LD_LIBRARY_PATH", self.config.game.parent().unwrap().join("lib"))
             .env("TMPDIR", self.config.work.join("tmp"))
+            .envs(agent_environment(&self.config))
             .stdin(Stdio::null())
             .stdout(Stdio::from(stdout))
             .stderr(Stdio::from(stderr))
@@ -644,8 +660,44 @@ impl Drop for Supervisor {
     }
 }
 
+/// LD_PRELOAD environment for the opt-in engine agent; empty when none is configured.
+fn agent_environment(config: &Config) -> Vec<(&'static str, std::ffi::OsString)> {
+    match &config.agent {
+        None => Vec::new(),
+        Some(agent) => vec![
+            ("LD_PRELOAD", agent.clone().into_os_string()),
+            ("X4MP_AGENT", "1".into()),
+            ("X4MP_AGENT_LOG", config.work.join("engine-agent.log").into_os_string()),
+        ],
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn engine_agent_is_off_by_default_and_preloaded_only_when_configured() {
+        let work = scratch();
+        let agent = work.join("libx4mp_agent.so");
+        fs::write(&agent, b"").unwrap();
+        let base = format!(
+            "{{\"game\":\"g\",\"profile\":\"p\",\"package\":\"k\",\"session\":\"s\",\"work\":\"{}\"",
+            work.display()
+        );
+        let path = work.join("config.json");
+        fs::write(&path, format!("{base}}}")).unwrap();
+        let config = Config::load(&path).unwrap();
+        assert!(config.agent.is_none() && agent_environment(&config).is_empty());
+        fs::write(&path, format!("{base},\"engine_agent\":\"libx4mp_agent.so\"}}")).unwrap();
+        let config = Config::load(&path).unwrap();
+        let env = agent_environment(&config);
+        assert_eq!(env[0], ("LD_PRELOAD", fs::canonicalize(&work).unwrap().join("libx4mp_agent.so").into_os_string()));
+        assert_eq!(env[1], ("X4MP_AGENT", "1".into()));
+        assert_eq!(env[2].1, config.work.join("engine-agent.log").into_os_string());
+        fs::write(&path, format!("{base},\"engine_agent\":\"missing.so\"}}")).unwrap();
+        assert!(Config::load(&path).unwrap_err().contains("not a regular file"));
+        fs::remove_dir_all(work).unwrap();
+    }
+
     use super::*;
 
     #[test]
@@ -670,6 +722,7 @@ mod tests {
             startup_timeout: 1,
             shutdown_timeout: 1,
             heartbeat_timeout: 1,
+            agent: None,
         };
         assert!(command(&config, "restart").is_err());
     }
@@ -696,6 +749,7 @@ mod tests {
             startup_timeout: 1,
             shutdown_timeout: 1,
             heartbeat_timeout: 1,
+            agent: None,
         };
         command(&config, "pause").unwrap();
         command(&config, "resume").unwrap();
@@ -720,6 +774,7 @@ mod tests {
             startup_timeout: 3600,
             shutdown_timeout: 1,
             heartbeat_timeout: 3600,
+            agent: None,
         };
         let prepared = Prepared {
             session: Json::Null,
@@ -772,6 +827,7 @@ mod tests {
             startup_timeout: 3600,
             shutdown_timeout: 1,
             heartbeat_timeout: 3600,
+            agent: None,
         };
         let session =
             Session::new(Level::Universe, &"a".repeat(32), "world1-test", &"b".repeat(32), LeaseSource::Os).unwrap();
