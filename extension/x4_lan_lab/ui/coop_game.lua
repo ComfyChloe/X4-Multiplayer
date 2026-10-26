@@ -10,6 +10,11 @@
 --  fire2=true: FIRE2 only, from startup; the NAV counter never triggers fire. Without the
 --   weapon-group API remote fire is disabled with a FIRE2_UNAVAILABLE diagnostic (no fallback).
 -- The first FIRE2 of an owner epoch is a baseline and never replays earlier shots.
+-- NMODE (entity|epoch|navSeq|sourceTime|mode) accompanies every NAV2 with the same seq and
+-- source time; mode is normal|boost|travel|highway. It is a separate optional message:
+-- relays/clients without it drop it, and receivers without it infer a 'fast' mode from the
+-- sampled speed. Outside 'normal' the replica is driven by pose only (no native velocity),
+-- with a mode-specific interpolation delay reached through a bounded-rate render clock.
 -- A local pause stops fire and drops queued edges. On resume, every FIRE2 frame whose source
 -- time is not newer than the resume cutoff (NAV2 source clock) is adopted without playing.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
@@ -26,7 +31,7 @@ if fire2Mode and not fire2Ready then
 end
 local M=assert(X4LAN_MOTION,'motion buffer missing')
 local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0},
- fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}},velocity={},velocityGeneration=0}
+ fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}},velocity={},velocityGeneration=0,modes={},fences={0,0}}
 A.coop=c
 local function log(v) DebugError('[X4LAN] '..v) end
 local function integer(v,limit)
@@ -39,7 +44,7 @@ local function send(p) if s.client and s.client.lease then s.transport:send(p) e
 local function clearVelocity(i)
  local v=c.velocity[i]
  if not v then return end
- c.velocityGeneration=c.velocityGeneration+1
+ c.velocityGeneration=c.velocityGeneration+1;c.fences[i]=c.fences[i]+1
  AddUITriggeredEvent('X4LAN_Coop','VelocityFence',{ship=i,generation=c.velocityGeneration,
   session=v.session,epoch=v.epoch,enabled=false})
  c.velocity[i]=nil
@@ -58,6 +63,7 @@ local function applyVelocity(i,sector,linear,now)
  if not v then
   c.velocityGeneration=c.velocityGeneration+1
   v={generation=c.velocityGeneration,session=session,epoch=c.epochs[i],sector=sector,parent=parent,sequence=0};c.velocity[i]=v
+  c.fences[i]=c.fences[i]+1
   AddUITriggeredEvent('X4LAN_Coop','VelocityFence',{ship=i,generation=v.generation,session=session,epoch=v.epoch,enabled=true})
  end
  local changed=not v.linear
@@ -72,6 +78,21 @@ local function applyVelocity(i,sector,linear,now)
    dockGeneration=cfg.coop_docks and c.attachmentGeneration and c.attachmentGeneration(i) or nil,dockStamp=dockStamp,dockAge=dockAge})
  end
 end
+-- Local motion mode of an owned ship. Only the piloted ship exposes boost/travel state.
+-- A highway context equal to the sector is not a highway (engine doubles return one id).
+local function localMode(ship,sector)
+ local highway=C.GetContextByClass(ship,'highway',false)
+ if highway~=0 and highway~=sector then return 'highway' end
+ if C.GetPlayerControlledShipID()~=ship then return 'normal' end
+ local boosting,travel
+ if GetPlayerSpeed then
+  local ok,_,_,_,b,t=pcall(GetPlayerSpeed);if ok then boosting,travel=b,t end
+ end
+ if travel==true or (travel==nil and GetPlayerActivity and GetPlayerActivity()=='travel') then return 'travel' end
+ if boosting==true then return 'boost' end
+ return 'normal'
+end
+c.localMode=localMode
 local function stopFire2(i)
  local q=c.fire2[i]
  if q and (q.on[1] or q.on[2]) then AddUITriggeredEvent('X4LAN_Coop','Fire2',{ship=i,epoch=q.epoch,primary=false,secondary=false,primaryShots=0,secondaryShots=0,primaryGroup=q.groups[1],secondaryGroup=q.groups[2]}) end
@@ -172,11 +193,15 @@ function c.receive(f,now)
   if r and seq<=r.seq then return true end
   if not r or r.sector~=name then
    clearVelocity(entity)
-   r={samples={},fire=fire,sector=name};c.remote[entity]=r
+   -- Same source process, same real-time clock: a sector change keeps its offset.
+   local clock=r and r.track and r.sourceLease==f[4] and r.track.offset or nil
+   r={samples={},fire=fire,sector=name,clock=clock,motion=r and r.sourceLease==f[4] and r.motion or {}};c.remote[entity]=r
   end
   if modern then
    local velocity={};for i=1,6 do velocity[i]=tonumber(f[17+i]) end
-   local track=r.track or {}
+   local track=r.track or {retainClock=true,leak=M.leak,offset=r.clock}
+   local declared=c.modes[entity];declared=declared and declared.epoch==epoch and declared.lease==f[4] and now-declared.at<=M.stale and declared.mode or nil
+   track.mode=declared
    if not M.push(track,tonumber(f[17]),p,velocity,now) then return true end
    r.track=track
    resumeCutoff(entity) -- Latch an unknown mapping at its first valid NAV2 baseline.
@@ -185,6 +210,15 @@ function c.receive(f,now)
   -- In fire2 mode the NAV counter never triggers fire; there is no protocol transition.
   if fire>r.fire and not fire2Mode then r.fireDeadline=now+.35 end;r.fire=fire
   r.samples[#r.samples+1]={time=now,pose=p};while #r.samples>5 do table.remove(r.samples,1) end
+  return true
+ elseif f[1]=='NMODE' then
+  if #f~=9 then return true end
+  local entity,epoch,seq,time,mode=integer(f[5],2),integer(f[6]),integer(f[7]),numeric(f[8],1e12),f[9]
+  if not entity or entity<1 or not epoch or not seq or not time or time<0 or not M.modes[mode] then return true end
+  if c.owners[entity]==cfg.slot or c.epochs[entity]~=epoch then return true end
+  local old=c.modes[entity]
+  if old and old.epoch==epoch and old.lease==f[4] and seq<=old.seq then return true end
+  c.modes[entity]={epoch=epoch,lease=f[4],seq=seq,time=time,mode=mode,at=now}
   return true
  elseif f[1]=='FIRE2' then
   if #f~=12 then return true end
@@ -230,9 +264,19 @@ function c.receive(f,now)
  end
  return false
 end
-local function render(r,now)
+local function declaredMode(i,r)
+ local m=c.modes[i]
+ if m and m.epoch==c.epochs[i] and m.lease==r.sourceLease and r.at and math.abs(r.at-m.at)<=M.stale then return m.mode end
+ return nil
+end
+local function render(r,now,i)
  if not r or #r.samples==0 then return nil end
- if r.track then return M.render(r.track,now) end
+ if r.track then
+  local track=r.track;local last=track.samples and track.samples[#track.samples]
+  local mode,profile=M.classify(r.motion,declaredMode(i,r),last and M.speed(last.velocity) or 0,now)
+  r.mode=mode;r.target=M.clock(track,now,profile.delay)
+  return M.renderAt(track,r.target,profile.horizon)
+ end
  if now-r.at>.75 then return nil end
  local target=now-.1;local a,b=r.samples[1],r.samples[#r.samples]
  for i=2,#r.samples do if r.samples[i].time>=target then b=r.samples[i];break end;a=r.samples[i] end
@@ -255,7 +299,7 @@ local function fire2Frame(i,r,ship,now)
   -- Freshness: stop even if motion keeps rendering a frozen prediction.
   stopFire2(i);return
  end
- local target=(r and r.track and r.track.offset) and now-r.track.offset-M.delay or math.huge
+ local target=(r and r.track and r.track.offset) and (r.target or now-r.track.offset-M.delay) or math.huge
  local cutoff=resumeCutoff(i)
  local keep={};local grant={0,0};local reset={false,false};local changed=false
  q.budgetUntil=q.budgetUntil or {0,0};q.group=q.group or {q.groups[1],q.groups[2]}
@@ -300,6 +344,31 @@ local function publishMetrics(now)
   c.metrics={n=0,sum=0,max=0}
  end
 end
+-- Opt-in (cfg.motion_diagnostics = seconds between rows, or true for 0.5 s): requested
+-- vs actual replica motion. Inert and unallocated by default; no session data is logged.
+local diagnose
+if cfg.motion_diagnostics then
+ local interval=tonumber(cfg.motion_diagnostics) or .5;local d={}
+ local function dist(a,b) return math.sqrt((a[1]-b[1])^2+(a[2]-b[2])^2+(a[3]-b[3])^2) end
+ diagnose=function(i,r,ship,p,linear,changed,now)
+  local a=C.GetObjectPositionInSector(ship);local actual={a.x,a.y,a.z}
+  local q=d[i] or {};d[i]=q
+  -- drift: how far the engine moved the replica away from the last requested pose.
+  local drift=r.applied and dist(actual,r.applied) or 0
+  q.maxDrift=math.max(q.maxDrift or 0,drift);q.frames=(q.frames or 0)+1;q.writes=(q.writes or 0)+(changed and 1 or 0)
+  if now<(q.next or 0) then return end
+  q.next=now+interval
+  local own=C.GetPlayerContainerID();local range=-1
+  if own~=0 and C.GetContextByClass(own,'sector',false)==C.GetContextByClass(ship,'sector',false) then
+   local o=C.GetObjectPositionInSector(own);range=dist({o.x,o.y,o.z},actual)
+  end
+  local m=c.modes[i];local track=r.track or {}
+  log(string.format('MOTION_DIAG ship=%d mode=%s declared=%s speed=%.1f request=%.2f drift=%.2f maxDrift=%.2f range=%.0f writes=%d/%d fences=%d resets=%d lag=%.3f velocity=%s',
+   i,r.mode or 'legacy',m and m.mode or 'none',linear and M.speed(linear) or 0,r.applied and dist(p,r.applied) or 0,drift,q.maxDrift,range,
+   q.writes,q.frames,c.fences[i],track.resets or 0,(track.lag or 0)-(track.offset or 0),c.velocity[i] and 'native' or 'off'))
+  q.maxDrift,q.frames,q.writes=0,0,0
+ end
+end
 function c.frame(now)
  if not c.ready or not s.client or not s.client.lease then c.stopVelocity(false);return end
  local controlled=c.entity(C.GetPlayerControlledShipID());local aboard=c.entity(C.GetPlayerContainerID());c.controlled=controlled
@@ -332,6 +401,7 @@ function c.frame(now)
      fields[#fields+1]=string.format('%.6f',now)
      for _,v in ipairs(velocity) do fields[#fields+1]=string.format('%.9g',v) end
      send(table.concat(fields,'|'))
+     send(string.format('NMODE|1|%s|%d|%d|%d|%.6f|%s',s.client.lease,i,c.epochs[i],c.seq[i],now,localMode(ship,sector)))
      -- FIRE2 shares NAV2's source time; a group outside 1-4 is never encoded.
      local primary,secondary=fire2Ready and getGroup(ship,true) or 0,fire2Ready and getGroup(ship,false) or 0
      if fire2Ready and primary>=1 and primary<=4 and secondary>=1 and secondary<=4 then
@@ -343,7 +413,7 @@ function c.frame(now)
   end
  end
  for i=1,2 do
-  local r=c.remote[i];local ship=c.ships[i];local p,linear=render(r,now);local velocityApplied=false
+  local r=c.remote[i];local ship=c.ships[i];local p,linear=render(r,now,i);local velocityApplied=false
   if r and r.firing and (not p or now>(r.fireDeadline or 0)) then r.firing=false;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
   if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) and C.GetPlayerControlledShipID()~=ship then
    if (r.fireDeadline or 0)>now and not r.firing then r.firing=true;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=true}) end
@@ -384,8 +454,12 @@ function c.frame(now)
        if math.abs(n<=3 and delta or M.angle(delta))>(n<=3 and .01 or .0001) then changed=true;break end
       end
      end
+     if diagnose then diagnose(i,r,ship,p,linear,changed,now) end
      if changed then C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));r.applied=p end
-     if C.GetPlayerControlledShipID()~=ship and linear then
+     -- Native velocity only in normal flight. At boost/travel/highway speed the free
+     -- replica's own flight model cannot hold the vector; the per-frame pose write is
+     -- authoritative (pathing SetOffsetOrder, see reports/PROXY-MOTION-20261025.txt).
+     if C.GetPlayerControlledShipID()~=ship and linear and (r.mode or 'normal')=='normal' then
       applyVelocity(i,sector,linear,now);velocityApplied=true
      end
     end
