@@ -8,8 +8,9 @@ Measured facts and assumptions are labelled; open questions are listed at the en
 
 The current mod grew one protocol per feature (`NAV2`, `UMOVE`, `FIRE2`, `HEALTH`,
 `SHOT`, `CARGOREQ`, `QUEST`, mission records, …), each with its own timing, rollback
-and authority rules, around a fixed host/guest pair. Every new symptom (highway
-flicker, NPCs not engaging the guest, lost NPC fire) gets its own fix. This proposal
+and authority rules, around a fixed pair of players in which one player's game is the
+authority ("host" and "guest" in the 7.x code). Every new symptom (highway
+flicker, NPCs not engaging the second player, lost NPC fire) gets its own fix. This proposal
 replaces that with a few general mechanisms that every feature reuses, sized for
 several players from the start.
 
@@ -26,6 +27,14 @@ several players from the start.
    (e.g. extra player factions) run on the server only.
 6. **Determinism is an optimisation, not a foundation.** Seeded RNG, attention parity
    and fixed tick reduce corrections; correctness never depends on them.
+
+### Terminology
+
+- **Server:** the dedicated X4 that owns the universe. It is not a player.
+- **Client:** a player's X4 connected to the server. All clients are equal; they are
+  numbered player 1 … N, not host and guest.
+- "Host" and "guest" survive only in 7.x code, profiles (45841/45842) and paths such as
+  `sandbox-baseline\guest`; rename them when those areas are next changed.
 
 ## 3. Authority rules
 
@@ -81,10 +90,11 @@ manoeuvre state, alongside motion. Client replicas have no AI of their own but a
 "firing". A lost packet delays the state instead of losing fire for the rest of the
 fight (the current failure). Hits on players follow section 3.
 
-Known reasons NPCs currently ignore the guest (diagnostic on
+Known reasons NPCs currently ignore the second player (7.x "guest"; diagnostic on
 `contrib/ferrite-npc-target-diag`, not yet run natively):
-1. guest replicas have AI disabled and host fire replication drops out;
-2. on the host the guest's surroundings may run at low attention
+1. that player's replicas have AI disabled and fire replication from the authoritative
+   game drops out;
+2. in the authoritative game that player's surroundings may run at low attention
    (`contrib/ferrite-attention-parity` raises it, untested natively);
 3. vanilla scripts special-case the single local player (`player.occupiedship`:
    111 AI-script and 172 MD references; e.g. `aiscripts/lib.target.selection.xml:276`).
@@ -150,7 +160,7 @@ they are known (`set_faction_known`), with name, colour, icon and relation.
   plot; plot payment comes from that faction's account.
 - Sector ownership changes are mirrored with the same per-client mapping as ships
   (own sectors appear as `player`, others as their pool faction).
-- Remaining host-only behaviour (engine C++ compares against the global player
+- Remaining single-player-faction behaviour (engine C++ compares against the global player
   faction) is covered by the planned context hooks.
 
 ### 7b. Hot join (decided: fork snapshots)
