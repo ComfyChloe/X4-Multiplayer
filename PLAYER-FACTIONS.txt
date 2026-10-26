@@ -188,7 +188,13 @@ Strict validator970f3bd passes; all115 frozen input hashes verified after comple
 Evidence .local/lane/sessions/s-004-drain256/{result,acceptance}.json and native client logs;
 frozen input manifest .local/lane/inputs/s-004-drain256/SOURCE-CHECKPOINT.json. No raw logs in Git.
 This is a two-co-op-client functional result, not timing, dedicated-server, cargo/magnet/radar,
-save/load, personal ledger or sector-claim acceptance. New protocol-ordering work is separate.
+save/load, personal ledger or sector-claim acceptance.
+s005 repeats that full native acceptance with frozen2741117, including protocol fix7c23ab2:
+16 valid samples per client, all four bilateral relation states and final160s allied UI.
+Lanes b3/b4, profiles45853/45854; both restored, all116 frozen hashes verified. Evidence:
+.local/lane/sessions/s-005-ordering/{result,acceptance}.json and corresponding input manifest.
+This proves normal native compatibility of the ordering fix. Reordering, duplicates and
+reconnect faults are injected by the cross-language regression tests, not this native probe.
 
 PROPOSAL: MONEY PER PLAYER (goal 4) - DESIGN ONLY, NOT IMPLEMENTED
 Today (7.x co-op) there is ONE shared wallet: md/x4lan_trade.xml Order debits/credits faction.player
