@@ -4,13 +4,14 @@
   instructions, source and evidence by task; read those before the affected work.
   Do not load the entire historical chat, handoff archive or all reports by default.
   `CLAUDE.md` imports these shared instructions.
-- Project lead is Ferrite, as assigned by the project owner on 25 October 2026.
+- Project owner is Lith7ium; ownership, licensing and publication decisions remain
+  with the owner. Project lead is Ferrite, as assigned on 25 October 2026.
   Astra / A:primary now contributes under that coordination. Agree new task
   ownership, shared interfaces and integration with Ferrite; earlier onboarding
   messages naming Astra as project lead are superseded. Native access remains
   subject to each machine owner's authorization and current session ownership.
-- Default to internal work. Public packages require an explicit request for that
-  release. Public Test 01 is withheld because full shared-universe authority is
+- Source development is public. Official public packages require an explicit
+  request for that release. Public Test 01 is withheld because full shared-universe authority is
   unfinished. The user confirmed basic ordinary cargo/magnet success in 7.1.1;
   preserve that regression without inferring acceptance of every cargo case.
 - Speak German with the user. Keep shipped documentation and interfaces English.
@@ -36,7 +37,7 @@
   do not assume permission to alter an unrelated machine's game installation.
 - Preserve existing Git history and local laptop edits. Fetch before integrating;
   never force-push or reset away another machine's work. The user selected the
-  private repository `https://github.com/Lith7ium/X4-Multiplayer` for synchronization.
+  repository `https://github.com/Lith7ium/X4-Multiplayer` for synchronization.
 - Do not regenerate old MD fixture scripts blindly: compare generator output
   against current profile protections and gameplay changes before replacing it.
 - Give each concurrent editing agent a separate clone/worktree and task branch.
@@ -80,3 +81,20 @@
   to personal documents/mail or spending. Preserve sealed release archives.
 - New Windows and Linux internal packages include server/runtime and English
   documentation. Two simultaneous players remain the implemented limit.
+
+## Public source and licensing
+
+- The owner authorized public development and free noncommercial use, changes,
+  forks and redistribution on 26 October 2026. LICENSE.md is the unmodified
+  PolyForm Noncommercial 1.0.0 text; preserve NOTICE.txt and third-party terms.
+  Read LICENSING.md before changing licensing or making commercial-use claims.
+- Public read/fork access does not grant write access to the original repository.
+  Only the owner and invited collaborators may push or merge there. Outside
+  contributors use their own forks and pull requests. Do not invite collaborators
+  or grant write access merely because someone wants to download or fork.
+- Official playable packages still need explicit release authorization; permitted
+  independent noncommercial builds are distinct from official releases.
+- Public source is not permission to publish private session data, credentials,
+  raw personal logs, local account paths or private coordination material. Keep
+  those outside Git and scrub new reports before committing. Do not rewrite
+  existing shared history as an incidental cleanup.

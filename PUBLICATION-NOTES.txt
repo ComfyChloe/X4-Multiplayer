@@ -1,0 +1,25 @@
+PUBLIC DEVELOPMENT HISTORY — 26 OCTOBER 2026
+
+This publication has been sanitized at the project owner's request. Personal
+contact details, local account paths, private coordination references and selected
+internal runtime logs were removed or replaced with synthetic examples across
+Git history. Public contributor handles and the development graph were retained.
+
+Historical reports describe the original tests and artifacts. Their recorded
+commit IDs and artifact checksums may refer to the private pre-sanitation source
+or sealed test packages; they are not checksums of this sanitized publication.
+Privacy edits do not turn pending or failed tests into passing results. Development
+branches remain experimental unless the current project documentation says otherwise.
+
+The previous repository, including its issues, pull requests and reviews, is now
+kept in a private archive. Historical PR/issue numbers and links in reports refer
+to that archive; they do not identify new issues or PRs in this repository.
+
+Contributors with an older checkout must preserve local work and clone this history
+into a separate directory. Reapply only reviewed, sanitized patches for unpushed
+work. Do not merge or push old history into this repository: that would restore
+removed personal data. Coordinate migration and integration with Ferrite.
+
+Lith7ium remains the project owner and controls publication and licensing;
+Ferrite is the technical project lead. See LICENSING.md for free noncommercial
+use, modifications and forks, and separately authorized commercial uses.

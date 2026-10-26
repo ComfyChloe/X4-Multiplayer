@@ -2,14 +2,16 @@ X4 MULTIPLAYER - PC / FEDORA LAPTOP DEVELOPMENT
 
 Repository: https://github.com/Lith7ium/X4-Multiplayer
 Current delivery/acceptance: CONTINUE-HERE.txt. New-agent entry: onboarding/00-START-HERE.txt.
-Use its agreed integration baseline; main may not contain the current7.4 changes.
+Use the agreed integration baseline; main contains 7.5.0, while newer experiments
+may remain on task branches. Read LICENSE.md and LICENSING.md for usage rights.
 Read CONTINUE-HERE.txt before changing gameplay. Public Test 01 is withheld.
 For additional contributors or concurrent agents, also read CONTRIBUTING.txt.
 CLAUDE.md imports the same AGENTS.md used by other coding agents.
 
 FIRST CHECKOUT (Fedora, Bazzite or another Linux development machine)
-For this private repository, Git needs its own GitHub authentication. Being
-signed into Firefox alone is not sufficient. If this laptop is not configured,
+Public HTTPS cloning does not require GitHub authentication. Pushing to your own
+fork or, if invited, to the original requires your own Git credentials. Being
+signed into Firefox alone is not sufficient. To configure authenticated pushes,
 use GitHub CLI's browser flow:
   gh auth login --hostname github.com --git-protocol https --web
   gh auth setup-git
