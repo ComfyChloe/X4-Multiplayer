@@ -295,5 +295,9 @@ Equivalence of `ui_elements` and the RNG split (functional lane run): mode `audi
 - Q11 answered (transforms): attachment-pose refresh; open whether simulation code reads vc+0x30.
 - `ui_render`: per-frame UI queue growth when skipped (commit size over a long diet run).
 - Whether `CMessageManager::CreateSource` IDs (UI message sources) differ between server and clients in practice.
+- Production integration (lead decision): today only the test-gated loader arms the module. A Windows server
+  would need a server-role switch in the mod configuration that loads `x4lan_framediet_64.dll` with the
+  `server` set (plus `rng_split` on every participant if RNG parity is wanted); the Linux server gets its own
+  switches in rust/x4mp-agent (x4mods-61, Q10).
 - Native steps: audit-002 (rng_split on/off), a diet stability run (`server`, then `all`, 10+ min, Lua and frames
   keep running, no `FEATURE ... DISABLED`), the quiet-window timing run (Q9).
