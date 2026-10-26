@@ -70,3 +70,13 @@ fn an_empty_or_unfinished_capture_cannot_pass() {
         assert_eq!(result.status.code(), Some(2), "{:?}", result);
     }
 }
+
+#[test]
+fn startup_rearm_session_is_explicitly_excluded_when_later_evidence_exists() {
+    let raw = "X4AITRACE\t1\tbuild=23660954\tsource=native\tcapture=bracket\n".to_owned() + &capture(100.0 + 0.001);
+    let log = raw.lines().map(|line| format!("AITR\t{line}\n")).collect::<String>();
+    let result = check(&log);
+    assert!(result.status.success(), "{:?}", result);
+    assert!(String::from_utf8_lossy(&result.stdout)
+        .contains("session 1: no complete brackets; excluded from wait validation"));
+}

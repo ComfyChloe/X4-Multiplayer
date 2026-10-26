@@ -474,7 +474,11 @@ impl Agent {
         }
         // Interrupts queued for the aborted frames are gone with them.
         self.pending_global.retain(|p| p.depth <= depth);
-        if self.pending_block.as_ref().is_some_and(|p| p.depth > depth) {
+        // The target frame's current blocking action is discarded by the restart too.
+        // Engine global-abort handling clears that context's wake mask (ClearWake),
+        // including bit 4; retaining its pending block would execute an old action after
+        // restart_at has already selected a different continuation.
+        if self.pending_block.as_ref().is_some_and(|p| p.depth >= depth) {
             self.pending_block = None;
         }
         self.returned = None;
@@ -651,6 +655,16 @@ impl Agent {
             self.stack[p.depth].handler_actions(&mut cx, i, &p.ev)?
         };
         if let Outcome::AbortCalled { label } = out {
+            // Native AIDirector selects a restart after executing the global-handler
+            // batch. We currently execute one handler at a time. Do not claim that an
+            // immediate restart is equivalent when another queued global can compete.
+            if !self.pending_global.is_empty() {
+                return Err(Stop::Unsupported {
+                    script: "runtime",
+                    line: 0,
+                    what: "global abort with additional queued global interrupts",
+                });
+            }
             self.abort_above(p.depth, label, facts, io)?;
         }
         Ok(Some((script, out)))

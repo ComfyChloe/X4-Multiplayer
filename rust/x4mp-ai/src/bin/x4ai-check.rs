@@ -24,6 +24,9 @@ fn main() {
                 brackets += report.brackets;
                 failed |= report.first_wait_mismatch.is_some();
                 print!("{}", report.render());
+                if report.brackets == 0 {
+                    println!("session {}: no complete brackets; excluded from wait validation", i + 1);
+                }
             }
             Err(e) => {
                 eprintln!("x4ai-check: session {}: {e}", i + 1);

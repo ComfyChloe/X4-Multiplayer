@@ -10,7 +10,7 @@ M2a **native**: two bracket captures of Patrol job ships (section 9a) confirm th
 contradiction (51/51 wait wake times bit-exact over both runs, constant draw counts per bracket class);
 `lib.target.selection` is native too (section 6a). The measured census (section 1.3) puts the AI time in
 move.generic, trade.find.free and fight.attack.object.fighter; **M3 = move.generic** (lead, 26 Oct), then
-trade.find.free. M3 now has a resumable `move.generic` port and ten synthetic replay/regression tests
+trade.find.free. M3 now has a resumable `move.generic` port and twelve synthetic replay/regression tests
 (section 9b); no live M3 switch or native value-replay acceptance yet. Everything else below is offline
 unless marked native.
 
@@ -317,7 +317,7 @@ Cross-sector reads are facts from the frame-start snapshot.
 
 ## 9. Tests (offline)
 
-`cargo test -p x4mp-ai`: 48 tests pass (Windows 11, Rust 1.94.1);
+`cargo test -p x4mp-ai`: 51 tests pass (Windows 11, Rust 1.94.1);
 `cargo clippy -p x4mp-ai --all-targets -- -D warnings` passes. The original test breakdown below
 is historical M1/M2; M3 additions are described in section 9b.
 
@@ -399,7 +399,7 @@ outside this check. The Tide handler checks its event selector first, so unrelat
 silently suppress RNG validation. The per-entity stream design is unchanged; no approval of altered
 vanilla roll sequences or live parallel RNG behavior is inferred.
 
-Ten **SYNTHETIC**, manually constructed replay/regression tests cover:
+Twelve **SYNTHETIC**, manually constructed replay/regression tests cover:
 - small-ship inter-sector movement with a blocking zone-change interrupt;
 - capital-ship gate call, opaque gate execution, planned sector change, then short movement;
 - gravidar target -> immediate Attack order and abort cleanup;
@@ -409,7 +409,9 @@ Ten **SYNTHETIC**, manually constructed replay/regression tests cover:
 - destination destruction: non-consuming handler followed by cleanup;
 - expired reservation: clear it and do not cancel it again on abort;
 - blocking delivery with debugging off, then duplicate ignored without another draw;
-- all four unsupported input modes refuse without any query/effect/draw and preserve RNG state.
+- all four unsupported input modes refuse without any query/effect/draw and preserve RNG state;
+- a global restart discards the same frame's pending blocking interrupt;
+- competing queued global restarts are explicitly unsupported, not accepted as equivalent.
 
 Each trace compares effects, query arguments, yield/interrupt outcomes, action-level draw records
 and bracket-end RNG states. These fixtures do not establish complete script coverage, native value
@@ -418,11 +420,23 @@ The unfinished capital fixture was completed by publishing its short-move distan
 last observed action preceding the conditional read, and correcting its count to 11 native runs plus
 2 opaque gate runs. Input facts must be visible before the decision that reads them.
 
+Review follow-up: restarting a frame clears its pending blocking interrupt as well as interrupts of
+aborted children. Evidence is the native global-abort path in AIDirector::Move (0x106d250) calling
+AIScriptContext_ClearWake (0x10669c0), which clears the wake mask and pending queue before restarting;
+local read-only RE: x4-re/work/rw-ai-orders/out/d1.txt and rw-ai-driver/out/d1.txt. This does not prove
+full multi-handler ordering. The engine executes the global-handler batch before selecting a restart,
+whereas this runtime executes one handler at a time. A global AbortCalled with additional global
+interrupts queued therefore returns Unsupported before applying the restart. Handler effects already
+produced remain failed offline evidence, not a transactional live fallback. Completing the native
+batch/selection semantics is required before that case can enter shadow or switch validation.
+
 The native bracket checker additionally recognizes move.generic's fixed waits at L382/L1027/L1237
 (1 ms) and L920 (1 s), with a one-ULP negative test. The CLI now exits 2 on a numerical wait
 mismatch or a file with no complete brackets; earlier versions printed mismatches but returned 0.
-Three process-level tests cover a one-ULP error, multiple sessions with one bad session, and empty or
-unfinished captures. Other unmatched records and draw histograms remain reported diagnostics; an exit
+Four process-level tests cover a one-ULP error, multiple sessions with one bad session, empty or
+unfinished files, and an empty startup session followed by valid evidence. An empty session in a
+multi-session file is explicitly excluded from wait validation; it is allowed because the probe can
+re-arm during startup. Only a file with no complete brackets fails the coverage check. Other unmatched records and draw histograms remain reported diagnostics; an exit
 0 is not full equivalence acceptance. Rechecking existing native patrol-capture-002 with the new M3
 wait rules finds five move.generic L382 waits, **5/5 bit-exact** (in addition to the historical Patrol
 checks), with 149 complete brackets and zero unmatched records across its two sessions. It deliberately does not predict L616 (highway

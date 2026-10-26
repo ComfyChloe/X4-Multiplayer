@@ -952,3 +952,51 @@ fn unported_input_modes_refuse_before_any_draw_or_effect() {
         assert_eq!(rng.state(), 0x1234, "{param}");
     }
 }
+
+#[test]
+fn global_restart_discards_the_same_frames_pending_block() {
+    let mut b = small_ship_until_long_move();
+    b.fact(Uid::NULL, "debug.channel", bv(false));
+    b.ev("block", "event_object_changed_zone", k("matched"), 0x1234, 0, vec![("object", c(S)), ("param", c(ZT))]);
+    b.ev(
+        "global",
+        "event_object_signalled",
+        s("move.generic/inline1"),
+        0x2345,
+        0,
+        vec![("object", c(S)), ("param", s("move.generic_reinitialize"))],
+    );
+    b.irun("handler", 0x3456);
+    b.roll(103, 0.0);
+    b.irend(vec![("outcome", k("abort")), ("label", k("check"))]);
+    check(&b.t);
+    // A fresh event after the restart must not be ignored as though the old block
+    // interrupt were still pending. This deliberately corrupt trace must be rejected.
+    b.ev("block", "event_object_changed_zone", k("ignored"), 0x4567, 0, vec![("object", c(S)), ("param", c(ZT))]);
+    let rep = replay(&b.t);
+    let m = rep.entities[&P.0].first_mismatch.as_deref().unwrap_or_default();
+    assert!(m.contains("none is queued natively"), "{m}");
+}
+
+#[test]
+fn competing_global_restarts_are_refused_without_claiming_equivalent_ordering() {
+    let mut b = small_ship_until_long_move();
+    for seed in [0x1234, 0x2345] {
+        b.ev(
+            "global",
+            "event_object_signalled",
+            s("move.generic/inline1"),
+            seed,
+            0,
+            vec![("object", c(S)), ("param", s("move.generic_reinitialize"))],
+        );
+    }
+    b.irun("handler", 0x3456);
+    b.roll(103, 0.0);
+    b.irend(vec![("outcome", k("abort")), ("label", k("check"))]);
+    let rep = replay(&b.t);
+    assert!(!rep.ok());
+    let r = &rep.entities[&P.0];
+    assert!(r.unsupported.as_deref().unwrap_or_default().contains("additional queued global"));
+    assert!(r.first_mismatch.is_none(), "do not continue a partially modeled bracket: {r:?}");
+}
