@@ -112,7 +112,8 @@ modifiers).
 +0x2e0 bullet macro; +0x2e8/+0x2f0 launch point indices; +0x300 cooldown block (+0x48 blocked-until time);
 +0x30c limited rotation; +0x30d firing; +0x30e beam active; +0x310 last shot time; +0x318 shoot controller;
 +0x350 magazine counter; +0x354 aiming flag. Shoot controller (`U::BasicShootController` 0x2b7fcc0, 35 slots;
-Player/LargeTarget/Mindless/Multiple variants): +0x18 target id, +0x28 last decision time, +0x40 LOS check
+Player/LargeTarget/Mindless/Multiple variants): +0x10 primary target reference (getter17 at 0x7e5d30),
++0x28 last decision time, +0x40 LOS check
 time, +0x50/+0x60 sampled target offset and its time, +0x80 angle override, +0x84/+0x85 LOS cache, +0x88
 burst start, +0x90 burst effect spawned.
 

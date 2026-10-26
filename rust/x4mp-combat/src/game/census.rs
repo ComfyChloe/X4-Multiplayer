@@ -69,7 +69,8 @@ pub struct Frame {
     pub weapon_nested: u32,
     /// Weapon calls by class: Weapon, Turret, MissileLauncher, MissileTurret.
     pub by_class: [u32; 4],
-    /// The shoot controller (+0x318) had a target id (+0x18) before the call.
+    /// The shoot controller (+0x318) had a primary target reference (+0x10) before the
+    /// call. This does not cover secondary targets of MultipleShootController or imply idle.
     pub with_target: u32,
     /// Aiming flag (+0x354) / firing flag (+0x30d) after the call.
     pub aiming: u32,
@@ -260,7 +261,7 @@ unsafe fn weapon_fields(weapon: *const u8) -> WeaponFields {
         aiming: weapon.add(0x354).read() != 0,
         firing: weapon.add(0x30d).read() != 0,
         last_shot: (weapon.add(0x310) as *const u64).read(),
-        target: if controller.is_null() { 0 } else { (controller.add(0x18) as *const u64).read() },
+        target: if controller.is_null() { 0 } else { (controller.add(0x10) as *const u64).read() },
     }
 }
 
@@ -748,7 +749,7 @@ impl CensusSession {
         writeln!(out, "X4MP-COMBATCENSUS 1 steam_build=23660954 source=native")?;
         writeln!(
             out,
-            "# frames={} dropped_frames={} foreign={} uninitialised_tls={} rng_unmatched={} rng_frame_over_cap={} ticks_per_second={:.0}",
+            "# frames={} dropped_frames={} foreign={} uninitialised_tls={} rng_unmatched={} rng_frame_over_cap={} ticks_per_second={:.0} primary_target_offset=16",
             s.frames, s.dropped_frames, s.foreign, s.uninitialised_tls, s.rng_unmatched, s.rng_frame_over_cap, s.ticks_per_second
         )?;
         for line in self.summary() {
@@ -932,7 +933,7 @@ mod tests {
         // a turret aiming at a target and firing 3 shots (2 draws) with a nested child weapon
         // (1 draw); an idle weapon; two bullets (one draws 1 and hits twice, one is not due)
         let mut controller = Obj::new(0);
-        controller.put(0x18, &77u64.to_le_bytes());
+        controller.put(0x10, &77u64.to_le_bytes());
         let mut child = Obj::new(0x1000);
         child.put(DRAWS, &[1]);
         let mut turret = Obj::new(0x2000);

@@ -61,6 +61,23 @@ fn pinned_entries_hold_the_pinned_originals_and_are_restored() {
 }
 
 #[test]
+fn primary_target_reference_matches_original_getter() {
+    let Some(image) = image() else { return };
+    // Getter17 is a leaf copying controller+0x10 to the caller's result slot.
+    type GetTarget = unsafe extern "system" fn(*const u8, *mut u64) -> *mut u64;
+    let original: GetTarget = unsafe { std::mem::transmute(image.at(0x007e_5d30)) };
+    for target in [0u64, 77, 0x0123_4567_89ab_cdef] {
+        let mut controller = [0u64; 4];
+        controller[2] = target;
+        controller[3] = !target; // wrong +0x18 offset must not influence the result
+        let mut out = 0;
+        let returned = unsafe { original(controller.as_ptr().cast(), &mut out) };
+        assert_eq!(returned, &mut out as *mut u64);
+        assert_eq!(out, target);
+    }
+}
+
+#[test]
 fn rng_step_equals_the_original_u64_state() {
     let Some(image) = image() else { return };
     type U64State = unsafe extern "C" fn(*mut u64, u64) -> u64;

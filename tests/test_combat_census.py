@@ -18,7 +18,7 @@ COLUMNS = ('now weapon_calls weapon_nested weapon turret missile_launcher missil
 def table(rows):
     lines = ['X4MP-COMBATCENSUS 1 steam_build=23660954 source=native',
              '# frames=%d dropped_frames=0 foreign=0 uninitialised_tls=0 rng_unmatched=0 rng_frame_over_cap=0 '
-             'ticks_per_second=1000000' % len(rows),
+             'ticks_per_second=1000000 primary_target_offset=16' % len(rows),
              '# shots mean=1.000 p50=1.000 p95=1.000 max=1.000',
              '\t'.join(COLUMNS)]
     for row in rows:
@@ -50,7 +50,12 @@ class CensusReport(unittest.TestCase):
         self.assertAlmostEqual(s['rng_per_shot_upper'], 4.0)
         self.assertAlmostEqual(s['rng_bullet_per_check'], 10 / 22)
         self.assertAlmostEqual(s['fresh_same_frame_share'], 0.75)
-        self.assertAlmostEqual(s['idle_weapon_share'], 0.5)
+        self.assertAlmostEqual(s['no_primary_target_share'], 0.5)
+        self.assertNotIn('idle_weapon_share', s)
+        old_meta = dict(meta)
+        del old_meta['primary_target_offset']
+        self.assertIsNone(report.summarise(old_meta, parsed)['no_primary_target_share'],
+                          'old captures used the wrong target offset and cannot be reinterpreted')
         self.assertAlmostEqual(s['frame_ms']['max'], 50.0)
         self.assertIn('rng_combat_share', report.text(s))
 

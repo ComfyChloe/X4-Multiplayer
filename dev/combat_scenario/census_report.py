@@ -96,7 +96,8 @@ def summarise(meta, rows) -> dict:
         'weapon_ms': dist([r['weapon_ticks'] * 1000.0 / tps for r in rows]),
         'bullet_ms': dist([r['bullet_ticks'] * 1000.0 / tps for r in rows]),
         'frame_ms': dist([r['frame_ticks'] * 1000.0 / tps for r in rows]),
-        'idle_weapon_share': 1.0 - total('with_target') / total('weapon_calls') if total('weapon_calls') else None,
+        'no_primary_target_share': (1.0 - total('with_target') / total('weapon_calls')
+                                    if total('weapon_calls') and meta.get('primary_target_offset') == 16 else None),
     }
     return out
 
@@ -111,10 +112,11 @@ def text(s: dict) -> str:
         d = s[key]
         out.append(f"{key:18} mean {d['mean']:9.3f}  p50 {d['p50']:8.3f}  p95 {d['p95']:8.3f}  max {d['max']:8.3f}")
     for key in ('rng_combat_share', 'rng_per_shot_upper', 'rng_bullet_per_check', 'fresh_same_frame_share',
-                'idle_weapon_share'):
+                'no_primary_target_share'):
         value = s[key]
         out.append(f"{key:24} {'n/a' if value is None else f'{value:.4f}'}")
     out.append('fresh counters classify Move calls by shot/check timestamps; they do not prove unique first moves or creation-frame order.')
+    out.append('no_primary_target_share is not an idle-weapon measure; secondary targets and untargeted firing are not classified.')
     return '\n'.join(out) + '\n'
 
 
