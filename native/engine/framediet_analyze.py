@@ -233,7 +233,7 @@ def load_names(x4re: Path) -> dict:
 ATTRIBUTION = [
     ('b3bad0', 'slot 6 UI controller total (CUIController::Move)'),
     ('lua', 'slot 6 Lua (any lua51_64 frame; the mod runs here)'),
-    ('1399c40', 'Anark gameface element update (no Lua)'),
+    ('1399c40', 'Anark element update (builds Lua dispatch list)'),
     ('af8e50', 'Anark scene manager -> scene layer walk (ui_scenes)'),
     ('ae9880', 'UI ICom message pump / VisibilityData'),
     ('121c1f0', 'slot 10 render preparation total (GameRender::Move)'),

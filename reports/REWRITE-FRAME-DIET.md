@@ -291,7 +291,7 @@ state and with it the mod. What it does get, without hooks:
 1. Anark element update 0x1399c40 (~1.9 / 2.0 ms): `ui_elements` instrumentation (09cadac) remains available
    in audit/pass mode, through its verified call-site rel32 patch and near stub. Stability-002 and bisect-001
    supersede the earlier UI-only assumption: skipping it stops UI Lua, not merely animation. Diet is refused
-   for every period. The exact element-to-Lua dependency is not yet established.
+   for every period. The element walk builds the per-frame onUpdate dispatch list (section 12).
 2. ICom message pump 0xae9880 / VisibilityData::Update 0xadcfa0 (0.75 / 1.2 ms): NOT presentation-only. Its
    message handling sets the player's soft target (`SetSofttargetMessage` in 0xaecb60 posts
    `U::PlayerChangedTargetEvent` deferred) and can post `U::StopDialogEvent` (0x11789d0), both visible to MD/AI.
@@ -407,3 +407,29 @@ regressing counters. This checks only the reported interval; it is not a gamepla
 Historic bisect-001 fails this check for one watchdog stall and four mode-drift reports, even though its
 41 reports cover 303.2 seconds with a maximum gap of 10.1 seconds. Engine error-like lines are listed for
 review, not automatically equated with mod failures.
+
+
+## 12. Why skipping the element walk stops onUpdate (static, 26 Oct 2026)
+
+Verified against the pinned Windows X4.exe copy (SHA-256
+19750a6563889a970f434b5566eb396c6b2dc29ff814bd3e336f838176ad6891, matching signatures.py).
+This is a data-flow explanation of the native bisect result, not a new native test:
+
+1. Presentation update 0x138f2c0 obtains its per-frame lists through vfunc30 (+0xf0). For the presentation
+   vtable 0x2ca2988 the accessor 0xb61250 returns the embedded object at +0x298. At 0x138f3a8 it clears that
+   object's +0x70 list size (and clears the storage at +0x60), alongside the other per-frame lists.
+2. The conditional call at 0x138f477 runs the element walk 0x1399c40. That walk obtains the same list owner
+   through its presentation pointer. At 0x1399e6e..0x1399e76 it appends an eligible element to the data pointer
+   at +0x60 and increments the count at +0x70. It also builds activation lists and updates element flags.
+3. The later Lua update 0xaf85e0 calls DispatchFrameScripts 0x13a1270. That dispatcher obtains the same
+   per-frame-list object through presentation vfunc30, then passes its +0x40 container to 0x13a35c0 with the
+   event name onUpdate (call setup 0x13a1433..0x13a145e). The container's data/count offsets are +0x20/+0x30,
+   so these are exactly list-owner +0x60/+0x70. An empty list returns before any Lua callback is selected.
+4. Widget fullscreen onUpdate calls CallUpdateScripts, which dispatches mod onUpdate handlers. Therefore
+   reaching the C++ Lua-update function is insufficient: omitting the list producer removes the callbacks.
+
+This corrects the earlier inference that zero direct Lua imports and zero sampled simulation writes made
+this walk presentation-only. Its output is an input to Lua scheduling. A future optimization must preserve
+list membership, order and activation/deactivation/slide events before it can skip any cosmetic calculation;
+blindly keeping the old list is unsafe when elements change. Current code keeps the whole original walk.
+Private listings remain in x4-re/work/rw-frame-diet/out/; no engine source/listing is committed here.
