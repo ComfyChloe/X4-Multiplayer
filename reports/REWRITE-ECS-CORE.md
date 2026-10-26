@@ -39,6 +39,11 @@ are messages and structural commands applied at a frame barrier in the original 
 - Messages are delivered to the addressed system's next run (by default the sender itself, next frame;
   `send_to` reaches a later system of the same frame). A first version delivered to "the next phase"; the
   thread-invariance test with two systems showed that this silently dropped messages, so it was changed.
+- Multi-pass systems (`System::max_passes`, requested by ai-orders for the AIDirector pass loop, up to
+  0x21 passes): `step` repeats the system, each pass a full phase with its barrier, until no message for it
+  waits and no job or hook called `request_pass`; its own messages are then handled in the next pass of the
+  same frame. The pass count is an OR over worlds of deterministic state, so it is thread independent
+  (tests/passes.rs); a bound hit with work left is reported (`more`) and the rest arrives next frame.
 - Randomness comes from per-entity streams in a column; nothing depends on which thread ran a job.
   Scheduling uses measured job time only to order work (largest first), never for results.
 
@@ -158,7 +163,8 @@ Procedure: lane run with the fixed-tick probe overlay plus a mirror overlay (`de
 | **NATIVE** mirror-validate-1 (b4) | 57c2ed2 | 10 x 16.5k objects, 282 roots | walk_errors 0; local 320/320 and Object sector 282/282 bit-identical; 913 ms/capture (old region cache) |
 | **NATIVE** mirror-validate-2 (b3) | f772266 | 60 | walk_errors 0; Object sector 1732/1732 exact; local 1901/1920: the 19 misses are two superhighways (class overrides GetLocalTransform, see below); 262 ms/capture |
 | **NATIVE** mirror-validate-3 (b6) | 247642b (v1.1) | 60 x 16.3-16.7k objects | walk_errors 0; **local 1920/1920** (10 of them superhighways) and **Object sector 1758/1758** bit-identical; 271 ms/capture; 2,570 VirtualQuery/frame |
-| mirror-validate-4 | 3179ba6 | 60 | queued: walk/serialize split, components visited, region-cache saturation, last-hit fast path |
+| **NATIVE** mirror-validate-4 (b1, run mirror-005) | 3179ba6 | 60 x 16.7k objects | functional: **429,325 components visited per frame** for 16,690 recorded rows; walk 272.8 ms, serialize 3.0 ms (of 275.9 ms); region cache never full (2.7k VirtualQuery/frame) |
+| mirror-ab-1 | 96730d9 | 60 | queued: per-class visit histogram, A/B prefetch (odd frames) |
 
 Findings from the native data: six classes override GetLocalTransform (slot 648): Explosive, Missile,
 Bomb (0x567aa0), Highway (0x5f79f0: adds the vector at +0x570 to row 0, then the standard step),
@@ -167,7 +173,11 @@ offset; `check::local_step` models Highway and refuses the others. Out-of-sector
 updated sparsely: at attention 2, 460k of 583k consecutive-frame samples keep the identical pose with a
 non-zero velocity (`x4mp-capdump kinematics`).
 
-Pending: capture cost (mirror-validate-4 counters); benchmarks in a quiet window;
+Capture cost: the walk is memory-latency bound (about 0.64 us per visited component; 26 components visited
+per recorded row). Next: the class histogram decides between pruning subtrees that cannot hold recorded
+classes and prefetching; the A/B flag measures prefetching inside one run.
+
+Pending: capture cost (histogram, A/B); benchmarks in the quiet window (x4lane hold);
 cross-check with the walk agent's collector order once both run in one lane (Q8).
 
 ## 7. How to use it (system agents)
