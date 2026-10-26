@@ -48,10 +48,21 @@ PROTOCOL (relay x4lan/players.py, routed in Relay.step; old relays drop PF* pack
   PFID     client -> relay   own name (UTF-8 hex, plain text, max 48 bytes) and icon id, every 2 s
   PFROSTER relay -> clients  every connected human, 1 Hz
   PFREL    host -> relay -> guests   authoritative relation per human pair, revisioned
-  PFREQ    guest -> relay -> host    relation intent; the relay stamps the sender's index
+  PFREQ    client -> relay -> authority    relation intent; relay stamps sender and envelope order
   PFSEC    host -> relay -> guests   sector owner rows (cached, every 5 s and on change)
            guest -> relay -> host    claim intent, only for the sender's own token S<own>
 A new host lease clears cached relations/sectors (new authority epoch).
+PFREQ keeps its wire field count. Client -> relay uses the client's own sequence; the relay
+rejects duplicate/older sequences per client lease and target. Relay -> authority field5 is a separate
+monotonic envelope sequence scoped to the authority lease. The authority rejects duplicate/
+older envelopes per unordered relation pair, preventing reordering on either UDP hop from undoing a later
+choice. A client reconnect may restart its ingress sequence, but the forwarded envelope order
+continues. A new authority lease resets the relay envelope sequence and the authority's
+receiver fences; old-lease datagrams are rejected by the outer authenticated client. Identity
+refresh alone resets nothing. Invalid targets/values do not advance ordering fences. Both
+relay and authority must include this behavior for reorder protection; older code lacks it.
+Independent target pairs keep independent fences: reordering an intent for one pair does not
+discard an unrelated pair's change. Opposite endpoints changing the same pair share its fence.
 
 FLOW
 1. After the bubble is ready and the relay lease exists, Lua sends Setup; MD resolves the pool

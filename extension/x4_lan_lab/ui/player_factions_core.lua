@@ -10,7 +10,7 @@
 --   host   -> relay  PFREL|1|lease|rev|a|b|value                    authoritative relation a<b
 --   relay -> client  PFREL|1|lease|rev|a|b|value
 --   guest  -> relay  PFREQ|1|lease|seq|target|value                 relation intent (to host)
---   relay -> host    PFREQ|1|hostLease|from|seq|target|value
+--   relay -> host    PFREQ|1|hostLease|from|authoritySeq|target|value (relay-stamped, per host lease)
 --   client -> relay  PFSEC|1|lease|seq|sectorMacro|owner            owner = S<index> or faction id
 --   relay -> client  PFSEC|1|lease|seq|sectorMacro|owner            host rows; guest claims to host
 X4LAN_PLAYERS_CORE={}
@@ -110,7 +110,7 @@ function K.new(cfg,io)
  -- localIndex: this machine's own human (nil on a server). Authority: slot p1.
  local localIndex=not server and slotIndex or nil
  local p={local_=localIndex,server=server,host=slotIndex==1,roster={},assigned={},relations={},applied={},
-  seq=0,relRev=0,secSeq=0,sectors={},hostSectors={},claims={},io=io}
+  seq=0,relRev=0,secSeq=0,sectors={},hostSectors={},claims={},requestOrders={},io=io}
  p.authority=p.host
  function p.faction(index) return K.factionFor(index,localIndex) end
  function p.coopOwner(pilot) return K.coopOwner(pilot,localIndex) end
@@ -241,9 +241,16 @@ function K.new(cfg,io)
   elseif kind=='PFREQ' then
    if not p.host or #f~=7 then return true end
    local from,target=integer(f[4],K.POOL),integer(f[6],K.POOL);local value=K.relation(tonumber(f[7]))
+   local order=integer(f[5])
    -- A human may only change relations it is part of.
-   if from and target and from>=1 and target>=1 and from~=target and value and p.roster[from] then
-    p.authorRelation(lease,from,target,value,'request:p'..from)
+   if from and target and from>=1 and target>=1 and from~=target and value and order and order>0 and p.roster[from] then
+    -- The outer client has authenticated the destination lease. Reset only for a
+    -- new authority lease, never when another human reconnects or refreshes identity.
+    if p.requestLease~=lease then p.requestLease=lease;p.requestOrders={} end
+    local pair=p.pair(from,target)
+    if not p.requestOrders[pair] or order>p.requestOrders[pair] then
+     if p.authorRelation(lease,from,target,value,'request:p'..from) then p.requestOrders[pair]=order end
+    end
    end
    return true
   elseif kind=='PFSEC' then

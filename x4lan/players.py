@@ -8,7 +8,7 @@ Every human slot pK owns pool faction x4lan_playerK. The relay only routes and c
   host   -> relay  PFREL|1|lease|rev|a|b|value                    authoritative relation (a < b)
   relay -> guest   PFREL|1|lease|rev|a|b|value                    cached, 1 Hz and on change
   guest  -> relay  PFREQ|1|lease|seq|target|value                 relation intent
-  relay -> host    PFREQ|1|hostLease|from|seq|target|value
+  relay -> host    PFREQ|1|hostLease|from|authoritySeq|target|value
   host   -> relay  PFSEC|1|lease|seq|sectorMacro|owner            owner = S<index> or faction id
   relay -> guest   PFSEC|1|lease|seq|sectorMacro|owner            cached rows, every 5 s and on change
   guest  -> relay  PFSEC|1|lease|seq|sectorMacro|S<own index>     claim intent, forwarded to the host
@@ -59,7 +59,8 @@ class PlayerRoster:
         self.relations = {}     # (a, b) -> (rev, value text)
         self.sectors = {}       # macro -> (seq, owner token)
         self.host_lease = None
-        self.request_sequences = {}  # slot -> (client lease, last accepted relation intent)
+        self.request_sequences = {}  # (slot, target) -> (client lease, last relation intent)
+        self.authority_request_sequence = 0  # monotonic envelope sequence within host lease
         self.next_roster = self.next_sectors = 0.0
 
     @staticmethod
@@ -77,6 +78,7 @@ class PlayerRoster:
             self.host_lease = lease
             self.relations.clear()
             self.sectors.clear()
+            self.authority_request_sequence = 0
         return host
 
     def handle(self, raw, address, peers, now):
@@ -122,14 +124,21 @@ class PlayerRoster:
                 value = relation(f[5])
                 if not 1 <= target or target == own:
                     return []
-                previous = self.request_sequences.get(slot)
+                request_key = slot, target
+                previous = self.request_sequences.get(request_key)
                 if previous and previous[0] == peer.lease and seq <= previous[1]:
+                    return []
+                if self.authority_request_sequence >= MAX_SEQ:
                     return []
                 # UDP can duplicate/reorder intents with DIFFERENT values. Reapplying an
                 # older intent would undo the human's latest choice. Fence per client
-                # lease, so reconnects may restart their sequence without being blocked.
-                self.request_sequences[slot] = (peer.lease, seq)
-                out.append((host.address, f'PFREQ|1|{host.lease}|{own}|{seq}|{target}|{value:.4f}'.encode()))
+                # lease AND target; independent target pairs must not discard each other.
+                self.request_sequences[request_key] = (peer.lease, seq)
+                # The second UDP hop can reorder too. A fresh client lease resets its
+                # ingress counter, but must not reset the authority's ordering fence.
+                self.authority_request_sequence += 1
+                order = self.authority_request_sequence
+                out.append((host.address, f'PFREQ|1|{host.lease}|{own}|{order}|{target}|{value:.4f}'.encode()))
             elif kind == 'PFSEC' and len(f) == 6:
                 seq = number(f[3])
                 if not MACRO.fullmatch(f[4]) or not ATOM.fullmatch(f[5]):
