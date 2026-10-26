@@ -9,11 +9,9 @@ use x4mp_physics::oracle::{default_exe, Image};
 #[test]
 fn oracle_capture_replays_exactly_and_a_flipped_bit_is_caught() {
     let path = default_exe();
-    if !path.exists() {
-        eprintln!("SKIP: {} not found", path.display());
-        return;
-    }
-    let image = Image::load(&path).unwrap();
+    let image = Image::load(&path).unwrap_or_else(|error| {
+        panic!("oracle coverage is required; set X4MP_X4_EXE to the pinned executable: {error}")
+    });
     let mut seed = 0x2545_f491_4f6c_dd1du64;
     let mut next = || {
         seed ^= seed << 13;

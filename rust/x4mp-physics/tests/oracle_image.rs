@@ -4,18 +4,16 @@
 
 use x4mp_physics::oracle::{default_exe, Image};
 
-fn image() -> Option<Image> {
+fn image() -> Image {
     let path = default_exe();
-    if !path.exists() {
-        eprintln!("SKIP: {} not found (set X4MP_X4_EXE)", path.display());
-        return None;
-    }
-    Some(Image::load(&path).expect("pinned image"))
+    Image::load(&path).unwrap_or_else(|error| {
+        panic!("oracle coverage is required; set X4MP_X4_EXE to the pinned executable: {error}")
+    })
 }
 
 #[test]
 fn pinned_code_hashes_match_the_mapped_image() {
-    let Some(image) = image() else { return };
+    let image = image();
     // (rva, length, sha256) copied from signatures.py PHYSICS_SITES.
     let sites: [(u32, usize, &str); 4] = [
         (0xC5940, 24, "ea41983c8853e368253719bebeee39612ea260cb5719e633669388722b04aaa6"),

@@ -36,6 +36,12 @@ the original-machine-code oracle, all 2,130,706,434 in-range asinf inputs,
 capture corruption control and three capture-validation regressions. No native
 ForcedFlight capture/replay, shadow or switch acceptance is claimed.
 
+Windows oracle tests now fail if the pinned executable is missing, rather than
+returning early and being counted as passing. Set `X4MP_X4_EXE` if the usual RE
+workspace path is unavailable. A missing-path negative control returned exit101
+as expected; the normal release suite then/also passed all10 tests. Other OSes
+still compile out the Windows oracle tests and do not provide oracle coverage.
+
 ## Next work
 
 Find a disposable scenario that naturally exercises ForcedFlight before its

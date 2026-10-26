@@ -6,13 +6,11 @@
 use x4mp_physics::flight::{forced_update, x4_asinf, CrtMath, ForcedModel, Slot, StdMath, X4Math, V4};
 use x4mp_physics::oracle::{default_exe, Image, MappedMath, FORCED_UPDATE_HEAD};
 
-fn image() -> Option<Image> {
+fn image() -> Image {
     let path = default_exe();
-    if !path.exists() {
-        eprintln!("SKIP: {} not found (set X4MP_X4_EXE)", path.display());
-        return None;
-    }
-    Some(Image::load(&path).expect("pinned image"))
+    Image::load(&path).unwrap_or_else(|error| {
+        panic!("oracle coverage is required; set X4MP_X4_EXE to the pinned executable: {error}")
+    })
 }
 
 struct Rng(u64);
@@ -92,7 +90,7 @@ fn compare(image: &Image, math: &impl CrtMath, m: &ForcedModel, s: &Slot, dt: f3
 
 #[test]
 fn forced_update_matches_the_original_bitwise() {
-    let Some(image) = image() else { return };
+    let image = image();
     assert_eq!(image.sha256_at(0xeb04c0, 32), FORCED_UPDATE_HEAD);
     let math = MappedMath::new(&image);
     let mut r = Rng(0x9e37_79b9_7f4a_7c15);
@@ -161,7 +159,7 @@ fn forced_update_matches_the_original_bitwise() {
 /// Measured, not asserted: does the platform's atan2f/asinf (Rust std) equal X4's statically linked CRT?
 #[test]
 fn std_math_vs_x4_crt() {
-    let Some(image) = image() else { return };
+    let image = image();
     let x4 = MappedMath::new(&image);
     let mut r = Rng(0x1234_5678_9abc_def1);
     let (mut atan2_diff, mut asin_diff) = (0u64, 0u64);
@@ -206,7 +204,7 @@ fn std_math_vs_x4_crt() {
 /// original's bits.
 #[test]
 fn ported_asinf_equals_x4_asinf_on_every_input_in_range() {
-    let Some(image) = image() else { return };
+    let image = image();
     let x4 = MappedMath::new(&image);
     let mut checked = 0u64;
     let mut first: Option<u32> = None;
@@ -230,7 +228,7 @@ fn ported_asinf_equals_x4_asinf_on_every_input_in_range() {
 /// The forced update with X4Math (no X4 code at all) equals the original executed with X4's CRT.
 #[test]
 fn forced_update_with_ported_math_matches_the_original() {
-    let Some(image) = image() else { return };
+    let image = image();
     let mut r = Rng(0x0dd1_7ea5_e5b1_0b5f);
     for _ in 0..300_000 {
         let m = ForcedModel {
