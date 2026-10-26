@@ -53,7 +53,11 @@ Read by this agent with a capstone-based helper over `x4-re/bin/X4.exe` (scripts
    +0xa0, calling slot 674 (Move) on each child. A container (begin iterator 0x314fa0) holds a live count
    at +0x20 (0 means empty), a vector of 0x20-byte blocks at +0x08..+0x10, each block a vector of
    component pointers at +0x00..+0x08; iteration goes block by block, entry by entry, skipping null
-   entries. This order is what the mirror records and what `SectorIx` means.
+   entries. This order is what the mirror records and what `SectorIx` means. The class overrides
+   use the same order: Galaxy, Cluster (after its own physics step, 0x3b8280), Sector (0x784230) and
+   Zone (0x834950) reach their children through `Positional::Move` (0x748120), which visits +0xa8 then
+   +0xa0 with the same iterator; only class-specific early returns (e.g. low-attention sectors) skip
+   subtrees.
 2. **Class ids.** Slot 571 (GetClassID) of all 120 component classes has one of four shapes; most return
    one id when Component+0x68 (mode) is 0 and another (usually 0x49 object) otherwise, e.g. ship_s 0x5b
    or 0x49; accessory 0 or 0x4d; detector 0x25 or 0x24. The table with both ids per vtable is in
