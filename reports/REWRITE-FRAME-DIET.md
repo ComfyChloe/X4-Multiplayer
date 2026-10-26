@@ -219,9 +219,15 @@ state and with it the mod. What it does get, without hooks:
    a call-site rel32 patch through a near stub, because 0x138f2c0 also runs the Lua dispatch. Native audit and
    stability pending. UI-only effect: animations and attribute propagation stall (or step every `period`
    frames); UI Lua reading element state sees older values.
-2. ICom message pump 0xae9880 / VisibilityData::Update 0xadcfa0 (0.75 / 1.2 ms): UI data and UI events; needs
-   RE of which messages reach Lua/MD before anything is skipped.
-3. Slot 8 character animation, slot 9 sound (0.4 ms each under load): `-disablesound` first, then measure.
+2. ICom message pump 0xae9880 / VisibilityData::Update 0xadcfa0 (0.75 / 1.2 ms): NOT presentation-only. Its
+   message handling sets the player's soft target (`SetSofttargetMessage` in 0xaecb60 posts
+   `U::PlayerChangedTargetEvent` deferred) and can post `U::StopDialogEvent` (0x11789d0), both visible to MD/AI.
+   Keep it; at most the VisibilityData computation could be thinned after per-source RE.
+3. Slot 8 character animation, slot 9 sound (0.4 ms each under load): `-disablesound` clears the sound-enabled
+   flag 0x2f4b9d3, read only by sound-system initialisation (SoundLibrary::Init 0x128bde0, XSoundEnvironmentLibrary
+   ::Setup 0x128fa60, 0x14e9600, 0x14ea680), so slot 9 should idle. Unmeasured, and to be checked before a server
+   uses it: whether voice-line durations (MD `speak`, conversations) depend on loaded audio. Character animation
+   may move walking NPCs and attachments (simulation state): not a candidate without RE.
 4. BuildCache (3.7-3.9 ms): if Q11 shows the render-set flag drives render-only cache work, a server without
    camera rendering would also save BuildCache time (owner transforms).
 
