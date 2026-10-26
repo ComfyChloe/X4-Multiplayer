@@ -287,12 +287,15 @@ state and with it the mod. What it does get, without hooks:
 
 1. Anark element update 0x1399c40 (~1.9 / 2.0 ms): implemented as the opt-in `ui_elements` site (09cadac):
    a call-site rel32 patch through a near stub, because 0x138f2c0 also runs the Lua dispatch. Native audit done
-   (audit-003, no simulation side effect); stability pending. UI-only effect: animations and attribute
+   (audit-003, no simulation side effect); stability run stability-002. UI-only effect: animations and attribute
    propagation stall (or step every `period` frames); UI Lua reading element state sees older values.
 2. ICom message pump 0xae9880 / VisibilityData::Update 0xadcfa0 (0.75 / 1.2 ms): NOT presentation-only. Its
    message handling sets the player's soft target (`SetSofttargetMessage` in 0xaecb60 posts
    `U::PlayerChangedTargetEvent` deferred) and can post `U::StopDialogEvent` (0x11789d0), both visible to MD/AI.
-   Keep it; at most the VisibilityData computation could be thinned after per-source RE.
+   Keep it. VisibilityData::Update (0.46 / 0.76 ms, decompiled) is not a presentation-only part either: for each
+   ICom message source it computes the distance to the player camera (Universe+0x3d0; in range below 15 km), the
+   view angle and an on-screen test (0x97af10), and 0xaddfe0 turns those into the priorities that decide which
+   messages are delivered. Delivery has the simulation-visible effects above, so skipping it would change them.
 3. Slot 8 character animation, slot 9 sound (0.4 ms each under load): `-disablesound` clears the sound-enabled
    flag 0x2f4b9d3, read only by sound-system initialisation (SoundLibrary::Init 0x128bde0, XSoundEnvironmentLibrary
    ::Setup 0x128fa60, 0x14e9600, 0x14ea680), so slot 9 should idle. Unmeasured. MD can wait on speech (`event_speak_finished`,
@@ -310,8 +313,12 @@ state and with it the mod. What it does get, without hooks:
    cosmetic (lights, rotating parts), others move connections and so attached children (attachment poses depend
    on animation state, see Q11). Not a presentation site as a whole; a per-timeline split (no connections
    driven, no attached component) would be needed first, with walk and transforms.
-6. Slot 8 character animation `SCharacterBaseClass::Move` 0x129f370: 0.41 ms per frame under load, ~0 at
-   baseline; may move walking NPCs (see 3).
+6. Slot 8 character animation `XGfx::SCharacterBaseClass::Move` 0x129f370: 0.41 ms per frame under load, ~0 at
+   baseline. It updates the animation library's actor instances and their attachments ("ActorInstance",
+   "Attachment ... of ActorInstance") on game time (TimerBase); its 228 functions reachable by direct calls are
+   library code without a single U:: (universe) call. Whether simulation code reads its results (root motion of
+   walking NPCs, attachment bones) is open; the audit framework could measure it (one more VBI vtable entry)
+   once a reader search says it is worth 0.4 ms.
 7. The game's own HUD Lua inside the Lua dispatch (0.6 / 0.8 ms in total): besides Lua itself, the sampled C calls
    are HUD work (`SetPointerOverride` 0.10-0.13 ms, `GetTargetElementInfo`, `RegisterMouseInteractions`,
    `GetWeaponDetails3`, `GetDroneDetails`, ...) plus the harness's own `DebugError` logging (0.08-0.18 ms). The
