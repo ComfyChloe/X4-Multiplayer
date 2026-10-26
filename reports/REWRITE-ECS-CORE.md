@@ -151,7 +151,8 @@ Procedure: lane run with the fixed-tick probe overlay plus a mirror overlay (`de
 |---|---|---|---|
 | **NATIVE** mirror-validate-1 (b4) | 57c2ed2 | 10 x 16.5k objects, 282 roots | walk_errors 0; local 320/320 and Object sector 282/282 bit-identical; 913 ms/capture (old region cache) |
 | **NATIVE** mirror-validate-2 (b3) | f772266 | 60 | walk_errors 0; Object sector 1732/1732 exact; local 1901/1920: the 19 misses are two superhighways (class overrides GetLocalTransform, see below); 262 ms/capture |
-| mirror-validate-3 | 247642b (v1.1) | 60 | queued: highways modelled (class_flags, local_offset) |
+| **NATIVE** mirror-validate-3 (b6) | 247642b (v1.1) | 60 x 16.3-16.7k objects | walk_errors 0; **local 1920/1920** (10 of them superhighways) and **Object sector 1758/1758** bit-identical; 271 ms/capture; 2,570 VirtualQuery/frame |
+| mirror-validate-4 | 3179ba6 | 60 | queued: walk/serialize split, components visited, region-cache saturation, last-hit fast path |
 
 Findings from the native data: six classes override GetLocalTransform (slot 648): Explosive, Missile,
 Bomb (0x567aa0), Highway (0x5f79f0: adds the vector at +0x570 to row 0, then the standard step),
@@ -160,7 +161,7 @@ offset; `check::local_step` models Highway and refuses the others. Out-of-sector
 updated sparsely: at attention 2, 460k of 583k consecutive-frame samples keep the identical pose with a
 non-zero velocity (`x4mp-capdump kinematics`).
 
-Pending: mirror-validate-3; capture cost (counters in 0a850d2); benchmarks in a quiet window;
+Pending: capture cost (mirror-validate-4 counters); benchmarks in a quiet window;
 cross-check with the walk agent's collector order once both run in one lane (Q8).
 
 ## 7. How to use it (system agents)
