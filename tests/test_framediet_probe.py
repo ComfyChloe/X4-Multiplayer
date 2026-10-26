@@ -136,16 +136,19 @@ class FrameDietProbeTests(unittest.TestCase):
         self.assertFalse(any('DISABLED' in line for line in logs))
         self.assertTrue(any('FRAMEDIET armed' in line for line in logs))
 
-    def test_stall_is_logged_once_and_the_cycle_goes_on(self):
+    def test_stall_disables_the_cycle_and_preserves_pass_through_owner(self):
         lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';X4LAN_FRAMEDIET_AB_S=30;"
                            "X4LAN_FRAMEDIET_AB_CYCLE='pass;ui_render'")
         lua.execute("ui();now=5;stall_count=1;stall_sites=2;stall_frame=500;ui();now=6;ui()")
         stalls = [line for line in self.logs(lua) if 'FRAMEDIET stall' in line]
         self.assertEqual(len(stalls), 1)
         self.assertIn('FRAMEDIET stall sites=ui_render frame=500 phase=pass t=5.000 stalls=1', stalls[0])
-        self.assertFalse(any('DISABLED' in line for line in self.logs(lua)))
-        lua.execute('now=31;ui()')
-        self.assertEqual(list(lua.eval('sets').values())[-1], 'diet:ui_render')
+        self.assertEqual([line for line in self.logs(lua) if 'FEATURE framediet DISABLED' in line],
+                         ['[X4LAN] FEATURE framediet DISABLED reason=UI Lua stalled while skipping'])
+        lua.execute('now=31;ui();now=61;ui();now=91;ui()')
+        self.assertEqual(list(lua.eval('sets').values()), ['pass'])
+        self.assertEqual(lua.eval('stops'), 0)  # retain the RNG split/pass-through owner
+        self.assertEqual(lua.eval('#starts'), 1)
 
     def test_load_failure_is_loud(self):
         lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';load_failure='The specified module could not be found.'")

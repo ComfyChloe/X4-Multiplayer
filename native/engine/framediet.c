@@ -27,8 +27,8 @@
  *              0x138f2c0, whose caller also runs the per-frame Lua dispatch, so the call itself is
  *              retargeted (CODE PATCH: the 4-byte rel32 of that E8, verified against the original
  *              target, compare-exchanged, re-verified every frame, restored on disarm) to a near stub
- *              that jumps to our wrapper. Opt-in: UI animations and attribute propagation stall
- *              (UI only); `period` lets them run every Nth frame.
+ *              that jumps to our wrapper. Audit/pass only: native bisect-001 proved skipping this
+ *              update stops UI Lua (including networking). Diet mode refuses this site.
  *   rng_split  GameRender::Move (VBI slot 10, 0x121c1f0) runs with its own thread-RNG state: the
  *              MoveWorker's TLS+0x318 is swapped with a private render stream around the call, so
  *              view-dependent draws of the render walk never reach the simulation stream. Applies
@@ -53,6 +53,7 @@
  * handle:set(mode[, sites]), handle:stats(), handle:active() -> armed, stalls, handle:stop() (also __gc).
  * active() is the UI Lua heartbeat: if UI Lua stops calling it for STALL_MS (and STALL_MIN_FRAMES
  * frames) while sites are skipped, the guard reverts the owner to pass mode and counts a stall.
+ * Further diet requests for that owner are refused; a recovered watchdog is not a successful diet.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -478,8 +479,9 @@ static void fd_stall_check(fd_owner *o) {
     o->stall_sites = o->sites;
     o->stall_frame = o->frames;
     o->mode = FD_PASS;
+    o->reason = "UI Lua stalled while skipping; diet disabled for this owner";
     fd_draw_release();
-    fd_lua_seen(o);   /* the next stall needs a new silent period */
+    fd_lua_seen(o);
 }
 
 /* Lock held. */
@@ -652,7 +654,8 @@ static fd_owner *fd_engaged_owner(void) {
 }
 
 static int fd_skipping(const fd_owner *o, int site) {
-    return o->mode == FD_DIET && (o->sites & site) && !fd_present;
+    /* Defence in depth: never skip the update required to drive UI Lua. */
+    return site != FD_UI_ELEMENTS && o->mode == FD_DIET && (o->sites & site) && !fd_present;
 }
 static int fd_auditing(const fd_owner *o, int site) {
     return o->mode == FD_AUDIT && (o->sites & site);
@@ -954,6 +957,7 @@ static int number_arg(lua_State *L, int index, double fallback, double lo, doubl
    refusal (a previous owner's statistics included). */
 static const char *fd_arm(uint64_t generation, int mode, int sites, int period, int audit_every, unsigned digest_max) {
     if (fd_current) return "an owner already exists; stop it first";
+    if (mode == FD_DIET && (sites & FD_UI_ELEMENTS)) return "ui_elements diet disabled: stops UI Lua";
     void **table = table_now();
     if (!readable(table, 0x138, 1) || table[VBI_SLOT] || table[17 + VBI_SLOT] || !table[3])
         return "VBI slot occupied or unavailable";
@@ -1019,6 +1023,8 @@ static const char *fd_arm(uint64_t generation, int mode, int sites, int period, 
 static const char *fd_set(fd_owner *o, int mode, int sites) {
     if (!o || o != fd_current || !o->armed) return "not armed";
     if (sites < 0) sites = o->sites;
+    if (mode == FD_DIET && o->stalls) return "diet disabled after UI Lua stall; stop owner first";
+    if (mode == FD_DIET && (sites & FD_UI_ELEMENTS)) return "ui_elements diet disabled: stops UI Lua";
     int installed = FD_DRAW | (fd_call_patched ? FD_UI_ELEMENTS : 0);
     for (int k = 0; k < VS_COUNT; ++k) if (fd_entry[k]) installed |= vs_site[k];
     if (sites & ~installed) return "site not installed";
@@ -1155,7 +1161,24 @@ static void top_words(const fd_stats *s, char *text, size_t size) {
 }
 
 static int stats(lua_State *L) {
-    fd_owner *o = owner_of(L);
+    fd_handle *h = p_luaL_checkudata(L, 1, META);
+    fd_owner snapshot;
+    int armed = 0, draw_owned = 0, found = 0;
+    double main_cpu_ms = 0, worker_cpu_ms = 0;
+    /* Lua allocations may invoke __gc (and stop()). Snapshot first, then release the lock before
+       constructing the result table. On loading screens this serialises with the guard. */
+    AcquireSRWLockExclusive(&fd_lock);
+    fd_owner *live = fd_owner_for(h->generation);
+    if (live) {
+        snapshot = *live;
+        armed = live == fd_current && live->armed;
+        draw_owned = live == fd_current && fd_draw_owned;
+        main_cpu_ms = thread_cpu_ms(fd_main_thread);
+        worker_cpu_ms = thread_cpu_ms(fd_worker_thread);
+        found = 1;
+    }
+    ReleaseSRWLockExclusive(&fd_lock);
+    fd_owner *o = found ? &snapshot : NULL;
     static const char *const modes[] = {"pass", "diet", "audit"};
     char key[64], text[128];
     if (!o) { p_lua_pushnil(L); return 1; }
@@ -1163,10 +1186,10 @@ static int stats(lua_State *L) {
     number_field(L, "frames", (double)o->frames);
     number_field(L, "loading_frames", (double)o->loading_frames);
     number_field(L, "present_frames", (double)o->present_frames);
-    number_field(L, "armed", o == fd_current && o->armed);
+    number_field(L, "armed", armed);
     number_field(L, "sites", o->sites);
     number_field(L, "period", o->period);
-    number_field(L, "draw_owned", o == fd_current && fd_draw_owned);
+    number_field(L, "draw_owned", draw_owned);
     number_field(L, "draw_set", (double)o->draw_set);
     number_field(L, "draw_reapplied", (double)o->draw_reapplied);
     number_field(L, "draw_recleared", (double)o->draw_recleared);
@@ -1181,8 +1204,8 @@ static int stats(lua_State *L) {
     number_field(L, "frame_rng_unknown", (double)o->frame_rng_unknown);
     number_field(L, "frame_ids", (double)o->frame_ids);
     number_field(L, "digest_max", o->digest_max);
-    number_field(L, "main_cpu_ms", thread_cpu_ms(fd_main_thread));
-    number_field(L, "worker_cpu_ms", thread_cpu_ms(fd_worker_thread));
+    number_field(L, "main_cpu_ms", main_cpu_ms);
+    number_field(L, "worker_cpu_ms", worker_cpu_ms);
     number_field(L, "process_cpu_ms", process_cpu_ms());
     {
         /* Process commit (private bytes), to watch per-frame UI queues for growth while a site is skipped. */

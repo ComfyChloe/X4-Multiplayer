@@ -2,7 +2,7 @@
 -- Inert unless X4LAN_FRAMEDIET_MODE is set; see reports/REWRITE-FRAME-DIET.md.
 -- X4LAN_FRAMEDIET_MODE        'diet' (skip presentation), 'pass' (wrappers inert), 'audit' (measure)
 -- X4LAN_FRAMEDIET_SITES       default 'server' (= ui_scenes,draw); also ui_render, camera, all, rng_split,
---                             ui_elements (call-site patch of the Anark element update)
+--                             ui_elements (audit/pass only: skipping stops UI Lua)
 -- X4LAN_FRAMEDIET_PERIOD      every Nth frame presents everything (default 0 = never)
 -- X4LAN_FRAMEDIET_AUDIT_EVERY frames between component digests in audit mode (default 30)
 -- X4LAN_FRAMEDIET_DIGEST      components per digest (default 16384)
@@ -116,6 +116,12 @@ SetScript('onUpdate',function()
    local s=owner:stats()
    DebugError(string.format('[X4LAN] FRAMEDIET stall sites=%s frame=%d phase=%s t=%.3f stalls=%d (UI Lua stopped while skipping; reverted to pass)',
     siteText(s.stall_sites or 0),s.stall_frame or 0,phase or mode,now,stalls))
+   report(s,now)
+   disabled(s.reason or 'UI Lua stalled while skipping')
+   -- Keep the pass-through owner (and its RNG split) alive, but never restart a failed diet
+   -- through the A/B cycle. The native owner also refuses every further diet request.
+   finished=true
+   return
   end
   if abEvery and now>=nextPhase then
    local entry

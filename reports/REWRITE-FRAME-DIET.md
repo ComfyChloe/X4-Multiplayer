@@ -3,7 +3,9 @@
 Owner: frame-diet agent, branch `contrib/ferrite-rw-frame-diet` (base `contrib/ferrite-rewrite-base` e63d9cf).
 Build: X4 9.00, Steam build 23660954 (Windows RVAs; Linux VAs in bin-linux/X4 where given).
 Status 26 Oct 2026: module, audit mode and tests done; native functional audits done on a lane (audit-001:
-presentation regions; audit-003: rng_split A/B and ui_elements); the timing measurement waits for a quiet window
+presentation regions; audit-003: rng_split A/B and ui_elements). Native stability/bisect later proved
+`ui_elements` skipping stops UI Lua; diet now refuses it, and watchdog recovery is a failure (section 11).
+The timing measurement waits for a quiet window
 (rewrite-coord Q9). Terminology: the dedicated X4 is the **server**,
 players connect as **clients**.
 
@@ -25,11 +27,12 @@ players connect as **clients**.
   The camera view is therefore an input of the simulation RNG stream on every X4 (a parity leak). The
   `rng_split` site moves slot 10's draws to a private stream (proposal of the determinism owner); natively all
   ~150 draws per frame moved and the simulation stream stayed continuous (audit-003). IDs are not covered.
-- `ui_elements` (opt-in, the Anark element update): 0 RNG steps, 0 IDs, 0 changed words in 589,824 snapshots over
-  43,312 calls natively; it stalls UI animations, so it is not part of `server`.
+- `ui_elements` (**audit/pass only**, the Anark element update): the earlier 0 RNG/ID/component-write audit
+  did not establish UI liveness. Native bisect-001 proved skipping it stops UI Lua, including networking.
+  Both start and set refuse it in diet mode, regardless of presentation period.
 - Expected saving of the behaviour-identical set: ~1.9-2.0 ms per frame on the MoveWorker (11 % of the
-  baseline frame, 7 % under load) plus the whole main-thread draw; the opt-in `ui_elements` (Anark element
-  update, a call-site patch) another ~1.9-2.0 ms, `camera` and `ui_render` another ~2.3-2.6 ms. Measured
+  baseline frame, 7 % under load) plus the whole main-thread draw; `camera` and `ui_render` are another
+  ~2.3-2.6 ms of candidates. The ~1.9-2.0 ms element update must run. Measured
   numbers: section 6 (pending the quiet window).
 
 ## 1. Attribution (where the server's frame goes)
@@ -44,7 +47,7 @@ attribution <log> --window 35:81 --window 105:261`.
 | frame (wall per MoveWorker frame) | 17.26 | 29.69 | |
 | slot 6 total, UI::CUIController::Move 0xb3bad0 | 5.27 (30.5 %) | 6.21 (20.9 %) | |
 | - Lua: every stack with a lua51_64 frame (game UI + mod) | 0.59 (3.4 %) | 0.82 (2.7 %) | keep |
-| - Anark gameface element update 0x1399c40 | 1.85 (10.7 %) | 1.95 (6.6 %) | `ui_elements` (opt-in) |
+| - Anark gameface element update 0x1399c40 | 1.85 (10.7 %) | 1.95 (6.6 %) | keep (skipping stops UI Lua) |
 | - Anark scene layer walk (SceneManager slot 3 0xaf8e50 -> AnarkScene slot 12 0xaf8760) | 1.87 (10.8 %) | 2.01 (6.8 %) | `ui_scenes` |
 | - ICom message pump 0xae9880 (VisibilityData::Update 0xadcfa0) | 0.75 (4.3 %) | 1.20 (4.1 %) | keep |
 | slot 10 total, X4::GameRender::Move 0x121c1f0 | 2.30 (13.3 %) | 2.58 (8.7 %) | |
@@ -264,7 +267,7 @@ Proposal of the multiplayer determinism owner (rng-streams 23c841f), implemented
 ## 6. Measurements
 
 Pending: the quiet-window timing run (Q9), started only when the lead opens the window: attnload steps 0/8,
-phases `pass` / `server` / `all` / `all,ui_elements` every 30 s, MoveWorker slot-loop ms and fps from the fixed-
+phases `pass` / `server` / `all` every 30 s (never `ui_elements` diet), MoveWorker slot-loop ms and fps from the fixed-
 tick probe per phase (`framediet_analyze.py phases`), CPU shares of the main thread and the MoveWorker per phase
 (`audit --phases`).
 
@@ -285,10 +288,10 @@ state and with it the mod. What it does get, without hooks:
 
 ## 8. Next client-only costs
 
-1. Anark element update 0x1399c40 (~1.9 / 2.0 ms): implemented as the opt-in `ui_elements` site (09cadac):
-   a call-site rel32 patch through a near stub, because 0x138f2c0 also runs the Lua dispatch. Native audit done
-   (audit-003, no simulation side effect); stability run stability-002. UI-only effect: animations and attribute
-   propagation stall (or step every `period` frames); UI Lua reading element state sees older values.
+1. Anark element update 0x1399c40 (~1.9 / 2.0 ms): `ui_elements` instrumentation (09cadac) remains available
+   in audit/pass mode, through its verified call-site rel32 patch and near stub. Stability-002 and bisect-001
+   supersede the earlier UI-only assumption: skipping it stops UI Lua, not merely animation. Diet is refused
+   for every period. The exact element-to-Lua dependency is not yet established.
 2. ICom message pump 0xae9880 / VisibilityData::Update 0xadcfa0 (0.75 / 1.2 ms): NOT presentation-only. Its
    message handling sets the player's soft target (`SetSofttargetMessage` in 0xaecb60 posts
    `U::PlayerChangedTargetEvent` deferred) and can post `U::StopDialogEvent` (0x11789d0), both visible to MD/AI.
@@ -345,8 +348,8 @@ probe + attention-load harness steps 0/8 for 240/360 s + phases every 30 s):
 ```
 x4lane make-overlay attnload --attnload <X4-Multiplayer-attnload> --out <wt>\.local\lane\overlays\attnload --steps 0,8 --durations 240,360 --warmup 20
 x4lane run --agent frame-diet --label timing1 --timing --wait 7200 --overlay <probe> --overlay <attnload> --overlay <framediet> ^
-    --lua "X4LAN_FRAMEDIET_MODE='diet'" --lua "X4LAN_FRAMEDIET_SITES='all,ui_elements'" --lua "X4LAN_FRAMEDIET_DELAY_S=10" ^
-    --lua "X4LAN_FRAMEDIET_AB_S=30" --lua "X4LAN_FRAMEDIET_AB_CYCLE='pass;server;all;all,ui_elements'" ^
+    --lua "X4LAN_FRAMEDIET_MODE='diet'" --lua "X4LAN_FRAMEDIET_SITES='all'" --lua "X4LAN_FRAMEDIET_DELAY_S=10" ^
+    --lua "X4LAN_FRAMEDIET_AB_S=30" --lua "X4LAN_FRAMEDIET_AB_CYCLE='pass;server;all'" ^
     --until "\[X4LAN\] ATTNLOAD done" --timeout 1150 --fail-on "FEATURE framediet DISABLED|ATTNLOAD error|HOOKS_DISABLED" ^
     --collect <wt>\.local\lane\runs\timing-001
 python native/engine/framediet_analyze.py phases <collect>\x4lan-debug.txt          # MoveWorker ms/frame and fps per phase and step
@@ -365,5 +368,33 @@ Equivalence of `ui_elements` and the RNG split (functional lane run): mode `audi
   would need a server-role switch in the mod configuration that loads `x4lan_framediet_64.dll` with the
   `server` set (plus `rng_split` on every participant if RNG parity is wanted); the Linux server gets its own
   switches in rust/x4mp-agent (x4mods-61, Q10).
-- Native steps: a diet stability run (`all,ui_elements,rng_split`, `server`, `all`, `pass`, 150 s each: Lua and
-  frames keep running, no `FEATURE ... DISABLED`, commit size per phase), the quiet-window timing run (Q9).
+- Native steps: safe-site stability (`server,rng_split` / `pass`, sustained UI updates, no stalls or
+  `FEATURE ... DISABLED`), then the quiet-window timing run (Q9). Never queue the old ui_elements diet recipe.
+
+
+## 11. UI liveness failure and fail-closed correction (26 Oct 2026)
+
+Native evidence (all under this worktree's `.local/evidence-075-withheld`; functional runs under contention):
+
+- `stability-002`: all skips plus `ui_elements,rng_split` stopped UI updates immediately after arming.
+  The agent stopped the lane, verdict fail / exit 9. This was not a passing stability test.
+- `bisect-001` on 5bceea6: individual ui_scenes, draw, ui_render and camera phases completed without a
+  watchdog stall. At game time 280.131 the `ui_elements` phase began; at 283.167, frame 12,275, the guard
+  reverted to pass after UI Lua stopped. Element skipped count was 731, and subsequent UI updates resumed.
+  The generic lane tool returned pass because it counted phase lines. That verdict proves collection and
+  watchdog recovery only; **the ui_elements diet failed**. It must not be used as liveness acceptance.
+
+Correction: `fd_arm` and `fd_set` refuse ui_elements in diet mode (even when a periodic presentation frame
+is requested); the wrapper also never skips this site. Audit/pass instrumentation is retained. A runtime
+stall leaves the current owner in pass, records a reason and makes every later diet request fail for that
+owner. The Lua loader emits `FEATURE framediet DISABLED`, reports the stall and stops cycling. It retains
+its pass-through owner so an already active render RNG split is not silently removed during recovery.
+A new explicit owner can be started for a different experiment; no automatic restart occurs.
+
+`stats()` snapshots the owner and thread-accounting handles under the lifecycle lock, then releases the
+lock before allocating Lua values. A Lua allocation/finaliser can stop and replace the owner; the returned
+snapshot stays the original owner's data and no lifecycle lock is held across Lua allocation.
+
+Verification of this correction: C synthetic lifecycle suite (including 300 concurrent stop rounds),
+new unsafe-mode/sticky-stall tests and allocation-time replacement test; 17 real LuaJIT loader tests;
+standalone Lua 5.1 DLL ABI validation. These are synthetic/standalone checks, not new native gameplay proof.

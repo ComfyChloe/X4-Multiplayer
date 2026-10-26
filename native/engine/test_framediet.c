@@ -236,7 +236,7 @@ static int32_t call_rel_now(void) { int32_t r; memcpy(&r, image + ELEMENT_CALL_R
 static volatile LONG worker_armed, worker_stop;
 static DWORD WINAPI stress_worker(LPVOID unused) {
     (void)unused;
-    if (arm(FD_DIET, FD_ALL | FD_UI_ELEMENTS | FD_RNG_SPLIT, 0, 0, 0)) return 1;
+    if (arm(FD_PASS, FD_ALL | FD_UI_ELEMENTS | FD_RNG_SPLIT, 0, 0, 0)) return 1;
     InterlockedExchange(&worker_armed, 1);
     while (!worker_stop) {
         fd_slot_move(&fd_hook);
@@ -265,6 +265,41 @@ static void stress_round(int loading) {
     assert(!fake_table[VBI_SLOT] && draw_bits() == 0 && !fd_current);
     assert_protected_like_x4();
     *(int *)((unsigned char *)fake_table + LOADING_OFFSET) = 0;
+}
+
+/* Lua allocations can run finalisers. Test the actual active()/stats() entry points with a
+   constructor that stops/replaces the owner, without needing an X4 process or a Lua allocation. */
+static fd_handle api_handle;
+static double api_number, api_frames, api_armed, api_draw;
+static int api_bool, api_nil, api_replace_on_table;
+static const char *api_text;
+static char api_mode[16];
+static void api_unlocked(void) {
+    assert(TryAcquireSRWLockExclusive(&fd_lock));
+    ReleaseSRWLockExclusive(&fd_lock);
+}
+static void *api_checkudata(lua_State *L, int index, const char *name) {
+    (void)L; assert(index == 1 && !strcmp(name, META)); return &api_handle;
+}
+static void api_pushnumber(lua_State *L, double n) { (void)L; api_unlocked(); api_number = n; }
+static void api_pushboolean(lua_State *L, int b) { (void)L; api_unlocked(); api_bool = b; }
+static void api_pushnil(lua_State *L) { (void)L; api_unlocked(); ++api_nil; }
+static void api_pushlstring(lua_State *L, const char *s, size_t n) {
+    (void)L; (void)n; api_unlocked(); api_text = s;
+}
+static void api_setfield(lua_State *L, int index, const char *name) {
+    (void)L; assert(index == -2); api_unlocked();
+    if (!strcmp(name, "frames")) api_frames = api_number;
+    if (!strcmp(name, "armed")) api_armed = api_number;
+    if (!strcmp(name, "draw_owned")) api_draw = api_number;
+    if (!strcmp(name, "mode")) snprintf(api_mode, sizeof(api_mode), "%s", api_text);
+}
+static void api_createtable(lua_State *L, int array, int fields) {
+    (void)L; (void)array; (void)fields; api_unlocked();
+    if (api_replace_on_table) {
+        disarm_all();
+        assert(!arm(FD_PASS, FD_UI_SCENES, 0, 0, 0));
+    }
 }
 
 static volatile LONG other_done;
@@ -319,7 +354,7 @@ int main(void) {
     assert(!strcmp(arm(FD_DIET, FD_ALL, 0, 0, 0), "loading"));
     *(int *)((unsigned char *)fake_table + LOADING_OFFSET) = 0;
     main_thread_role = 1;     /* loading just ended, Lua still runs on the main thread */
-    assert(!strcmp(arm(FD_DIET, FD_ALL | FD_UI_ELEMENTS, 0, 0, 0), "loading (UI on the main thread)"));
+    assert(!strcmp(arm(FD_PASS, FD_ALL | FD_UI_ELEMENTS, 0, 0, 0), "loading (UI on the main thread)"));
     main_thread_role = -1;
     assert(!strcmp(arm(FD_DIET, FD_ALL, 0, 0, 0), "main thread unknown"));
     main_thread_role = 0;
@@ -538,20 +573,24 @@ int main(void) {
         frame();
         assert(scene_walks == walks + 3);   /* everything runs again */
     }
-    assert(!set_mode(FD_DIET, -1));        /* Lua alive again: may re-enter the diet */
-    frame();
-    assert(draw_bits() == 3);
-    assert(is_active());
-    for (int f = 0; f < STALL_MIN_FRAMES - 1; ++f) { fake_now += fd_qpf; frame(); }   /* long but too few frames */
+    assert(!strcmp(set_mode(FD_DIET, -1), "diet disabled after UI Lua stall; stop owner first"));
+    assert(!strcmp(set_mode(FD_DIET, FD_DRAW), "diet disabled after UI Lua stall; stop owner first"));
+    assert(fd_state.mode == FD_PASS && draw_bits() == 0);
+    assert(fd_state.reason && strstr(fd_state.reason, "UI Lua stalled"));
+    assert(!set_mode(FD_AUDIT, -1));  /* observation can continue without skipping */
+    for (int f = 0; f < 40; ++f) { fake_now += fd_qpf; frame(); }
     assert(fd_state.stalls == 1);
+    disarm_all();
+    setup_engine();
+    assert(!arm(FD_DIET, FD_UI_SCENES | FD_DRAW, 0, 0, 0));
+    for (int f = 0; f < STALL_MIN_FRAMES - 1; ++f) { fake_now += fd_qpf; frame(); }
+    assert(fd_state.stalls == 0);   /* long silence but too few frames */
     fake_now += fd_qpf;
     frame();
-    assert(fd_state.stalls == 2 && fd_state.mode == FD_PASS);
-    for (int f = 0; f < 40; ++f) { fake_now += fd_qpf; frame(); }   /* pass (and audit) are never watched */
-    assert(fd_state.stalls == 2);
+    assert(fd_state.stalls == 1 && fd_state.mode == FD_PASS);
     disarm_all();
     fd_qpc = fd_qpc_default;
-    puts("PASS: UI Lua stall watchdog reverts a skipping owner to pass mode and records the sites");
+    puts("PASS: UI Lua watchdog restores pass-through and permanently refuses diet for that owner");
 
     /* A refused arm keeps the previous owner's statistics and generation. */
     setup_engine();
@@ -651,32 +690,38 @@ int main(void) {
     disarm_all();
     puts("PASS: rng_split keeps view-dependent slot 10 draws off the simulation stream");
 
-    /* ui_elements: the E8 rel32 is retargeted to a near stub, skipped in diet, audited, restored. */
+    /* ui_elements: unsafe diet refused; pass/audit retain the call-site instrumentation. */
     setup_engine();
     {
         int32_t original = call_rel_now();
-        assert(!arm(FD_DIET, FD_UI_ELEMENTS, 0, 0, 0));
+        for (int period = 0; period < 3; ++period) {
+            assert(!strcmp(arm(FD_DIET, FD_UI_ELEMENTS, period, 0, 0), "ui_elements diet disabled: stops UI Lua"));
+            assert(!fd_current && !fake_table[VBI_SLOT] && call_rel_now() == original);
+        }
+        assert(!arm(FD_PASS, FD_UI_ELEMENTS, 0, 0, 0));
+        assert(!strcmp(set_mode(FD_DIET, -1), "ui_elements diet disabled: stops UI Lua"));
+        assert(fd_state.mode == FD_PASS);
         assert(fd_call_patched && call_rel_now() != original && fd_stub_page);
         assert_protected_like_x4();
         assert(protection_at(fd_stub_page) == PAGE_EXECUTE_READ);
         unsigned char *target = image + ELEMENT_CALL_RVA + 5 + call_rel_now();
         assert(target == fd_stub_page);
         for (int f = 0; f < 5; ++f) frame();
-        assert(element_updates == 0 && fd_state.st[ST_UI_ELEMENTS].skipped == 5);
+        assert(element_updates == 5 && fd_state.st[ST_UI_ELEMENTS].skipped == 0);
         assert(!set_mode(FD_PASS, -1));
         frame();
-        assert(element_updates == 1 && fd_state.st[ST_UI_ELEMENTS].passed == 1);   /* args preserved */
+        assert(element_updates == 6 && fd_state.st[ST_UI_ELEMENTS].passed == 6);   /* args preserved */
         assert(!set_mode(FD_AUDIT, -1));
         element_fx.rng_steps = 3;
         frame();
-        assert(element_updates == 2 && fd_state.st[ST_UI_ELEMENTS].rng_steps == 3);
+        assert(element_updates == 7 && fd_state.st[ST_UI_ELEMENTS].rng_steps == 3);
         disarm_all();
         assert(!fd_call_patched && call_rel_now() == original);
         assert_protected_like_x4();
         presentation_update();
-        assert(element_updates == 3);   /* original call again */
+        assert(element_updates == 8);   /* original call again */
         /* A foreign retarget is detected at the next frame and left alone. */
-        assert(!arm(FD_DIET, FD_UI_ELEMENTS, 0, 0, 0));
+        assert(!arm(FD_PASS, FD_UI_ELEMENTS, 0, 0, 0));
         int32_t foreign = original + 16;
         poke(image + ELEMENT_CALL_RVA + 1, &foreign, 4);
         fd_slot_move(&fd_hook);
@@ -687,11 +732,11 @@ int main(void) {
         /* A call site that no longer targets the element update refuses arming; nothing changes. */
         unsigned char jmp = 0xe9, call = 0xe8;
         poke(image + ELEMENT_CALL_RVA, &jmp, 1);
-        assert(!strcmp(arm(FD_DIET, FD_UI_ELEMENTS | FD_UI_SCENES, 0, 0, 0), "element update call site changed"));
+        assert(!strcmp(arm(FD_AUDIT, FD_UI_ELEMENTS | FD_UI_SCENES, 0, 0, 0), "element update call site changed"));
         assert(!fd_current && !fake_table[VBI_SLOT] && *entry_of(VS_SCENE_WALK) == fn_of(VS_SCENE_WALK));
         poke(image + ELEMENT_CALL_RVA, &call, 1);
     }
-    puts("PASS: ui_elements call-site patch: near stub, skip/pass/audit, restore, foreign value kept, refusal");
+    puts("PASS: ui_elements diet refused; near stub, pass/audit, restore, foreign value kept, refusal");
 
     /* CPU accounting: the main thread is the process's earliest thread; times are monotonic. */
     {
@@ -706,6 +751,27 @@ int main(void) {
         assert(fd_on_main_thread_default() == 1);
     }
     puts("PASS: main-thread lookup and CPU-time accounting");
+
+    setup_engine();
+    assert(!arm(FD_DIET, FD_UI_SCENES | FD_DRAW, 0, 0, 0));
+    for (int f = 0; f < 7; ++f) frame();
+    api_handle.generation = fd_state.generation;
+    p_luaL_checkudata = api_checkudata;
+    p_lua_pushnumber = api_pushnumber;
+    p_lua_pushboolean = api_pushboolean;
+    p_lua_pushnil = api_pushnil;
+    p_lua_pushlstring = api_pushlstring;
+    p_lua_setfield = api_setfield;
+    p_lua_createtable = api_createtable;
+    assert(active(NULL) == 2 && api_bool == 1 && api_number == 0);
+    api_replace_on_table = 1;
+    assert(stats(NULL) == 1);  /* the Lua allocation replaces the static owner */
+    assert(api_frames == 7 && api_armed == 1 && api_draw == 1 && !strcmp(api_mode, "diet"));
+    assert(fd_state.frames == 0 && fd_state.mode == FD_PASS);
+    assert(active(NULL) == 2 && api_bool == 0 && api_number == 0);  /* stale generation */
+    assert(stats(NULL) == 1 && api_nil == 1);
+    disarm_all();
+    puts("PASS: Lua active ABI and stats snapshot survive allocation-time owner replacement without holding the lock");
 
     /* Histogram summary orders by count and lists at most six words. */
     {
