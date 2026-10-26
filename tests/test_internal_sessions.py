@@ -241,3 +241,114 @@ class InternalPackageRuntime(unittest.TestCase):
                     result=subprocess.run([sys.executable,'-I','-B','-c',code,str(folder)],cwd=d,text=True,capture_output=True)
                     self.assertEqual(result.returncode,0,result.stderr)
                     self.assertEqual(result.stdout.strip(),'UniverseSession')
+
+    def test_dedicated_roles_give_every_client_slot_a_windows_and_a_linux_package(self):
+        from distribution import build_packages
+        roles = build_packages.dedicated_roles(8)
+        self.assertEqual(roles[0], ('Linux', 'host', '45841'))
+        clients = roles[1:]
+        self.assertEqual(len(clients), 14)
+        for k, role in enumerate(['guest'] + ['guest%d' % k for k in range(2, 8)], start=2):
+            profile = '45841' if k == 2 else str(45839 + k)
+            self.assertEqual([r for r in clients if r[1] == role],
+                             [('Windows11', role, profile), ('Linux', role, profile)])
+            self.assertEqual(launcher.role_slot(role), 'p%d' % k)
+        names = [build_packages.package_name('7.6.0', *r[:2]) for r in roles]
+        self.assertEqual(len(set(names)), len(names))
+        self.assertEqual(names[:5], ['X4-LAN-7.6.0-Linux', 'X4-LAN-7.6.0-Windows11', 'X4-LAN-7.6.0-Linux-Client',
+                                     'X4-LAN-7.6.0-Windows11-Guest2', 'X4-LAN-7.6.0-Linux-Client2'])
+        self.assertEqual(names[-1], 'X4-LAN-7.6.0-Linux-Client7')
+
+    def test_built_dedicated_set_has_matched_linux_clients_without_session_secrets(self):
+        import shutil, tarfile
+        from distribution import build_packages
+        with tempfile.TemporaryDirectory() as temp:
+            # Fixture reports and Rust outputs only; this is no release validation.
+            source = Path(temp) / 'source'; source.mkdir()
+            for name in ('VERSION.txt', 'VERSIONING.txt', 'DEDICATED-SERVER.md', 'extension', 'x4lan'):
+                if (ROOT / name).is_dir():
+                    shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns('__pycache__'))
+                else:
+                    shutil.copy2(ROOT / name, source / name)
+            release = build_packages.version()
+            (source / 'reports').mkdir()
+            for name, suffix in (('automated', 'tests'), ('release', 'checks')):
+                (source / 'reports' / f'{name}-{release}-{suffix}.txt').write_text('Unit-test fixture only.\n')
+            rust = source / 'rust/target/release'; rust.mkdir(parents=True)
+            (rust / 'libx4lan_net.so').write_bytes(b'\x7fELF rust x4lan-net fixture')
+            (rust / 'x4lan-dedicated').write_bytes(b'\x7fELF supervisor fixture')
+            out = Path(temp) / 'set'
+            with patch.object(build_packages, 'SOURCE', source), patch.object(build_packages.subprocess, 'run') as cargo:
+                folders = build_packages.build(out, dedicated=True, max_players=3)
+            self.assertEqual(cargo.call_count, 2)  # One Rust build for the whole set.
+            self.assertEqual([f.name.split(release + '-')[1] for f in folders],
+                             ['Linux', 'Windows11', 'Linux-Client', 'Windows11-Guest2', 'Linux-Client2'])
+            metas = {f.name: json.loads((f / 'package.json').read_text()) for f in folders}
+            self.assertEqual(len({m['pair_id'] for m in metas.values()}), 1)
+            for meta in metas.values():
+                self.assertEqual(meta['roles'], ['host', 'guest', 'guest2'])
+                self.assertEqual(meta['max_players'], 3)
+            listed = [line.split('  ', 1)[1] for line in (out / 'PACKAGES-SHA256.txt').read_text().splitlines()]
+            self.assertEqual(sorted(listed), sorted(f.name + ('.zip' if 'Windows' in f.name else '.tar.xz') for f in folders))
+            from distribution.world_launcher import content_digest
+            digests = {content_digest(f / 'extension/x4_lan_lab') for f in folders}
+            self.assertEqual(len(digests), 1)  # Same mod hash: any client package joins the same world.
+            for name, role, profile in (('Linux-Client', 'guest', '45841'), ('Linux-Client2', 'guest2', '45842')):
+                folder = out / f'X4-LAN-{release}-{name}'
+                meta = metas[folder.name]
+                self.assertEqual((meta['platform'], meta['role'], meta['test_profile'], meta['dedicated']),
+                                 ('Linux', role, profile, True))
+                self.assertIsNone(meta['slot']); self.assertIsNone(meta['package_id'])
+                native = folder / 'extension/x4_lan_lab/native'
+                self.assertEqual(sorted(p.name for p in native.iterdir()), ['x4lan_net.so'])
+                self.assertEqual((native / 'x4lan_net.so').read_bytes(), (rust / 'libx4lan_net.so').read_bytes())
+                self.assertFalse((folder / 'x4lan-dedicated').exists())
+                self.assertTrue((folder / 'setup_linux.py').is_file())
+                self.assertFalse((folder / 'setup_windows.ps1').exists())
+                self.assertTrue((folder / 'DEDICATED-SERVER.md').is_file())
+                for title in ('01-INSTALL', '04-TEST-CONNECTION', '05-START-X4', '09-REMOVE-MOD'):
+                    self.assertTrue((folder / (title + '.sh')).is_file())
+                cfg = (folder / 'extension/x4_lan_lab/ui/config.lua').read_text()
+                self.assertIn('enabled = false', cfg); self.assertNotIn('token', cfg)
+                with tarfile.open(out / (folder.name + '.tar.xz')) as tar:
+                    members = {m.name[len(folder.name) + 1:] for m in tar.getmembers()}
+                for secret in ('session.json', 'JOIN-SESSION.json', 'installation.json'):
+                    self.assertNotIn(secret, members)
+                self.assertIn('extension/x4_lan_lab/native/x4lan_net.so', members)
+                self.assertIn('setup_linux.py', members)
+            server = out / f'X4-LAN-{release}-Linux'
+            self.assertTrue((server / 'x4lan-dedicated').is_file())
+            self.assertEqual((server / 'extension/x4_lan_lab/native/x4lan_net.so').read_bytes(),
+                             (rust / 'libx4lan_net.so').read_bytes())
+            windows = out / f'X4-LAN-{release}-Windows11-Guest2/extension/x4_lan_lab/native'
+            self.assertEqual(sorted(p.name for p in windows.iterdir()), ['x4lan_net_64.dll'])
+
+    def test_linux_client_package_configures_as_client_only(self):
+        from distribution import build_packages
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            folders = {}
+            for platform, role, profile in build_packages.dedicated_roles(3):
+                folder = root / build_packages.package_name(launcher.VERSION, platform, role)
+                (folder / 'extension/x4_lan_lab/ui').mkdir(parents=True)
+                (folder / 'package.json').write_text(json.dumps(dict(
+                    channel='internal', version=launcher.VERSION, platform=platform, slot=None, package_id=None,
+                    steam_build='23660954', dedicated=True, role=role, max_players=3, test_profile=profile)))
+                folders[folder.name.split(launcher.VERSION + '-')[1]] = folder
+            client = folders['Linux-Client2']
+            with patch.object(launcher, 'ROOT', client), self.assertRaisesRegex(RuntimeError, 'dedicated client'):
+                launcher.configure('host', '192.0.2.109')
+            self.assertFalse((client / 'session.json').exists())
+            self.assertEqual(launcher.dedicated_setup_role(json.loads((client / 'package.json').read_text())), 'guest')
+            self.assertEqual(launcher.dedicated_setup_role(json.loads((folders['Linux'] / 'package.json').read_text())), 'host')
+            with patch.object(launcher, 'ROOT', folders['Linux']):
+                launcher.configure('host', '192.0.2.109')
+            with patch.object(launcher, 'ROOT', client):
+                launcher.configure('guest', invite=folders['Linux'] / 'JOIN-SESSION.json')
+                meta, session = launcher.configured()
+            self.assertEqual((meta['slot'], session['host']), ('p3', '192.0.2.109'))
+            lua = (client / 'extension/x4_lan_lab/ui/config.lua').read_text()
+            for text in ('slot = "p3"', 'test_profile = "45842"', 'dedicated = false', 'max_players = 3'):
+                self.assertIn(text, lua)
+            self.assertNotIn('dedicated_control_path', lua)
+            self.assertFalse((client / 'JOIN-SESSION.json').exists())
