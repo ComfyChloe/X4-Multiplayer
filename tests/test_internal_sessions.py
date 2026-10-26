@@ -278,9 +278,13 @@ class InternalPackageRuntime(unittest.TestCase):
             (rust / 'libx4lan_net.so').write_bytes(b'\x7fELF rust x4lan-net fixture')
             (rust / 'x4lan-dedicated').write_bytes(b'\x7fELF supervisor fixture')
             out = Path(temp) / 'set'
-            with patch.object(build_packages, 'SOURCE', source), patch.object(build_packages.subprocess, 'run') as cargo:
+            diet = Path(temp) / 'framediet-fixture.dll'; diet.write_bytes(b'frame diet module fixture')
+            with patch.object(build_packages, 'SOURCE', source), patch.object(build_packages.subprocess, 'run') as cargo,                     patch.object(build_packages, 'build_framediet', return_value=diet):
                 folders = build_packages.build(out, dedicated=True, max_players=3)
             self.assertEqual(cargo.call_count, 2)  # One Rust build for the whole set.
+            for name in ('Windows11', 'Windows11-Guest2'):  # Windows clients carry the frame-diet/RNG-split module
+                native = out / f'X4-LAN-{release}-{name}' / 'extension/x4_lan_lab/native'
+                self.assertEqual((native / 'x4lan_framediet_64.dll').read_bytes(), diet.read_bytes())
             self.assertEqual([f.name.split(release + '-')[1] for f in folders],
                              ['Linux', 'Windows11', 'Linux-Client', 'Windows11-Guest2', 'Linux-Client2'])
             metas = {f.name: json.loads((f / 'package.json').read_text()) for f in folders}
@@ -321,7 +325,7 @@ class InternalPackageRuntime(unittest.TestCase):
             self.assertEqual((server / 'extension/x4_lan_lab/native/x4lan_net.so').read_bytes(),
                              (rust / 'libx4lan_net.so').read_bytes())
             windows = out / f'X4-LAN-{release}-Windows11-Guest2/extension/x4_lan_lab/native'
-            self.assertEqual(sorted(p.name for p in windows.iterdir()), ['x4lan_net_64.dll'])
+            self.assertEqual(sorted(p.name for p in windows.iterdir()), ['x4lan_framediet_64.dll', 'x4lan_net_64.dll'])
 
     def test_linux_client_package_configures_as_client_only(self):
         from distribution import build_packages
