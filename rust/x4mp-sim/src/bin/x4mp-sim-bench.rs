@@ -151,10 +151,7 @@ fn p95(v: &[f64]) -> f64 {
     }
 }
 
-fn list<T: std::str::FromStr>(args: &[String], name: &str, default: &[T]) -> Vec<T>
-where
-    T: Clone,
-{
+fn list<T: std::str::FromStr + Clone>(args: &[String], name: &str, default: &[T]) -> Vec<T> {
     match args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)) {
         Some(v) => v.split(',').filter_map(|x| x.trim().parse().ok()).collect(),
         None => default.to_vec(),

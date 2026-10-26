@@ -24,12 +24,15 @@ use crate::shadow::{Comparator, Policy};
 use crate::universe::Universe;
 use crate::world::CompareOpts;
 
+/// Fills system-owned state after the mirror loaded a frame.
+pub type Prepare<'a> = &'a dyn Fn(&FrameRecord, &mut Universe);
+
 /// What to replay and how to compare.
 pub struct ReplaySetup<'a> {
     /// An empty universe with every component the systems need (core components + their own).
     pub make: &'a dyn Fn() -> Universe,
     /// Fills system-owned state that the capture does not carry (called after the mirror).
-    pub prepare: Option<&'a dyn Fn(&FrameRecord, &mut Universe)>,
+    pub prepare: Option<Prepare<'a>>,
     pub systems: &'a [&'a dyn System],
     /// Columns the systems produce (compared); empty = all registered columns.
     pub columns: &'a [&'a str],
