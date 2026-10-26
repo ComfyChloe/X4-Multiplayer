@@ -7,14 +7,18 @@ for i, a in enumerate(sys.argv):
     if a == '--skip': skip = int(sys.argv[i + 1])
 path = args[0]; label = args[1] if len(args) > 1 else path
 kv = re.compile(r'(\w+)=(-?\d+\.?\d*)')
-rows, scripts, sectors = [], [], []
+sv = re.compile(r'(\S+?)=(\d+\.\d+)ms/(\d+\.?\d*)')
+rows, scripts, sectors, script_rows = [], [], [], []
 for line in open(path, encoding='utf-8', errors='replace'):
-    if 'AIPROF mode=census' in line:
+    if 'AIPROF mode=' in line and ' frames=' in line:
         rows.append({k: float(v) for k, v in kv.findall(line.split('AIPROF',1)[1])})
     elif 'AIPROF scripts ' in line:
-        scripts.append(line.split('AIPROF scripts ',1)[1].strip())
+        text = line.split('AIPROF scripts ',1)[1].strip()
+        scripts.append(text)
+        script_rows.append((len(rows) - 1, [(n, float(ms), float(runs)) for n, ms, runs in sv.findall(text)]))
     elif 'AIPROF sectors ' in line:
         sectors.append(line.split('AIPROF sectors ',1)[1].strip())
+rows_all = rows
 rows = rows[skip:]
 if not rows:
     print(f'{label}: no AIPROF census lines'); sys.exit(1)
@@ -51,3 +55,17 @@ if fw + wo: print(f'  foreign-wake rate: {100*fw/(fw+wo):.2f}%  ({fw:.0f}/{fw+wo
 if ef + eo + ec: print(f'  foreign+cue event rate: {100*(ef+ec)/(ef+eo+ec):.2f}%  (foreign {ef:.0f}, cue {ec:.0f}, own {eo:.0f})')
 if scripts: print('top scripts (last window): ' + scripts[-1][:300])
 if sectors: print('top sectors (last window): ' + sectors[-1][:200])
+# whole-run script ranking: per-window top lists weighted by the window's frames (scripts outside a
+# window's top 8 are missing from that window, so this ranks, it does not total exactly)
+agg = {}
+for idx, items in script_rows:
+    if idx < skip or idx >= len(rows_all): continue
+    frames = rows_all[idx].get('frames', 0.0)
+    for name, ms, runs in items:
+        a = agg.setdefault(name, [0.0, 0.0, 0])
+        a[0] += ms * frames; a[1] += runs * frames; a[2] += 1
+if agg:
+    total = sum(v[0] for v in agg.values()) or 1.0
+    print('script ranking over the run (ms summed over frames, share of listed, runs, windows in top 8):')
+    for name, (ms, runs, wins) in sorted(agg.items(), key=lambda kv: -kv[1][0])[:15]:
+        print(f'  {name:40s} {ms:9.1f} ms {100*ms/total:5.1f}%  runs {runs:9.0f}  windows {wins}')
