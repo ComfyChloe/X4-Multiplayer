@@ -699,8 +699,7 @@ impl Supervisor {
                 let _ = command(&self.config, "shutdown");
                 let deadline = Instant::now() + Duration::from_secs(self.config.shutdown_timeout);
                 while self.child.is_some() && Instant::now() < deadline {
-                    std::thread::sleep(Duration::from_millis(100));
-                    self.relay.step(self.started.elapsed().as_secs_f64());
+                    self.serve_relay(Duration::from_millis(100));
                     if self.child.as_mut().is_some_and(|child| matches!(child.try_wait(), Ok(Some(_)))) {
                         self.child = None;
                     }
@@ -717,9 +716,20 @@ impl Supervisor {
             if let Err(error) = self.tick() {
                 self.fail(error);
             }
-            std::thread::sleep(Duration::from_millis(100));
+            self.serve_relay(Duration::from_millis(100));
         };
         result
+    }
+
+    /// Step the relay every 5 ms (as the standalone relay does) while the slower supervisor work
+    /// (control, log, child) waits. Stepping only once per 100 ms supervisor tick added up to
+    /// 100 ms of latency and dropped datagrams once the socket buffer filled between steps.
+    fn serve_relay(&mut self, period: Duration) {
+        let until = Instant::now() + period;
+        while Instant::now() < until {
+            std::thread::sleep(Duration::from_millis(5));
+            self.relay.step(self.started.elapsed().as_secs_f64());
+        }
     }
 }
 
@@ -988,6 +998,63 @@ mod tests {
         assert!(supervisor.child.is_none());
         assert!(supervisor.reason.contains("automatic world restart is disabled"));
         assert!(fs::read_to_string(work.join("status.json")).unwrap().contains("\"state\":\"failed\""));
+        fs::remove_dir_all(work).unwrap();
+    }
+
+    #[test]
+    fn relay_is_served_between_supervisor_ticks() {
+        // One supervisor period must drain far more than one relay step (128 datagrams) can.
+        let work = scratch();
+        let config = Config {
+            game: "/bin/true".into(),
+            profile: work.join("missing-profile"),
+            package: "missing".into(),
+            session: "missing".into(),
+            work: work.clone(),
+            display: ":0".into(),
+            startup_timeout: 3600,
+            shutdown_timeout: 1,
+            heartbeat_timeout: 3600,
+            agent: None,
+        };
+        let session =
+            Session::new(Level::Universe, &"a".repeat(32), "world1-test", &"b".repeat(32), LeaseSource::Os).unwrap();
+        let relay = Relay::bind("127.0.0.1", 0, session).unwrap();
+        let target = relay.socket.local_addr().unwrap();
+        let prepared = Prepared {
+            session: Json::Null,
+            level: Level::Universe,
+            token: "a".repeat(32),
+            build: "world1-test".into(),
+            bubble: "b".repeat(32),
+            port: 0,
+            max_players: 3,
+        };
+        let mut supervisor = Supervisor {
+            config,
+            prepared,
+            relay,
+            child: None,
+            state: State::Ready,
+            reason: String::new(),
+            started: Instant::now(),
+            log_offset: 0,
+            pending: String::new(),
+            heartbeat: None,
+            heartbeat_at: None,
+            progressed: false,
+            control_generation: 0,
+            stopping_at: None,
+        };
+        let sender = std::net::UdpSocket::bind("127.0.0.1:0").unwrap();
+        // Bursts of 200 fit the default socket buffer; one step per period would take only 128 of each.
+        for _ in 0..3 {
+            for _ in 0..200 {
+                sender.send_to(b"NOISE|1", target).unwrap();
+            }
+            supervisor.serve_relay(Duration::from_millis(30));
+        }
+        assert_eq!(supervisor.relay.received_packets, 600);
         fs::remove_dir_all(work).unwrap();
     }
 }
