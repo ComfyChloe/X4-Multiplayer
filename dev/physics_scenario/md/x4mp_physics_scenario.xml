@@ -6,6 +6,7 @@
       <actions>
         <set_value name="$Allowed" exact="player.module == 'custom_creative'"/>
         <set_value name="$Spawned" exact="false"/>
+        <set_value name="$SpawnedAt" exact="0s"/>
         <debug_text text="'PHYSICSSCN loaded allowed=%s'.[$Allowed]"/>
       </actions>
       <cues>
@@ -27,11 +28,12 @@
               </do_if>
             </do_all>
             <set_value name="$Spawned" exact="true"/>
+            <set_value name="$SpawnedAt" exact="player.age"/>
             <debug_text text="'PHYSICSSCN spawned count=%s t=%s'.[$Ships.count, player.age]"/>
           </actions>
         </cue>
         <cue name="Cleanup" checkinterval="1s">
-          <conditions><check_value value="$Spawned and player.age ge 90s"/></conditions>
+          <conditions><check_value value="$Spawned and player.age ge $SpawnedAt + 75s"/></conditions>
           <actions>
             <destroy_group group="$Ships" explosion="false"/>
             <debug_text text="'PHYSICSSCN cleaned'"/>
