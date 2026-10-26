@@ -75,7 +75,11 @@ local function frame()
  D.nextHeartbeat=now+D.interval
  -- The authority's player may be outside any container (e.g. in its observer suit).
  local object=C.GetPlayerContainerID();if object==0 then object=C.GetPlayerID() end;local sector=object~=0 and C.GetContextByClass(object,'sector',false) or 0
- local macro=sector~=0 and GetComponentData(ConvertStringToLuaID(tostring(sector):gsub('ULL$','')),'macro') or ''
+ -- Same conversion as X4's own UI: tostring(UniverseID) keeps its ULL suffix.
+ local macro=sector~=0 and GetComponentData(ConvertStringToLuaID(tostring(sector)),'macro') or ''
+ if (macro or '')=='' and not D.sectorDiag then
+  D.sectorDiag=true;log(string.format('SECTOR_UNRESOLVED object=%s sector=%s',tostring(object),tostring(sector)))
+ end
  local elapsed=D.heartbeatAt and now-D.heartbeatAt or 0
  local rate=D.heartbeatAt and elapsed>0 and (D.frames-(D.heartbeatFrames or 0))/elapsed or 0
  D.heartbeatAt=now;D.heartbeatFrames=D.frames
