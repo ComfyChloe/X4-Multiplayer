@@ -5,7 +5,7 @@
 
 1. builds .local/engine/x4lan_xform_64.dll (native/engine/xform_probe.c, -Wall -Wextra -Werror);
 2. assembles the lane overlay .local/lane/overlays/xform (DLL, ui/xform_probe.lua, ui.xml.files);
-3. runs ONE lane through ../X4-Multiplayer-rw-lane/dev/x4lane.py (a new disposable world; rules in
+3. runs ONE lane through the released ../lanes/release/dev/x4lane.py (a new disposable world; rules in
    rewrite-coord/native-lane.md: lane profiles only, quiet.lock respected, <= 20 min), with the
    captures written to .local/lane/runs/<label>-captures;
 4. replays every capture with rust/x4mp-transform (examples/replay_capture.rs) and writes
@@ -23,7 +23,7 @@ ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from native.engine.signatures import c_header  # noqa: E402
 
-LANE = ROOT.parent / 'X4-Multiplayer-rw-lane' / 'dev' / 'x4lane.py'
+LANE = ROOT.parent / 'lanes' / 'release' / 'dev' / 'x4lane.py'  # released lane tool, see rewrite-coord/native-lane.md
 
 
 def build(zig: Path) -> Path:
