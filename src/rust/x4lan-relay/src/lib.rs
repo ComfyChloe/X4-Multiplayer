@@ -8,6 +8,7 @@
 pub mod dedicated;
 pub mod json;
 pub mod ordmap;
+pub mod players;
 pub mod pynum;
 pub mod relay;
 pub mod rng;

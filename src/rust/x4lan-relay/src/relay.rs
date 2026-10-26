@@ -3,11 +3,14 @@
 use std::io::ErrorKind;
 use std::net::{SocketAddr, UdpSocket};
 
+use crate::players::PlayerRoster;
 use crate::session::{Session, TICK_HZ};
 use crate::wire::MAX_PACKET;
 
 pub struct Relay {
     pub session: Session,
+    /// Player factions (players.py): PF* packets are routed and cached here, never seen by the session.
+    pub players: PlayerRoster,
     pub socket: UdpSocket,
     next_tick: f64,
     pub received_packets: u64,
@@ -71,6 +74,7 @@ impl Relay {
         socket.set_nonblocking(true)?;
         Ok(Relay {
             session,
+            players: PlayerRoster::new(),
             socket,
             next_tick: 0.0,
             received_packets: 0,
@@ -105,12 +109,21 @@ impl Relay {
                 }
                 continue;
             }
+            if buffer[..count].starts_with(b"PF") {
+                for (target, packet) in self.players.handle(&buffer[..count], address, &self.session.core.peers, now) {
+                    self.send(&packet, target);
+                }
+                continue;
+            }
             for reply in self.session.receive(&buffer[..count], address, now) {
                 self.send(&reply, address);
             }
         }
         if now >= self.next_tick {
             for (address, packet) in self.session.snapshots(now) {
+                self.send(&packet, address);
+            }
+            for (address, packet) in self.players.snapshots(&self.session.core.peers, now) {
                 self.send(&packet, address);
             }
             self.next_tick = now + 1.0 / f64::from(TICK_HZ);
