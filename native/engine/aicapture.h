@@ -158,6 +158,7 @@ static uint64_t ac_bits(double v) {
 #define AC_A_KEYWORD 0x08
 #define AC_A_LINE 0x0c
 #define AC_H_RECORD 0x18      /* ScriptEventHandler: event record (int keyword, then Values at +0x08..) */
+#define AC_ENT_ATTENTION 0x1ec /* Component: attention level (int; AttentionBlockChanged 0x10664a0) */
 #define AC_MAX_FRAMES 16
 #define AC_MAX_NEST 8
 
@@ -184,6 +185,11 @@ static int ac_stdout_sink(const char *data, size_t len, void *user) {
 static uint64_t ac_ent_uid(const void *ctx) {
     const unsigned char *e = ad_ctx_entity(ctx);
     return e ? *(const uint64_t *)(e + AD_COMP_ID) : 0;
+}
+
+static int ac_ent_attention(const void *ctx) {
+    const unsigned char *e = ad_ctx_entity(ctx);
+    return e ? *(const int32_t *)(e + AC_ENT_ATTENTION) : -1;
 }
 
 static void ac_ctx_script(const void *ctx, char *out, size_t cap) {
@@ -256,9 +262,9 @@ static void ac_run_begin(void *ctx, void *es, unsigned mask, int irq, void *user
                 (unsigned long long)pc, q, (unsigned long long)(uintptr_t)ctx);
     } else {
         ++ac.runs;
-        ac_line(&ac, "run\tc:0x%llx\t%s\tt=d:%016llx\tmask=x:%x\trng=x:%016llx\tpc=i:%llu\tctx=x:%llx",
+        ac_line(&ac, "run\tc:0x%llx\t%s\tt=d:%016llx\tmask=x:%x\trng=x:%016llx\tpc=i:%llu\tatt=i:%d\tctx=x:%llx",
                 (unsigned long long)ent, script, (unsigned long long)ac_bits(now), mask, (unsigned long long)rng,
-                (unsigned long long)pc, (unsigned long long)(uintptr_t)ctx);
+                (unsigned long long)pc, ac_ent_attention(ctx), (unsigned long long)(uintptr_t)ctx);
     }
 }
 

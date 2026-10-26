@@ -122,6 +122,7 @@ static void test_part_b(void) {
     static uintptr_t prog_vec[3];
     static const void *prog[2];
     set_u64(entity, AD_COMP_ID, 0x7001);
+    *(int32_t *)(entity + AC_ENT_ATTENTION) = 3;
     for (int k = 0; k < 2; ++k) {
         unsigned char *c = k ? ctx_seek : ctx_patrol, *es = k ? es_seek : es_patrol;
         set_ptr(c, AD_C_ENTITY, entity);
@@ -196,7 +197,7 @@ static void test_part_b(void) {
     char l[AC_LINE_BYTES];
     assert(line_at(1, l, sizeof(l)) && !strcmp(l, "track\tc:0x7001\torder.fight.p\tslot=i:0"));
     assert(line_at(2, l, sizeof(l)));
-    assert(starts(l, "run\tc:0x7001\torder.fight.p\tt=d:4059000000000000\tmask=x:20\trng=x:0000000000001111\tpc=i:7\tctx=x:"));
+    assert(starts(l, "run\tc:0x7001\torder.fight.p\tt=d:4059000000000000\tmask=x:20\trng=x:0000000000001111\tpc=i:7\tatt=i:3\tctx=x:"));
     assert(line_at(3, l, sizeof(l)));
     assert(!strcmp(l, "yield\tc:0x7001\torder.fight.p\trng=x:0000000000002222\tpc=i:9\tyielded=b:1\tkw=i:2558\tline=i:509\tuntil=d:4059600000000000"));
     assert(line_at(4, l, sizeof(l)));
