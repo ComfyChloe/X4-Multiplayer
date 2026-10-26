@@ -7,7 +7,10 @@ Usage:
 
 DIV1 logs come from extension/x4_lan_lab/ui/divergence_probe.lua and align by
 SCHEDULED saved-game time. With --statehash, observer frames from engine_hooks.lua
-are aligned instead and the first differing bucket is reported.
+are aligned instead and the first differing bucket is reported. The optional attention
+bucket (per-object Component+0x1ec levels) is compared when both logs carry it; its first
+mismatch is reported separately with the level histograms and, when the run enabled
+engine_hash_attention_rows, the differing ATTNROW rows of that frame.
 
 Ship matching, per aligned sample and only over sectors completely sampled in both logs:
  1. id:   equal native component ID AND equal macro AND (equal idcode when both have one).
@@ -24,6 +27,7 @@ object (generation), so engine ID reuse never joins two different ships.
 from __future__ import annotations
 
 import argparse
+import bisect
 import csv
 import math
 import re
@@ -404,8 +408,11 @@ def report(result):
 
 
 STATEHASH_MARKER = '[X4LAN] STATEHASH '
+ATTNROW_MARKER = '[X4LAN] ATTNROW '
 HASH_BUCKETS = ('identity', 'pose', 'health', 'rng', 'time')
+OPTIONAL_BUCKETS = ('attention',)
 HASH16 = re.compile(r'[0-9a-f]{16}\Z')
+LEVELS = re.compile(r'\d{1,6}(\.\d{1,6}){11}\Z')
 
 
 def parse_statehash_line(line):
@@ -437,14 +444,21 @@ def parse_statehash_line(line):
     if fields['complete'] == '1':
         if not {'h', 'ships', 'weak', *HASH_BUCKETS} <= fields.keys() or 'reason' in fields:
             raise ProbeLogError('incomplete STATEHASH payload')
-        if any(not HASH16.fullmatch(fields[key]) for key in ('h', *HASH_BUCKETS)):
+        present = [key for key in OPTIONAL_BUCKETS if key in fields]
+        if any(not HASH16.fullmatch(fields[key]) for key in ('h', *HASH_BUCKETS, *present)):
             raise ProbeLogError('invalid STATEHASH digest')
-        for key in ('ships', 'weak'):
+        for key in ('ships', 'weak', 'attn_rows'):
+            if key not in fields:
+                continue
             if not fields[key].isdigit():
                 raise ProbeLogError('invalid STATEHASH count')
             fields[key] = int(fields[key])
+        if ('attn_rows' in fields or 'attn_levels' in fields) and 'attention' not in fields:
+            raise ProbeLogError('attention details without attention bucket')
+        if 'attn_levels' in fields and not LEVELS.fullmatch(fields['attn_levels']):
+            raise ProbeLogError('invalid STATEHASH attention levels')
     elif fields['complete'] == '0':
-        if not fields.get('reason') or {'h', *HASH_BUCKETS} & fields.keys():
+        if not fields.get('reason') or {'h', *HASH_BUCKETS, *OPTIONAL_BUCKETS} & fields.keys():
             raise ProbeLogError('invalid incomplete STATEHASH record')
         for key in ('scanned', 'ships'):
             if key in fields:
@@ -454,6 +468,28 @@ def parse_statehash_line(line):
     else:
         raise ProbeLogError('invalid STATEHASH completeness')
     return fields
+
+
+def parse_attnrow_line(line):
+    at = line.find(ATTNROW_MARKER)
+    if at < 0:
+        return None
+    if len(line) > MAX_LINE:
+        raise ProbeLogError('ATTNROW line exceeds limit')
+    match = re.fullmatch(r'frame=(\d+) row=(\S+)', line[at + len(ATTNROW_MARKER):].strip())
+    if not match or int(match.group(1)) < 1:
+        raise ProbeLogError('invalid ATTNROW record')
+    return int(match.group(1)), match.group(2)
+
+
+def read_attention_rows(path):
+    rows = {}
+    with open(path, encoding='utf-8', errors='replace') as stream:
+        for line in stream:
+            if ATTNROW_MARKER in line:
+                frame, row = parse_attnrow_line(line)
+                rows.setdefault(frame, []).append(row)
+    return rows
 
 
 def read_statehash(path):
@@ -479,18 +515,74 @@ def read_statehash(path):
     return samples
 
 
-def compare_statehash(host, guest):
-    if (host[0]['run'], host[0]['session'], host[0].get('seed', '')) != (guest[0]['run'], guest[0]['session'], guest[0].get('seed', '')):
-        raise ProbeLogError('STATEHASH run, session or seed differs')
+def _row_key(row):
+    head, _, level = row.rpartition('|')
+    return head, level
+
+
+def attention_row_diff(host_rows, guest_rows, limit=20):
+    host = dict(_row_key(row) for row in host_rows)
+    guest = dict(_row_key(row) for row in guest_rows)
+    out = []
+    for key in sorted(host.keys() | guest.keys()):
+        if host.get(key) != guest.get(key):
+            out.append((key, host.get(key, '-'), guest.get(key, '-')))
+            if len(out) >= limit:
+                break
+    return out
+
+
+def _pairs_by_frame(host, guest):
     host_by_frame = {sample['frame']: sample for sample in host}
     guest_by_frame = {sample['frame']: sample for sample in guest}
+    frames = sorted(host_by_frame.keys() | guest_by_frame.keys())
+    return [(frame, frame, host_by_frame.get(frame), guest_by_frame.get(frame)) for frame in frames], len(frames)
+
+
+def _pairs_by_time(host, guest, tolerance):
+    """Pair every host sample with the nearest unused guest sample in game time."""
+    remaining = sorted(guest, key=lambda sample: sample['gt'])
+    times = [sample['gt'] for sample in remaining]
+    used = set()
+    pairs = []
+    for h in host:
+        best = None
+        start = bisect.bisect_left(times, h['gt'] - tolerance)
+        for index in range(start, bisect.bisect_right(times, h['gt'] + tolerance)):
+            if index in used:
+                continue
+            if best is None or abs(times[index] - h['gt']) < abs(times[best] - h['gt']):
+                best = index
+        if best is None:
+            pairs.append((h['frame'], 0, h, None))
+        else:
+            used.add(best)
+            pairs.append((h['frame'], remaining[best]['frame'], h, remaining[best]))
+    pairs += [(0, g['frame'], None, g) for index, g in enumerate(remaining) if index not in used]
+    return pairs, len(pairs)
+
+
+def compare_statehash(host, guest, host_rows=None, guest_rows=None, align_time=None):
+    """Compare STATEHASH logs by observer frame, or with align_time seconds by nearest game time.
+
+    Two simultaneously running games register their observers at different moments, so
+    their frame numbers do not correspond; use align_time for them.
+    """
+    if (host[0]['run'], host[0]['session'], host[0].get('seed', '')) != (guest[0]['run'], guest[0]['session'], guest[0].get('seed', '')):
+        raise ProbeLogError('STATEHASH run, session or seed differs')
+    if align_time is None:
+        pairs, frame_count = _pairs_by_frame(host, guest)
+    else:
+        pairs, frame_count = _pairs_by_time(host, guest, align_time)
     events = []
     first = None
     compared = 0
     baseline = None
     bucket_stats = {key: dict(first=None, differences=0) for key in HASH_BUCKETS}
-    for frame in sorted(host_by_frame.keys() | guest_by_frame.keys()):
-        h, g = host_by_frame.get(frame), guest_by_frame.get(frame)
+    attention_compared = 0
+    first_attention = None
+    for frame, guest_frame, h, g in pairs:
+        frame = frame or guest_frame
         if not h or not g:
             events.append((frame, 'missing', 'host' if not h else 'guest'))
             continue
@@ -500,7 +592,21 @@ def compare_statehash(host, guest):
         compared += 1
         if baseline is None:
             baseline = h['gt']
-        differing = [key for key in HASH_BUCKETS if h[key] != g[key]]
+        buckets = HASH_BUCKETS
+        if ('attention' in h) != ('attention' in g):
+            raise ProbeLogError(f'attention bucket present in only one log at frame {frame}')
+        if 'attention' in h:
+            buckets = HASH_BUCKETS + OPTIONAL_BUCKETS
+            bucket_stats.setdefault('attention', dict(first=None, differences=0))
+            attention_compared += 1
+        differing = [key for key in buckets if h[key] != g[key]]
+        if 'attention' in differing and first_attention is None:
+            first_attention = dict(frame=frame, guest_frame=guest_frame, gt=h['gt'], guest_gt=g['gt'],
+                                   elapsed_s=h['gt'] - baseline,
+                                   host_levels=h.get('attn_levels', '-'), guest_levels=g.get('attn_levels', '-'),
+                                   host_rows=h.get('attn_rows', '-'), guest_rows=g.get('attn_rows', '-'),
+                                   rows=attention_row_diff((host_rows or {}).get(frame, []),
+                                                           (guest_rows or {}).get(guest_frame, [])))
         for key in differing:
             bucket_stats[key]['differences'] += 1
             if bucket_stats[key]['first'] is None:
@@ -510,15 +616,19 @@ def compare_statehash(host, guest):
                          host=h['h'], guest=g['h'])
         if bool(differing) != (h['h'] != g['h']):
             raise ProbeLogError(f'inconsistent combined STATEHASH at frame {frame}')
-    return dict(first=first, events=events, compared=compared, frames=len(host_by_frame.keys() | guest_by_frame.keys()),
+    return dict(first=first, events=events, compared=compared, frames=frame_count, align_time=align_time,
                 missing=sum(event[1] == 'missing' for event in events),
                 incomplete=sum(event[1] == 'incomplete' for event in events),
                 weak=max((sample.get('weak', 0) for sample in host + guest), default=0),
-                bucket_stats=bucket_stats, run=host[0]['run'], session=host[0]['session'])
+                bucket_stats=bucket_stats, run=host[0]['run'], session=host[0]['session'],
+                attention_compared=attention_compared, first_attention=first_attention,
+                attention_rows=bool(host_rows) and bool(guest_rows))
 
 
 def statehash_report(result):
-    lines = ['X4 STATEHASH COMPARISON (offline; observer frames, not save-persistent engine frames)',
+    lines = ['X4 STATEHASH COMPARISON (offline; observer frames, not save-persistent engine frames)'
+             + ('' if result.get('align_time') is None else
+                '; paired by nearest game time within %.3f s' % result['align_time']),
              f"Run {result['run']} session {result['session']}: {result['compared']} complete comparisons over {result['frames']} frames"]
     first = result['first']
     if first:
@@ -528,8 +638,24 @@ def statehash_report(result):
         lines.append('No hash divergence in complete shared frames')
     for key, stats in result['bucket_stats'].items():
         initial = stats['first']
+        total = result['attention_compared'] if key == 'attention' else result['compared']
         lines.append('BUCKET %s first=%s differences=%d/%d' %
-                     (key, initial['frame'] if initial else 'none', stats['differences'], result['compared']))
+                     (key, initial['frame'] if initial else 'none', stats['differences'], total))
+    attention = result['first_attention']
+    if attention:
+        lines.append('FIRST ATTENTION MISMATCH frame=%d guest_frame=%d game_time=%.9f guest_game_time=%.9f elapsed=%.9f '
+                     'rows=%s/%s levels(0..11) host=%s guest=%s' %
+                     (attention['frame'], attention['guest_frame'], attention['gt'], attention['guest_gt'],
+                      attention['elapsed_s'], attention['host_rows'], attention['guest_rows'],
+                      attention['host_levels'], attention['guest_levels']))
+        for key, host_level, guest_level in attention['rows']:
+            lines.append('  ATTENTION %s host=%s guest=%s' % (key, host_level, guest_level))
+        if not attention['rows']:
+            lines.append('  (no ATTNROW rows for this frame in both logs; enable engine_hash_attention_rows)')
+    elif result['attention_compared']:
+        lines.append('No attention mismatch in %d compared frames' % result['attention_compared'])
+    else:
+        lines.append('WARNING attention bucket absent; attention parity not compared')
     if result['missing'] or result['incomplete']:
         lines.append('WARNING missing frames=%d incomplete frames=%d; these are not equality evidence' %
                      (result['missing'], result['incomplete']))
@@ -578,14 +704,19 @@ def main(argv=None):
     parser.add_argument('--include-player-owned', action='store_true', help='also compare player-owned ships')
     parser.add_argument('--run', type=int, default=-1, help='run index when a log restarted its game clock (default last)')
     parser.add_argument('--statehash', action='store_true', help='compare STATEHASH frames/buckets instead of DIV1 samples')
+    parser.add_argument('--align-time', type=float, help='with --statehash: pair samples by nearest game time within '
+                        'this many seconds (needed for two simultaneously running games)')
     args = parser.parse_args(argv)
     if not (0 < args.pose_tolerance <= 100000) or not (0 <= args.hull_tolerance <= 100):
         parser.error('tolerance outside bounds')
     if args.statehash and (args.csv or args.summary_csv):
         parser.error('DIV1 CSV outputs are unavailable with --statehash')
+    if args.align_time is not None and (not args.statehash or not 0 < args.align_time <= 60):
+        parser.error('--align-time requires --statehash and 0 < seconds <= 60')
     try:
         if args.statehash:
-            result = compare_statehash(read_statehash(args.host), read_statehash(args.guest))
+            result = compare_statehash(read_statehash(args.host), read_statehash(args.guest),
+                                       read_attention_rows(args.host), read_attention_rows(args.guest), args.align_time)
             text = statehash_report(result)
         else:
             result = compare(read_log(args.host), read_log(args.guest), args.pose_tolerance, args.hull_tolerance,

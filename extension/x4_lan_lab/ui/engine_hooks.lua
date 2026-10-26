@@ -1,8 +1,8 @@
--- Default-enabled STATEHASH, MoveWorker seed and shared ship/zone attention; no network changes.
+-- Default-enabled STATEHASH, MoveWorker seed and shared attention for all remote proxies; no network changes.
 local cfg=X4LAN_CONFIG
 if not cfg or cfg.engine_hooks~=true then return end
 local ffi=require('ffi');local C=ffi.C
-local M={failed=false,observed=false,attentionProxy='0',cost={captures=0,completed=0,failed=0,totalMs=0,maxMs=0}};X4LAN_ENGINE_HOOKS=M
+local M={failed=false,observed=false,attentionProxy='0',attentionSources='',cost={captures=0,completed=0,failed=0,totalMs=0,maxMs=0}};X4LAN_ENGINE_HOOKS=M
 local function esc(value)
  value=tostring(value==nil and '' or value);return (value:gsub('[^%w_%.:%-]',function(c)return string.format('%%%02X',c:byte())end))
 end
@@ -10,7 +10,7 @@ local function out(kind,text) DebugError('[X4LAN] '..kind..' '..text) end
 local function disabled(reason)
  M.failed=true;out('HOOKS_DISABLED','reason='..esc(reason))
  if M.owner then pcall(function()M.owner:stop()end);M.owner=nil end
- M.attentionProxy='0'
+ M.attentionProxy='0';M.attentionSources=''
 end
 local function declare(name,definition)if not pcall(ffi.typeof,name)then pcall(ffi.cdef,definition)end end
 local function key(id)return(tostring(id):gsub('ULL$',''))end
@@ -37,7 +37,8 @@ local ok,err=pcall(function()
  for _,fn in ipairs({'const char* GetSaveFolderPath(void);','bool IsPlayerValid(void);','bool IsComponentOperational(UniverseID);',
   'UniverseID GetContextByClass(UniverseID,const char*,bool);','UIPosRot GetObjectPositionInSector(UniverseID);',
   'uint32_t GetAllFactions(const char**,uint32_t,bool);','uint32_t GetNumAllFactionShips(const char*);',
-  'uint32_t GetAllFactionShips(UniverseID*,uint32_t,const char*);'})do pcall(ffi.cdef,fn)end
+  'uint32_t GetAllFactionShips(UniverseID*,uint32_t,const char*);','uint32_t GetNumAllFactionStations(const char*);',
+  'uint32_t GetAllFactionStations(UniverseID*,uint32_t,const char*);'})do pcall(ffi.cdef,fn)end
  for _,name in ipairs({'GetSaveFolderPath','IsPlayerValid','IsComponentOperational','GetContextByClass','GetObjectPositionInSector',
   'GetAllFactions','GetNumAllFactionShips','GetAllFactionShips'})do assert(optional(name),'missing game export: '..name)end
  local path=ffi.string(C.GetSaveFolderPath()):gsub('\\','/'):gsub('/+$','')
@@ -45,7 +46,7 @@ local ok,err=pcall(function()
  settings={cadence=integer(cfg.engine_hash_cadence,1,3600,30),maxShips=integer(cfg.engine_hash_max_ships,1,20000,4000),
   budgetMs=number(cfg.engine_hash_budget_ms,0.1,1000,8),
   sectors=cfg.engine_hash_sectors or {'cluster_14_sector001_macro','cluster_01_sector001_macro'},
-  run=cfg.engine_hash_run or 'default',session=cfg.build or 'disabled'}
+  run=cfg.engine_hash_run or 'default',session=cfg.build or 'disabled',attentionRows=cfg.engine_hash_attention_rows==true}
  assert(atom(settings.run) and #settings.run<=32,'invalid engine hash run')
  assert(type(settings.sectors)=='table' and #settings.sectors<=16,'engine_hash_sectors must have at most 16 entries')
  local wanted={};for _,sector in ipairs(settings.sectors)do assert(atom(sector),'invalid engine hash sector');wanted[sector]=true end
@@ -63,10 +64,17 @@ local function identity(object,macro,owner,code)
  if code and code~='' then return 'code:'..esc(macro)..':'..esc(owner)..':'..esc(code),false end
  return 'local:'..k..':'..esc(macro)..':'..esc(owner),true
 end
-local function sectorName(object,cache)
+local function sectorName(object,cache,ids)
  local sector=C.GetContextByClass(object,'sector',false);if sector==0 then return nil end
  local k=key(sector);if cache[k]then return cache[k]end
- local macro=GetComponentData(luaId(sector),'macro');cache[k]=macro;return macro
+ local macro=GetComponentData(luaId(sector),'macro');cache[k]=macro
+ if ids and macro then ids[macro]=k end
+ return macro
+end
+local LEVELS=11
+local function levelOf(value)
+ value=tonumber(value);if not value or value~=math.floor(value) or value<0 or value>LEVELS then return nil end
+ return value
 end
 local function inspect(object,details)
  local result,reason=native.inspect(key(object))
@@ -80,7 +88,13 @@ local function sample(frame,gameTime,dt,rng,sessionSeed)
  local function fail(reason)stats.ships=#rows;stats.captureMs=elapsed();return nil,reason,stats end
  local factions=ffi.new('const char*[256]');local count=tonumber(C.GetAllFactions(factions,256,true))
  if count<=0 or count>=256 then return fail('faction enumeration incomplete')end
- local sectors={};local total=0;local weak=0
+ local sectors={};local sectorIds={};local total=0;local weak=0;local attentionRows={};local histogram={}
+ for level=0,LEVELS do histogram[level]=0 end
+ local function attentionRow(sector,id,kind,level)
+  level=levelOf(level);if not level then return false end
+  attentionRows[#attentionRows+1]=sector..'|'..id..'|'..kind..'|'..level;histogram[level]=histogram[level]+1
+  return true
+ end
  for i=0,count-1 do
   local faction=ffi.string(factions[i]);local amount=tonumber(C.GetNumAllFactionShips(faction))
   if amount>250000 then return fail('faction fleet limit exceeded')end
@@ -90,13 +104,14 @@ local function sample(frame,gameTime,dt,rng,sessionSeed)
   for j=0,read-1 do
    local object=buffer[j];stats.scanned=stats.scanned+1
    if C.IsComponentOperational(object) then
-    local sector=sectorName(object,sectors)
+    local sector=sectorName(object,sectors,sectorIds)
     if sector and settings.wanted[sector] then
      total=total+1;if total>settings.maxShips then return fail('ship limit exceeded')end
      local macro,owner,code=GetComponentData(luaId(object),'macro','owner','idcode')
      if owner~='player' then
       local id,isWeak=identity(object,macro,owner,code);if isWeak then weak=weak+1 end
       local details,problem=inspect(object,M.firstInspect);if not details then return fail(problem)end
+      if not attentionRow(sector,id,'s',details.attention)then return fail('invalid attention level')end
       local p=C.GetObjectPositionInSector(object);local degrees=180/math.pi
       rows[#rows+1]={id=id,macro=macro,owner=owner,sector=sector,
        pose=table.concat({quantize(p.x,100),quantize(p.y,100),quantize(p.z,100),
@@ -109,6 +124,40 @@ local function sample(frame,gameTime,dt,rng,sessionSeed)
   end
   if elapsed()>settings.budgetMs then return fail('capture budget exceeded')end
  end
+ local level=native.attention_level
+ if level and optional('GetNumAllFactionStations') and optional('GetAllFactionStations') then
+  for i=0,count-1 do
+   local faction=ffi.string(factions[i]);local amount=tonumber(C.GetNumAllFactionStations(faction))
+   if amount>250000 then return fail('faction station limit exceeded')end
+   local buffer=ffi.new('UniverseID[?]',amount+64)
+   local read=tonumber(C.GetAllFactionStations(buffer,amount+64,faction))
+   if read>=amount+64 or tonumber(C.GetNumAllFactionStations(faction))>read then return fail('stations changed during capture')end
+   for j=0,read-1 do
+    local object=buffer[j];stats.scanned=stats.scanned+1
+    if C.IsComponentOperational(object) then
+     local sector=sectorName(object,sectors,sectorIds)
+     if sector and settings.wanted[sector] then
+      total=total+1;if total>settings.maxShips then return fail('ship limit exceeded')end
+      local macro,owner,code=GetComponentData(luaId(object),'macro','owner','idcode')
+      local id,isWeak=identity(object,macro,owner,code);if isWeak then weak=weak+1 end
+      local value,problem=level(key(object));if not value then return fail(problem or 'attention read failed')end
+      if not attentionRow(sector,id,'t',value)then return fail('invalid attention level')end
+     end
+    end
+    if stats.scanned%16==0 and elapsed()>settings.budgetMs then return fail('capture budget exceeded')end
+   end
+  end
+ end
+ if level then
+  for sector in pairs(settings.wanted)do
+   local id=sectorIds[sector]
+   if id then
+    local value,problem=level(id);if not value then return fail(problem or 'attention read failed')end
+    if not attentionRow(sector,'*','sector',value)then return fail('invalid attention level')end
+   end
+  end
+ end
+ table.sort(attentionRows)
  table.sort(rows,function(a,b)
   if a.sector~=b.sector then return a.sector<b.sector end
   if a.id~=b.id then return a.id<b.id end
@@ -130,7 +179,8 @@ local function sample(frame,gameTime,dt,rng,sessionSeed)
  local hashStarted=native.walltime()
  local identityHash,poseHash,healthHash=native.hash(identities),native.hash(poses),native.hash(health)
  local timeHash=native.hash({string.format('%.9f',gameTime)})
- local combined=native.hash({identityHash,poseHash,healthHash,rng,timeHash})
+ local attentionHash=native.hash(attentionRows)
+ local combined=native.hash({identityHash,poseHash,healthHash,rng,timeHash,attentionHash})
  local sectorHashes={}
  for sector,values in pairs(sectorRows)do sectorHashes[sector]={identity=native.hash(values.identity),pose=native.hash(values.pose),health=native.hash(values.health)}end
  stats.hashMs=(native.walltime()-hashStarted)*1000
@@ -142,8 +192,10 @@ local function sample(frame,gameTime,dt,rng,sessionSeed)
   out('HOOKS_OBSERVE',string.format('id=%s attention=%d hull=%.6f shield=%.6f ownerptr=%s generation=%d rng=%s seed=%s gt=%.9f dt=%.9f',
    seen.id,seen.result.attention,seen.result.hull,seen.result.shield,seen.result.owner_pointer,seen.result.generation,rng,sessionSeed,gameTime,dt))
  end
- out('STATEHASH',string.format('run=%s session=%s frame=%d h=%s identity=%s pose=%s health=%s rng=%s time=%s seed=%s ships=%d weak=%d fresh=1 complete=1 gt=%.9f dt=%.9f',
-  esc(settings.run),esc(settings.session),frame,combined,identityHash,poseHash,healthHash,rng,timeHash,sessionSeed,#rows,weak,gameTime,dt))
+ local counts={};for value=0,LEVELS do counts[#counts+1]=tostring(histogram[value])end
+ out('STATEHASH',string.format('run=%s session=%s frame=%d h=%s identity=%s pose=%s health=%s rng=%s time=%s attention=%s seed=%s ships=%d weak=%d attn_rows=%d attn_levels=%s fresh=1 complete=1 gt=%.9f dt=%.9f',
+  esc(settings.run),esc(settings.session),frame,combined,identityHash,poseHash,healthHash,rng,timeHash,attentionHash,sessionSeed,#rows,weak,#attentionRows,table.concat(counts,'.'),gameTime,dt))
+ if settings.attentionRows then for _,row in ipairs(attentionRows)do out('ATTNROW',string.format('frame=%d row=%s',frame,row))end end
  return true,nil,stats
 end
 local function incomplete(frame,gameTime,dt,reason,sessionSeed,stats)
@@ -165,22 +217,47 @@ local function safeSample(frame,gameTime,dt,rng,sessionSeed)
  if not result then incomplete(frame,gameTime,dt,reason,sessionSeed,stats)end
  hashCost(frame,result and true or false,stats,started)
 end
+local MAX_ATTENTION_SOURCES=8
+local function proxyIds()
+ local api=rawget(_G,'X4LAN_BUBBLE_API');local state=api and api.state;local ids,seen={},{}
+ local function add(proxy)
+  if proxy and proxy~=0 and C.IsComponentOperational(proxy) then
+   local k=key(proxy);if not seen[k] then seen[k]=true;ids[#ids+1]=k end
+  end
+ end
+ if state then
+  add(state.proxy)
+  if type(state.proxies)=='table' then for _,proxy in ipairs(state.proxies)do add(proxy)end end
+ end
+ table.sort(ids)
+ return ids
+end
 local function syncAttention()
  if not M.owner then return true end
- local api=rawget(_G,'X4LAN_BUBBLE_API');local state=api and api.state;local proxy=state and state.proxy
- local id=proxy and C.IsComponentOperational(proxy) and key(proxy) or '0'
- if id==M.attentionProxy then return true end
- local ok,reason=native.set_remote_attention(id)
+ local ids=proxyIds();local text=table.concat(ids,',')
+ if text==M.attentionSources then return true end
+ local ok,reason
+ if #ids>MAX_ATTENTION_SOURCES then ok,reason=false,'too many remote attention sources'
+ elseif native.set_remote_attention_sources then ok,reason=native.set_remote_attention_sources(ids)
+ elseif #ids<=1 then ok,reason=native.set_remote_attention(ids[1] or '0')
+ else ok,reason=false,'hooks module supports one remote attention source' end
  if not ok then disabled(reason or 'remote attention registration refused');return false end
- M.attentionProxy=id
+ M.attentionSources=text;M.attentionProxy=ids[1] or '0'
  return true
+end
+local function attentionStatus()
+ if not native.attention_status then return '' end
+ local ok,state=pcall(native.attention_status)
+ if not ok or type(state)~='table' then return '' end
+ return string.format(' attn_sources=%d attn_resolved=%d attn_raises=%d attn_refreshes=%d jitter_fixed=%d jitter_skipped=%d cameras=%d camera_offchain=%d',
+  state.sources or 0,state.resolved or 0,state.raises or 0,state.refreshes or 0,state.jitter_fixed or 0,state.jitter_skipped or 0,state.cameras or 0,state.camera_offchain or 0)
 end
 function M.start()
  if M.failed or M.owner then return end
  local owner,reason=native.start(safeSample,settings.cadence)
  if not owner and reason=='loading'then return end
  if not owner then disabled(reason or 'registration refused');return end
- M.owner=owner;M.attentionProxy='0'
+ M.owner=owner;M.attentionProxy='0';M.attentionSources=''
  if not syncAttention()then return end
  out('HOOKS_READY',string.format('slot=12 cadence=%d run=%s session=%s maxships=%d budget_ms=%.3f',settings.cadence,esc(settings.run),esc(settings.session),settings.maxShips,settings.budgetMs))
 end
@@ -192,7 +269,7 @@ SetScript('onUpdate',function()
   if not M.owner:active()then disabled('observer disarmed');return end
   if not syncAttention()then return end
   local now=GetCurRealTime()
-  if now>=(M.nextStatus or 0)then out('HOOKS_STATUS','frames='..tostring(M.owner:frames()));M.nextStatus=now+5 end
+  if now>=(M.nextStatus or 0)then out('HOOKS_STATUS','frames='..tostring(M.owner:frames())..attentionStatus());M.nextStatus=now+5 end
   return
  end
  if not C.IsPlayerValid()then return end

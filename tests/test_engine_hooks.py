@@ -258,6 +258,119 @@ class EngineHookTests(unittest.TestCase):
         lua.eval("events['X4LAN.Loaded']")()
         self.assertEqual(lua.eval("#captures"), 0)
 
+    def test_attention_bucket_changes_only_attention_and_combined_hash(self):
+        lua = self.runtime()
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.eval("callback")(1, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+        first = self.fields(self.state_lines(lua)[0])
+        self.assertRegex(first["attention"], "^[0-9a-f]{16}$")
+        self.assertEqual((first["attn_rows"], first["attn_levels"]), ("1", "0.0.0.0.0.0.0.0.0.1.0.0"))
+        lua.execute("native.inspect=function(id) return {attention=8,hull=50,shield=75,owner_pointer='1',generation=3} end")
+        lua.eval("callback")(2, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+        second = self.fields(self.state_lines(lua)[1])
+        for name in ("identity", "pose", "health", "rng", "time"):
+            self.assertEqual(first[name], second[name], name)
+        self.assertNotEqual(first["attention"], second["attention"])
+        self.assertNotEqual(first["h"], second["h"])
+        self.assertEqual(second["attn_levels"], "0.0.0.0.0.0.0.0.1.0.0.0")
+
+    def test_station_and_sector_attention_rows_use_read_only_reader(self):
+        setup = '''
+         ships[3001]={sector=22,macro='station_arg_01_macro',owner='argon',idcode='STA-1',pos={x=0,y=0,z=0,yaw=0,pitch=0,roll=0}}
+         levels={[3001]=9,[22]=5};reads={}
+         native.attention_level=function(id) reads[#reads+1]=id;return levels[tonumber(id)] end
+         api.GetNumAllFactionStations=function(faction) return 1 end
+         api.GetAllFactionStations=function(buf,n,faction) buf[0]=3001;return 1 end
+         X4LAN_CONFIG.engine_hash_attention_rows=true
+        '''
+        lua = self.runtime(setup)
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.eval("callback")(1, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+        first = self.fields(self.state_lines(lua)[0])
+        self.assertEqual((first["complete"], first["ships"], first["attn_rows"]), ("1", "1", "3"))
+        self.assertEqual(first["attn_levels"], "0.0.0.0.0.1.0.0.0.2.0.0")
+        rows = [line.split("row=", 1)[1] for line in self.logs(lua) if "ATTNROW" in line]
+        self.assertEqual(rows, sorted(rows))
+        self.assertIn("cluster_14_sector001_macro|*|sector|5", rows)
+        self.assertIn("cluster_14_sector001_macro|code:station_arg_01_macro:argon:STA-1|t|9", rows)
+        lua.execute("levels[22]=4")
+        lua.eval("callback")(2, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+        second = self.fields(self.state_lines(lua)[1])
+        self.assertEqual(first["identity"], second["identity"])
+        self.assertNotEqual(first["attention"], second["attention"])
+        lua.execute("levels[3001]=12")
+        lua.eval("callback")(3, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+        third = self.fields(self.state_lines(lua)[2])
+        self.assertEqual((third["complete"], third["reason"]), ("0", "invalid%20attention%20level"))
+        self.assertNotIn("attention", third)
+
+    def test_adapter_output_is_accepted_by_offline_comparison(self):
+        import tempfile
+        from dev import compare_divergence as compare
+        logs = []
+        for level in (9, 8):
+            lua = self.runtime("X4LAN_CONFIG.engine_hash_attention_rows=true")
+            lua.eval("events['X4LAN.Loaded']")()
+            lua.eval("callback")(1, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+            lua.execute(f"native.inspect=function(id) return {{attention={level},hull=50,shield=75,owner_pointer='1',generation=3}} end")
+            lua.eval("callback")(2, 100.0, 0.1, "0123456789abcdef", "0011223344556677")
+            logs.append("\n".join(self.logs(lua)) + "\n")
+        with tempfile.TemporaryDirectory() as folder:
+            paths = []
+            for name, text in zip(("host.log", "guest.log"), logs):
+                path = Path(folder) / name
+                path.write_text(text, encoding="utf-8")
+                paths.append(path)
+            result = compare.compare_statehash(compare.read_statehash(paths[0]), compare.read_statehash(paths[1]),
+                                               compare.read_attention_rows(paths[0]), compare.read_attention_rows(paths[1]))
+        self.assertEqual(result["first_attention"]["frame"], 2)
+        self.assertEqual(result["first"]["buckets"], ["attention"])
+        self.assertEqual(len(result["first_attention"]["rows"]), 1)
+
+    def test_all_remote_proxies_are_attention_sources(self):
+        setup = '''
+         sourceCalls={}
+         native.set_remote_attention_sources=function(ids)
+          local copy={};for i,id in ipairs(ids) do copy[i]=id end
+          sourceCalls[#sourceCalls+1]=table.concat(copy,',');return true
+         end
+         ships[2004]=ships[2002];ships[2010]=ships[2002]
+         X4LAN_BUBBLE_API.state.proxies={2010,2004,2002}
+        '''
+        lua = self.runtime(setup)
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertEqual(lua.eval("sourceCalls[1]"), "2002,2004,2010")
+        self.assertEqual(lua.eval("#remoteAttention"), 0)
+        lua.eval("onUpdate")()
+        self.assertEqual(lua.eval("#sourceCalls"), 1)
+        lua.execute("ships[2004]=nil")
+        lua.eval("onUpdate")()
+        self.assertEqual(lua.eval("sourceCalls[2]"), "2002,2010")
+        lua.execute("X4LAN_BUBBLE_API.state.proxy=nil;X4LAN_BUBBLE_API.state.proxies=nil")
+        lua.eval("onUpdate")()
+        self.assertEqual(lua.eval("sourceCalls[3]"), "")
+        self.assertFalse(lua.eval("X4LAN_ENGINE_HOOKS.failed"))
+
+    def test_too_many_sources_or_single_source_module_fail_closed(self):
+        many = "for i=1,9 do ships[4000+i]=ships[2002] end;X4LAN_BUBBLE_API.state.proxies={4001,4002,4003,4004,4005,4006,4007,4008,4009}"
+        lua = self.runtime("native.set_remote_attention_sources=function() return true end;" + many)
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertIn("HOOKS_DISABLED reason=too%20many%20remote%20attention%20sources", self.logs(lua)[-1])
+        lua = self.runtime("ships[2004]=ships[2002];X4LAN_BUBBLE_API.state.proxies={2004}")
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertIn("HOOKS_DISABLED reason=hooks%20module%20supports%20one%20remote%20attention%20source",
+                      self.logs(lua)[-1])
+
+    def test_status_reports_attention_counters(self):
+        setup = '''native.attention_status=function() return {sources=1,resolved=1,raises=7,refreshes=2,
+          jitter_fixed=3,jitter_skipped=0,cameras=2,camera_offchain=1} end'''
+        lua = self.runtime(setup)
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.eval("onUpdate")()
+        status = [line for line in self.logs(lua) if "HOOKS_STATUS" in line][-1]
+        fields = self.fields(status, "HOOKS_STATUS")
+        self.assertEqual((fields["attn_raises"], fields["jitter_fixed"], fields["camera_offchain"]), ("7", "3", "1"))
+
     def test_lua_has_no_gameplay_writes_or_transport(self):
         text = SOURCE.read_text()
         for forbidden in ("SetObjectSectorPos", "RemoveComponent", "SpawnObject", "ActivateObject",
