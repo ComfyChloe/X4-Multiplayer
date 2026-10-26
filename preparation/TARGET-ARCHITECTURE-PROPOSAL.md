@@ -112,6 +112,42 @@ Proposal:
   a script-level context switch would miss, where money/licences/logbook live, and
   whether mods can define factions without faction AI.
 
+### 7a. Player factions in diplomacy
+
+The vanilla diplomacy menu lists every faction from `GetLibrary("factions")` and
+removes only the id `player` (`ui/addons/ego_detailmonitor/menu_diplomacy.lua`). The
+other players' factions (`player2` …) therefore appear like normal factions once
+they are known (`set_faction_known`), with name, colour, icon and relation.
+
+- Relations between players live on the server (relation matrix between player
+  factions); each client receives its row. Default: allied.
+- War, ceasefire and alliance between players are intents (section 8); both sides see
+  the change through the state stream.
+- For player factions, X4's AI diplomacy (agents, embassies, diplomatic events) is
+  off: `isdiplomacyactive` / `arediplomacyeventsallowed` false.
+- Open: runtime renaming of non-`player` factions to the player's name
+  (`SetPlayerFactionName` only covers `player`), and a distinct icon/colour per player.
+
+### 7b. Hot join (decided: fork snapshots)
+
+Players join a running server without pausing the others:
+
+1. The dedicated Linux server takes savegame snapshots from a `fork()`ed child: the
+   parent keeps simulating after a short hitch (page-table copy), the child writes the
+   save from its copy-on-write memory and calls `_exit`.
+2. Snapshots run on a schedule (e.g. every 5 minutes) and on demand; a joining player
+   receives the latest one immediately. The same snapshots serve crash recovery.
+3. The server rewrites the compressed XML save per client so that the joining
+   player's faction becomes `player` (section 7).
+4. After loading, the client replays the event log since the snapshot frame and then
+   switches to its live sector channels.
+5. Blocking risk under investigation (`x4-re/coord/reports/save-fork.md`): in the
+   child only the forking thread exists, so the save path must not depend on job
+   threads, locks held by other threads, Vulkan, audio, Steam or sockets. If the
+   engine serializer cannot run that way, fall back to quiescing before the fork or
+   to a custom serializer reading the copied memory.
+6. Windows clients load a save produced on Linux; compatibility (XML) to be verified.
+
 ## 8. Intents
 
 All player actions use one path: client applies optimistically and sends an intent
@@ -160,7 +196,8 @@ path as fallback until native tests pass.
 4. **Intent path:** cargo first (replacing `CARGOREQ`), then docking, fleet orders,
    missions.
 5. **Owners:** server player factions with the context-dependent `faction.player`
-   hooks (after the RE survey); per-player money.
+   hooks (after the RE survey); per-player money; player factions in diplomacy.
+5a. **Hot join:** fork snapshots, per-client save rewrite, event-log catch-up.
 6. **Relevance tiers and ambient-traffic exclusion;** coarse map channel.
 7. **Determinism work** (RNG streams, attention parity, thread timing, fixed tick) to
    shrink corrections for predicted NPCs.
