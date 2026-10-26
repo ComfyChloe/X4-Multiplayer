@@ -202,8 +202,10 @@ local function frame()
   s.lastLog=now
  end
 end
+-- Looked up per frame so the opt-in frame profiler can wrap it; nothing else replaces it.
+X4LAN_BUBBLE_API.frame=frame
 local function safeFrame()
- local ok,e=pcall(frame)
+ local ok,e=pcall(X4LAN_BUBBLE_API.frame)
  if not ok then log('BUBBLE STOPPED: '..tostring(e));pcall(closeNetwork);s.failed=true end
 end
 local ok,e=pcall(function()

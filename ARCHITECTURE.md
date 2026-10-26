@@ -240,3 +240,42 @@ saves, back up config changes, disable autosave and apply Full HD exclusive Low
 with a 60 FPS cap. Development harnesses run only in a backed-up test installation
 and must not enter either release archive. Local synthetic-peer tests verify
 engine behaviour on Linux; real Windows/Linux latency and endurance need playtests.
+
+## Opt-in measurement (FRAMECOST, NETRTT)
+
+Two diagnostic flags, false in the source config and in generated session configs,
+supply numbers for the target-architecture "measure before porting" step. With both
+false, `measure_clock.lua`, `net_rtt.lua`, `frame_profile.lua` and
+`frame_profile_install.lua` return immediately and wrap nothing. Enable them by editing
+the package's generated `extension/x4_lan_lab/ui/config.lua` on both players after
+01-INSTALL (05-START-X4 copies it into the game); session recovery rewrites it to false.
+
+The clock is QueryPerformanceCounter (Windows) or `clock_gettime(CLOCK_MONOTONIC)`
+(Linux) through LuaJIT FFI, falling back to `GetCurRealTime`. `MEASURE_CLOCK` logs the
+source, observed resolution and read cost; a clock that never advances is reported as
+untimed rather than as zero cost.
+
+`frame_profile=true` wraps the bubble frame root, network client update, each adapter's
+`frame`/`receive` entry point, the seed gate, the shared motion buffer and the mod's
+MD event callbacks. Times are exclusive (self) wall time, so chained adapters are not
+counted twice; inline chain members (cargo and identity in universe, co-op docks in
+coop) belong to their chain. Once per second:
+
+`FRAMECOST v=1 window_s frames mod_ms_mean mod_ms_p95 mod_ms_max frame_interval_ms_mean
+frame_interval_ms_p95 frame_interval_ms_max profiled_calls overhead_ms_est clock
+sections=name:calls:total_ms:max_ms,...` (sorted by total) and
+`FRAMECOST_MD v=1 window_s lua_to_md md_to_lua lua_to_md_per_s md_to_lua_per_s
+sent=Screen.Control:n,... received=Event.Name:n,...`. MD execution itself cannot be
+timed from Lua; its cost appears only in the game's frame interval.
+
+`net_probe=true` sends `RTTPING|1|lease|seq|client_ms|echo_relay_ms|hold_ms` every 0.25 s
+(`net_probe_interval`, 0.05-5 s). The relay answers `RTTPONG|1|lease|seq|client_ms|relay_ms`
+at transport level; a ping never reaches the session, refreshes a lease or is forwarded.
+Older relays drop RTTPING; older clients never send it. The client logs
+`NETRTT v=1 side=client` every 5 s (pings, pongs, lost after 2 s, late, loss, RTT
+min/median/p95/max, relay-to-client jitter p95, transport packet/byte rates). The relay
+writes `NETRTT v=1 side=relay` per peer to `logs/netprobe-*.log` (created at the first
+ping) with RTT from the echoed relay time minus client hold, upstream jitter, sequence-gap
+loss and per-peer rates; the status JSON and dashboard show the latest summary. Samples are
+read once per UI frame and once per relay poll, so RTT includes up to one frame interval
+plus the relay's 5 ms poll sleep. Jitter is p95 of |inter-arrival - source spacing|.
