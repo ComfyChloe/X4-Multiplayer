@@ -43,20 +43,26 @@ def dist(values):
 def summarise(meta, rows) -> dict:
     tps = meta.get('ticks_per_second') or 1.0
     total = lambda key: sum(r[key] for r in rows)
-    frames_ok = [r for r in rows if r['rng_frame'] >= 0]
+    # A call over CALL_CAP is stored as zero RNG steps plus rng_unmatched.
+    # Including that frame would turn a missing numerator into a measured low share.
+    frames_ok = [r for r in rows if r['rng_frame'] >= 0 and r['rng_unmatched'] == 0]
+    calls_complete = all(r['rng_unmatched'] == 0 for r in rows)
     rng_all = sum(r['rng_frame'] for r in frames_ok)
     rng_combat = sum(r['rng_weapon'] + r['rng_bullet'] for r in frames_ok)
     shots, checks = total('shots'), total('bullet_checks')
     out = {
         'frames': len(rows),
         'meta': meta,
+        'rng_complete_frames': len(frames_ok),
+        'rng_excluded_frames': len(rows) - len(frames_ok),
+        'rng_unmatched_calls': total('rng_unmatched'),
         'per_frame': {key: dist([r[key] for r in rows]) for key in (
             'weapon_calls', 'with_target', 'aiming', 'fired', 'shots', 'missile_shots', 'bullet_calls',
             'bullet_checks', 'bullet_hits', 'bullet_fresh', 'fresh_same_frame', 'rng_weapon', 'rng_bullet')},
         'rng_frame': dist([r['rng_frame'] for r in frames_ok]),
         'rng_combat_share': rng_combat / rng_all if rng_all else None,
-        'rng_per_shot_upper': total('rng_weapon') / shots if shots else None,
-        'rng_bullet_per_check': total('rng_bullet') / checks if checks else None,
+        'rng_per_shot_upper': total('rng_weapon') / shots if shots and calls_complete else None,
+        'rng_bullet_per_check': total('rng_bullet') / checks if checks and calls_complete else None,
         'fresh_same_frame_share': total('fresh_same_frame') / total('bullet_fresh') if total('bullet_fresh') else None,
         'weapon_ms': dist([r['weapon_ticks'] * 1000.0 / tps for r in rows]),
         'bullet_ms': dist([r['bullet_ticks'] * 1000.0 / tps for r in rows]),
@@ -67,7 +73,9 @@ def summarise(meta, rows) -> dict:
 
 
 def text(s: dict) -> str:
-    out = [f"frames {s['frames']}"]
+    out = [f"frames {s['frames']}",
+           f"rng complete_frames={s['rng_complete_frames']} excluded_frames={s['rng_excluded_frames']} "
+           f"unmatched_calls={s['rng_unmatched_calls']:.0f}"]
     for key, d in s['per_frame'].items():
         out.append(f"{key:18} mean {d['mean']:9.2f}  p50 {d['p50']:8.0f}  p95 {d['p95']:8.0f}  p99 {d['p99']:8.0f}  max {d['max']:8.0f}")
     for key in ('weapon_ms', 'bullet_ms', 'frame_ms', 'rng_frame'):

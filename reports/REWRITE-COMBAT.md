@@ -336,6 +336,14 @@ thunk argument and result pass-through, a foreign thread, restore); on the mappe
 entries hold the pinned originals and are swapped and restored; the RNG step equals the original
 `Random::U64State` 0x14ddb30 on 10,000 states.
 
+Analysis validity: a call whose RNG distance exceeds the search cap contributes an unknown count,
+not a measured zero. `census_report.py` excludes frames with `rng_unmatched > 0` from the combat
+RNG share and reports included/excluded frame counts. Per-shot and per-check RNG ratios are
+unavailable if any call is unmatched. A bookkeeping or switch failure first observed at window
+end emits the same `FEATURE ... DISABLED` failure marker as a periodic check, while retaining
+the evidence and attempting hook restoration. These paths have LuaJIT/Python regression tests;
+they are not additional native acceptance evidence.
+
 ## 10. Shadow and switch design for the joint step
 
 - **Shadow:** built into the recorder (section 9): `rotate_toward` on a copy of the pre-state with the same

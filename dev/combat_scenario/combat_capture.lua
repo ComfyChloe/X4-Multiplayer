@@ -57,6 +57,10 @@ local function finish(reason)
  if s then
   log('final '..statsLine(s))
   if s.first_mismatch then log('first_mismatch '..s.first_mismatch) end
+  -- A failure first observed at the end of the window must fail the lane too.
+  -- Otherwise the normal stopped/written markers can disguise failed bookkeeping.
+  if s.failed then DebugError('[X4LAN] FEATURE '..feature..' DISABLED reason='..s.failed) end
+  if s.switch_off then DebugError('[X4LAN] FEATURE ikjoint DISABLED reason='..s.switch_off) end
  end
  if census then
   local lines=handle:summary()

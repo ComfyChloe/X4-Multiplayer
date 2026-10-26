@@ -67,6 +67,26 @@ class CaptureScript(unittest.TestCase):
         lua = self.runtime('')
         lua.execute('assert(loaded==nil and ui==nil and next(events)==nil)')
 
+    def test_failure_first_observed_at_window_end_fails_lane_and_restores_hooks(self):
+        lua = self.runtime("X4MP_COMBATCAP={mode='census',path='C:/p/census.txt'}")
+        lua.execute('''
+          events['X4MP.CombatScn'](nil,'begin');ui()
+          cstats.failed='vtable entry changed'
+          events['X4MP.CombatScn'](nil,'end')
+          assert(find('FEATURE combatcensus DISABLED reason=vtable entry changed'))
+          assert(stops==1 and #writes==1,'retain evidence and restore hooks')
+        ''')
+
+    def test_switch_failure_first_observed_at_window_end_is_loud(self):
+        lua = self.runtime("X4MP_COMBATCAP={mode='switch'}")
+        lua.execute('''
+          events['X4MP.CombatScn'](nil,'begin');ui()
+          stats.switch_off='verification mismatch'
+          events['X4MP.CombatScn'](nil,'end')
+          assert(find('FEATURE ikjoint DISABLED reason=verification mismatch'))
+          assert(stops==1)
+        ''')
+
     def test_arms_only_inside_the_window_and_writes_at_its_end(self):
         lua = self.runtime("X4MP_COMBATCAP={mode='both',capacity=1234,path='C:/p/x4mp-combatcap.txt'}")
         lua.execute('''

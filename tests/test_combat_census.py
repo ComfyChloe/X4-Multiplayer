@@ -60,6 +60,26 @@ class CensusReport(unittest.TestCase):
             path.write_text('X4CJSTEP-HEX 1\n', encoding='utf-8')
             self.assertEqual(report.main([str(path)]), 3)
 
+    def test_unmatched_call_does_not_become_a_zero_rng_measurement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'x4mp-combatcensus.txt'
+            path.write_text(table([
+                dict(now=1, rng_weapon=10, rng_bullet=5, rng_frame=100, shots=2, bullet_checks=3),
+                dict(now=2, rng_weapon=0, rng_bullet=0, rng_frame=10000, rng_unmatched=1,
+                     shots=10, bullet_checks=20),
+            ]), encoding='utf-8')
+            meta, parsed = report.read(path)
+        s = report.summarise(meta, parsed)
+        self.assertAlmostEqual(s['rng_combat_share'], 0.15)
+        self.assertEqual(s['rng_complete_frames'], 1)
+        self.assertEqual(s['rng_excluded_frames'], 1)
+        self.assertEqual(s['rng_unmatched_calls'], 1)
+        self.assertIsNone(s['rng_per_shot_upper'])
+        self.assertIsNone(s['rng_bullet_per_check'])
+        self.assertIn('excluded_frames=1', report.text(s))
+        s = report.summarise(meta, parsed[1:])
+        self.assertIsNone(s['rng_combat_share'])
+
 
 if __name__ == '__main__':
     unittest.main()
