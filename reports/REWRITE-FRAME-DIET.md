@@ -252,8 +252,11 @@ state and with it the mod. What it does get, without hooks:
    Keep it; at most the VisibilityData computation could be thinned after per-source RE.
 3. Slot 8 character animation, slot 9 sound (0.4 ms each under load): `-disablesound` clears the sound-enabled
    flag 0x2f4b9d3, read only by sound-system initialisation (SoundLibrary::Init 0x128bde0, XSoundEnvironmentLibrary
-   ::Setup 0x128fa60, 0x14e9600, 0x14ea680), so slot 9 should idle. Unmeasured, and to be checked before a server
-   uses it: whether voice-line durations (MD `speak`, conversations) depend on loaded audio. Character animation
+   ::Setup 0x128fa60, 0x14e9600, 0x14ea680), so slot 9 should idle. Unmeasured. MD can wait on speech (`event_speak_finished`,
+   `event_speak_line_finished`); those events come from `U::EntitySpeakData` timers on game time (0x563d30 ->
+   `OnSpeakFinished` 0x562590), with OpenAL source pause/resume calls alongside (0x14f0ba0 alSourcePause), so
+   speech timing looks independent of loaded audio; check natively (same cue timing with and without
+   `-disablesound`) before a server uses it. Character animation
    may move walking NPCs and attachments (simulation state): not a candidate without RE.
 4. BuildCache (3.7-3.9 ms): Q11 answered: without camera rendering only the attachment-pose refresh (vfunc 622,
    0.16-0.27 ms) goes away (owner transforms).
