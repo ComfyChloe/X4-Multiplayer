@@ -215,15 +215,21 @@ pub trait StationEnv {
     fn pending_accepts(&mut self, _products: &[WareAmount], _pending: &[WareAmount]) -> bool {
         true
     }
-    /// 0x4070e0 when an item starts waiting for resources (called with the thread's current
-    /// game time, not the event time: the station refreshes its trade offers).
-    fn request_resources(&mut self) {}
-    /// Engine events posted by the transition (logs and shadow comparison only).
+    /// 0x4070e0 (the station's trade-offer update), called with the thread's current game
+    /// time, not the event time: on entering waiting-for-resources, after storing products,
+    /// and at a cycle start of a non-repeating or research-type item. `reset_build_cache` is
+    /// set when the caller also clears the container's `+0x931` flag and `+0x938` time
+    /// (non-repeating or research-type item).
+    fn refresh_offers(&mut self, _reset_build_cache: bool) {}
+    /// Engine events posted by the transition (logs and shadow comparison only). They are
+    /// posted *scheduled* at the thread's game time (immediate flag 0), so listeners run in
+    /// the next `ProcessDueEvents`, outside the catch-up.
     fn event(&mut self, _ev: ProductionEvent, _t: f64) {}
 }
 
-/// Events posted by Step (ProductionStartedEvent ctor 0x9a8650, ProductionFinishedEvent ctor
-/// 0x9a88c0; delivered immediately to the module, its container and related objects).
+/// Events posted by Step (event ctors 0x9a8650 on item start, 0x9a88c0 on item finish) to the
+/// module, its container, a related object (0x493390) and, for the player's faction, the
+/// player entity.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum ProductionEvent {
     ItemStarted {
@@ -377,7 +383,7 @@ impl Module {
             State::ChoosingItem => self.choose_item(t, spread, env, rng),
             State::ItemStarted => self.item_started(t, spread, env, rng),
             State::WaitingForResources => self.wait_resources(t, spread, env, rng),
-            State::CycleStarted => self.cycle_started(t, spread, rng),
+            State::CycleStarted => self.cycle_started(t, spread, env, rng),
             State::Producing => {
                 if t >= self.next {
                     self.state = State::WaitingForStorage;
@@ -486,6 +492,7 @@ impl Module {
         let item = &self.items[idx];
         let allowed = !env.player_owned() || env.production_allowed(item);
         let req = required_primary(item, &self.factors);
+        let reset = !item.repeat || item.method.as_ref().is_some_and(|m| m.special);
         if allowed && env.has_resources(&req) {
             let used = item_resources(item, &self.factors);
             env.consume(&used, t);
@@ -498,16 +505,18 @@ impl Module {
         } else {
             self.reset_phase(t);
             self.state = State::WaitingForResources;
-            env.request_resources();
+            env.refresh_offers(reset);
         }
     }
 
-    fn cycle_started(&mut self, t: f64, spread: f32, rng: &mut dyn ProductionRng) {
+    fn cycle_started(&mut self, t: f64, spread: f32, env: &mut dyn StationEnv, rng: &mut dyn ProductionRng) {
         self.start = t;
-        let dur = match self.item_index().map(|i| &self.items[i]) {
+        let current = self.item_index().map(|i| &self.items[i]);
+        let dur = match current {
             Some(Item { method: Some(m), time_factor, .. }) => time_factor * self.factors.time * m.time,
             _ => 0.0,
         };
+        let refresh = current.is_some_and(|i| !i.repeat || i.method.as_ref().is_some_and(|m| m.special));
         self.next = dur + t;
         if !(self.next > t) {
             let draw = rng.float(spread);
@@ -517,6 +526,9 @@ impl Module {
         self.paused_since = UNSET;
         self.paused_total = 0.0;
         self.state = State::Producing;
+        if refresh {
+            env.refresh_offers(true);
+        }
     }
 
     fn finish_cycle(&mut self, t: f64, env: &mut dyn StationEnv) {
@@ -529,7 +541,16 @@ impl Module {
                     env.event(ProductionEvent::ResearchFinished { item: self.item }, t);
                 }
             } else if env.can_store(&products) {
-                env.store(&products, t);
+                let stored = env.store(&products, t);
+                // 0x8f32f0 on the pending list with the stored list (unverified: modelled as
+                // removing stored amounts that are also pending).
+                for (w, a) in stored {
+                    if let Some(e) = self.pending.iter_mut().find(|e| e.0 == w) {
+                        e.1 = e.1.saturating_sub(a).max(0);
+                    }
+                }
+                self.pending.retain(|e| e.1 != 0);
+                env.refresh_offers(false);
             } else {
                 for &(w, a) in &products {
                     add_amount(&mut self.pending, w, a);
