@@ -54,29 +54,37 @@
       <set_value name="$ship" exact="$arena.$ships.{$i}"/>
       <set_value name="$valid" exact="false"/>
       <include_actions ref="DockExecutionWindow"/>
-      <do_if value="$dockWindow and $ship.isoperational and not $ship.dock and player.occupiedship != $ship and $ship.sector == $v.$sector and $ship.parent == $v.$parent and player.age le $v.$expires * 1s and $v.$expires * 1s le player.age + 0.31s">
-       <!-- Evidence covers a free ship in an aligned zone/sector/cluster only.
-            Moving containers and differently rotated spaces fail closed. -->
-       <do_if value="$ship.parent.isclass.zone and $ship.parent.parent == $ship.sector and $ship.sector.parent == $ship.cluster">
-        <set_value name="$p" exact="$ship.parent.relativerotation.{$ship.sector}"/>
-        <set_value name="$s" exact="$ship.sector.relativerotation.{$ship.cluster}"/>
-        <set_value name="$basisError" exact="$p.forward.x^2 + $p.forward.y^2 + ($p.forward.z - 1)^2 + $p.up.x^2 + ($p.up.y - 1)^2 + $p.up.z^2 + $s.forward.x^2 + $s.forward.y^2 + ($s.forward.z - 1)^2 + $s.up.x^2 + ($s.up.y - 1)^2 + $s.up.z^2"/>
-        <set_value name="$valid" exact="$basisError lt 0.00000001"/>
+      <!-- A closed dock window is a stale capability, not a physical boundary. Its
+           systemtime stamp has one-second resolution, so a vector read before and
+           executed after a wall-clock second closes it about once a second. Skip the
+           command and keep the running vector: zeroing it showed the moving replica at
+           speed 0 (target speed readout, lead reticle) until the next vector. The 0.3 s
+           deadline, the watchdog and the Lua velocity fence still end it. -->
+      <do_if value="$dockWindow">
+       <do_if value="$ship.isoperational and not $ship.dock and player.occupiedship != $ship and $ship.sector == $v.$sector and $ship.parent == $v.$parent and player.age le $v.$expires * 1s and $v.$expires * 1s le player.age + 0.31s">
+        <!-- Evidence covers a free ship in an aligned zone/sector/cluster only.
+             Moving containers and differently rotated spaces fail closed. -->
+        <do_if value="$ship.parent.isclass.zone and $ship.parent.parent == $ship.sector and $ship.sector.parent == $ship.cluster">
+         <set_value name="$p" exact="$ship.parent.relativerotation.{$ship.sector}"/>
+         <set_value name="$s" exact="$ship.sector.relativerotation.{$ship.cluster}"/>
+         <set_value name="$basisError" exact="$p.forward.x^2 + $p.forward.y^2 + ($p.forward.z - 1)^2 + $p.up.x^2 + ($p.up.y - 1)^2 + $p.up.z^2 + $s.forward.x^2 + $s.forward.y^2 + ($s.forward.z - 1)^2 + $s.up.x^2 + ($s.up.y - 1)^2 + $s.up.z^2"/>
+         <set_value name="$valid" exact="$basisError lt 0.00000001"/>
+        </do_if>
+        <do_if value="not $valid and not $velocityUnsupported.{$i}"><debug_text text="'[X4LAN] NATIVE_VELOCITY_UNSUPPORTED_SPACE ship=%s'.[$i]"/></do_if>
+        <set_value name="$velocityUnsupported.{$i}" exact="not $valid"/>
        </do_if>
-       <do_if value="not $valid and not $velocityUnsupported.{$i}"><debug_text text="'[X4LAN] NATIVE_VELOCITY_UNSUPPORTED_SPACE ship=%s'.[$i]"/></do_if>
-       <set_value name="$velocityUnsupported.{$i}" exact="not $valid"/>
+       <do_if value="$valid">
+        <set_object_velocity object="$ship" constantvel="true"><linear x="$v.$x" y="$v.$y" z="$v.$z"/></set_object_velocity>
+        <set_value name="$velocityManaged.{$i}" exact="true"/>
+        <set_value name="$velocityDeadline.{$i}" exact="$v.$expires * 1s"/>
+        <set_value name="$velocityParent.{$i}" exact="$ship.parent"/>
+        <set_value name="$velocitySector.{$i}" exact="$ship.sector"/>
+       </do_if>
+       <do_else>
+        <do_if value="$velocityManaged.{$i} and $ship.isoperational"><set_object_velocity object="$ship" constantvel="false"><linear x="0" y="0" z="0"/></set_object_velocity></do_if>
+        <set_value name="$velocityManaged.{$i}" exact="false"/>
+       </do_else>
       </do_if>
-      <do_if value="$valid">
-       <set_object_velocity object="$ship" constantvel="true"><linear x="$v.$x" y="$v.$y" z="$v.$z"/></set_object_velocity>
-       <set_value name="$velocityManaged.{$i}" exact="true"/>
-       <set_value name="$velocityDeadline.{$i}" exact="$v.$expires * 1s"/>
-       <set_value name="$velocityParent.{$i}" exact="$ship.parent"/>
-       <set_value name="$velocitySector.{$i}" exact="$ship.sector"/>
-      </do_if>
-      <do_else>
-       <do_if value="$velocityManaged.{$i} and $ship.isoperational"><set_object_velocity object="$ship" constantvel="false"><linear x="0" y="0" z="0"/></set_object_velocity></do_if>
-       <set_value name="$velocityManaged.{$i}" exact="false"/>
-      </do_else>
      </do_if>
     </actions></cue>
     <cue name="VelocityWatchdog" instantiate="true" checkinterval="0.05s"><conditions><check_value value="$velocityManaged.{1} or $velocityManaged.{2} or @$velocityManaged.{3} or @$velocityManaged.{4} or @$velocityManaged.{5} or @$velocityManaged.{6} or @$velocityManaged.{7}"/></conditions><actions>

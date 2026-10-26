@@ -9,6 +9,41 @@ from test_game_adapter import LuaRuntime
 import test_coop_adapter
 
 UI = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/ui'
+COOP_MD = UI.parent / 'md/x4lan_coop.xml'
+
+
+def closed_window_zeroes(path=COOP_MD):
+    """True if the MD Velocity cue can zero native velocity while $dockWindow is false.
+
+    Walks every zero-vector set_object_velocity in the cue with its enclosing branch
+    conditions. A branch requires the window only if `$dockWindow` is one of its own
+    top-level `and` terms; a do_else only negates earlier branches, which never does.
+    """
+    import xml.etree.ElementTree as ET
+    cue = ET.parse(path).getroot().find(".//cue[@name='Velocity']/actions")
+
+    def requires(node):
+        return '$dockWindow' in [t.strip() for t in node.get('value', '').split(' and ')]
+
+    def walk(node, guarded):
+        for child in node:
+            if child.tag in ('do_if', 'do_elseif'):
+                # A do_elseif also negates the earlier branches; only its own terms count.
+                if walk(child, guarded or requires(child)):
+                    return True
+            elif child.tag == 'do_else':
+                if walk(child, guarded):
+                    return True
+            elif child.tag == 'set_object_velocity':
+                linear = child.find('linear')
+                zero = linear is not None and all(linear.get(a) == '0' for a in 'xyz')
+                if zero and not guarded:
+                    return True
+            elif walk(child, guarded):
+                return True
+        return False
+    return walk(cue, False)
+
 
 FLIGHT = """
  local c=X4LAN_BUBBLE_API.coop;c.sectors.cluster_14_sector001_macro=22
@@ -108,6 +143,64 @@ class MotionHitchTests(unittest.TestCase):
         ''')
         self.assertEqual(l.eval('STALLS'), 0)
         self.assertLess(l.eval('JERK'), 5.0)
+
+    SECOND_BOUNDARY = '''
+     local c=X4LAN_BUBBLE_API.coop
+     c.dockPoseAllowed=function() return true end
+     c.attachmentGeneration=function() return 1 end
+     -- Dock rows are read by MD every 0.05 s and stamped with the wall-clock second.
+     rowAt,rowStamp=-1,nil
+     c.attachmentWindow=function() return rowStamp,rowAt end
+     function wall(t) return t+.37 end
+     -- MD double: requests queued by one Lua update execute in the next frame. The dock
+     -- window is open only while the current wall second equals the command's stamp.
+     native,seen,zeroFrames,movingFrames=nil,0,0,0
+     function nativeStep(dt)
+      for k=seen+1,#requests do
+       local r=requests[k]
+       if r[2]=='VelocityFence' and r[3].ship==2 then native=nil
+       elseif r[2]=='Velocity' and r[3].ship==2 then
+        if math.floor(wall(now))==r[3].dockStamp then native=r[3].x
+        elseif CLOSED_ZEROES then native=nil end
+       end
+      end
+      seen=#requests
+      if now>=rowAt+.05 then rowAt=now;rowStamp=math.floor(wall(now)) end
+      if native then positions[42].x=positions[42].x+native*dt end
+     end
+     fly(0,4,nil,function(t)
+      if t>1 then movingFrames=movingFrames+1;if not native or native==0 then zeroFrames=zeroFrames+1 end end
+     end)
+    '''
+
+    def test_dock_window_second_boundary_never_zeroes_a_moving_replica(self):
+        # Native 7.6.x: a remote ship flying at a constant 650 m/s showed target speed 0 and
+        # a snapping lead reticle for single frames. MOTION_DIAG rows with velocity=native and
+        # unchanged fences had drift=0 and error=request (the engine did not move the
+        # replica between two pose writes) in 6-7 % of rows: about one stall per second.
+        # The MD Velocity cue zeroed native velocity whenever its dock window was closed,
+        # and the window's systemtime stamp closes across every wall-clock second.
+        self.assertFalse(closed_window_zeroes(),
+                         'a closed dock window must skip the command, not zero native velocity')
+        for zeroes, expect_stalls in ((closed_window_zeroes(), False), (True, True)):
+            l = self.make('X4LAN_CONFIG.coop_docks=true')
+            l.execute('CLOSED_ZEROES=%s' % ('true' if zeroes else 'false'))
+            l.execute(self.SECOND_BOUNDARY)
+            self.assertGreater(l.eval('movingFrames'), 100)
+            stalls = l.eval('zeroFrames')
+            if expect_stalls:
+                self.assertGreater(stalls, 0, 'the double must reproduce the old stalls')
+            else:
+                self.assertEqual(stalls, 0, 'native velocity was zero for %d frames' % stalls)
+
+    def test_watchdog_still_zeroes_on_physical_boundaries(self):
+        import xml.etree.ElementTree as ET
+        root = ET.parse(COOP_MD).getroot()
+        guard = root.find(".//cue[@name='VelocityWatchdog']/actions/do_all/do_if/do_if").get('value')
+        for condition in ('not $ship.isoperational', '$ship.dock', 'player.occupiedship == $ship',
+                          '$ship.parent != $velocityParent.{$i}', '$ship.sector != $velocitySector.{$i}',
+                          'player.age gt $velocityDeadline.{$i}'):
+            self.assertIn(condition, guard)
 
     def test_client_drains_a_busy_relay_queue_in_one_update(self):
         # Native: rx ~1000 packets/s, NETRTT median up to 477 ms with 28-48 % loss while the
