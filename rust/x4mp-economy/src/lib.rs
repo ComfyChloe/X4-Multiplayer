@@ -8,6 +8,8 @@
 //!   0x41a910), transition by transition, with the engine's arithmetic.
 //! - [`market`]: trade offers in per-sector books and the barrier-published, read-only
 //!   [`market::OfferSnapshot`] that trade searches of every sector read.
+//! - [`reservations`]: a container's ware reservations (Container+0x980) with the engine's
+//!   merge, expiry and removal rules.
 //! - [`msg`]: reservations against offers of other sectors as stamped messages, applied at
 //!   the barrier in the original order, with stale-decision detection.
 //! - [`sector`]: the per-sector economy world and a deterministic parallel runner used by the
@@ -31,5 +33,6 @@ pub mod ids;
 pub mod market;
 pub mod msg;
 pub mod production;
+pub mod reservations;
 pub mod sector;
 pub mod time;
