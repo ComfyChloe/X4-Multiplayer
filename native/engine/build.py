@@ -54,21 +54,39 @@ def build_fixedtick_module(root: Path, zig: Path | None = None) -> Path:
     return module
 
 
+def build_framediet_module(root: Path, zig: Path | None = None) -> Path:
+    """Opt-in server frame diet (reports/REWRITE-FRAME-DIET.md); never packaged."""
+    root = root.resolve()
+    compiler = compiler_path(zig)
+    out = output_directory(root)
+    module = out / 'x4lan_framediet_64.dll'
+    subprocess.run([
+        compiler, 'cc', '-target', 'x86_64-windows-gnu',
+        '-std=c11', '-O2', '-Wall', '-Wextra', '-Werror', '-shared',
+        '-I', str(out), str(root / 'native/engine/framediet.c'), '-lbcrypt', '-o', str(module),
+    ], check=True)
+    return module
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--zig', required=True, type=Path)
     parser.add_argument('--fixedtick', action='store_true', help='Build the opt-in fixed-tick probe')
+    parser.add_argument('--framediet', action='store_true', help='Build the opt-in server frame diet')
     parser.add_argument('--test', action='store_true', help='Build/run synthetic Windows lifecycle tests')
     args = parser.parse_args()
     root = ROOT
-    module = build_fixedtick_module(root, args.zig) if args.fixedtick else build_module(root, args.zig)
+    if args.framediet:
+        module = build_framediet_module(root, args.zig)
+    else:
+        module = build_fixedtick_module(root, args.zig) if args.fixedtick else build_module(root, args.zig)
     out = module.parent
     print(module)
     if args.test:
         if os.name != 'nt':
             parser.error('--test executes a Windows binary and requires Windows')
         # The sampler test (simprof) unwinds against the test executable's own .pdata.
-        names = ['fixedtick', 'simprof'] if args.fixedtick else ['simtick']
+        names = ['framediet'] if args.framediet else ['fixedtick', 'simprof'] if args.fixedtick else ['simtick']
         for name in names:
             test = out / f'test_{name}.exe'
             subprocess.run([

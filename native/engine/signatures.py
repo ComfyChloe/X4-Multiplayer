@@ -49,7 +49,39 @@ WALK_EXTRA_ENTRIES = [
 ]
 WALK_CODE_SITES = {f'walk_{name}_move': (fn, 32, sha) for name, (fn, _entry, sha) in WALK_SITES.items()}
 
-SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES}
+# Server frame diet (frame-diet agent, contrib/ferrite-rw-frame-diet; reports/REWRITE-FRAME-DIET.md).
+# Verified before any vtable entry, VBI slot 2 or the render flag bit is touched.
+FRAMEDIET_SITES = {
+    'fd_scene_manager_update': (0xAF8E50, 32, '283e2a9a4513d6ac90bb6e6524b0ba6694c3581852d401fe3c78c18610e4b8dc'),
+    'fd_scene_layer_walk': (0xAF8760, 32, '779f1fe33a1e6eab6fac308382dd828d0848637b998bb887c649358c717fbee9'),
+    # AnarkScene slot 5: clears the per-frame lists, then tail-calls slot 12 (jmp [rax+0x60]).
+    'fd_scene_update': (0x13AA510, 166, '493453e6210de75923ae9be01aeed195c9bd02e91858142745c91a58f7c5db39'),
+    'fd_ui_render': (0xB3BBA0, 32, '6846988fdb1605f03ad1d619957a9f09af88ddf9207dc3518ae3e95ad7679f00'),
+    # GameClient render bank: camera loop over Universe+0x2c0 calling slot 3 (call [rax+0x18]).
+    'fd_game_client_render': (0x122BFC0, 174, 'faf61b940146abf385a9fb155bf180348fcfc7b7246cd52284fa227bfa2629b2'),
+    'fd_camera_render': (0x983160, 32, '67aa70787d093d7f2511df0076d4e86a07c3adb0a846cfeb50568d75f504b55d'),
+    # RenderPreviousFrame: test qword [RenderFlags], 0x8000000 (disable_rendering).
+    'fd_render_disable_test': (0xFA007A, 11, 'a5034f95f69d074f1c7b4d16a02b57290024868f08657472044e3c16d300ecb0'),
+    # ProcessGraphicsStateChanges: staged RenderFlags (0x6adfa38) copied over the live value.
+    'fd_render_flags_stage': (0xFA3811, 14, '4ddbb572933826cd11b52b3b2de1108a8791a05f2cbbd6b49ea4cc99959db0ae'),
+    # Audit probes: AutoIDMap insert counter (+0x38), registry bucket layout, deferred event list size,
+    # thread RNG step (TLS+0x318).
+    'fd_id_insert_count': (0xCC64D, 4, '7e104436070ef74ec041571d6ced9696c075c6783c63a65a92125a49fc548d74'),
+    'fd_id_map_find': (0xCED70, 64, '99aa931616db6c9f92574b2408563aa3b9f09a452bc5456ce0ec25fa8a9bb9cf'),
+    'fd_event_list_push': (0x998430, 112, '39da624a9f2bca0707dfbc5475e3f31b9eb4128a899171b51a165d4b306d29d3'),
+    'fd_random_float_state': (0x14DDC90, 24, '99b587b2e3a3e175da228cdcadc902b715ec9fb81f048af19e0d4d7c10afb519'),
+}
+# Wrapped virtuals (name, vtable entry RVA, function RVA), in framediet.c VS_* order. The entries
+# hold relocated pointers; they are compared at runtime against image base + function RVA.
+FRAMEDIET_VTABLE_ENTRIES = [
+    ('scene_manager_update', 0x2BC0DD8, 0xAF8E50),  # UI::XAnark::AnarkSceneManager slot 3
+    ('scene_layer_walk', 0x2BC0E70, 0xAF8760),      # UI::XAnark::AnarkScene slot 12
+    ('ui_render', 0x2BC07E0, 0xB3BBA0),             # UI::CUIController XVbiHandler slot 2 (Render)
+    ('client_render', 0x2C8ABE0, 0x122BFC0),        # X4::GameClient XVbiHandler slot 2 (render bank)
+    ('camera_render', 0x2BAE1B8, 0x983160),         # U::Camera slot 3 (Render)
+]
+
+SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **FRAMEDIET_SITES}
 
 
 def c_header() -> str:
@@ -61,7 +93,8 @@ def c_header() -> str:
         f'#define X4_IMAGE_SIZE 0x{EXECUTABLE["image_size"]:x}u',
         'typedef struct { size_t rva; ULONG length; const char *sha; } x4_signature_check;',
     ]
-    for name, sites in [('common', COMMON_SITES), ('simtick', SIMTICK_SITES), ('fixedtick', FIXEDTICK_SITES)]:
+    for name, sites in [('common', COMMON_SITES), ('simtick', SIMTICK_SITES), ('fixedtick', FIXEDTICK_SITES),
+                        ('framediet', FRAMEDIET_SITES)]:
         lines.append(f'static const x4_signature_check x4_{name}_checks[] = {{')
         for rva, length, sha in sites.values():
             lines.append(f'    {{0x{rva:x}, {length}, "{sha}"}},')
@@ -76,5 +109,10 @@ def c_header() -> str:
     lines.append('static const x4_walk_extra x4_walk_extras[] = {')
     for name, entry in WALK_EXTRA_ENTRIES:
         lines.append(f'    {{{classes.index(name)}, 0x{entry:x}}},')
+    lines.append('};')
+    lines.append('typedef struct { const char *name; size_t entry; size_t fn; } x4_framediet_vtable;')
+    lines.append('static const x4_framediet_vtable x4_framediet_vtables[] = {')
+    for name, entry, fn in FRAMEDIET_VTABLE_ENTRIES:
+        lines.append(f'    {{"{name}", 0x{entry:x}, 0x{fn:x}}},')
     lines.append('};')
     return '\n'.join(lines) + '\n'
