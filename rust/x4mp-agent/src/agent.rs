@@ -401,7 +401,23 @@ fn worker(config: Config) {
     let start = Instant::now();
     let mut gate = ArmGate::new(config.settle_ms);
     let mut last_wait = "";
+    let mut next_diag = Instant::now();
     loop {
+        if Instant::now() >= next_diag {
+            next_diag = Instant::now() + Duration::from_secs(30);
+            let ranges = readable_ranges();
+            let global = if covered(&ranges, pinned::VBI_TABLE_GLOBAL, 8) {
+                // SAFETY: checked readable above.
+                format!("0x{:x}", unsafe { read_u64(pinned::VBI_TABLE_GLOBAL) })
+            } else {
+                "unreadable".to_string()
+            };
+            log.line(&format!(
+                "X4MP_AGENT WAITDIAG vbi_global={global} mover_thread={} uptime_s={}",
+                u8::from(movement_worker_running()),
+                start.elapsed().as_secs()
+            ));
+        }
         if config.disarm_file.exists() {
             log.line("X4MP_AGENT NOT_ARMED reason=disarm_file_present");
             return;
