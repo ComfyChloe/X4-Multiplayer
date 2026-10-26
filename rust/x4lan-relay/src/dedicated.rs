@@ -78,7 +78,7 @@ impl Config {
             session: required("session")?,
             work: required("work")?,
             display,
-            startup_timeout: timeout("startup_timeout_s", 240)?,
+            startup_timeout: timeout("startup_timeout_s", 600)?,
             shutdown_timeout: timeout("shutdown_timeout_s", 30)?,
             heartbeat_timeout: timeout("heartbeat_timeout_s", 15)?,
         })
@@ -522,7 +522,8 @@ impl Supervisor {
                 "scripts",
                 "-logfile",
             ])
-            .arg(&log)
+            // X4 resolves -logfile relative to the profile folder; an absolute path fails.
+            .arg(log.file_name().unwrap())
             .args(["-nocputhrottle", "-noworkshopsync"])
             .env("DISPLAY", &self.config.display)
             .env("LD_LIBRARY_PATH", self.config.game.parent().unwrap().join("lib"))
