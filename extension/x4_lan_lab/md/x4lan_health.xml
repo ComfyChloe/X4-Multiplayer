@@ -84,7 +84,7 @@
      <do_if value="$a.$gen == $arena.$healthAuth.{$a.$entity} and player.timewarp.factor gt 0s and player.systemtime.{'%Y-%m-%dT%H:%M:%S'} == $a.$stamp and player.age / 1s ge $a.$from and player.age / 1s le $a.$deadline and @$ship.isoperational and player.occupiedship == $ship">
       <!-- A generation's baseline is written once; a retry of it only confirms. -->
       <do_if value="$arena.$healthBased.{$a.$entity} != $a.$gen">
-       <set_object_hull object="$ship" exact="$a.$hull"/><set_object_shield object="$ship" exact="$a.$shield"/>
+       <do_if value="($ship.hullpercentage - $a.$hull) * ($ship.hullpercentage - $a.$hull) gt 0.25"><set_object_hull object="$ship" exact="$a.$hull"/></do_if><do_if value="($ship.shieldpercentage - $a.$shield) * ($ship.shieldpercentage - $a.$shield) gt 0.25"><set_object_shield object="$ship" exact="$a.$shield"/></do_if>
        <set_value name="$arena.$healthBased.{$a.$entity}" exact="$a.$gen"/>
        <do_if value="@$arena.$healthProbe"><debug_text text="'[X4LAN] HEALTH_PROBE written Base entity=%s gen=%s requested=%s/%s readback=%s/%s age=%s'.[$a.$entity,$a.$gen,$a.$hull,$a.$shield,$ship.hullpercentage,$ship.shieldpercentage,player.age]"/></do_if>
        <debug_text text="'[X4LAN] HEALTH_BASE entity=%s gen=%s hull=%s shield=%s'.[$a.$entity,$a.$gen,$a.$hull,$a.$shield]"/>
@@ -105,8 +105,8 @@
       <!-- Physical writes only on an operational proxy. -->
       <do_if value="@$ship.isoperational">
        <set_object_min_hull object="$ship" exact="1"/>
-       <set_object_hull object="$ship" exact="$a.$hull"/>
-       <set_object_shield object="$ship" exact="$a.$shield"/>
+       <do_if value="($ship.hullpercentage - $a.$hull) * ($ship.hullpercentage - $a.$hull) gt 0.25"><set_object_hull object="$ship" exact="$a.$hull"/></do_if>
+       <do_if value="($ship.shieldpercentage - $a.$shield) * ($ship.shieldpercentage - $a.$shield) gt 0.25"><set_object_shield object="$ship" exact="$a.$shield"/></do_if>
        <do_if value="@$arena.$healthProbe"><debug_text text="'[X4LAN] HEALTH_PROBE written Apply entity=%s gen=%s requested=%s/%s readback=%s/%s age=%s'.[$e,$a.$gen,$a.$hull,$a.$shield,$ship.hullpercentage,$ship.shieldpercentage,player.age]"/></do_if>
       </do_if>
      </do_if>
@@ -119,7 +119,7 @@
        <set_value name="$ship" exact="$arena.$ships.{$i}"/>
        <do_if value="@$ship.isoperational">
         <set_object_min_hull object="$ship" exact="1"/>
-        <do_if value="not $arena.$dead.{$i}"><set_object_hull object="$ship" exact="$arena.$healthValue.{$i}.{1}"/><set_object_shield object="$ship" exact="$arena.$healthValue.{$i}.{2}"/></do_if>
+        <do_if value="not $arena.$dead.{$i}"><do_if value="($ship.hullpercentage - $arena.$healthValue.{$i}.{1}) * ($ship.hullpercentage - $arena.$healthValue.{$i}.{1}) gt 0.25"><set_object_hull object="$ship" exact="$arena.$healthValue.{$i}.{1}"/></do_if><do_if value="($ship.shieldpercentage - $arena.$healthValue.{$i}.{2}) * ($ship.shieldpercentage - $arena.$healthValue.{$i}.{2}) gt 0.25"><set_object_shield object="$ship" exact="$arena.$healthValue.{$i}.{2}"/></do_if></do_if>
        </do_if>
        <!-- Expiry closes the generation natively: no queued old Apply can re-arm it after a hang. -->
        <set_value name="$arena.$healthLive.{$i}" exact="false"/>
@@ -139,7 +139,7 @@
       <do_if value="@$ship.isoperational">
        <set_object_min_hull object="$ship" exact="1"/>
        <do_if value="$arena.$healthLive.{$e} and not $arena.$dead.{$e}">
-        <set_object_hull object="$ship" exact="$arena.$healthValue.{$e}.{1}"/><set_object_shield object="$ship" exact="$arena.$healthValue.{$e}.{2}"/>
+        <do_if value="($ship.hullpercentage - $arena.$healthValue.{$e}.{1}) * ($ship.hullpercentage - $arena.$healthValue.{$e}.{1}) gt 0.25"><set_object_hull object="$ship" exact="$arena.$healthValue.{$e}.{1}"/></do_if><do_if value="($ship.shieldpercentage - $arena.$healthValue.{$e}.{2}) * ($ship.shieldpercentage - $arena.$healthValue.{$e}.{2}) gt 0.25"><set_object_shield object="$ship" exact="$arena.$healthValue.{$e}.{2}"/></do_if>
        </do_if>
       </do_if>
       <set_value name="$arena.$healthLive.{$e}" exact="false"/>
