@@ -1,0 +1,11 @@
+[package]
+name = "x4mp-core"
+description = "Per-frame Rust core for X4: build-pinned bindings to X4's exported C functions, frame driver, MD action queue"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "x4mp_core"
+crate-type = ["rlib"]

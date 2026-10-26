@@ -189,6 +189,14 @@ mod tests {
     }
 
     #[test]
+    fn same_build_as_the_core_pins() {
+        assert_eq!(STEAM_BUILD, x4mp_core::pins::STEAM_BUILD);
+        assert_eq!(FILE_SIZE, x4mp_core::pins::linux::FILE_SIZE);
+        assert_eq!(FILE_SHA256, x4mp_core::pins::linux::FILE_SHA256);
+        assert_eq!(GAME_VERSION, x4mp_core::pins::GAME_VERSION);
+    }
+
+    #[test]
     fn build_id_check_requires_exact_note() {
         let mut note = vec![4, 0, 0, 0, 20, 0, 0, 0, 3, 0, 0, 0, b'G', b'N', b'U', 0];
         let id: Vec<u8> = (0..20).map(|i| u8::from_str_radix(&BUILD_ID[i * 2..i * 2 + 2], 16).unwrap()).collect();

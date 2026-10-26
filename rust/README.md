@@ -20,6 +20,9 @@ but native game evidence is tracked separately in `reports/dedicated-server-wsl.
 | `x4lan-relay/src/bin/x4lan-dedicated.rs` | unattended authority CLI (`run/status/pause/resume/stop`) |
 | `x4lan-replay.rs` | deterministic replay driver used by the parity harness |
 | `parity/` | differential harnesses (Python) comparing Python and Rust |
+| `x4mp-agent/` | Linux `LD_PRELOAD` engine agent: build-pinned VBI slot-13 frame callback that drives `x4mp-core` |
+| `x4mp-core/` | per-frame Rust core (no hooks of its own): build-pinned bindings to X4's exported C functions, frame driver with budgets/`X4MP_CORE COST`, bounded MD action queue + `executor/` stub, read-only player pose probe; see `x4mp-core/FFI-INVENTORY.md` |
+| `x4mp-core-win/` | Windows cdylib exposing `x4mp-core` through a build-pinned C ABI for the slot-12 hooks observer or a Lua `onUpdate` |
 
 The workspace has **no third-party crates**. Like the Python relay (standard library
 only), it depends on the Rust standard library and the OS (`bcrypt.dll`/`/dev/urandom`

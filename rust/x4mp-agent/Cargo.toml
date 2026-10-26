@@ -10,6 +10,9 @@ rust-version.workspace = true
 name = "x4mp_agent"
 crate-type = ["cdylib", "rlib"]
 
+[dependencies]
+x4mp-core = { path = "../x4mp-core" }
+
 [[bin]]
 name = "x4mp-sigcheck"
 path = "src/bin/x4mp-sigcheck.rs"

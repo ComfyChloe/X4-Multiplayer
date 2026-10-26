@@ -13,3 +13,17 @@ version = "7.5.0"
 [[package]]
 name = "x4mp-agent"
 version = "7.5.0"
+dependencies = [
+ "x4mp-core",
+]
+
+[[package]]
+name = "x4mp-core"
+version = "7.5.0"
+
+[[package]]
+name = "x4mp-core-win"
+version = "7.5.0"
+dependencies = [
+ "x4mp-core",
+]

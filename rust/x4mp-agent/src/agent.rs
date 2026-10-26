@@ -18,6 +18,11 @@ use crate::export::{self, FrameSample};
 use crate::logic::{cadence_line, ArmGate, Disarm, Gate, Observation, Snapshot};
 use crate::pinned::{self, Image};
 use crate::sha256;
+use x4mp_core::config::Parsed as CoreParsed;
+use x4mp_core::ffi::{Api, VerifiedBuild};
+use x4mp_core::pins::Platform;
+use x4mp_core::resolve::Dlsym;
+use x4mp_core::runtime;
 
 #[used]
 #[link_section = ".init_array"]
@@ -391,18 +396,77 @@ fn arm(table: u64) -> bool {
     won
 }
 
+fn drain_core(log: &mut Log) {
+    runtime::drain_log(|line| log.line(&line));
+    // Frames the core skipped because this drain held its lock (reported on change).
+    static REPORTED: AtomicU64 = AtomicU64::new(0);
+    let contended = runtime::contended_frames();
+    if REPORTED.swap(contended, Ordering::Relaxed) != contended {
+        log.line(&format!("X4MP_CORE CONTENDED frames={contended}"));
+    }
+}
+
+/// Bind and install the Rust core after the build is verified. On by default;
+/// `X4MP_CORE=0` turns it off. Returns the core's fields for the one FEATURES line.
+fn install_core(log: &mut Log) -> String {
+    match x4mp_core::config::parse(|key| std::env::var(key).ok()) {
+        CoreParsed::Disabled => runtime::features_fields_disabled("off"),
+        CoreParsed::Invalid(reason) => {
+            log.line(&format!("FEATURE x4mp_core DISABLED reason=invalid_config:{reason}"));
+            runtime::features_fields_disabled("auto-disabled:invalid_config")
+        }
+        CoreParsed::Enabled(core_config) => {
+            let source = Dlsym::new();
+            // SAFETY: verify_build() matched the size and SHA-256 of /proc/self/exe with the
+            // pinned Linux build (same build as x4mp_core::pins, asserted in pinned.rs tests).
+            let build = unsafe { VerifiedBuild::assert_verified(Platform::Linux, x4mp_core::pins::STEAM_BUILD) };
+            let (api, report) = Api::bind(&source, &build);
+            match runtime::install(&core_config, api, &report, Platform::Linux) {
+                Ok(()) => {
+                    drain_core(log);
+                    runtime::features()
+                        .unwrap_or_else(|| runtime::features_fields_disabled("auto-disabled:not_installed"))
+                }
+                Err(reason) => {
+                    log.line(&format!("FEATURE x4mp_core DISABLED reason={reason}"));
+                    runtime::features_fields_disabled(&format!("auto-disabled:{reason}"))
+                }
+            }
+        }
+    }
+}
+
+/// The frame observer stopped: the core loses its driver too.
+fn disable_observer(log: &mut Log, reason: &str) {
+    log.line(&format!("FEATURE frame_observer DISABLED reason={reason}"));
+    if runtime::installed() {
+        drain_core(log);
+        runtime::uninstall();
+        log.line(&format!("FEATURE x4mp_core DISABLED reason=frame_observer_disabled:{reason}"));
+    }
+}
+
 fn worker(config: Config) {
     let mut log = Log::open(&config.log);
     log.line(&format!("X4MP_AGENT START pid={} log={}", std::process::id(), config.log.display()));
     if !verify_build(&mut log) {
+        log.line("FEATURE frame_observer DISABLED reason=build_refused");
+        log.line("FEATURE x4mp_core DISABLED reason=build_refused");
+        log.line(&format!(
+            "FEATURES process=x4mp-agent frame_observer=auto-disabled:build_refused {}",
+            runtime::features_fields_disabled("auto-disabled:build_refused")
+        ));
         return;
     }
+    let core = install_core(&mut log);
+    log.line(&format!("FEATURES process=x4mp-agent frame_observer=on {core}"));
     let start = Instant::now();
     let mut gate = ArmGate::new(config.settle_ms);
     let mut last_wait = "";
     loop {
         if config.disarm_file.exists() {
             log.line("X4MP_AGENT NOT_ARMED reason=disarm_file_present");
+            disable_observer(&mut log, "disarm_file_present");
             return;
         }
         let o = observe(start);
@@ -415,6 +479,7 @@ fn worker(config: Config) {
             }
             Gate::Refuse(reason) => {
                 log.line(&format!("X4MP_AGENT REFUSED reason={reason}"));
+                disable_observer(&mut log, reason);
                 return;
             }
             Gate::Arm => {
@@ -425,6 +490,7 @@ fn worker(config: Config) {
                     break;
                 }
                 log.line("X4MP_AGENT REFUSED reason=agent_slot_taken_during_arm");
+                disable_observer(&mut log, "agent_slot_taken_during_arm");
                 return;
             }
         }
@@ -440,11 +506,14 @@ fn worker(config: Config) {
         let cur = snapshot();
         let wall_ms = prev_at.elapsed().as_millis() as u64;
         log.line(&cadence_line(&prev, &cur, wall_ms));
+        drain_core(&mut log);
         prev = cur;
         prev_at = Instant::now();
         let code = DISARM.load(Ordering::SeqCst);
         if code != 0 {
-            log.line(&format!("X4MP_AGENT DISARMED reason={}", Disarm::from_code(code).reason()));
+            let reason = Disarm::from_code(code).reason();
+            log.line(&format!("X4MP_AGENT DISARMED reason={reason}"));
+            disable_observer(&mut log, reason);
             return;
         }
     }

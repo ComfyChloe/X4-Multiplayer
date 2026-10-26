@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  x4mp-core MD executor (stub). The single cue that executes engine actions without a C
+  export, fed once per UI update by x4mp_core_bridge.lua with one batch:
+    event.param3 = table { $n = N, $id1, $kind1, $arg1, $id2, ... }
+  It answers once per batch with raise_lua_event 'X4MP_Core.Results' "id status;..."
+  where status is ok | failed | unknown_kind. Ids are opaque strings from Rust.
+
+  Stub scope: only 'debug_text' (harmless, proves the path). New kinds add a do_elseif
+  branch here and an MdAction variant in rust/x4mp-core/src/mdq.rs.
+
+  Not installed: this file lives outside the extension on purpose. To use it, copy it
+  to extension/x4_lan_lab/md/ together with the Lua bridge (see the bridge header).
+  Not yet run natively.
+-->
+<mdscript name="X4MP_Core_Executor" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <cue name="Batch" instantiate="true" namespace="this">
+      <conditions>
+        <event_ui_triggered screen="'X4MP_Core'" control="'Batch'" />
+      </conditions>
+      <actions>
+        <set_value name="$batch" exact="event.param3" />
+        <set_value name="$results" exact="''" />
+        <do_if value="typeof $batch == datatype.table and $batch.$n? and $batch.$n ge 1 and $batch.$n le 16">
+          <do_all exact="$batch.$n" counter="$i">
+            <set_value name="$id" exact="$batch.{'$id' + $i}" />
+            <set_value name="$kind" exact="$batch.{'$kind' + $i}" />
+            <do_if value="$kind == 'debug_text'">
+              <debug_text text="$batch.{'$arg' + $i}" filter="general" />
+              <set_value name="$results" exact="$results + $id + ' ok;'" />
+            </do_if>
+            <do_else>
+              <set_value name="$results" exact="$results + $id + ' unknown_kind;'" />
+            </do_else>
+          </do_all>
+        </do_if>
+        <do_if value="$results != ''">
+          <raise_lua_event name="'X4MP_Core.Results'" param="$results" />
+        </do_if>
+      </actions>
+    </cue>
+  </cues>
+</mdscript>

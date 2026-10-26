@@ -1,10 +1,11 @@
-//! Offline check of a Linux X4 executable against the agent's pinned build and sites.
+//! Offline check of a Linux X4 executable against the agent's pinned build and sites,
+//! and against the code heads of the exports `x4mp-core` binds.
 //! Usage: x4mp-sigcheck /path/to/X4
 
 use std::process::ExitCode;
 
 use x4mp_agent::elf::FileImage;
-use x4mp_agent::pinned;
+use x4mp_agent::pinned::{self, Image};
 use x4mp_agent::sha256::{hex, Sha256};
 
 fn main() -> ExitCode {
@@ -45,6 +46,24 @@ fn main() -> ExitCode {
             eprintln!("FAIL {reason}");
             failures += 1;
         }
+    }
+    let mut heads = 0;
+    for pin in x4mp_core::pins::EXPORTS {
+        let name = pin.name.to_string_lossy();
+        match image.read(pin.linux_va, x4mp_core::pins::HEAD_LEN) {
+            Some(bytes) if pinned::digest(&bytes) == pin.linux_head => heads += 1,
+            Some(bytes) => {
+                eprintln!("FAIL export {name} at 0x{:x}: head sha256 {}", pin.linux_va, pinned::digest(&bytes));
+                failures += 1;
+            }
+            None => {
+                eprintln!("FAIL export {name} at 0x{:x}: unreadable", pin.linux_va);
+                failures += 1;
+            }
+        }
+    }
+    if heads == x4mp_core::pins::EXPORTS.len() {
+        println!("PASS {heads} x4mp-core export heads");
     }
     if failures == 0 {
         println!("PASS executable {} build {}; no files modified", pinned::GAME_VERSION, pinned::STEAM_BUILD);
