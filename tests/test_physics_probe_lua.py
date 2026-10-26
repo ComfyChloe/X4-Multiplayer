@@ -198,6 +198,28 @@ class PhysicsProbeLuaTests(unittest.TestCase):
           assert(n==1)
         ''')
 
+    def test_flight_capture_waits_through_zero_time_ui_reload_and_loading(self):
+        lua = self.runtime()
+        lua.execute('''
+          X4LAN_FLIGHTCAP='forced';X4LAN_FLIGHTCAP_PATH='C:/p/cap.log';calls=0
+          gameTime=0;loading=0
+          handle.flight_capture=function(self,m,n,path,frames)
+            calls=calls+1;assert(calls==1);return true end
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.game_time=gameTime;s.loading_skips=loading;return s end
+          ui();ui();now=1;ui();assert(calls==0)
+          -- X4 tears down and reloads the UI at game time zero. The native capture must still be unused.
+          X4LAN_FIXEDTICK_PROBE=nil
+        ''')
+        lua.execute(fixed_tick_probe.SOURCE.read_text())
+        lua.execute('''
+          ui();ui();assert(calls==0)
+          now=2;gameTime=0.5;ui();assert(calls==0)
+          now=3;gameTime=2;loading=1;ui();assert(calls==0)
+          now=4;loading=0;ui();assert(calls==1)
+          now=5;ui();assert(calls==1)
+        ''')
+
     def test_old_dll_without_physics_mode_is_ignored(self):
         self.runtime().execute('''
           X4LAN_PHYSICS_MODE='joltwait'

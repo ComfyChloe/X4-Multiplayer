@@ -57,6 +57,15 @@ capture test verifies persistent mutations are captured; the 2,000-record
 original-machine-code replay also covers v2 and an injected model-output error.
 These are offline/synthetic checks; native v2 capture validation is pending.
 
+The first native v2 run, `.local/evidence-084-withheld`, failed at startup
+with `capture already used`. X4 loaded UI twice at game time zero; the first
+instance armed the one-shot buffer while loading and the second could not reuse
+it. The game closed gracefully and the lane was restored. No capture or native
+equivalence evidence came from this run. The harness now waits for a non-loading
+stats window with at least one second of game time before arming.35 LuaJIT probe
+tests pass, including the observed zero-time UI-reload sequence. Native retry
+remains required.
+
 ## Remaining model object sizes verified
 
 The SetFlightControlModel factory allocates linear0x270 bytes at0xe87ed9,

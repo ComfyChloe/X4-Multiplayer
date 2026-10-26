@@ -12,6 +12,7 @@
 -- each of the six U::Path flight control models, cheap-mode calls; data-only, refusal FEATURE flightprof DISABLED).
 -- X4LAN_FLIGHTCAP='forced' records that model's Update inputs/outputs (X4LAN_FLIGHTCAP_N records, default 20000,
 -- at most X4LAN_FLIGHTCAP_FRAMES frames, default 3000) into <profile>/x4mp-flightcap-<model>.log for offline replay.
+-- Capture waits for a non-loading stats window with at least one second of game time; startup loads UI twice.
 if not X4LAN_CONFIG or X4LAN_CONFIG.test_profile~='45841' then return end
 if X4LAN_FIXEDTICK_PROBE then return end
 X4LAN_FIXEDTICK_PROBE=true
@@ -25,6 +26,7 @@ local physRefusedLogged
 local joltwaitLogged,joltwaitOnLogged
 local flightRequested,flightRefusedLogged
 local capRequested,capLogged
+local captureReady=false
 local physMode,nextPhysMode=nil,0
 local sectorHooks={[0]='pending',[1]='original',[2]='chained',[3]='refused'}
 local nextTry=0
@@ -34,6 +36,7 @@ local nextProfile=0
 local profileDisabled=false
 local function logStats(now)
  local s=owner:stats()
+ captureReady=(s.frames or 0)>0 and (s.loading_skips or 0)==0 and (s.game_time or 0)>=1
  DebugError(string.format('[X4LAN] FRAMEPROBE frames=%d wallDt=%.6f maxWallDt=%.6f gameDt=%.9f realDt=%.9f gameTime=%.6f realTime=%.6f speed=%.3f paused=%d loadingSkips=%d regressions=%d',
   s.frames,s.wall_dt,s.max_wall_dt,s.game_dt,s.real_dt,s.game_time,s.real_time,s.speed,
   s.paused_frames,s.loading_skips,s.game_time_regressions)..
@@ -127,7 +130,7 @@ local function capturePath(model)
  return folder..'/x4mp-flightcap-'..model..'.log'
 end
 local function applyFlightCapture()
- if capRequested or not X4LAN_FLIGHTCAP or not owner.flight_capture then return end
+ if capRequested or not captureReady or not X4LAN_FLIGHTCAP or not owner.flight_capture then return end
  capRequested=true
  local path=X4LAN_FLIGHTCAP_PATH or capturePath(X4LAN_FLIGHTCAP)
  local n,frames=X4LAN_FLIGHTCAP_N or 20000,X4LAN_FLIGHTCAP_FRAMES or 3000
