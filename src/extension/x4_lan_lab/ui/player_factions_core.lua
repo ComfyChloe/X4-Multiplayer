@@ -197,7 +197,7 @@ function K.new(cfg,io)
  local function roster(lease,index,name,icon,now)
   local row=p.roster[index]
   if not row or row.name~=name or row.icon~=icon then
-   p.roster[index]={name=name,icon=icon,at=now}
+   p.roster[index]={name=name,icon=icon,at=now,shown=K.displayName(name,index,p.name)}
    if index~=localIndex then
     local shown,picture=K.displayName(name,index,p.name),K.displayIcon(icon,index)
     io.md('Assign',{index=index,faction=K.poolFaction(index),name=shown,short=K.shortName(shown),icon=picture})

@@ -117,7 +117,7 @@ RegisterEvent('X4LAN_PlayerFactions.Assigned',function(_,text)
  local index,faction=tostring(text):match('^(%d+)|([%w_]+)$')
  if index and core then
   local row=core.roster[tonumber(index)]
-  log('PLAYER_FACTIONS IDENTITY_APPLIED slot=p'..index..' faction='..faction..' name='..string.format('%q',row and row.name or '?'))
+  log('PLAYER_FACTIONS IDENTITY_APPLIED slot=p'..index..' faction='..faction..' name='..string.format('%q',row and (row.shown or row.name) or '?')..' announced='..string.format('%q',row and row.name or '?'))
  end
 end)
 RegisterEvent('X4LAN_PlayerFactions.CoopOwnerApplied',function(_,text) log('PLAYER_FACTIONS COOP_OWNER_APPLIED '..tostring(text)) end)
