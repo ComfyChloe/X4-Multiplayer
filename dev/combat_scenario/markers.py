@@ -1,7 +1,7 @@
 """Read COMBATSCN markers from an X4 debug log and profile the scenario's measurement window.
 
     python dev/combat_scenario/markers.py summary <x4lan-debug.txt>        JSON summary; exit 0 when done
-    python dev/combat_scenario/markers.py profile <x4lan-debug.txt> [--folded out.folded] [--x4re DIR]
+    python dev/combat_scenario/markers.py profile <x4lan-debug.txt> [--folded out.folded] [--x4re DIR] [--open-end]
 
 `profile` keeps only the simprof report windows that lie completely inside the scenario's
 measurement window (log order: the window before must close after "COMBATSCN window begin",
@@ -86,9 +86,12 @@ def window_lines(markers: list[Marker]):
     return begin, end
 
 
-def combat_profile(lines: list[str]):
-    """(stacks, window dicts) of the simprof windows fully inside the measurement window."""
+def combat_profile(lines: list[str], open_end: bool = False):
+    """(stacks, window dicts) of the simprof windows fully inside the measurement window.
+    open_end: a run that stopped before "window end" counts up to the end of the log."""
     begin, end = window_lines(parse_markers(lines))
+    if end is None and open_end:
+        end = len(lines)
     if begin is None or end is None:
         return collections.Counter(), []
     windows = []          # (line, fields)
@@ -126,6 +129,8 @@ def main(argv=None) -> int:
     parser.add_argument('--folded', type=Path)
     parser.add_argument('--x4re', type=Path)
     parser.add_argument('--top', type=int, default=25)
+    parser.add_argument('--open-end', action='store_true',
+                        help='profile: without "window end" (X4 stopped early) use the rest of the log')
     args = parser.parse_args(argv)
     lines = args.log.read_text(encoding='utf-8', errors='replace').splitlines()
     if args.action == 'summary':
@@ -133,7 +138,7 @@ def main(argv=None) -> int:
         print(json.dumps(result, indent=2))
         return 0 if result['complete'] else 1
     import simprof_report
-    stacks, windows = combat_profile(lines)
+    stacks, windows = combat_profile(lines, args.open_end)
     if not stacks:
         print('no complete simprof window inside the COMBATSCN measurement window', file=sys.stderr)
         return 1

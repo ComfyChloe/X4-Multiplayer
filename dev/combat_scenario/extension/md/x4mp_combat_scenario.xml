@@ -253,6 +253,7 @@
             <set_value name="$Stage" exact="'window'"/>
             <set_value name="$StageAt" exact="player.age"/>
             <debug_text text="'COMBATSCN window begin t=%s a=%s b=%s'.[player.age, $GroupA.count, $GroupB.count]"/>
+            <raise_lua_event name="'X4MP.CombatScn'" param="'begin'"/>
           </actions>
         </cue>
 
@@ -262,6 +263,7 @@
           </conditions>
           <actions>
             <set_value name="$Running" exact="false"/>
+            <raise_lua_event name="'X4MP.CombatScn'" param="'end'"/>
             <debug_text text="'COMBATSCN window end t=%s a=%s b=%s reason=%s'.[player.age, $GroupA.count, $GroupB.count, if player.age ge $StageAt + $WindowS then 'timeout' else 'decided']"/>
             <set_value name="$Stage" exact="'done'"/>
             <set_value name="$StageAt" exact="player.age"/>

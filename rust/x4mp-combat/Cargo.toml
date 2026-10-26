@@ -8,7 +8,7 @@ rust-version.workspace = true
 
 [lib]
 name = "x4mp_combat"
-crate-type = ["rlib"]
+crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 x4mp-core = { path = "../x4mp-core" }

@@ -5,6 +5,7 @@ The MD syntax itself is checked against the game's md.xsd by dev/combat_scenario
 schema cannot see: cross references, variant parameters, the installer's path guard and the
 marker/profile parser.
 """
+import collections
 import contextlib
 import importlib.util
 import io
@@ -284,6 +285,14 @@ class Markers(unittest.TestCase):
         # the end marker; windows 0/1 belong to warmup and spawning.
         self.assertEqual(dict(stacks), {'slot3;ef4400;9fdef0;8132d0': 900, 'slot3;ef4400;9fdef0;d4f090': 50})
         self.assertEqual(len(windows), 2)
+
+    def test_open_end_profile_runs_to_the_end_of_the_log(self):
+        lines = [l for l in LOG.splitlines() if 'window end' not in l]
+        self.assertEqual(markers.combat_profile(lines), (collections.Counter(), []))
+        stacks, windows = markers.combat_profile(lines, open_end=True)
+        self.assertEqual(stacks['slot3;ef4400;9fdef0;8132d0'], 900)
+        self.assertEqual(stacks['slot3;ef4400;9fdef0'], 600)
+        self.assertEqual(len(windows), 3)
 
     def test_profile_without_window_is_empty(self):
         stacks, windows = markers.combat_profile(LOG.splitlines()[:6])

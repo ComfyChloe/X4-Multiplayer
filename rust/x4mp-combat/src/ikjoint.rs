@@ -21,15 +21,20 @@
 //! differ for subnormal intermediates.
 //!
 //! The behavioural description (no game code) is in `reports/REWRITE-COMBAT.md`.
+//!
+//! The comparisons are written as negated tests (`!(a >= b)`) on purpose: that is what
+//! the original's `comiss` + branch does when an operand is NaN.
+// `v < 0.0 || v > 0.0` is not `v != 0.0`: the original skips the arrival test for NaN.
+#![allow(clippy::neg_cmp_op_on_partial_ord, clippy::nonminimal_bool, clippy::double_comparisons)]
 
-/// 2*pi as stored at RVA 0x2cbebdc (0x40c90fdb).
-pub const TWO_PI: f32 = f32::from_bits(0x40c9_0fdb);
-/// pi as stored at RVA 0x2cbeab4 (0x40490fdb).
-pub const PI: f32 = f32::from_bits(0x4049_0fdb);
-/// The engine's 1e-4 "equal" tolerance at RVA 0x2cbe0ac (0x38d1b717).
-pub const EPSILON: f32 = f32::from_bits(0x38d1_b717);
-/// Braking margin 0.9 at RVA 0x2cbe550 (0x3f666666).
-pub const BRAKE_MARGIN: f32 = f32::from_bits(0x3f66_6666);
+/// 2*pi as stored at RVA 0x2cbebdc (bits 0x40c90fdb; checked by the tests and the oracle).
+pub const TWO_PI: f32 = std::f32::consts::TAU;
+/// pi as stored at RVA 0x2cbeab4 (bits 0x40490fdb).
+pub const PI: f32 = std::f32::consts::PI;
+/// The engine's 1e-4 "equal" tolerance at RVA 0x2cbe0ac (bits 0x38d1b717).
+pub const EPSILON: f32 = 1e-4;
+/// Braking margin 0.9 at RVA 0x2cbe550 (bits 0x3f666666).
+pub const BRAKE_MARGIN: f32 = 0.9;
 
 /// The part of a `U::IKValue` that the step reads and writes.
 #[derive(Debug, Clone, Copy, Default)]
@@ -191,10 +196,10 @@ mod tests {
 
     #[test]
     fn constants_have_the_binary_bit_patterns() {
-        assert_eq!(TWO_PI, std::f32::consts::TAU);
-        assert_eq!(PI, std::f32::consts::PI);
-        assert_eq!(EPSILON, 1e-4f32);
-        assert_eq!(BRAKE_MARGIN, 0.9f32);
+        assert_eq!(TWO_PI.to_bits(), 0x40c9_0fdb);
+        assert_eq!(PI.to_bits(), 0x4049_0fdb);
+        assert_eq!(EPSILON.to_bits(), 0x38d1_b717);
+        assert_eq!(BRAKE_MARGIN.to_bits(), 0x3f66_6666);
     }
 
     #[test]
@@ -244,6 +249,21 @@ mod tests {
         c.max_speed = 10.0;
         assert!(rotate_toward(&mut j, &c, CLOCK));
         assert_eq!(j.value, 1.0);
+        assert_eq!(j.velocity, 0.0);
+    }
+
+    #[test]
+    fn nan_speed_skips_the_arrival_test() {
+        // max_speed NaN makes the new velocity NaN. The original skips the arrival test, the
+        // angle becomes NaN and the settle test against the zero limits stops the joint; a
+        // `!= 0.0` test would instead snap to the goal and keep a NaN velocity.
+        let mut j = joint(0.0, 0.0);
+        let mut c = cmd(0.5);
+        c.max_speed = f32::NAN;
+        c.min = 0.0;
+        c.max = 0.0;
+        assert!(rotate_toward(&mut j, &c, CLOCK));
+        assert!(j.value.is_nan());
         assert_eq!(j.velocity, 0.0);
     }
 

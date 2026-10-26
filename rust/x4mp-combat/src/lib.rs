@@ -7,7 +7,9 @@
 //! * [`capture`]: a capture/replay format for the original's inputs and outputs,
 //! * [`batch`]: per-sector batched steps whose results do not depend on the thread count,
 //! * [`oracle`] (Windows x64): the original machine code of the local pinned `X4.exe`
-//!   mapped into this process, used by the tests as the reference.
+//!   mapped into this process, used by the tests as the reference,
+//! * [`game`] (Windows x64): the in-game recorder/shadow (`luaopen_x4mp_combat` in the
+//!   cdylib `x4mp_combat.dll`) that captures the original's calls in a lane run.
 //!
 //! The method, findings (RVAs, data layouts) and the shadow design are in
 //! `reports/REWRITE-COMBAT.md`. No game code is copied here; the Rust follows the
@@ -15,6 +17,8 @@
 
 pub mod batch;
 pub mod capture;
+#[cfg(all(target_os = "windows", target_arch = "x86_64"))]
+pub mod game;
 pub mod ikjoint;
 #[cfg(target_arch = "x86_64")]
 pub mod mxcsr;

@@ -219,6 +219,34 @@ fn edge_cases_are_bit_exact() {
 }
 
 #[test]
+fn nan_inputs_are_bit_exact() {
+    // NaN in any non-wrapping input (wrapping would send NaN into the CRT fmodf error path,
+    // which cannot run offline). NaN payloads and signs must match too.
+    let Some(image) = image() else { return };
+    let mut rng = Rng::new(1234);
+    let mut tally = Tally { cases: 0, reached: 0, snapped_or_settled: 0 };
+    let nans = [f32::NAN, -f32::NAN, f32::from_bits(0x7fc0_0001), f32::from_bits(0xffa0_0000)];
+    for i in 0..60_000 {
+        let (mut before, mut cmd, clock) = realistic(&mut rng);
+        before.wrap = false;
+        let nan = nans[i % nans.len()];
+        match i % 9 {
+            0 => cmd.max_speed = nan,
+            1 => cmd.accel = nan,
+            2 => cmd.feed_forward = nan,
+            3 => cmd.min = nan,
+            4 => cmd.max = nan,
+            5 => cmd.target = nan,
+            6 => before.velocity = nan,
+            7 => before.value = nan,
+            _ => before.time = f64::NAN,
+        }
+        check(image, &before, &cmd, clock, &mut tally);
+    }
+    eprintln!("nan: {} cases, {} reached", tally.cases, tally.reached);
+}
+
+#[test]
 fn tracking_sequences_are_bit_exact() {
     // Feed the original's output back as the next frame's input: a turret following a
     // moving target for 600 frames, 400 turrets.

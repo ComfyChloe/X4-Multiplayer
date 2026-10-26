@@ -32,6 +32,10 @@
 //! | clock now, previous | 80, 88 | f64 |
 //!
 //! Floats are stored as their raw bits, so a record round-trips exactly.
+//!
+//! Text form (what the in-game recorder writes, so the lane runner collects it as a .txt
+//! file): the line `X4CJSTEP-HEX 1`, the header as 64 hex digits, then one record per line
+//! as 192 hex digits. [`read_capture`] accepts both forms.
 
 use std::io::{self, Read, Write};
 
@@ -186,9 +190,58 @@ pub fn write_capture(mut out: impl Write, header: &Header, records: &[Record]) -
     out.flush()
 }
 
+pub const TEXT_MAGIC: &str = "X4CJSTEP-HEX 1";
+
+fn hex_line(out: &mut impl Write, bytes: &[u8]) -> io::Result<()> {
+    const DIGITS: &[u8; 16] = b"0123456789abcdef";
+    let mut line = Vec::with_capacity(bytes.len() * 2 + 1);
+    for byte in bytes {
+        line.push(DIGITS[(byte >> 4) as usize]);
+        line.push(DIGITS[(byte & 15) as usize]);
+    }
+    line.push(b'\n');
+    out.write_all(&line)
+}
+
+pub fn write_capture_hex(mut out: impl Write, header: &Header, records: &[Record]) -> io::Result<()> {
+    out.write_all(TEXT_MAGIC.as_bytes())?;
+    out.write_all(b"\n")?;
+    hex_line(&mut out, &header.encode())?;
+    for record in records {
+        hex_line(&mut out, &record.encode())?;
+    }
+    out.flush()
+}
+
+fn unhex(line: &str) -> io::Result<Vec<u8>> {
+    let bad = || io::Error::new(io::ErrorKind::InvalidData, "bad hex line");
+    let text = line.trim_end();
+    if text.len() % 2 != 0 {
+        return Err(bad());
+    }
+    (0..text.len())
+        .step_by(2)
+        .map(|i| u8::from_str_radix(text.get(i..i + 2).ok_or_else(bad)?, 16).map_err(|_| bad()))
+        .collect()
+}
+
 pub fn read_capture(mut input: impl Read) -> io::Result<(Header, Vec<Record>)> {
     let mut bytes = Vec::new();
     input.read_to_end(&mut bytes)?;
+    if bytes.starts_with(TEXT_MAGIC.as_bytes()) {
+        let text = std::str::from_utf8(&bytes).map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "not UTF-8"))?;
+        let mut lines = text.lines().skip(1);
+        let header = Header::decode(&unhex(lines.next().unwrap_or(""))?)?;
+        let mut records = Vec::new();
+        for line in lines.filter(|l| !l.trim().is_empty()) {
+            let raw = unhex(line)?;
+            if raw.len() != RECORD_SIZE {
+                return Err(io::Error::new(io::ErrorKind::InvalidData, "truncated record"));
+            }
+            records.push(Record::decode(&raw));
+        }
+        return Ok((header, records));
+    }
     let header = Header::decode(&bytes)?;
     let body = &bytes[HEADER_SIZE..];
     if body.len() % RECORD_SIZE != 0 {
@@ -306,6 +359,23 @@ mod tests {
         assert_eq!(read_header, header);
         let report = replay(&read);
         assert!(report.exact(), "{report:?}");
+    }
+
+    #[test]
+    fn text_form_round_trips() {
+        let header = Header { steam_build: 23_660_954, mxcsr: 0x9fc0, joint_mode: 0, source: Source::Native };
+        let mut record = sample();
+        record.after.value = f32::from_bits(0xffc0_1234);
+        let mut text = Vec::new();
+        write_capture_hex(&mut text, &header, &[record, sample()]).unwrap();
+        let lines: Vec<&str> = std::str::from_utf8(&text).unwrap().lines().collect();
+        assert_eq!(lines.len(), 4);
+        assert_eq!(lines[0], TEXT_MAGIC);
+        assert_eq!((lines[1].len(), lines[2].len()), (64, 192));
+        let (read_header, read) = read_capture(&text[..]).unwrap();
+        assert_eq!(read_header, header);
+        assert_eq!(read[0].encode(), record.encode());
+        assert!(read_capture(&b"X4CJSTEP-HEX 1\nzz\n"[..]).is_err());
     }
 
     #[test]
