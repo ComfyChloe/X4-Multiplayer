@@ -1,6 +1,7 @@
 -- Lane-only recorder/shadow of X4's turret joint step (rust/x4mp-combat, x4mp_combat.dll).
 -- Enabled only by a lane overlay (dev/combat_scenario/capture_overlay.py), which appends
---   X4MP_COMBATCAP = {mode='both'|'capture'|'shadow', capacity=200000}
+--   X4MP_COMBATCAP = {mode='both'|'capture'|'shadow'|'switch', capacity=200000, verify=1}
+-- ('switch': the Rust step is authoritative, every verify-th call checked against the original)
 -- to ui/config.lua. Arms when the combat scenario's measurement window begins (its MD raises
 -- the Lua event 'X4MP.CombatScn' with 'begin'), logs a COMBATCAP line every 10 s, and when the
 -- window ends writes <profile folder>/x4mp-combatcap.txt (collected by x4lane) and restores
@@ -18,14 +19,18 @@ if not init then
  return
 end
 local native=init()
-local record=cfg.mode~='shadow'
-local shadow=cfg.mode~='capture'
+local switch=cfg.mode=='switch'
+local record=not switch and cfg.mode~='shadow'
+local shadow=not switch and cfg.mode~='capture'
+local verify=cfg.verify or 1
 local capacity=cfg.capacity or 200000
 local handle,state,nextLog,wanted=nil,'waiting',0,false
 local function statsLine(s)
  return string.format('calls=%d recorded=%d dropped=%d foreign=%d shadowed=%d mismatched=%d skippedMode=%d uninitTls=%d mxcsr=0x%x mxcsrChanges=%d mode=%d%s',
   s.calls,s.recorded,s.dropped,s.foreign,s.shadowed,s.mismatched,s.skipped_mode,s.uninitialised_tls,
-  s.mxcsr,s.mxcsr_changes,s.mode,s.failed and (' failed='..s.failed) or '')
+  s.mxcsr,s.mxcsr_changes,s.mode,s.failed and (' failed='..s.failed) or '')..
+  (switch and string.format(' served=%d verified=%d switchMismatched=%d foreignClass=%d%s',s.served or 0,s.verified or 0,
+   s.switch_mismatched or 0,s.foreign_class or 0,s.switch_off and (' switchOff='..s.switch_off) or '') or '')
 end
 local function finish(reason)
  if not handle then return end
@@ -55,7 +60,7 @@ end)
 SetScript('onUpdate',function()
  local now=GetCurRealTime()
  if state=='waiting' and wanted then
-  local h,why=native.start(capacity,record,shadow)
+  local h,why=native.start(capacity,record,shadow,switch,verify)
   if not h then
    DebugError('[X4LAN] FEATURE combatcap DISABLED reason='..tostring(why))
    state='off'
@@ -64,13 +69,14 @@ SetScript('onUpdate',function()
   handle=h
   state='armed'
   nextLog=now+10
-  DebugError(string.format('[X4LAN] FEATURE combatcap ENABLED record=%s shadow=%s capacity=%d',
-   tostring(record),tostring(shadow),capacity))
+  DebugError(string.format('[X4LAN] FEATURE combatcap ENABLED record=%s shadow=%s switch=%s verify=%d capacity=%d',
+   tostring(record),tostring(shadow),tostring(switch),verify,capacity))
  elseif state=='armed' and now>=nextLog then
   nextLog=now+10
   local s=handle:stats()
   if s then
    log('stats '..statsLine(s))
+   if s.switch_off then DebugError('[X4LAN] FEATURE ikjoint DISABLED reason='..s.switch_off) end
    if s.failed then finish('failed') end
   end
  end

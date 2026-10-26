@@ -2,8 +2,9 @@
 //!
 //! ```lua
 //! local m = package.loadlib(dll, 'luaopen_x4mp_combat')()
-//! local h, why = m.start(capacity, record, shadow)  -- on the main Lua thread (X4's MoveWorker)
-//! h:stats()       -- table: calls, recorded, dropped, foreign, shadowed, mismatched, mxcsr, mode, failed, first_mismatch
+//! local h, why = m.start(capacity, record, shadow[, switch[, verify_every]])  -- main Lua thread
+//! h:stats()       -- table: calls, recorded, dropped, foreign, shadowed, mismatched, served, verified,
+//!                 --   switch_mismatched, switch_off, mxcsr, mode, failed, first_mismatch
 //! h:write(path)   -- records written, or nil, reason (text capture X4CJSTEP-HEX)
 //! h:stop()        -- true, or nil, reason (the patch stays and the session leaks when the site changed)
 //! ```
@@ -15,7 +16,7 @@ use std::ffi::{c_char, c_int, c_void, CStr};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::sync::OnceLock;
 
-use super::session::{Image, Session};
+use super::session::{Image, Options, Session};
 
 #[repr(C)]
 pub struct lua_State {
@@ -150,6 +151,8 @@ unsafe extern "C-unwind" fn start(l: *mut lua_State) -> c_int {
     let capacity = if (a.type_)(l, 1) == LUA_TNUMBER { (a.tonumber)(l, 1) } else { 200_000.0 };
     let record = matches!((a.type_)(l, 2), LUA_TNONE | LUA_TNIL) || (a.toboolean)(l, 2) != 0;
     let shadow = matches!((a.type_)(l, 3), LUA_TNONE | LUA_TNIL) || (a.toboolean)(l, 3) != 0;
+    let switch = (a.toboolean)(l, 4) != 0;
+    let verify_every = if (a.type_)(l, 5) == LUA_TNUMBER { (a.tonumber)(l, 5) } else { 1.0 };
     let main = (a.pushthread)(l);
     (a.settop)(l, -2);
     guarded(l, || {
@@ -159,7 +162,12 @@ unsafe extern "C-unwind" fn start(l: *mut lua_State) -> c_int {
         if !(0.0..=MAX_CAPACITY).contains(&capacity) {
             return fail(l, "invalid capacity");
         }
-        match Session::start(Image::Process, capacity as usize, record, shadow) {
+        if !(0.0..=1e9).contains(&verify_every) || verify_every.fract() != 0.0 {
+            return fail(l, "invalid verify interval");
+        }
+        let options =
+            Options { capacity: capacity as usize, record, shadow, switch, verify_every: verify_every as u32 };
+        match Session::start(Image::Process, options) {
             Ok(session) => {
                 let cell = (a.newuserdata)(l, std::mem::size_of::<*mut Session>()) as *mut *mut Session;
                 cell.write(Box::into_raw(Box::new(session)));
@@ -192,6 +200,13 @@ unsafe extern "C-unwind" fn stats(l: *mut lua_State) -> c_int {
         number_field(l, c"mxcsr", s.mxcsr as f64);
         number_field(l, c"mxcsr_changes", s.mxcsr_changes as f64);
         number_field(l, c"mode", s.mode as f64);
+        number_field(l, c"served", s.served as f64);
+        number_field(l, c"verified", s.verified as f64);
+        number_field(l, c"switch_mismatched", s.switch_mismatched as f64);
+        number_field(l, c"foreign_class", s.foreign_class as f64);
+        if let Some(reason) = s.switch_off {
+            string_field(l, c"switch_off", reason);
+        }
         if let Some(reason) = s.failed {
             string_field(l, c"failed", reason);
         }

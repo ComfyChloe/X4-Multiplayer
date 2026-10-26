@@ -34,8 +34,8 @@ STUBS = '''
     stop=function(self) stops=stops+1;return true end}
   function package.loadlib(path,symbol)
     assert(symbol=='luaopen_x4mp_combat');loaded=path
-    return function() return {start=function(capacity,record,shadow)
-      starts[#starts+1]={capacity=capacity,record=record,shadow=shadow}
+    return function() return {start=function(capacity,record,shadow,switch,verify)
+      starts[#starts+1]={capacity=capacity,record=record,shadow=shadow,switch=switch,verify=verify}
       if refusal then return nil,refusal end
       return handle
     end} end
@@ -62,7 +62,7 @@ class CaptureScript(unittest.TestCase):
           ui();assert(#starts==0,'no arm before the window')
           events['X4MP.CombatScn'](nil,'begin')
           ui();assert(#starts==1);assert(starts[1].capacity==1234 and starts[1].record and starts[1].shadow)
-          assert(find('FEATURE combatcap ENABLED record=true shadow=true capacity=1234'))
+          assert(find('FEATURE combatcap ENABLED record=true shadow=true switch=false verify=1 capacity=1234'))
           now=11;ui();assert(find('COMBATCAP stats calls=10 recorded=8 dropped=0 foreign=1 shadowed=10 mismatched=0'))
           events['X4MP.CombatScn'](nil,'end')
           assert(writes[1]=='C:/p/x4mp-combatcap.txt' and stops==1)
@@ -80,6 +80,19 @@ class CaptureScript(unittest.TestCase):
           events['X4MP.CombatScn'](nil,'end')
           assert(#writes==0 and stops==1)
           assert(find('COMBATCAP final') and find('COMBATCAP first_mismatch original='))
+        ''')
+
+    def test_switch_mode_starts_authoritative_and_reports_a_switch_off(self):
+        lua = self.runtime("X4MP_COMBATCAP={mode='switch',verify=7}")
+        lua.execute('''
+          events['X4MP.CombatScn'](nil,'begin');ui()
+          assert(starts[1].record==false and starts[1].shadow==false)
+          assert(find('FEATURE combatcap ENABLED record=false shadow=false switch=true verify=7'))
+          stats.served=100;stats.verified=15;stats.switch_mismatched=1;stats.switch_off='verification mismatch'
+          now=11;ui()
+          assert(find('served=100 verified=15 switchMismatched=1 foreignClass=0 switchOff=verification mismatch'))
+          assert(find('FEATURE ikjoint DISABLED reason=verification mismatch'))
+          events['X4MP.CombatScn'](nil,'end');assert(#writes==0 and stops==1)
         ''')
 
     def test_refusal_and_failure_are_loud(self):
@@ -106,7 +119,11 @@ class Overlay(unittest.TestCase):
             out = overlay.build(base / 'ov', dll, 'both', 5000)
             self.assertEqual((out / 'native' / 'x4mp_combat_64.dll').read_bytes(), b'MZ fake')
             self.assertEqual((out / 'ui.xml.files').read_text().split(), ['ui/combat_capture.lua'])
-            self.assertIn("X4MP_COMBATCAP = {mode='both', capacity=5000}", (out / 'ui' / 'config.lua.append').read_text())
+            self.assertIn("X4MP_COMBATCAP = {mode='both', capacity=5000, verify=1}", (out / 'ui' / 'config.lua.append').read_text())
+            switched = overlay.build(base / 'sw', dll, 'switch', 10, 7)
+            self.assertIn("mode='switch', capacity=10, verify=7", (switched / 'ui' / 'config.lua.append').read_text())
+            with self.assertRaises(ValueError):
+                overlay.build(base / 'sw2', dll, 'switch', 10, -1)
             self.assertEqual((out / 'ui' / 'combat_capture.lua').read_text(), SCRIPT.read_text())
             overlay.build(base / 'ov', dll, 'shadow', 10)  # rebuild over its own output
             with self.assertRaises(ValueError):

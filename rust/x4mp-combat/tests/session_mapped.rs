@@ -7,7 +7,8 @@
 use std::sync::{Mutex, OnceLock};
 
 use x4mp_combat::capture::{read_capture, replay};
-use x4mp_combat::game::session::{Image as Target, Session, SITE_BYTES};
+use x4mp_combat::game::recorder::FAULT_INJECT;
+use x4mp_combat::game::session::{Image as Target, Options, Session, SITE_BYTES};
 use x4mp_combat::ikjoint::{FrameClock, JointCommand, JointState};
 use x4mp_combat::oracle::{default_exe, rva, Image, IK_ROTATE_TOWARD_HEAD};
 use x4mp_combat::testrng::Rng;
@@ -59,7 +60,8 @@ fn records_and_shadows_through_the_real_patch() {
     let base = image.at(0);
     let site = image.at(rva::IK_ROTATE_TOWARD);
     assert_eq!(image.bytes(rva::IK_ROTATE_TOWARD, 16), &SITE_BYTES);
-    let mut session = Session::start(Target::Mapped(base), 10_000, true, true).expect("arm on the mapped image");
+    let mut session =
+        Session::start(Target::Mapped(base), Options::capture(10_000, true)).expect("arm on the mapped image");
     assert_ne!(image.bytes(rva::IK_ROTATE_TOWARD, 16), &SITE_BYTES, "patched");
     assert_eq!(unsafe { *site }, 0xff);
 
@@ -110,8 +112,8 @@ fn records_and_shadows_through_the_real_patch() {
 fn full_buffer_drops_and_second_session_is_refused() {
     let _serial = SERIAL.lock().unwrap();
     let Some(image) = image() else { return };
-    let session = Session::start(Target::Mapped(image.at(0)), 10, true, false).unwrap();
-    assert!(Session::start(Target::Mapped(image.at(0)), 10, true, false).is_err());
+    let session = Session::start(Target::Mapped(image.at(0)), Options::capture(10, false)).unwrap();
+    assert!(Session::start(Target::Mapped(image.at(0)), Options::capture(10, false)).is_err());
     let mut rng = Rng::new(3);
     for _ in 0..25 {
         let (before, cmd, clock) = case(&mut rng);
@@ -131,10 +133,61 @@ fn refuses_a_modified_site() {
     let site = image.at(rva::IK_ROTATE_TOWARD);
     let original = image.bytes(rva::IK_ROTATE_TOWARD, 16).to_vec();
     unsafe { poke(site, 0x90) };
-    assert!(Session::start(Target::Mapped(image.at(0)), 10, true, true).is_err());
+    assert!(Session::start(Target::Mapped(image.at(0)), Options::capture(10, true)).is_err());
     assert_eq!(unsafe { *site }, 0x90);
     unsafe { poke(site, original[0]) };
     assert_eq!(image.bytes(rva::IK_ROTATE_TOWARD, 16), &original[..]);
+}
+
+#[test]
+fn switch_serves_rust_results_identical_to_the_original() {
+    let _serial = SERIAL.lock().unwrap();
+    let Some(image) = image() else { return };
+    let mut rng = Rng::new(77);
+    let cases: Vec<_> = (0..4000).map(|_| case(&mut rng)).collect();
+    // Reference: the original alone.
+    let reference: Vec<_> = cases.iter().map(|(b, c, k)| image.call_ik_rotate_toward(b, c, *k)).collect();
+    for verify_every in [1u32, 7, 0] {
+        let session = Session::start(Target::Mapped(image.at(0)), Options::switched(verify_every)).unwrap();
+        let served: Vec<_> = cases.iter().map(|(b, c, k)| image.call_ik_rotate_toward(b, c, *k)).collect();
+        let stats = session.stats();
+        session.stop().unwrap();
+        assert_eq!(stats.served, 4000, "verify_every={verify_every}");
+        let expected_verified = if verify_every == 0 { 0 } else { 4000u64.div_ceil(verify_every as u64) };
+        assert_eq!(stats.verified, expected_verified);
+        assert_eq!((stats.switch_mismatched, stats.switch_off), (0, None));
+        for ((after, result), (want, want_result)) in served.iter().zip(&reference) {
+            assert_eq!(result, want_result);
+            assert_eq!(after.value.to_bits(), want.value.to_bits());
+            assert_eq!(after.velocity.to_bits(), want.velocity.to_bits());
+            assert_eq!(after.target.to_bits(), want.target.to_bits());
+            assert_eq!(after.time.to_bits(), want.time.to_bits());
+        }
+    }
+    assert_eq!(image.bytes(rva::IK_ROTATE_TOWARD, 16), &SITE_BYTES);
+}
+
+#[test]
+fn switch_mismatch_falls_back_to_the_original_for_good() {
+    let _serial = SERIAL.lock().unwrap();
+    let Some(image) = image() else { return };
+    let mut rng = Rng::new(5);
+    let cases: Vec<_> = (0..50).map(|_| case(&mut rng)).collect();
+    let reference: Vec<_> = cases.iter().map(|(b, c, k)| image.call_ik_rotate_toward(b, c, *k)).collect();
+    let session = Session::start(Target::Mapped(image.at(0)), Options::switched(1)).unwrap();
+    FAULT_INJECT.store(true, std::sync::atomic::Ordering::SeqCst);
+    let served: Vec<_> = cases.iter().map(|(b, c, k)| image.call_ik_rotate_toward(b, c, *k)).collect();
+    FAULT_INJECT.store(false, std::sync::atomic::Ordering::SeqCst);
+    let stats = session.stats();
+    session.stop().unwrap();
+    assert_eq!((stats.served, stats.verified, stats.switch_mismatched), (0, 1, 1));
+    assert_eq!(stats.switch_off, Some("verification mismatch"));
+    // Every call, including the mismatching one, got the original's result.
+    for ((after, result), (want, want_result)) in served.iter().zip(&reference) {
+        assert_eq!(result, want_result);
+        assert_eq!(after.velocity.to_bits(), want.velocity.to_bits());
+        assert_eq!(after.value.to_bits(), want.value.to_bits());
+    }
 }
 
 unsafe fn poke(at: *mut u8, value: u8) {

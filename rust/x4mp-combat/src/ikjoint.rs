@@ -118,6 +118,22 @@ pub fn wrap_target(target: f32, current: f32) -> f32 {
 /// the target (or a limit) or snapped, `false` while it is still moving or when no game
 /// time passed since the joint's last update.
 pub fn rotate_toward(joint: &mut JointState, cmd: &JointCommand, clock: FrameClock) -> bool {
+    step(joint, cmd, clock).0
+}
+
+/// Which writes the original performs for a step (needed to apply a result in place of it).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Outcome {
+    /// target, velocity, then the value source's SetValue(target, joint's own time).
+    Snapped,
+    /// target only (no game time passed); no SetValue call.
+    Waiting,
+    /// target, velocity, then SetValue(angle, now).
+    Stepped,
+}
+
+/// [`rotate_toward`] plus the [`Outcome`] that says which fields and calls it produced.
+pub fn step(joint: &mut JointState, cmd: &JointCommand, clock: FrameClock) -> (bool, Outcome) {
     let target = if joint.wrap { wrap_target(cmd.target, joint.value) } else { cmd.target };
     joint.target = target;
     if cmd.snap || !((target - joint.value).abs() >= EPSILON) {
@@ -129,10 +145,10 @@ pub fn rotate_toward(joint: &mut JointState, cmd: &JointCommand, clock: FrameClo
             velocity = cmd.feed_forward;
         }
         joint.velocity = velocity;
-        return true;
+        return (true, Outcome::Snapped);
     }
     if !(clock.now > joint.time) {
-        return false;
+        return (false, Outcome::Waiting);
     }
     let goal = joint.target;
     let current = joint.value;
@@ -177,7 +193,7 @@ pub fn rotate_toward(joint: &mut JointState, cmd: &JointCommand, clock: FrameClo
     }
     joint.value = position;
     joint.time = clock.now;
-    reached
+    (reached, Outcome::Stepped)
 }
 
 #[cfg(test)]

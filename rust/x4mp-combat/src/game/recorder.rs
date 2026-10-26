@@ -1,22 +1,28 @@
-//! In-game recorder and shadow of `IKValue_RotateToward` (RVA 0xe1f840).
+//! In-game recorder, shadow and switch of `IKValue_RotateToward` (RVA 0xe1f840).
 //!
-//! The detour runs the original through the trampoline on every call. On the owner thread
-//! (the simulation thread that armed it) it also copies the joint before and after, the
-//! arguments and the two game clocks from executable TLS slot 0, and
-//! * records the call into a buffer reserved at start (never grows; full means dropped),
-//! * shadows it: runs [`crate::ikjoint::rotate_toward`] on a copy and compares bitwise.
+//! On every call from another thread the detour runs the original. On the owner thread (the
+//! simulation thread that armed it) it can
+//! * record the call (joint before/after, arguments, both game clocks) into a buffer
+//!   reserved at start (never grows; full means dropped),
+//! * shadow it: run [`crate::ikjoint::rotate_toward`] on a copy and compare bitwise,
+//! * switch: make the reimplementation authoritative for the kinematic branch. The result is
+//!   applied with the original's writes (target, velocity, then the joint's value source
+//!   SetValue through its vftable, or nothing but the target when no game time passed). With
+//!   `verify_every` = N, every N-th switched call also runs the original on a scratch copy of
+//!   the joint first; any difference turns the switch off for good and that call (and all
+//!   later ones) is served by the original on the real joint.
 //!
-//! The original's result is always the one returned. Calls on other threads go straight
-//! to the trampoline. Bookkeeping panics are caught and switch recording and shadowing off.
+//! Bookkeeping panics are caught and turn everything but the plain pass-through off.
 
 use std::arch::asm;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::sync::atomic::{AtomicPtr, AtomicU32, AtomicU64, AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 
 use crate::capture::{diff, Record};
-use crate::ikjoint::{rotate_toward, FrameClock, JointCommand, JointState};
+use crate::ikjoint::{self, FrameClock, JointCommand, JointState, Outcome};
 
 pub type StepFn = unsafe extern "C" fn(*mut u8, f32, f32, f32, f32, f32, f32, u8) -> u8;
+type SetValueFn = unsafe extern "C" fn(*mut u8, *const f32, f64);
 
 /// Trampoline to the original; set before the patch is installed, never cleared.
 pub static TRAMPOLINE: AtomicUsize = AtomicUsize::new(0);
@@ -25,6 +31,10 @@ pub static OWNER: AtomicU32 = AtomicU32::new(0);
 pub static RECORDER: AtomicPtr<Recorder> = AtomicPtr::new(std::ptr::null_mut());
 /// Calls from other threads (passed through).
 pub static FOREIGN: AtomicU64 = AtomicU64::new(0);
+/// Test hook: when set, switched results are corrupted by one bit before verification
+/// (proves that a mismatch turns the switch off). Never set outside tests.
+#[doc(hidden)]
+pub static FAULT_INJECT: AtomicBool = AtomicBool::new(false);
 
 #[link(name = "kernel32")]
 extern "system" {
@@ -32,11 +42,14 @@ extern "system" {
 }
 
 pub const MISMATCH_KEEP: usize = 16;
+const IKVALUE_VBASE: usize = 0x678;
 
 #[derive(Debug, Default)]
 pub struct Recorder {
     pub record: bool,
     pub shadow: bool,
+    pub switch: bool,
+    pub verify_every: u32,
     pub records: Vec<Record>,
     pub calls: u64,
     pub dropped: u64,
@@ -44,11 +57,18 @@ pub struct Recorder {
     pub shadowed: u64,
     pub mismatched: u64,
     pub skipped_mode: u64,
-    /// (original record, our result) of the first mismatches.
+    pub served: u64,
+    pub verified: u64,
+    pub switch_mismatched: u64,
+    pub foreign_class: u64,
+    pub switch_off: Option<&'static str>,
+    /// (original record, our result) of the first mismatches (shadow or switch).
     pub mismatches: Vec<(Record, JointState, bool)>,
     pub mxcsr: u32,
     pub mxcsr_changes: u64,
     pub mode_byte: usize,
+    /// Address of `U::IKValue::vftable` (the joint's value-source vtable) in this image.
+    pub ikvalue_vftable: usize,
     pub failed: Option<&'static str>,
 }
 
@@ -62,6 +82,20 @@ impl Recorder {
             mxcsr: crate::mxcsr::get(),
             mode_byte,
             ..Default::default()
+        }
+    }
+
+    /// Enable switch mode (reimplementation authoritative).
+    pub fn with_switch(mut self, verify_every: u32, ikvalue_vftable: usize) -> Recorder {
+        self.switch = true;
+        self.verify_every = verify_every;
+        self.ikvalue_vftable = ikvalue_vftable;
+        self
+    }
+
+    fn keep_mismatch(&mut self, record: Record, ours: JointState, our_result: bool) {
+        if self.mismatches.len() < MISMATCH_KEEP {
+            self.mismatches.push((record, ours, our_result));
         }
     }
 }
@@ -98,6 +132,40 @@ fn read_clock() -> Option<FrameClock> {
     }
 }
 
+/// The joint's value-source subobject (virtual base) through its vbtable.
+unsafe fn value_source(joint: *mut u8) -> *mut u8 {
+    let vbtable = (joint as *const *const u8).read();
+    let offset = (vbtable.add(4) as *const i32).read();
+    joint.offset(offset as isize)
+}
+
+/// Write a step result into the joint exactly as the original does for that outcome.
+unsafe fn apply(joint: *mut u8, ours: &JointState, outcome: Outcome) {
+    (joint.add(0x1c) as *mut f32).write(ours.target);
+    if outcome == Outcome::Waiting {
+        return;
+    }
+    (joint.add(0x18) as *mut f32).write(ours.velocity);
+    let source = value_source(joint);
+    let vtable = (source as *const *const usize).read();
+    let set_value: SetValueFn = std::mem::transmute(vtable.add(3).read());
+    let value = ours.value;
+    set_value(source, &value, ours.time);
+}
+
+#[repr(C, align(16))]
+struct Scratch([u8; IKVALUE_SIZE]);
+const IKVALUE_SIZE: usize = 0x680;
+static mut SCRATCH: Scratch = Scratch([0; IKVALUE_SIZE]);
+
+/// A copy of the joint's header and value-source vptr in the owner-thread scratch IKValue.
+unsafe fn scratch_copy(joint: *const u8) -> *mut u8 {
+    let scratch = std::ptr::addr_of_mut!(SCRATCH) as *mut u8;
+    std::ptr::copy_nonoverlapping(joint, scratch, 0x40);
+    std::ptr::copy_nonoverlapping(joint.add(IKVALUE_VBASE - 8), scratch.add(IKVALUE_VBASE - 8), 16);
+    scratch
+}
+
 /// The detour installed at the site (same ABI as the original).
 ///
 /// # Safety
@@ -125,7 +193,60 @@ pub unsafe extern "C" fn detour(
     // SAFETY: only the owner thread dereferences the recorder.
     let recorder = &mut *recorder;
     recorder.calls += 1;
-    if recorder.failed.is_some() || (!recorder.record && !recorder.shadow) {
+    if recorder.failed.is_some() {
+        return original(joint, target, min, max, max_speed, accel, feed_forward, snap);
+    }
+    let command = JointCommand { target, min, max, max_speed, accel, feed_forward, snap: snap != 0 };
+
+    if recorder.switch && recorder.switch_off.is_none() {
+        if (recorder.mode_byte as *const u8).read() != 0 {
+            recorder.switch_off = Some("sub-stepped joint mode active");
+        } else if (value_source(joint) as *const usize).read() != recorder.ikvalue_vftable {
+            recorder.foreign_class += 1;
+        } else if let Some(clock) = read_clock() {
+            let before = read_joint(joint);
+            let served = catch_unwind(AssertUnwindSafe(|| {
+                let mut ours = before;
+                let (mut our_result, outcome) = ikjoint::step(&mut ours, &command, clock);
+                if FAULT_INJECT.load(Ordering::Relaxed) {
+                    ours.velocity = f32::from_bits(ours.velocity.to_bits() ^ 1);
+                    our_result = !our_result;
+                }
+                let verify = recorder.verify_every != 0 && recorder.served % recorder.verify_every as u64 == 0;
+                if verify {
+                    let scratch = scratch_copy(joint);
+                    let result = original(scratch, target, min, max, max_speed, accel, feed_forward, snap);
+                    let record = Record {
+                        component: joint as u64,
+                        before,
+                        command,
+                        clock,
+                        after: read_joint(scratch),
+                        result: result != 0,
+                        ..Default::default()
+                    };
+                    recorder.verified += 1;
+                    if diff(&record, &ours, our_result).any() {
+                        recorder.switch_mismatched += 1;
+                        recorder.keep_mismatch(record, ours, our_result);
+                        recorder.switch_off = Some("verification mismatch");
+                        return None;
+                    }
+                }
+                apply(joint, &ours, outcome);
+                recorder.served += 1;
+                Some(our_result as u8)
+            }));
+            match served {
+                Ok(Some(result)) => return result,
+                Ok(None) => {}
+                Err(_) => recorder.failed = Some("switch panicked"),
+            }
+            return original(joint, target, min, max, max_speed, accel, feed_forward, snap);
+        }
+    }
+
+    if !recorder.record && !recorder.shadow {
         return original(joint, target, min, max, max_speed, accel, feed_forward, snap);
     }
     let before = read_joint(joint);
@@ -136,7 +257,6 @@ pub unsafe extern "C" fn detour(
         return result;
     };
     let after = read_joint(joint);
-    let command = JointCommand { target, min, max, max_speed, accel, feed_forward, snap: snap != 0 };
     let outcome = catch_unwind(AssertUnwindSafe(|| {
         let record = Record {
             component: joint as u64,
@@ -157,13 +277,11 @@ pub unsafe extern "C" fn detour(
                 recorder.skipped_mode += 1;
             } else {
                 let mut ours = before;
-                let our_result = rotate_toward(&mut ours, &command, clock);
+                let our_result = ikjoint::rotate_toward(&mut ours, &command, clock);
                 recorder.shadowed += 1;
                 if diff(&record, &ours, our_result).any() {
                     recorder.mismatched += 1;
-                    if recorder.mismatches.len() < MISMATCH_KEEP {
-                        recorder.mismatches.push((record, ours, our_result));
-                    }
+                    recorder.keep_mismatch(record, ours, our_result);
                 }
             }
         }

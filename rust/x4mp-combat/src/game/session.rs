@@ -60,8 +60,36 @@ pub enum Image {
     Mapped(*mut u8),
 }
 
+/// What a session does on the owner thread.
+#[derive(Debug, Clone, Copy)]
+pub struct Options {
+    /// Records reserved for the capture (record mode).
+    pub capacity: usize,
+    pub record: bool,
+    pub shadow: bool,
+    /// Reimplementation authoritative (kinematic branch only).
+    pub switch: bool,
+    /// In switch mode, verify every N-th switched call against the original on a scratch
+    /// copy (0 = never, 1 = every call).
+    pub verify_every: u32,
+}
+
+impl Options {
+    pub fn capture(capacity: usize, shadow: bool) -> Options {
+        Options { capacity, record: true, shadow, switch: false, verify_every: 0 }
+    }
+    pub fn switched(verify_every: u32) -> Options {
+        Options { capacity: 0, record: false, shadow: false, switch: true, verify_every }
+    }
+}
+
 pub struct Stats {
     pub calls: u64,
+    pub served: u64,
+    pub verified: u64,
+    pub switch_mismatched: u64,
+    pub foreign_class: u64,
+    pub switch_off: Option<&'static str>,
     pub recorded: usize,
     pub dropped: u64,
     pub foreign: u64,
@@ -117,7 +145,7 @@ fn verify_process() -> Result<*mut u8, &'static str> {
 
 impl Session {
     /// Verify, prepare, publish the recorder and arm the detour, on the calling thread.
-    pub fn start(image: Image, capacity: usize, record: bool, shadow: bool) -> Result<Session, &'static str> {
+    pub fn start(image: Image, options: Options) -> Result<Session, &'static str> {
         if !RECORDER.load(Ordering::Acquire).is_null() {
             return Err("a session is already running");
         }
@@ -150,7 +178,12 @@ impl Session {
         }
         let mut patch = unsafe { Patch::prepare(site, SITE_BYTES, RELOCATED)? };
         let mode_byte = unsafe { base.add(rva::JOINT_MODE as usize) } as usize;
-        let recorder = Box::into_raw(Box::new(Recorder::new(capacity, record, shadow, mode_byte)));
+        let mut state = Recorder::new(options.capacity, options.record, options.shadow, mode_byte);
+        if options.switch {
+            let vftable = unsafe { base.add(rva::IKVALUE_VFTABLE as usize) } as usize;
+            state = state.with_switch(options.verify_every, vftable);
+        }
+        let recorder = Box::into_raw(Box::new(state));
         TRAMPOLINE.store(patch.trampoline() as usize, Ordering::Release);
         OWNER.store(unsafe { GetCurrentThreadId() }, Ordering::Release);
         FOREIGN.store(0, Ordering::Relaxed);
@@ -173,6 +206,11 @@ impl Session {
         let r = self.recorder();
         Stats {
             calls: r.calls,
+            served: r.served,
+            verified: r.verified,
+            switch_mismatched: r.switch_mismatched,
+            foreign_class: r.foreign_class,
+            switch_off: r.switch_off,
             recorded: r.records.len(),
             dropped: r.dropped,
             foreign: FOREIGN.load(Ordering::Relaxed),
