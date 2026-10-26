@@ -10,7 +10,8 @@ STATS = '''
   function stats_table()
     local s={mode=current_mode,sites=sites_mask,period=0,digest_max=16384,frames=frames,loading_frames=0,
       present_frames=0,ui_scenes_calls=30,ui_scenes_skipped=skipped,ui_render_calls=0,ui_render_skipped=0,
-      camera_calls=0,camera_skipped=0,draw_owned=1,draw_set=1,draw_reapplied=0,reason=reason}
+      camera_calls=0,camera_skipped=0,draw_owned=1,draw_set=1,draw_reapplied=0,reason=reason,
+      stalls=stall_count,stall_sites=stall_sites,stall_frame=stall_frame}
     for _,row in ipairs({'ui_scenes','ui_render','camera','control'}) do
       for _,k in ipairs({'audited','ms_mean','ms_max','rng_calls','rng_steps','rng_unknown','id_calls','ids',
         'event_calls','events_up','time_changed','digests','digest_components','digest_changed','digest_unreadable'}) do
@@ -39,7 +40,7 @@ class FrameDietProbeTests(unittest.TestCase):
           function DebugError(s) logs[#logs+1]=s end
           function SetScript(event,fn) assert(event=='onUpdate');ui=fn end
         ''' + STATS + '''
-          handle={active=function(self) return armed end,stop=function(self) stops=stops+1 end,
+          handle={active=function(self) return armed,stall_count end,stop=function(self) stops=stops+1 end,
             stats=function(self) return stats_table() end,
             set=function(self,mode,sites) sets[#sets+1]=sites and (mode..':'..sites) or mode;current_mode=mode
               if set_refusal then return nil,set_refusal end
@@ -134,6 +135,17 @@ class FrameDietProbeTests(unittest.TestCase):
         logs = self.logs(lua)
         self.assertFalse(any('DISABLED' in line for line in logs))
         self.assertTrue(any('FRAMEDIET armed' in line for line in logs))
+
+    def test_stall_is_logged_once_and_the_cycle_goes_on(self):
+        lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';X4LAN_FRAMEDIET_AB_S=30;"
+                           "X4LAN_FRAMEDIET_AB_CYCLE='pass;ui_render'")
+        lua.execute("ui();now=5;stall_count=1;stall_sites=2;stall_frame=500;ui();now=6;ui()")
+        stalls = [line for line in self.logs(lua) if 'FRAMEDIET stall' in line]
+        self.assertEqual(len(stalls), 1)
+        self.assertIn('FRAMEDIET stall sites=ui_render frame=500 phase=pass t=5.000 stalls=1', stalls[0])
+        self.assertFalse(any('DISABLED' in line for line in self.logs(lua)))
+        lua.execute('now=31;ui()')
+        self.assertEqual(list(lua.eval('sets').values())[-1], 'diet:ui_render')
 
     def test_load_failure_is_loud(self):
         lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';load_failure='The specified module could not be found.'")

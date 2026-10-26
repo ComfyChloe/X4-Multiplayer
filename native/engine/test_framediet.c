@@ -19,6 +19,8 @@ static unsigned char fake_macro[0x50];
 static unsigned char *fake_tls_fn(void) { return fake_tls; }
 static int main_thread_role;   /* what the main-thread seam reports */
 static int fake_on_main_thread(void) { return main_thread_role; }
+static LONGLONG fake_now;
+static BOOL WINAPI fake_qpc(LARGE_INTEGER *v) { v->QuadPart = fake_now; return TRUE; }
 
 static void **entry_of(int k) { return (void **)(image + x4_framediet_vtables[k].entry); }
 static void *fn_of(int k) { return image + x4_framediet_vtables[k].fn; }
@@ -515,6 +517,41 @@ int main(void) {
        without the loading flag): never a torn restore, every round ends restored. */
     for (int round = 0; round < 300; ++round) stress_round(round & 1);
     puts("PASS: the guard skips frames while another thread holds the lock; 300 concurrent stop rounds restore everything");
+
+    /* UI Lua stall watchdog: while sites are skipped, UI Lua must keep calling active(); after STALL_MS
+       and STALL_MIN_FRAMES of silence the guard reverts to pass and records the sites. */
+    setup_engine();
+    fd_qpc = fake_qpc;
+    fake_now = 1000000;
+    assert(!arm(FD_DIET, FD_UI_SCENES | FD_DRAW, 0, 0, 0));
+    for (int f = 0; f < 50; ++f) { fake_now += fd_qpf / 10; assert(is_active()); frame(); }   /* 5 s with heartbeat */
+    assert(fd_state.stalls == 0 && fd_state.mode == FD_DIET && draw_bits() == 3);
+    assert(is_active());
+    for (int f = 0; f < 100; ++f) { fake_now += fd_qpf / 50; frame(); }   /* 100 silent frames in 2 s */
+    assert(fd_state.stalls == 0 && fd_state.mode == FD_DIET);
+    fake_now += fd_qpf + fd_qpf / 10;                                       /* now 3.1 s silent */
+    frame();
+    assert(fd_state.stalls == 1 && fd_state.mode == FD_PASS && fd_state.stall_sites == (FD_UI_SCENES | FD_DRAW));
+    assert(draw_bits() == 0 && fd_state.armed);
+    {
+        int walks = scene_walks;
+        frame();
+        assert(scene_walks == walks + 3);   /* everything runs again */
+    }
+    assert(!set_mode(FD_DIET, -1));        /* Lua alive again: may re-enter the diet */
+    frame();
+    assert(draw_bits() == 3);
+    assert(is_active());
+    for (int f = 0; f < STALL_MIN_FRAMES - 1; ++f) { fake_now += fd_qpf; frame(); }   /* long but too few frames */
+    assert(fd_state.stalls == 1);
+    fake_now += fd_qpf;
+    frame();
+    assert(fd_state.stalls == 2 && fd_state.mode == FD_PASS);
+    for (int f = 0; f < 40; ++f) { fake_now += fd_qpf; frame(); }   /* pass (and audit) are never watched */
+    assert(fd_state.stalls == 2);
+    disarm_all();
+    fd_qpc = fd_qpc_default;
+    puts("PASS: UI Lua stall watchdog reverts a skipping owner to pass mode and records the sites");
 
     /* A refused arm keeps the previous owner's statistics and generation. */
     setup_engine();

@@ -35,6 +35,7 @@ local abEvery=X4LAN_FRAMEDIET_AB_S and (mode=='diet' or X4LAN_FRAMEDIET_AB_CYCLE
 local cycle={}
 for entry in string.gmatch(abEvery and X4LAN_FRAMEDIET_AB_CYCLE or '','[^;]+') do cycle[#cycle+1]=entry end
 local owner,finished,armAt,nextTry,nextReport,nextPhase,phase,cycleIndex
+local lastStalls=0
 local SITE_NAMES={{1,'ui_scenes'},{2,'ui_render'},{4,'camera'},{8,'draw'},{16,'rng_split'},{32,'ui_elements'}}
 local function siteText(mask)
  local names={}
@@ -51,8 +52,8 @@ local function report(s,now)
   s.draw_owned,s.draw_set,s.draw_reapplied)..
   string.format(' elementsCalls=%d elementsSkipped=%d splitCalls=%d splitRenderSteps=%d commitMb=%.1f',s.ui_elements_calls or 0,
   s.ui_elements_skipped or 0,s.split_calls or 0,s.split_render_steps or 0,s.commit_mb or 0)..
-  string.format(' mainCpuMs=%.1f workerCpuMs=%.1f processCpuMs=%.1f drawRecleared=%d guardSkipped=%d',s.main_cpu_ms or 0,
-  s.worker_cpu_ms or 0,s.process_cpu_ms or 0,s.draw_recleared or 0,s.guard_skipped or 0))
+  string.format(' mainCpuMs=%.1f workerCpuMs=%.1f processCpuMs=%.1f drawRecleared=%d guardSkipped=%d stalls=%d',s.main_cpu_ms or 0,
+  s.worker_cpu_ms or 0,s.process_cpu_ms or 0,s.draw_recleared or 0,s.guard_skipped or 0,s.stalls or 0))
  if s.mode~='audit' then return end
  DebugError(string.format('[X4LAN] FRAMEDIET_FRAMES audited=%d rngSteps=%d rngUnknown=%d ids=%d',
   s.frame_audited or 0,s.frame_rng_steps or 0,s.frame_rng_unknown or 0,s.frame_ids or 0))
@@ -103,10 +104,18 @@ SetScript('onUpdate',function()
  if finished then return end
  local now=GetCurRealTime()
  if owner then
-  if not owner:active() then
+  -- active() is also the heartbeat of the module's UI Lua stall watchdog: call it every update.
+  local on,stalls=owner:active()
+  if not on then
    local s=owner:stats()
    if s then report(s,now) end
    disabled(s and s.reason or 'disarmed');owner:stop();owner=nil;finished=true;return
+  end
+  if (stalls or 0)>lastStalls then
+   lastStalls=stalls
+   local s=owner:stats()
+   DebugError(string.format('[X4LAN] FRAMEDIET stall sites=%s frame=%d phase=%s t=%.3f stalls=%d (UI Lua stopped while skipping; reverted to pass)',
+    siteText(s.stall_sites or 0),s.stall_frame or 0,phase or mode,now,stalls))
   end
   if abEvery and now>=nextPhase then
    local entry

@@ -50,7 +50,9 @@
  * `control` window of equal length at frame start measures what other threads change meanwhile.
  *
  * Lua: start(mode, sites[, period[, audit_every[, digest_max]]]) -> handle | nil, reason;
- * handle:set(mode[, sites]), handle:stats(), handle:active(), handle:stop() (also __gc).
+ * handle:set(mode[, sites]), handle:stats(), handle:active() -> armed, stalls, handle:stop() (also __gc).
+ * active() is the UI Lua heartbeat: if UI Lua stops calling it for STALL_MS (and STALL_MIN_FRAMES
+ * frames) while sites are skipped, the guard reverts the owner to pass mode and counts a stall.
  */
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
@@ -130,6 +132,11 @@ typedef struct {
 typedef struct {
     uint64_t generation;
     uint64_t frames, loading_frames, present_frames, draw_set, draw_reapplied, draw_recleared, guard_skipped;
+    /* UI Lua heartbeat: the loader calls active() every UI update. If UI Lua stops calling while sites
+       are skipped, the guard reverts the owner to pass mode (the mod's networking runs in UI Lua). */
+    uint64_t lua_frames, stalls, stall_frame;
+    int64_t lua_qpc;
+    int stall_sites;
     uint64_t split_calls, split_render_steps;   /* rng_split: slot 10 calls, render-stream steps */
     /* audit: whole MoveWorker frames (slot 2 to slot 2) on the simulation stream and ID map */
     uint64_t frame_audited, frame_rng_steps, frame_rng_unknown, frame_ids;
@@ -178,6 +185,9 @@ static int fd_draw_owned;        /* the current owner holds disable_rendering */
 static int fd_draw_ours;         /* we set the bit and have not seen it stay clear since */
 static int fd_draw_watch;        /* guard frames left in which a reappearing bit is cleared */
 #define CONTROL_MAX_US 5000.0    /* control window cap (the mean of the slowest audited region) */
+#define STALL_MS 3000.0          /* no UI Lua call for this long ... */
+#define STALL_MIN_FRAMES 30      /* ... and this many MoveWorker frames while skipping: revert to pass */
+#define FD_SKIP_SITES (FD_UI_SCENES | FD_UI_RENDER | FD_CAMERA | FD_DRAW | FD_UI_ELEMENTS)
 static int fd_ctx_scenes, fd_ctx_camera;
 static int fd_present;           /* this frame runs every presentation site (period) */
 #define FD_RENDER_RNG_SEED 0x52454e4445525631ull   /* "RENDERV1": private slot 10 stream */
@@ -449,6 +459,27 @@ static void fd_draw_hold(fd_owner *o) {
         fd_draw_ours = 1;
     }
     fd_draw_watch = 0;
+}
+
+/* A UI Lua call reached the module (heartbeat). Lock held. */
+static void fd_lua_seen(fd_owner *o) {
+    LARGE_INTEGER now;
+    if (o && fd_qpc(&now)) { o->lua_qpc = now.QuadPart; o->lua_frames = o->frames; }
+}
+
+/* Guard frames while skipping: UI Lua silent for STALL_MS and STALL_MIN_FRAMES means a skipped site
+   stopped the UI update; run everything again (pass) and record which sites were active. Lock held. */
+static void fd_stall_check(fd_owner *o) {
+    LARGE_INTEGER now;
+    if (o->mode != FD_DIET || !(o->sites & FD_SKIP_SITES) || !fd_qpc(&now)) return;
+    if (o->frames - o->lua_frames < STALL_MIN_FRAMES) return;
+    if ((double)(now.QuadPart - o->lua_qpc) * 1000.0 / (double)fd_qpf <= STALL_MS) return;
+    ++o->stalls;
+    o->stall_sites = o->sites;
+    o->stall_frame = o->frames;
+    o->mode = FD_PASS;
+    fd_draw_release();
+    fd_lua_seen(o);   /* the next stall needs a new silent period */
 }
 
 /* Lock held. */
@@ -784,6 +815,7 @@ static void fd_guard(fd_owner *o) {
         if (fd_entry[k] && *fd_entry[k] != fd_wrapper[k]) { fd_disarm("vtable entry changed"); return; }
     if (fd_call_patched && *call_rel() != fd_call_hook_rel) { fd_disarm("element update call changed"); return; }
     ++o->frames;
+    fd_stall_check(o);
     if (o->mode == FD_AUDIT) {
         /* Whole previous frame: every simulation-stream draw and ID insertion, for scale. */
         unsigned char *tls = fd_tls();
@@ -977,6 +1009,7 @@ static const char *fd_arm(uint64_t generation, int mode, int sites, int period, 
     /* A bit a previous owner set and whose release raced an engine copy is ours: adopt it, so this
        owner holds or releases it. A bit set by anyone else stays foreign. */
     fd_draw_owned = flags_ok && fd_draw_ours && fd_draw_bit_set();
+    fd_lua_seen(o);
     o->installed = 1;
     o->armed = 1;
     return NULL;
@@ -992,6 +1025,7 @@ static const char *fd_set(fd_owner *o, int mode, int sites) {
     o->mode = mode;
     o->sites = sites;
     if (mode != FD_DIET || !(sites & FD_DRAW)) fd_draw_release();
+    fd_lua_seen(o);
     return NULL;
 }
 
@@ -1000,10 +1034,13 @@ static void fd_stop(fd_owner *o) {
     if (o && o == fd_current) { fd_disarm(NULL); fd_current = NULL; }
 }
 
-/* active() core: also notices a lost slot (the guard no longer runs then). Lock held. */
+/* active() core: the UI Lua heartbeat; also notices a lost slot (the guard no longer runs then).
+   Lock held. */
 static int fd_active(fd_owner *o) {
     if (o && o == fd_current && o->armed && !fd_table_owned()) fd_disarm("callback ownership lost");
-    return o && o == fd_current && o->armed;
+    int on = o && o == fd_current && o->armed;
+    if (on) fd_lua_seen(o);
+    return on;
 }
 
 /* The owner state behind a handle's generation, or NULL for a stale handle. */
@@ -1059,13 +1096,17 @@ static int stop(lua_State *L) {
     return 0;
 }
 
+/* active() -> armed, stalls (UI Lua stalls the guard reverted to pass mode). Call it every UI update:
+   it is the heartbeat the stall watchdog waits for. */
 static int active(lua_State *L) {
     fd_owner *o = owner_of(L);
     AcquireSRWLockExclusive(&fd_lock);
     int on = fd_active(o);
+    double stalls = o ? (double)o->stalls : 0.0;
     ReleaseSRWLockExclusive(&fd_lock);
     p_lua_pushboolean(L, on);
-    return 1;
+    p_lua_pushnumber(L, stalls);
+    return 2;
 }
 
 /* set(mode[, sites]): switch the mode, or change the active sites within the installed set
@@ -1130,6 +1171,9 @@ static int stats(lua_State *L) {
     number_field(L, "draw_reapplied", (double)o->draw_reapplied);
     number_field(L, "draw_recleared", (double)o->draw_recleared);
     number_field(L, "guard_skipped", (double)o->guard_skipped);
+    number_field(L, "stalls", (double)o->stalls);
+    number_field(L, "stall_sites", o->stall_sites);
+    number_field(L, "stall_frame", (double)o->stall_frame);
     number_field(L, "split_calls", (double)o->split_calls);
     number_field(L, "split_render_steps", (double)o->split_render_steps);
     number_field(L, "frame_audited", (double)o->frame_audited);
