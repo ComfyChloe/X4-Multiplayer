@@ -94,6 +94,7 @@ struct Sample {
     frame_ms: Vec<f64>,
     parallel_ms: Vec<f64>,
     barrier_ms: Vec<f64>,
+    split_ms: Vec<[f64; 4]>,
     ideal: Vec<f64>,
     messages: u64,
     migrations: u64,
@@ -107,6 +108,7 @@ fn run(entities: u32, sectors: u32, threads: usize, frames: u64, warmup: u64, lo
         frame_ms: vec![],
         parallel_ms: vec![],
         barrier_ms: vec![],
+        split_ms: vec![],
         ideal: vec![],
         messages: 0,
         migrations: 0,
@@ -122,6 +124,7 @@ fn run(entities: u32, sectors: u32, threads: usize, frames: u64, warmup: u64, lo
             s.frame_ms.push(ms);
             s.parallel_ms.push(p.parallel_ns as f64 / 1e6);
             s.barrier_ms.push(p.barrier_ns as f64 / 1e6);
+            s.split_ms.push([p.commands_ns, p.commit_ns, p.route_ns, p.hook_ns].map(|v| v as f64 / 1e6));
             s.ideal.push(p.ideal_speedup());
             s.messages += p.messages;
             s.migrations += p.migrated;
@@ -174,8 +177,8 @@ fn main() {
         "x4mp-sim-bench: frames={frames} warmup={warmup} work={work} msg/1000={msg} migrate/1000={migrate} cores={}",
         std::thread::available_parallelism().map(|n| n.get()).unwrap_or(0)
     );
-    println!("| entities | sectors | threads | frame ms (median) | p95 | parallel ms | barrier ms | speedup | ideal (sum/max) | msgs/frame | migr/frame | hash |");
-    println!("|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---|");
+    println!("| entities | sectors | threads | frame ms (median) | p95 | parallel ms | barrier ms (cmd/commit/route/hook) | speedup | ideal (sum/max) | msgs/frame | migr/frame | hash |");
+    println!("|---:|---:|---:|---:|---:|---:|---|---:|---:|---:|---:|---|");
     let mut all_equal = true;
     for &e in &entities {
         for &s in &sectors {
@@ -190,10 +193,14 @@ fn main() {
                 let same = h == r.hash;
                 all_equal &= same;
                 println!(
-                    "| {e} | {s} | {t} | {m:.3} | {:.3} | {:.3} | {:.3} | {:.2}x | {:.1}x | {:.0} | {:.1} | {:016x}{} |",
+                    "| {e} | {s} | {t} | {m:.3} | {:.3} | {:.3} | {:.3} ({}) | {:.2}x | {:.1}x | {:.0} | {:.1} | {:016x}{} |",
                     p95(&r.frame_ms),
                     median(&r.parallel_ms),
                     median(&r.barrier_ms),
+                    (0..4)
+                        .map(|k| format!("{:.2}", median(&r.split_ms.iter().map(|x| x[k]).collect::<Vec<_>>())))
+                        .collect::<Vec<_>>()
+                        .join("/"),
                     b / m.max(1e-9),
                     median(&r.ideal),
                     r.messages as f64 / frames as f64,

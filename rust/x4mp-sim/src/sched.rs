@@ -87,6 +87,11 @@ pub struct PhaseReport {
     pub sectors: usize,
     pub parallel_ns: u64,
     pub barrier_ns: u64,
+    /// Barrier split: commands applied, worlds committed, messages routed, system hook.
+    pub commands_ns: u64,
+    pub commit_ns: u64,
+    pub route_ns: u64,
+    pub hook_ns: u64,
     pub sector_sum_ns: u64,
     pub sector_max_ns: u64,
     pub messages: u64,

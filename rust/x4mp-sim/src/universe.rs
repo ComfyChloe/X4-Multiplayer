@@ -440,7 +440,11 @@ impl Universe {
                 }
             }
         }
+        let t_cmd = Instant::now();
+        rep.commands_ns = ns(tb, t_cmd);
         self.commit();
+        let t_commit = Instant::now();
+        rep.commit_ns = ns(t_cmd, t_commit);
         // Barrier 2: route messages in the same total order.
         for env in msgs {
             rep.messages += 1;
@@ -448,12 +452,15 @@ impl Universe {
                 rep.dropped_messages += 1;
             }
         }
+        let t_route = Instant::now();
+        rep.route_ns = ns(t_commit, t_route);
         // Barrier 3: the system's serial hook gets everything queued for it, then commit.
         let barrier = std::mem::take(self.barrier_inbox(sys.name()));
         sys.barrier(&mut BarrierCtx { frame, universe: self, messages: &barrier });
         self.commit();
         self.phase += 1;
         self.serial_seq = 0;
+        rep.hook_ns = ns(t_route, Instant::now());
         rep.barrier_ns = u64::try_from(tb.elapsed().as_nanos()).unwrap_or(u64::MAX);
         rep
     }
@@ -530,4 +537,8 @@ impl Universe {
             e.compare_with(a, opts, frame, c);
         }
     }
+}
+
+fn ns(a: Instant, b: Instant) -> u64 {
+    u64::try_from(b.saturating_duration_since(a).as_nanos()).unwrap_or(u64::MAX)
 }
