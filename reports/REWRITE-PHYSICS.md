@@ -121,7 +121,13 @@ The rest of `Scene::Step` at 8 sectors is X4 code: shape refresh 0xbff80 (5.1 ms
 - `UpdateBatch` 0xeaecc0 (worker): registers as a reader of the published view cache, updates its agents in
   cursor order with 0xe8f250 (the flight/steering update), checks the **wall-clock budget** (+0x218 seconds since
   +0x210; for flagged batches only after 100 agents) and gives every remaining agent the cheap update once over
-  budget; then rotates the cursor so those agents go first next frame. Each batch splices its private command list
+  budget; then rotates the cursor so those agents go first next frame. Batch (0x20 bytes): +8 agent count,
+  +0x10 list head, +0x18 cursor node (MSVC list nodes: next +0, prev +8, agent +0x10).
+- **Windows budget quirk** (static + this PC): the check multiplies the QPC tick delta by the constant 1e-9
+  (0x31c05a8), but QPC runs at 10 MHz, so with pm+0x218 = 0.001 the **effective Windows budget is 100 ms per
+  batch** and the cheap update practically never happens (passes take 1-2 ms). The Linux build (UpdateBatch
+  0x13e32f0) computes nanoseconds from `clock_gettime`: a real 1 ms budget. A Linux server therefore degrades
+  pathing under load, Windows does not. Each batch splices its private command list
   into the global deferred queue under 0x398a558 **in completion order**.
 - Join (`WaitAndSwapBuffers` 0xeac170, MoveWorker, after the walk, MD and AI): waits for the done handle, applies
   queued orders (0xeace40) and flips the double buffer. In `ApplyQueuedOrders` a non-empty removed-component set
@@ -217,7 +223,38 @@ pass ends 8-27 ms before the MoveWorker joins.
 - Scene::Step besides Jolt (battle profile): `Body_UpdateShape` 0xbff80 0.68 %, velocity feedback 0xbfb00
   0.67 %, pre-sync 0x3dc040 0.37 %, `SetLinearAndAngularVelocity` 0.22 % of MoveWorker samples.
 
-## 7. Status and next stages
+## 7. The flight/steering update 0xe8f250 (stage 4)
+Static; key facts re-verified by hand, details in the stage-4 results file.
+- Signature `void(Agent*, CmdList*, float dt, double t, bool cheap)`; only call site 0xeaed6f in UpdateBatch
+  (`e8 dc 04 fe ff`). Double-buffered pathing slots: slot(i) = agent+0xad0+i*0x1a0, read index 0x38f4ee4,
+  write index 0x2f4b6f4.
+- Mostly plumbing (orders, formation flags, reference checks, zone/gate WarpEvents, boost/travel checks; events
+  appended to the batch-private command list). The flight math is the agent's flight control model,
+  `model->Update(slot(W), dt, t, cheap, P(owner))` through vtable slot +0x70 (call `ff d3` at 0xe901d5), followed
+  by a pure post-model filter (rate limiter, forward-speed ratio, angular clamp).
+- Six model classes (vtable / Update): Forced 0x2c4f7d0 / 0xeb04c0 (0x1ce bytes, pure), Highway 0x2c4f6f0 /
+  0xeb0b70, Linear 0x2c4f610 / 0xeb27c0, MassTraffic 0x2c4f8d0 / 0xeb3d90 (uses `rsqrtss`), Spline 0x2c4f480 /
+  0xeb7230, Steering 0x2c4e9c8 / 0xec7200 (large; draws from the worker's TLS RNG: `Random::FloatState(TLS+0x318)`
+  at 0xec80b0, so its result depends on which worker ran the batch).
+- Thread context: the job path never sets the TLS game time (+0x300) or the view-cache selector (+0x314) on the
+  workers; e8f250 stamps some events with the TLS time.
+- Data-only interception point: the six vtable slots (+0x70). physics_flight.h wraps them for the census
+  (`FLIGHTPROF`) and the capture (`FLIGHTCAP`).
+
+Rust candidate (offline, original machine code via the oracle; rust/x4mp-physics):
+- `flight::forced_update` = ForcedFlightControlModel::Update: velocity from the pose step, the relative
+  orientation (target x current^T in the original lane order), Euler terms from atan2f/asinf with the clamp,
+  pose copy. Bit-identical to the original on 483,322 cases (realistic, near-identity, arbitrary finite bits).
+- `flight::x4_asinf` = X4's statically linked asinf (0x1b43ce0), ported: identical on **every** f32 in [-1, 1]
+  (2,130,706,434 inputs). The platform asinf differs on ~0.9 % of inputs, a double asin rounded to float on
+  ~6.5 %; the platform atan2f equals X4's on Windows (2 M inputs). With the port, the forced update runs
+  without any X4 code and stays bit-identical (300,000 cases).
+- Capture/replay: physics_flight.h records the model bytes, the agent block 0x340..0x39f and the slot before and
+  after each Update of one class into `x4mp-flightcap-<model>.log` (X4PFCAP1); `x4mp-flight-replay` replays it
+  against the reimplementation (`REPLAYCAP` line). Offline round trip: 2,000 records from the original replay
+  with 0 mismatches, a flipped bit is caught.
+
+## 8. Status and next stages
 - Stage 1 (static + synthetic): done (6a0a9a8). Stage 2 (native probe runs): done. Stage 3: joltwait done
   (quiet-window timing requested, Q17); parallel pool offline only.
 - Stage 4/5: flight/steering update 0xe8f250 assessment and a capture/replay of it.

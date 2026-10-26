@@ -22,7 +22,7 @@ static void fake_forced(void *self, void *slot, float dt, double t, uint8_t chea
 }
 static DWORD WINAPI capture_worker(LPVOID arg) {
     int worker = (int)(intptr_t)arg;
-    static unsigned char agents[2][0x400], models[2][0x60], slots[2][0x1a0];
+    static unsigned char agents[2][0x400], models[2][0x70], slots[2][0x1a0];
     unsigned char *agent = agents[worker], *model = models[worker], *slot = slots[worker];
     agent[0x340] = (unsigned char)(0x40 + worker);
     *(float *)(agent + 0x364) = 321.0f + (float)worker;
@@ -412,7 +412,7 @@ int main(void) {
         wcscat(wpath, L"x4pf-test-capture.log");
         WideCharToMultiByte(CP_UTF8, 0, wpath, -1, path, MAX_PATH, NULL, NULL);
         DeleteFileW(wpath);
-        assert(pf_request_capture("warp", 10, path, 0) && pf_request_capture("steering", 10, path, 0));
+        assert(pf_request_capture("warp", 10, path, 0) && pf_request_capture("steering", 10, path, 0) && pf_request_capture("linear", 10, path, 0));
         assert(pf_request_capture("forced", 0, path, 0) && pf_request_capture("forced", 10, NULL, 0));
         assert(!pf_request_capture("forced", 64, path, 1000));
         assert(pf_request_capture("forced", 64, path, 1000));   /* one capture per session */
@@ -434,10 +434,10 @@ int main(void) {
         CloseHandle(f);
         DeleteFileW(wpath);
         const uint32_t *hdr = (const uint32_t *)(file + 8);
-        assert(!memcmp(file, PF_CAP_MAGIC, 8) && hdr[0] == 1 && hdr[1] == 0 && hdr[3] == 0x60 && hdr[7] == 64);
+        assert(!memcmp(file, PF_CAP_MAGIC, 8) && hdr[0] == 1 && hdr[1] == 0 && hdr[3] == 0x70 && hdr[7] == 64);
         assert(hdr[8] == 16 && hdr[9] == X4_PE_TIMESTAMP && hdr[10] == X4_IMAGE_SIZE && hdr[11] == sizeof(pf_cap_head));
         size_t rs = hdr[2];
-        assert(rs == pf_cap_record_size(0x60) && got_bytes == 8 + 48 + 64 * rs);
+        assert(rs == pf_cap_record_size(0x70) && got_bytes == 8 + 48 + 64 * rs);
         for (int r = 0; r < 64; ++r) {
             const unsigned char *rec = file + 56 + r * rs;
             const pf_cap_head *h = (const pf_cap_head *)rec;
@@ -445,7 +445,7 @@ int main(void) {
             assert(h->model == 0 && h->dt == 0.5f && h->max_forward == 321.0f + (float)worker && (h->flags & 3) == 2);
             const unsigned char *model = rec + sizeof(pf_cap_head);
             assert(model[0x20] == 0x20 + worker);                       /* model bytes */
-            const unsigned char *agent = model + 0x60;
+            const unsigned char *agent = model + 0x70;
             assert(agent[0] == 0x40 + worker);                          /* agent +0x340 */
             const unsigned char *before = agent + PF_CAP_AGENT_BYTES, *after = before + PF_CAP_SLOT;
             assert(before[0x40] == 0x11 && after[0x40] == 0x99 && after[0x41] == before[0x41]);

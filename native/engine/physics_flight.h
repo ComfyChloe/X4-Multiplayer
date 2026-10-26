@@ -36,7 +36,9 @@ static struct {
 #define PF_CAP_AGENT_FROM 0x340u
 #define PF_CAP_AGENT_BYTES 0x60u
 #define PF_CAP_MAGIC "X4PFCAP1"
-static const uint32_t pf_cap_model_bytes[PF_MODELS] = {0x60, 0, 0, 0, 0, 0};   /* forced: 0x60 (eb04c0) */
+/* Object sizes from the factory's SMem::Allocate (0xe87a08 forced 0x70, 0xe87e3f highway 0xa0, 0xe87f65
+   mass traffic 0xc0); linear/spline/steering are built in their own constructors (size not pinned yet). */
+static const uint32_t pf_cap_model_bytes[PF_MODELS] = {0x70, 0xa0, 0, 0xc0, 0, 0};
 typedef struct {
     uint32_t model, flags;        /* flags: 1 cheap, 2 P(owner), 4 called on the owner thread */
     float dt, max_forward;        /* max_forward: agent+0x364 (also inside the agent bytes) */
