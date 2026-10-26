@@ -5,7 +5,7 @@
 
 pub use x4mp_sim::id::{OrderKey, SectorIx, UniverseId};
 
-/// Dense index into a [`crate::ware::WareTable`] (the engine keys wares by `WareClass*`;
+/// Dense ware index (the engine keys wares by `WareClass*`;
 /// captures carry the ware id string and the table assigns the index).
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct WareIx(pub u16);
