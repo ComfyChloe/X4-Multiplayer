@@ -8,7 +8,7 @@ const SESSION: u64 = 276944566;
 
 #[test]
 fn the_x4mp_sim_binding_reproduces_the_driver() {
-    // Same universe on x4mp-sim's scheduler (one Universe::step per AI pass): identical effect log,
+    // Same universe on x4mp-sim's scheduler (multi-pass system, one Universe::step per frame): identical effect log,
     // stops and state hash for 1, 3 and 8 threads.
     // 8 s of game time: first legs, waits and reservations of every ship.
     let (mut w0, mut ais0) = synthetic_universe(SESSION, 8, 4, 6);

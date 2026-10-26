@@ -293,7 +293,7 @@ share (create_position + get_safe_pos draws), and delivery draws per event class
 | `replay` | trace replay with bit-exact comparison and first-difference report |
 | `native` | checks of native bracket captures (sessions, wake times, draw classes; `x4ai-check`) |
 | `system` | per-sector driver (passes, outbox, barrier merge in sector order), synthetic world, thread-invariance bed |
-| `ecs` | the driver on x4mp-sim: AI state as a per-world resource, one `Universe::step` per pass, effects ordered by x4mp-sim's barrier |
+| `ecs` | the driver on x4mp-sim: AI state as a per-world resource, a multi-pass system (pass until no agent ran, cap 0x40), effects ordered by x4mp-sim's barrier |
 
 **Order interface** (for the faction AI that will command orders; published in rewrite-coord/interfaces.md):
 `OrderSpec` holds an order's typed `<params>` with the XML defaults (`OrderSpec::Patrol(PatrolParams)`),

@@ -1,12 +1,13 @@
 //! x4mp-sim binding of the per-sector AI driver ([`crate::system`]).
 //!
 //! Each x4mp-sim world (one sector) holds its AI state as a resource ([`AiSector`]). One AI pass is one
-//! x4mp-sim phase of the [`AiPass`] system: the sector jobs run their due agents in parallel
-//! ([`run_pass`]) and send every effect and every stop to the barrier as a message; x4mp-sim's barrier
-//! orders them by (order key, sector, emission sequence), which with key 0 is the sector order of
-//! [`crate::system::run_frame`]. [`run_frame_ecs`] repeats the pass (one `Universe::step` each) until no
-//! sector ran an agent, at most [`MAX_PASSES`] times, so calls, returns and cross-sector wakes made in a
-//! pass run in the next pass of the same frame, as in `AIDirector::Move`.
+//! x4mp-sim phase of the multi-pass system [`AiPass`] (`max_passes` = [`MAX_PASSES`], the engine's cap):
+//! the sector jobs run their due agents in parallel ([`run_pass`]), send every effect and every stop to
+//! the barrier as a message, and request another pass when an agent ran; x4mp-sim's barrier orders the
+//! messages by (order key, sector, emission sequence), which with key 0 is the sector order of
+//! [`crate::system::run_frame`]. `Universe::step` repeats the pass until none is requested, so calls,
+//! returns and cross-sector wakes made in a pass run in the next pass of the same frame, as in
+//! `AIDirector::Move`.
 //!
 //! Status: the binding drives the synthetic test world (`tests/system_invariance.rs` checks that it
 //! reproduces `system::run_frame` exactly for 1, 2 and 16 threads). The engine-backed [`Services`] (facts
@@ -17,7 +18,6 @@ use crate::system::{
 };
 use crate::val::Uid;
 use crate::world::Effect;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
 use x4mp_sim::{BarrierCtx, FrameInfo, Pool, SectorCtx, SectorIx, System, Target, Universe, UniverseId, WorldKind};
 
@@ -47,21 +47,15 @@ pub struct AiStopped {
     pub why: String,
 }
 
-/// One AI pass as an x4mp-sim system.
+/// The AI phase as an x4mp-sim multi-pass system.
 pub struct AiPass<'s> {
     services: &'s dyn Services,
-    ran: AtomicBool,
     log: Mutex<Outbox>,
 }
 
 impl<'s> AiPass<'s> {
     pub fn new(services: &'s dyn Services) -> AiPass<'s> {
-        AiPass { services, ran: AtomicBool::new(false), log: Mutex::new(Outbox::default()) }
-    }
-
-    /// Whether any sector ran an agent since the last call (an OR over sectors: thread independent).
-    fn take_ran(&self) -> bool {
-        self.ran.swap(false, Ordering::Relaxed)
+        AiPass { services, log: Mutex::new(Outbox::default()) }
     }
 
     fn take_log(&self) -> Outbox {
@@ -78,8 +72,9 @@ impl System for AiPass<'_> {
         let now = ctx.frame.game_time;
         let res = ctx.world.resource_mut::<AiSector>();
         let mut out = Outbox::default();
+        // An agent ran: what it did may make others (or itself) due in the next pass.
         if run_pass(&mut res.ai, self.services, now, &mut res.moving, &mut out) {
-            self.ran.store(true, Ordering::Relaxed);
+            ctx.request_pass();
         }
         for (ent, line, effect) in out.effects {
             ctx.out.send(Target::Barrier, AiEffect { ent, line, effect });
@@ -87,6 +82,10 @@ impl System for AiPass<'_> {
         for (ent, why) in out.stopped {
             ctx.out.send(Target::Barrier, AiStopped { ent, why });
         }
+    }
+
+    fn max_passes(&self) -> u32 {
+        MAX_PASSES as u32
     }
 
     fn barrier(&self, ctx: &mut BarrierCtx<'_>) {
@@ -119,19 +118,13 @@ pub fn sector_ais(universe: &Universe) -> Vec<SectorAi> {
     universe.worlds().iter().filter_map(|w| w.resource::<AiSector>()).map(|r| r.ai.clone()).collect()
 }
 
-/// One frame: AI passes until quiescent. Returns the merged outbox (pass-major, sector order inside a
-/// pass) and the entities that issued a `move_to` this frame (sector order).
+/// One frame: AI passes until quiescent (one `Universe::step`). Returns the merged outbox (pass-major,
+/// sector order inside a pass) and the entities that issued a `move_to` this frame (sector order).
 pub fn run_frame_ecs(universe: &mut Universe, pool: &Pool, pass: &AiPass<'_>, frame: &FrameInfo) -> (Outbox, Vec<Uid>) {
     for i in 0..universe.sector_count() {
         universe.world_mut(SectorIx(i as u32)).resource_mut::<AiSector>().moving.clear();
     }
-    let _ = pass.take_ran();
-    for _ in 0..MAX_PASSES {
-        universe.step(pool, &[pass as &dyn System], frame);
-        if !pass.take_ran() {
-            break;
-        }
-    }
+    universe.step(pool, &[pass as &dyn System], frame);
     let mut moved = Vec::new();
     for w in universe.worlds() {
         if let Some(r) = w.resource::<AiSector>() {
