@@ -124,6 +124,9 @@ replicas of the explicitly shared objects.
 ## Session and stable objects
 
 Two player slots authenticate with a matched package key and build/session IDs.
+Dedicated sessions admit `p1..pN` and one shared ship per client; see
+[DEDICATED-SERVER.md](DEDICATED-SERVER.md) for N-player routing, `XSHIP` and the
+subsystems that stay on ships 1/2.
 The handshake's start sector is Argon Prime; later navigation contains the actual
 sector macro. Packets use the bounded ASCII version-1 envelope (768 bytes max).
 Version 6 adds channels incompatible with a version-5 game adapter. Pair keys and

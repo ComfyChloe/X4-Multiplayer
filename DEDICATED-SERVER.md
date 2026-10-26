@@ -1,40 +1,92 @@
 # Linux dedicated-server prototype
 
 Status: internal development. This is an unattended **full X4 process** supervised by
-Rust, not a renderer-free or standalone universe simulator. Two human guests connect
-to one Linux authority. Engine hooks are not used or required.
+Rust, not a renderer-free or standalone universe simulator. Up to seven human clients
+connect to one Linux server. Engine hooks are not used or required.
 
-## Roles and limits
+Terminology: the dedicated X4 is the **server**; humans connect as **clients**
+(player 1 ... N, all equal). Older identifiers keep their names for compatibility:
+package roles `host`/`guest`/`guestK`, folders `-GuestK`, wire slot `p1` for the
+server and MD/log strings such as `SetupHost`/`SetupGuest`.
 
-- `p1`: Linux X4 authority and Rust relay/supervisor. Its internal player remains in
-  the observer ship and does not count as a human pilot.
-- `p2`: human guest, initially assigned shared ship 2.
-- `p3`: second human guest, using shared ship 1 through the normal authenticated
-  handoff. The authority does not teleport into that ship.
-- Each guest has independent sector interest and acknowledged baseline delivery.
+## Players, slots and ships
 
-Persistent campaign save/resume, progressed-world late join, crash recovery into the
-same world, 4–6 players, general economy/attention correctness, and public Internet
-exposure are not implemented. Use a trusted LAN or VPN. A failed game or relay is not
-automatically restarted; create an explicit fresh session/world instead.
+- A dedicated session declares `max_players` N (2..8; session.json and package.json).
+  Slots are `p1..pN`. `p1` is the server; its internal player stays in the observer ship
+  and never consumes a shared ship.
+- Shared ships: `max(2, N - 1)`, one per client, entity ids 1.. on the wire. Default
+  local ships: player 2 -> ship 2, player 3 -> ship 1 (as before), player K -> ship K-1.
+  Ship 2 starts with player 2, every other ship with the server until its client takes
+  the controls through the normal authenticated CREW handoff.
+- Every client's motion, fire, body and authority reaches every other client and the
+  server; server state reaches every client. Each client has independent sector
+  interest and acknowledged baseline delivery.
+- A session without `max_players` is the legacy three-slot session (players 2 and 3).
+  Non-dedicated (Python relay) sessions stay at two players; the Python relay refuses
+  dedicated or N-player sessions.
+
+### Protocol version
+
+Every new build label carries the protocol tag `np1`; dedicated labels also name the
+player count, e.g. `world1-7.5.0-np1-p4-9.00-steam23660954`. The launcher refuses an
+invitation whose label or player count does not match, the supervisor refuses a
+session whose label lacks `-np1-p<N>-` or whose authority config lacks
+`max_players=N`, and the relay never admits a HELLO with another build label. A
+package for a player number above `max_players` refuses to configure.
+
+### N-player limits (fail closed)
+
+Ships 1/2 are the fixture ships. These subsystems stay on ships 1/2 in every session
+size; the relay rejects ships 3.. explicitly (no reply, or `REJECTED` for orders):
+
+| Subsystem | Ships 3.. |
+| --- | --- |
+| WORLD rows (hull/shield/cargo/dock) | separate server-owned `XSHIP` rows, 5 Hz |
+| Pilot-reported health (HEALTH/HACK/HSTALE/HBASE), HGEN | not offered; health is server-owned via `XSHIP` |
+| Shot claims (SHOT), NPC hit claims (NCLAIM) | rejected; no hit credit from ships 3.. |
+| Projectile visuals (BOLT/BEND) | rejected; FIRE2 trigger playback still works |
+| Native cargo drop/pickup (CARGOREQ), market orders (COOPORDER) | rejected (`REJECTED`) |
+| Legacy bubble actions (fixture drops, station transfer) | rejected |
+| Dock attachment (CDOCK) | rejected; the remote ship follows its NAV2 pose only |
+| Remote spacesuit kill (SUITKILL) | replicas for every client; the server reports a kill only for the most recent remote suit and only when its generation is unique |
+
+### Bandwidth
+
+Per client and 20 Hz tick the relay sends AUTH, HGEN, WORLD, one NAV2 and one FIRE2
+per remote ship, one BODY2 per other player, and the existing bounded universe
+traffic (32 motion records, a 12-packet baseline window, IDENT budget). XSHIP adds
+`N - 3` rows per client at 5 Hz. Player traffic therefore grows linearly with N
+(about `3 * (N - 1)` extra packets per tick per client); the universe budgets are per
+client and unchanged.
 
 ## Build
 
 Requirements: Linux x86-64, Rust 1.82+, Cargo, Python 3.10+, and the pinned X4 9.00
-Linux installation (Steam build 23660954). Build an internal triple package:
+Linux installation (Steam build 23660954). Build an internal package set:
 
 ```sh
-python3 distribution/build_packages.py /path/to/new-dedicated-pair --dedicated     --runtime-cache /path/to/internal-runtime-cache
+python3 distribution/build_packages.py /path/to/new-dedicated-set --dedicated     --max-players 4 --runtime-cache /path/to/internal-runtime-cache
 ```
 
-`--runtime-cache` (the normal internal runtime cache) is required by the CLI. The
-dedicated build compiles `x4lan-dedicated` and the Rust `x4lan-net`
-module. It does not use new C code. Existing launchers still include Python helpers
-for installation and world transfer.
+`--max-players` (default 3) counts the server slot: 4 builds the Linux server package
+plus `X4-LAN-*-Windows11` (player 2, profile 45841), `-Guest2` (player 3, profile
+45842) and `-Guest3` (player 4, profile 45843). Build into a Linux file system: the
+bundled runtime's terminfo tree does not fit a case-insensitive `/mnt/c` target.
+`--runtime-cache` is required by the CLI. The dedicated build compiles
+`x4lan-dedicated` and the Rust `x4lan-net` module. It does not use new C code.
 
-Configure the Linux package as host, the first Windows package as guest, and
-`X4-LAN-*-Windows11-Guest2` as the second guest. Send the same private
-`JOIN-SESSION.json` to both guests. Do not publish session files or configured Lua.
+Configure the Linux package as host (server) and each Windows package as a client
+(the launcher's `guest` choice). Send the same private `JOIN-SESSION.json` to every
+client. Do not publish session files or configured Lua.
+
+### Several clients on one test PC
+
+Each client package uses its own isolated profile (`test_profile` in package.json:
+45841 for player 2, 45839+K for player K). Install each package into its own X4
+installation or sandbox; the profile id keeps saves and config apart, but a worktree
+or profile does not isolate the Steam client, the X4 installation folder or the
+extension folder. Profiles 45841..45848 are recognized as test profiles and are never
+offered as settings sources.
 
 ## Steam client requirement
 
@@ -78,10 +130,29 @@ the supervisor exits failed and never starts a replacement world automatically.
 
 ## Validation boundary
 
-Rust/Python/LuaJIT tests and synthetic p2/p3 peers do not establish native two-human
-play. A WSL smoke test with one native authority and synthetic guests is a separate,
+Rust/Python/LuaJIT tests and synthetic 3-/4-player peers do not establish native
+multi-client play. A WSL smoke test with one native authority and synthetic guests is a separate,
 limited result. Two actual clients, multi-sector combat/attention behavior, long
 sessions, and persistent-world lifecycle require their own acceptance tests.
+
+## Native N-player check (pending)
+
+No native N-player run has been made. Synthetic evidence: `rust/x4lan-relay/tests/nplayer.rs`
+and `tests/test_nplayer_lua.py`. A first native check with a server plus three clients:
+
+1. Build a fresh set with `--max-players 4`; set up the server (Linux package, profile
+   45841) and three client packages (profiles 45841, 45842, 45843) from fresh folders.
+2. Start the server; check `status` shows the server peer admitted.
+3. Start clients one at a time. In each client log expect `shared ships ready: ... count=3`,
+   `BUBBLE_READY ... ships=3 local=<own ship>` (player 2 -> 2, player 3 -> 1, player 4 -> 3),
+   and `ship <n> movement authority=p<k>` for every ship.
+4. Fly every client: each client must see the two other clients' ships move, fire
+   (FIRE2) and change sector; the server log shows all three NAV2 sources.
+5. Disconnect one client for more than 30 s, reconnect it (resume), and check that the
+   other two never stopped seeing each other.
+6. Damage ship 3 on the server side and check the hull/shield mirror on the other
+   clients (XSHIP); confirm cargo/market/dock-attachment actions from ship 3 are refused
+   with a notice, not silently half-applied.
 
 ## Relay listen address
 

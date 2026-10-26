@@ -66,9 +66,12 @@ The pitch is not "Rust is faster" (the relay is idle most of the time) but that 
 protocol's invariants become types the compiler checks:
 
 * Fields are parsed once into validated types: `Hex32` (token/nonce/lease/request,
-  constant-time comparison built in), `Atom` / `Atom::parse_macro`, `Slot` (`P1`/`P2`,
-  no third value), `Ship` (`One`/`Two`; Python indexes dicts with ints 1/2 after
-  re-checking `entity in (1, 2)` in ~20 places). A handler holding these never re-checks.
+  constant-time comparison built in), `Atom` / `Atom::parse_macro`, `Slot` (`p1`..`p8`,
+  admitted only up to the session's `max_players`: 2 outside dedicated mode), `Ship`
+  (1..8, validated against the session's `ship_count`; `is_fixture()` marks ships 1/2,
+  which Python indexes with ints after re-checking `entity in (1, 2)` in ~20 places).
+  A handler holding these never re-checks. N-player routing is dedicated-only; the
+  two-player wire output stays byte-identical to Python (see `tests/nplayer.rs`).
 * Lifecycles are enums: `CommandResult`, `OrderResult`, `CargoResult`, `MissionState`
   with its transition table (`may_become`), `DockMode::attached()`, `BodyMode`,
   `NavKind`, `WeaponKind`. A string like `"PENDNG"` cannot be stored.
