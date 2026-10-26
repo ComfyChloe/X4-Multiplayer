@@ -234,7 +234,20 @@ while it runs the rest of the chain is stored as `then:` (so nobody else can ado
 its end the lock is handed on (`handoff: b, c`, `handed_from: a`, `handoff_since`) instead of removed.
 A handed-on member that does not adopt within 10 minutes is skipped (by any run's checks or
 `doctor --fix`); the last member, or running out of members, removes the lock. The first member of
-a lead-made chain is not timed. `--timing` waiters never hold the queue head.
+a lead-made chain is not timed. `--timing` waiters never hold the queue head. A name may appear more
+than once (each adoption consumes the first entry).
+
+`x4lane.py hold --agent A [--minutes 15] [--wait S] -- CMD ARGS` is a chain member for CPU-only
+work: it adopts the lock under the same rule (A first, no X4.exe of any kind running), runs CMD in
+a kill-on-close job (killed at the limit), records every X4 that appears meanwhile (`x4_free`), and
+hands the lock on; result.json under `X4Mods\lanes\holds\` or `--collect`.
+
+## Slot reservation for the protected clients
+
+`x4lane.py reserve --slots N --owner NAME [--minutes M] [--reason R]` (or `--clear`) writes
+`rewrite-coord\reserve.json`. Admission counts `max(0, slots - running protected X4)` as occupied
+(all X4 + unfilled reserved + new starts <= MAX_X4_TOTAL) and adds `RESERVE_SLOT_GB = 9` GB of
+free-RAM floor per unfilled slot. Expired reservations are ignored; running lanes are never stopped.
 
 ## Timing caveats
 
@@ -265,6 +278,11 @@ numbers below are functional, not timing-grade. Overlay: fixed-tick probe built 
 | v1-b2-already-running | `--test-skip-release` while b1's X4 held the lock | box `Game is already running!` detected and closed, X4 exit 50, run failed cleanly (exit 7) in 2 s, lane restored |
 | v1-b2-crash-victim, v1-b2-after-crash | runner hard-killed after READY | the kill-on-close job ended its X4 at once; `status` showed the lock STALE (owner pid gone); the next run took it over, warned `lane was left in phase running`, restored, passed |
 | --timing | timing run with `--wait` | refusal path only: it waited while other X4 instances ran; not yet run holding quiet.lock (PC busy) |
+| v3-session-1 | session, 2 clients | stopped safely before any X4 started: x4lock exit 5 (a protected client also held the mutex); that case now waits instead |
+| v4-session-2 | session b3/b4, telemetry + probe overlays, relay on 127.0.0.1:64539 | clients connected (`connected to relay as p1/p2`, `remote=receiving` x3 each), relay endpoint UDP 127.0.0.1 only; verdict timeout only because my `--server-until` regex required p1 before p2 |
+| v5-session-3 | same, order-free `--server-until` | **pass**: b1 (p1) + b3 (p2), relay UDP 127.0.0.1:63439 only, both peers listed, WM_CLOSE 28 s each, lanes restored, gates re-pinned (9 .lua per client), max 6 X4 on the PC |
+| ramp | `x4lane observe`, 01:52-02:08 | 6 X4: 8-9 GB available, 24-32 fps; 7 X4: 0.8-2.7 GB, 6k-16k hard faults/s, commit 141/191 GB; 8 X4: 0.4-0.6 GB, up to 43k-46k pages/s. Lead set MAX_X4_TOTAL 6 and MIN_FREE_PER_START 14 GB |
+| other agents | queue, protected clients, stop | the queue served up to 8 waiters; the lead used `x4lane stop --lane b2`; protected clients were never touched |
 
 Peak commit per lane X4: 8.8-9.0 GB (fresh custom_creative world). No save files were written,
 no dialog other than the provoked one appeared, the foreground window stayed with the user's
@@ -274,9 +292,10 @@ count from the latest world start.
 
 ## Open points
 
-- `--timing` with quiet.lock held (own or adopted by handoff): validate when the PC is quiet.
-- Session mode (assigned by the lead after Q6/Q7): implemented, offline-tested; native two-client
-  loopback validation pending (the PC was reserved for the user's N-player test).
+- `--timing` with quiet.lock held (own or adopted by handoff) and `hold`: offline-tested; native
+  run when the lead opens a quiet window.
+- Sessions with 3 clients need a 3-slot relay (the 7.x Python relay has p1/p2 only); only 2 clients
+  were validated natively.
 - Single runs keep the offline guard; only sessions allow loopback networking. Profile gates in
   source stay pinned to 45841; lane copies are re-pinned per run (sessions by default).
 - `native/engine/build.py --fixedtick --test`: the DLL and fixedtick tests pass; `test_simprof`'s
