@@ -570,7 +570,8 @@ def setup(args):
     if (ROOT / 'session.json').exists():
         recover_session_metadata()
     if not (ROOT / 'session.json').exists():
-        fixed = dedicated_setup_role(read_json(ROOT / 'package.json'))
+        package_path = ROOT / 'package.json'
+        fixed = dedicated_setup_role(read_json(package_path)) if package_path.is_file() else None
         if fixed and args.role is None:
             print('Dedicated ' + ('server' if fixed == 'host' else 'client') + ' package.')
         role = args.role or fixed or input('Role: [H]ost or [G]uest? ').strip().lower()
