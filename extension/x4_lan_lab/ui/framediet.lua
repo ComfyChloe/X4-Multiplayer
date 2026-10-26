@@ -32,7 +32,9 @@ if state.framediet=='pending' and not (cfg.dedicated==true and cfg.slot=='p1') t
  refuse('framediet','not_dedicated_server')
 end
 if not (package and package.config and package.config:sub(1,1)=='\\') then refuseAll('windows_only') end
-if cfg.test_profile~='45841' then refuseAll('not_test_profile') end
+-- Disposable test profiles only: 45841 (p1) .. 45848 (np8 assigns one per slot).
+local profile=tonumber(cfg.test_profile)
+if not (profile and profile>=45841 and profile<=45848) then refuseAll('not_test_profile') end
 if not (package and package.loadlib) then refuseAll('native_modules_unavailable') end
 local diet,split=state.framediet=='pending',state.rng_split=='pending'
 if not diet and not split then features();return end

@@ -92,6 +92,17 @@ class FrameDietLoaderTests(unittest.TestCase):
             self.assertEqual(self.logs(lua)[-1], '[X4LAN] FEATURES process=x4lan-framediet '
                              f'framediet=auto-disabled:{reason} rng_split=auto-disabled:{reason}')
 
+    def test_every_slot_test_profile_is_accepted(self):
+        for profile in ('45841', '45843', '45848'):
+            lua = self.runtime("{enabled=true,rng_split=true,slot='p3',test_profile='%s'}" % profile)
+            lua.execute('ui()')
+            self.assertEqual(self.starts(lua), ['pass:rng_split'])
+            self.assertEqual(self.disabled(lua), [])
+        for profile in ('45840', '45849', 'x'):
+            lua = self.runtime("{enabled=true,rng_split=true,slot='p3',test_profile='%s'}" % profile)
+            self.assertIsNone(lua.eval('ui'))
+            self.assertEqual(self.disabled(lua), ['[X4LAN] FEATURE rng_split DISABLED reason=not_test_profile'])
+
     def test_nothing_requested_logs_features_off_and_loads_nothing(self):
         lua = self.runtime("{enabled=true,frame_diet=false,rng_split=false,slot='p2',test_profile='45841'}")
         self.assertIsNone(lua.eval('ui'))
