@@ -913,6 +913,7 @@ class LogWatcher:
         self.failed_line = None
         self.failed_regex = None
         self.markers = {}
+        self.last_line_at = None                       # clock() of the newest complete line
 
     def poll(self):
         try:
@@ -940,6 +941,7 @@ class LogWatcher:
 
     def line(self, text):
         self.lines += 1
+        self.last_line_at = self.clock()
         if '[=ERROR=]' in text:
             self.errors += 1
         elapsed = round(self.clock() - self.t0, 3)

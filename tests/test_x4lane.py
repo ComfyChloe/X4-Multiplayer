@@ -1,5 +1,6 @@
 """Offline tests of the native test lane tool (dev/x4lane.py, dev/lane/). No X4 is started."""
 from pathlib import Path
+import json
 import os
 import socket
 import subprocess
@@ -698,6 +699,97 @@ class StopAndReserveTests(FakeWindows):
         for blocker in blockers[:2]:
             blocker.release()
         self.assertFalse(any(self.paths.lane(n).lock.exists() for n in core.LANE_PROFILES))
+
+
+class DoctorTests(FakeWindows):
+    def lane_dirs(self, name='b1'):
+        lane = self.paths.lane(name)
+        make_lab(self.paths.base)                                  # lanes/base/x4_lan_lab
+        lane.extensions.mkdir(parents=True)
+        core.copy_tree(self.paths.base_lab, lane.lab, lane.dir)
+        lane.profile_base.mkdir(parents=True)
+        for file, text in (('config.xml', '<root><autosave>false</autosave></root>'), ('inputmap.xml', '<x/>'),
+                           ('content.xml', '<content/>')):
+            (lane.profile_base / file).write_text(text)
+        lane.profile_dir.mkdir(parents=True)
+        return lane
+
+    def levels(self, findings, lane='b1'):
+        return [(f['level'], f['what']) for f in findings if f['what'].startswith(f'lane {lane}')]
+
+    def test_dirty_free_lane_is_reported_and_restored(self):
+        lane = self.lane_dirs()
+        (lane.extensions / 'x4lane_autostart').mkdir()
+        core.write_json(lane.state_file, {'phase': 'running', 'run': 'dead-run'})
+        (lane.dir / x4lane.STOP_FILE).write_text('{}')
+        found = self.levels(x4lane.doctor(self.paths, fix=False))
+        self.assertIn(('problem', 'lane b1: not in base state while free'), found)
+        found = self.levels(x4lane.doctor(self.paths, fix=True))
+        self.assertIn(('fixed', 'lane b1: restored to base'), found)
+        self.assertEqual(sorted(p.name for p in lane.extensions.iterdir()), ['x4_lan_lab'])
+        self.assertEqual(json.loads(lane.state_file.read_text())['phase'], 'idle')
+        self.assertFalse((lane.dir / x4lane.STOP_FILE).exists())
+        self.assertFalse(lane.lock.exists())
+        self.assertIn(('ok', 'lane b1: free and clean'), self.levels(x4lane.doctor(self.paths)))
+
+    def test_lane_in_use_is_left_alone_and_stale_lock_is_removed(self):
+        lane = self.lane_dirs()
+        (lane.extensions / 'x4lane_autostart').mkdir()
+        lock = core.DirLock.acquire(lane.lock, {'agent': 'walk', 'run': 'live', 'machine': socket.gethostname(),
+                                                'pid': 1234})
+        found = self.levels(x4lane.doctor(self.paths, fix=True))
+        self.assertEqual([level for level, _ in found], ['ok'])     # in use: not touched
+        self.assertTrue((lane.extensions / 'x4lane_autostart').exists())
+        self.saved_alive = x4lane.win().pid_alive
+        fake = x4lane.win()
+        fake.pid_alive = lambda pid, created=None: False           # the owner died
+        found = self.levels(x4lane.doctor(self.paths, fix=True))
+        self.assertIn(('fixed', 'lane b1: stale lock removed'), found)
+        self.assertIn(('fixed', 'lane b1: restored to base'), found)
+        self.assertFalse(lane.lock.exists())
+        fake.pid_alive = self.saved_alive
+        lock.held = False
+
+    def test_orphan_lane_x4_is_terminated_only_with_fix(self):
+        import types
+        lane = self.lane_dirs()
+        killed = []
+        fake = x4lane.win()
+        fake.terminate = lambda pid, exe: killed.append((pid, str(exe))) or True
+        self.others = [types.SimpleNamespace(pid=77, exe=str(lane.exe), cmdline='-personalfolderid 45850', created=1),
+                       types.SimpleNamespace(pid=78, exe='C:/Other/X4.exe', cmdline='', created=1)]
+        found = self.levels(x4lane.doctor(self.paths, fix=False))
+        self.assertIn(('problem', 'lane b1: orphan X4 pid 77 without a runner'), found)
+        self.assertEqual(killed, [])
+        x4lane.doctor(self.paths, fix=True)
+        self.assertEqual(killed, [(77, str(lane.exe))])             # never the other X4
+
+
+class StallTests(FakeWindows):
+    def test_silent_log_after_ingame_is_a_stall(self):
+        import types
+        run = self.run_for('walk', False)
+        run.args.stall, run.args.alive = 60.0, 10.0
+        run.lane = self.paths.lane('b1')
+        run.lock = types.SimpleNamespace(refresh=lambda: None)
+        log = self.tmp / 'x4lan-debug.txt'
+        log.write_text('[=ERROR=] 0.00 [X4LANE] AUTOSTART INGAME gamestart=custom_creative\n')
+        clock = [100.0]
+        run.watch = core.LogWatcher(log, clock=lambda: clock[0])
+        run.proc = types.SimpleNamespace(pid=5, poll=lambda: None, returncode=None)
+        fake = x4lane.win()
+        fake.dialogs_of = lambda pid: []
+        fake.window_hung = lambda pid: True
+        run.check_dialogs = lambda: None
+        run.sample = lambda: None
+        run.begin_monitor()
+        self.assertIsNone(run.poll(100.0))
+        self.assertIsNone(run.poll(150.0))
+        reason, message = run.poll(170.0)
+        self.assertEqual(reason, 'stalled')
+        self.assertIn('not responding', message)
+        run.args.alive = 0                                           # no heartbeat: stall check off
+        self.assertIsNone(run.poll(500.0))
 
 
 class LogWatcherTests(Temp):

@@ -540,3 +540,11 @@ def _job_terminate(self, code=1) -> bool:
 
 KillOnCloseJob.pids = _job_pids
 KillOnCloseJob.terminate = _job_terminate
+
+
+user32.IsHungAppWindow.argtypes = [wt.HWND]
+
+
+def window_hung(pid: int) -> bool:
+    """True if a visible top-level window of the process does not respond (IsHungAppWindow)."""
+    return any(user32.IsHungAppWindow(w['hwnd']) for w in main_windows(pid))

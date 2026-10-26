@@ -597,6 +597,9 @@ class Run:
             raise UsageError('--gamestart must be a gamestart id')
         if not 0 <= a.seed <= 2147483647:
             raise UsageError('--seed must be 0 (random world) .. 2147483647')
+        stall, alive = getattr(a, 'stall', 0) or 0, getattr(a, 'alive', 0) or 0
+        if stall < 0 or (stall > 0 and alive > 0 and stall < 3 * alive):
+            raise UsageError('--stall must be 0 (off) or at least 3 x --alive')
         self.until = core.compile_regex(a.until, '--until') if a.until else None
         self.expect = [core.parse_expect(spec) for spec in a.expect]
         self.fail_on = [core.compile_regex(p, '--fail-on') for p in a.fail_on]
@@ -724,6 +727,14 @@ class Run:
             self.give_back_lane()
             raise
         self.result['quiet_lock']['present_at_start'] = quiet_owner is not None
+
+    def selfcheck(self):
+        """Quick lane self-check (no fixes, no hashing); findings other than ok go into result.json."""
+        try:
+            self.result['selfcheck'] = [f for f in doctor(self.paths, fix=False, check_hash=False)
+                                        if f['level'] != 'ok']
+        except Exception as error:                                   # noqa: BLE001 - never blocks a run
+            self.result['selfcheck'] = [{'level': 'warn', 'what': 'selfcheck failed', 'detail': repr(error)}]
 
     def acquire(self):
         wait_in_queue(self, self.preflight, self.give_back_lane, 1, f'run {self.args.label}'.strip())
@@ -972,6 +983,13 @@ class Run:
                 self.quiet.refresh()
         if self.watch.failed_line is not None:
             return 'fail_pattern', f'--fail-on matched: {self.watch.failed_line}'
+        stall = (getattr(self.args, 'stall', 0) or 0) if (getattr(self.args, 'alive', 0) or 0) > 0 else 0
+        if stall > 0 and 'autostart_ingame' in self.watch.markers and self.watch.last_line_at is not None \
+                and self.proc.poll() is None and now - self.watch.last_line_at > stall:
+            hung = win().window_hung(self.proc.pid)
+            return 'stalled', (f'no debug log line for {now - self.watch.last_line_at:.0f} s after INGAME '
+                               f'(--stall {stall:g}); window ' + ('not responding' if hung else 'responding')
+                               + ' - X4 hung, minimized or frozen')
         if self.proc.poll() is not None:
             self.watch.flush()
             stop = self.stop_request()
@@ -1142,7 +1160,7 @@ class Run:
                 reason, message = 'expect_failed', f'expectations not met: {missing}'
         code = {'until_matched': 0, 'duration_elapsed': 0, 'usage': 1, 'refused': 2, 'timeout': 3,
                 'x4_exited': 4, 'fail_pattern': 5, 'expect_failed': 6, 'launch_failed': 7,
-                'already_running': 7, 'lock_release_failed': 7, 'error': 8, 'interrupted': 9, 'stopped': 9}[reason]
+                'already_running': 7, 'lock_release_failed': 7, 'error': 8, 'interrupted': 9, 'stopped': 9, 'stalled': 3}[reason]
         others = list(self.other_seen.values())
         r['other_x4']['any'] = bool(others)
         r['timing_trustworthy'] = bool(self.result['quiet_lock']['held_by_this_run'] and not others
@@ -1159,6 +1177,7 @@ class Run:
         reason, message = 'error', None
         try:
             self.validate()
+            self.selfcheck()
             self.acquire()
             self.prepare()
             self.launch_x4()
@@ -1376,7 +1395,7 @@ class SessionRun:
             lua=list(a.lua) + per['lua'][index], ui_file=list(a.ui_file), config=list(a.config) + per['config'][index],
             until=a.until, until_count=a.until_count, timeout=a.timeout, settle=a.settle, expect=list(a.expect),
             fail_on=list(a.fail_on), gamestart=a.gamestart, seed=a.seed, start=a.start, alive=a.alive,
-            sound=a.sound, wait=0, timing=a.timing, min_free_gb=a.min_free_gb, close_grace=a.close_grace,
+            sound=a.sound, wait=0, timing=a.timing, min_free_gb=a.min_free_gb, close_grace=a.close_grace, stall=a.stall,
             allow_workshop=a.allow_workshop, test_skip_release=False, lane='auto', repin_profile=not a.no_repin)
 
     def validate(self):
@@ -1598,7 +1617,7 @@ class SessionRun:
         code = {'until_matched': 0, 'duration_elapsed': 0, 'usage': 1, 'refused': 2, 'timeout': 3,
                 'x4_exited': 4, 'fail_pattern': 5, 'network_violation': 5, 'expect_failed': 6,
                 'launch_failed': 7, 'already_running': 7, 'lock_release_failed': 7, 'server_failed': 7,
-                'error': 8, 'interrupted': 9, 'stopped': 9}[reason]
+                'error': 8, 'interrupted': 9, 'stopped': 9, 'stalled': 3}[reason]
         members = {c.proc.pid for c in self.clients if c.proc is not None}
         seen = {}
         for client in self.clients:
@@ -1631,6 +1650,8 @@ class SessionRun:
         reason, message = 'error', None
         try:
             self.validate()
+            self.clients[0].selfcheck()
+            self.result['selfcheck'] = self.clients[0].result.get('selfcheck')
             self.acquire()
             self.prepare()
             self.start_server()
@@ -1690,6 +1711,133 @@ def cmd_restore(args, paths):
     finally:
         lock.release()
     return 0
+
+
+def doctor(paths, fix=False, check_hash=True):
+    """Self-check of the lanes. Returns findings {level: ok|warn|problem|fixed, what, detail}.
+    fix=True repairs only what is safe: stale lane/launch locks, dirty lanes nobody holds, orphan
+    lane X4 instances (exe path checked), leftover stop markers, temp and staging files."""
+    out = []
+
+    def note(level, what, detail=''):
+        out.append({'level': level, 'what': what, 'detail': str(detail)})
+
+    alive = win().pid_alive
+    if paths.quiet_lock.exists():
+        note('warn', 'quiet.lock held', core.owner_summary(core.read_owner(paths.quiet_lock)))
+    if not win().steam_status()['running']:
+        note('problem', 'Steam client not running (runs are refused)')
+    if not paths.x4lock_exe.is_file():
+        if fix:
+            ensure_x4lock(paths)
+            note('fixed', 'x4lock built', paths.x4lock_exe)
+        else:
+            note('problem', 'x4lock not built', paths.x4lock_exe)
+    if workshop_items(paths):
+        note('warn', 'X4 Workshop items installed (runs are refused)', len(workshop_items(paths)))
+    try:
+        check_base(paths)
+    except (LaneError, OSError, ValueError) as error:
+        note('problem', 'base x4_lan_lab', error)
+    if not (paths.lanes / 'release' / 'RELEASE.txt').is_file():
+        note('warn', 'no lanes/release export (lane owner: x4lane.py publish-release)')
+    procs = x4_processes()
+    for name in core.LANE_PROFILES:
+        lane = paths.lane(name)
+        for problem in verify_view(paths, lane, check_hash=check_hash):
+            note('problem', f'lane {name} view', problem)
+        owner = core.read_owner(lane.lock) if lane.lock.exists() else None
+        stale = core.lock_is_stale(lane.lock, owner, alive) if owner is not None else None
+        if owner is not None and stale:
+            if fix:
+                core._remove_lock_dir(lane.lock, stale)
+                note('fixed', f'lane {name}: stale lock removed', stale)
+                owner = None
+            else:
+                note('problem', f'lane {name}: stale lock', stale)
+        held = owner is not None and not stale
+        orphans = [p for p in procs if p.exe and Path(p.exe) == lane.exe]
+        if orphans and not held:
+            for proc in orphans:
+                if fix and win().terminate(proc.pid, lane.exe):
+                    note('fixed', f'lane {name}: orphan X4 pid {proc.pid} terminated')
+                else:
+                    note('problem', f'lane {name}: orphan X4 pid {proc.pid} without a runner')
+        state = None
+        if lane.state_file.exists():
+            try:
+                state = json.loads(lane.state_file.read_text(encoding='utf-8')).get('phase')
+            except (OSError, ValueError):
+                state = 'unreadable'
+        extras = [p.name for p in lane.extensions.iterdir() if not core.is_link(p) and p.name != core.LAB_ID] \
+            if lane.extensions.is_dir() else []
+        dirty = (state not in (None, 'idle')) or extras or (lane.dir / STOP_FILE).exists()
+        if dirty and not held:
+            if fix and not any(p.exe and Path(p.exe) == lane.exe for p in x4_processes()):
+                try:
+                    lock = core.DirLock.acquire(lane.lock, lock_info('doctor', f'restore lane {name}'), alive)
+                except core.LockBusy:
+                    note('warn', f'lane {name}: dirty but just taken by a run; left alone')
+                else:
+                    try:
+                        reset_extensions(paths, lane, paths.base_lab)
+                        restore_profile(lane)
+                        core.safe_unlink(lane.dir / STOP_FILE, lane.dir)
+                        core.write_json(lane.state_file, {'phase': 'idle', 'restored': core.now_iso(),
+                                                          'by': 'doctor'})
+                        note('fixed', f'lane {name}: restored to base', f'phase {state}, extras {extras}')
+                    finally:
+                        lock.release()
+            else:
+                note('problem', f'lane {name}: not in base state while free', f'phase {state}, extras {extras}')
+        temps = []                    # lane-owned folders only; never walk the junctions into the install
+        for folder, pattern in ((lane.profile_base, '*.x4lane-tmp-*'), (lane.profile_dir, '*.x4lane-tmp-*'),
+                                (lane.game, '*.x4lane-tmp-*'), (lane.dir, '*.x4lane-tmp-*'),
+                                (lane.lab, '**/*.x4lane-tmp-*')):
+            if folder.is_dir() and not core.is_link(folder):
+                temps += [(item, folder) for item in folder.glob(pattern) if item.is_file()]
+        for item, folder in temps:
+            if fix:
+                core.safe_unlink(item, folder)
+                note('fixed', f'lane {name}: temp file removed', item.name)
+            else:
+                note('warn', f'lane {name}: temp file left', item)
+        if not held and not dirty and not orphans:
+            note('ok', f'lane {name}: free and clean')
+        elif held:
+            note('ok', f'lane {name}: in use', core.owner_summary(owner))
+    if paths.launch_lock.exists():
+        owner = core.read_owner(paths.launch_lock)
+        stale = core.lock_is_stale(paths.launch_lock, owner, alive)
+        if stale and fix:
+            core._remove_lock_dir(paths.launch_lock, stale)
+            note('fixed', 'stale lane-launch.lock removed', stale)
+        elif stale:
+            note('problem', 'stale lane-launch.lock', stale)
+    leftovers = [*paths.coord.glob('*.lock.removing-*')] if paths.coord.is_dir() else []
+    leftovers += [*paths.lanes.glob('release.new-*'), *paths.lanes.glob('release.old-*')]
+    for item in leftovers:
+        if fix:
+            core.check_tree_unlinked(item)
+            shutil.rmtree(item)
+            note('fixed', 'leftover removed', item)
+        else:
+            note('warn', 'leftover from an interrupted step', item)
+    tickets = core.live_tickets(paths.queue, alive)
+    if tickets:
+        note('ok', f'{len(tickets)} run(s) queued', ', '.join(str(t.get('agent')) for _p, t in tickets))
+    return out
+
+
+def cmd_doctor(args, paths):
+    require_windows()
+    findings = doctor(paths, fix=args.fix)
+    if args.json:
+        print(json.dumps(findings, indent=1))
+    else:
+        for item in findings:
+            print(f"{item['level'].upper():8} {item['what']}" + (f" - {item['detail']}" if item['detail'] else ''))
+    return 1 if any(item['level'] == 'problem' for item in findings) else 0
 
 
 def cmd_publish_release(args, paths):
@@ -1949,6 +2097,8 @@ def parser():
     r.add_argument('--start', default='module', choices=('module', 'menu'),
                    help='module: -module <gamestart>; menu: autostart calls NewGame from the start menu')
     r.add_argument('--alive', type=float, default=10.0, help='autostart ALIVE line interval (0 = off)')
+    r.add_argument('--stall', type=float, default=240.0,
+                   help='fail when no debug log line arrives for S s after INGAME (0 = off)')
     r.add_argument('--sound', action='store_true', help='keep game sound on (default: autostart mutes)')
     r.add_argument('--wait', type=float, default=0.0, help='wait up to S for quiet.lock/lanes/RAM (checks every 60 s)')
     r.add_argument('--timing', action='store_true',
@@ -1996,6 +2146,7 @@ def parser():
     q.add_argument('--seed', type=int, default=276944566)
     q.add_argument('--start', default='module', choices=('module', 'menu'))
     q.add_argument('--alive', type=float, default=10.0)
+    q.add_argument('--stall', type=float, default=240.0)
     q.add_argument('--sound', action='store_true')
     q.add_argument('--wait', type=float, default=0.0)
     q.add_argument('--timing', action='store_true')
@@ -2003,6 +2154,9 @@ def parser():
     q.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S)
     q.add_argument('--allow-workshop', action='store_true')
     q.add_argument('--no-repin', action='store_true', help='keep the 45841 profile gates (default: re-pin per lane)')
+    s = sub.add_parser('doctor', help='self-check of all lanes; --fix repairs what is safe')
+    s.add_argument('--fix', action='store_true')
+    s.add_argument('--json', action='store_true')
     s = sub.add_parser('publish-release', help='lane owner: export a tested commit to X4Mods/lanes/release')
     s.add_argument('--commit', default='HEAD')
     s = sub.add_parser('stop', help='gracefully close lane X4 instances (lane exes only)')
@@ -2041,7 +2195,7 @@ def main(argv=None):
         return 1
     handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'session': cmd_session,
                 'stop': cmd_stop, 'queue': cmd_queue, 'restore': cmd_restore, 'unlock': cmd_unlock,
-                'make-overlay': cmd_make_overlay, 'publish-release': cmd_publish_release}
+                'make-overlay': cmd_make_overlay, 'publish-release': cmd_publish_release, 'doctor': cmd_doctor}
     try:
         return handlers[args.command](args, paths)
     except LaneError as error:
