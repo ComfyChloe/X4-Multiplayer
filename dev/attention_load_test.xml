@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="utf-8"?>
+<mdscript name="X4LAN_AttnLoad" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <!-- READ-ONLY helper for dev/attention_load_test.lua (test installs only; installed as
+      md/x4lan_attnload.xml by dev/install_attention_load_test.py). It finds sectors,
+      stations and ships and raises Lua events; it creates, moves or changes nothing.
+      Nothing happens unless the driver sends X4LAN_AttnLoad UI events. -->
+ <cues>
+  <!-- Rank: one row per sector with station and ship counts, used to pick busy sectors. -->
+  <cue name="Rank" instantiate="true" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_AttnLoad'" control="'Rank'"/></conditions>
+   <actions>
+    <set_value name="$seq" exact="event.param3"/>
+    <find_sector name="$sectors" space="player.galaxy" multiple="true"/>
+    <do_all exact="$sectors.count" counter="$i">
+     <set_value name="$sector" exact="$sectors.{$i}"/>
+     <find_station name="$stations" space="$sector" multiple="true"/>
+     <find_ship name="$ships" space="$sector" multiple="true" recursive="true"/>
+     <raise_lua_event name="'X4LAN_AttnLoad.Rank'" param="'%s|%s|%s|%s|%s'.[$seq, $sector.macro.id, $stations.count, $ships.count, if $sector == player.sector then 1 else 0]"/>
+    </do_all>
+    <raise_lua_event name="'X4LAN_AttnLoad.RankEnd'" param="'%s|%s'.[$seq, $sectors.count]"/>
+   </actions>
+  </cue>
+  <!-- Sector: stream the sector component, its stations and up to $max ships (any owner;
+       the driver filters proxy candidates and reads attention levels). -->
+  <cue name="Sector" instantiate="true" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_AttnLoad'" control="'Sector'"/></conditions>
+   <actions>
+    <set_value name="$seq" exact="event.param3.$seq"/>
+    <set_value name="$max" exact="event.param3.$max"/>
+    <find_sector name="$sector" macro="macro.{event.param3.$macro}" space="player.galaxy" required="false"/>
+    <do_if value="not @$sector">
+     <raise_lua_event name="'X4LAN_AttnLoad.End'" param="'%s|%s|missing'.[$seq, event.param3.$macro]"/>
+    </do_if>
+    <do_else>
+     <find_station name="$stations" space="$sector" multiple="true"/>
+     <find_ship name="$ships" space="$sector" multiple="true" recursive="true"/>
+     <set_value name="$n" exact="$ships.count"/>
+     <do_if value="$n gt $max"><set_value name="$n" exact="$max"/></do_if>
+     <raise_lua_event name="'X4LAN_AttnLoad.Begin'" param="'%s|%s|%s|%s|%s'.[$seq, $sector.macro.id, $ships.count, $stations.count, if $sector == player.sector then 1 else 0]"/>
+     <raise_lua_event name="'X4LAN_AttnLoad.SectorObject'" param="$sector"/>
+     <do_all exact="$stations.count" counter="$j"><raise_lua_event name="'X4LAN_AttnLoad.Station'" param="$stations.{$j}"/></do_all>
+     <do_all exact="$n" counter="$j"><raise_lua_event name="'X4LAN_AttnLoad.Ship'" param="$ships.{$j}"/></do_all>
+     <raise_lua_event name="'X4LAN_AttnLoad.End'" param="'%s|%s|ok'.[$seq, $sector.macro.id]"/>
+    </do_else>
+   </actions>
+  </cue>
+ </cues>
+</mdscript>

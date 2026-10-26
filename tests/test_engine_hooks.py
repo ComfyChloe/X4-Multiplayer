@@ -371,6 +371,61 @@ class EngineHookTests(unittest.TestCase):
         fields = self.fields(status, "HOOKS_STATUS")
         self.assertEqual((fields["attn_raises"], fields["jitter_fixed"], fields["camera_offchain"]), ("7", "3", "1"))
 
+    def test_load_test_profile_45842_only_with_flag(self):
+        lua = self.runtime('savePath="C:/Users/x/Documents/Egosoft/X4/45842/save"')
+        self.assertIn("HOOKS_DISABLED reason=", self.logs(lua)[-1])
+        self.assertIn("45841", self.logs(lua)[-1])
+        lua = self.runtime('savePath="C:/Users/x/Documents/Egosoft/X4/45842/save";X4LAN_CONFIG.attention_load_profile="45842"')
+        self.assertIn("HOOKS_DISABLED", self.logs(lua)[-1])
+        lua = self.runtime('savePath="C:/Users/x/Documents/Egosoft/X4/45842/save";'
+                           'X4LAN_CONFIG.attention_load_test=true;X4LAN_CONFIG.attention_load_profile="45842"')
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertIn("HOOKS_READY", self.logs(lua)[-1])
+        self.assertIn("profile=45842", self.logs(lua)[-1])
+        lua = self.runtime('X4LAN_CONFIG.attention_load_test=true;X4LAN_CONFIG.attention_load_profile="45842"')
+        self.assertIn("inactive%20outside%20isolated%20profile%2045842", self.logs(lua)[-1])
+        lua = self.runtime('X4LAN_CONFIG.attention_load_test=true;X4LAN_CONFIG.attention_load_profile="12345"')
+        self.assertIn("unsupported%20attention%20load%20profile", self.logs(lua)[-1])
+
+    def test_hashing_can_be_disabled_without_disarming(self):
+        lua = self.runtime("X4LAN_CONFIG.engine_hash_enabled=false")
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertIn("hashing=0", self.logs(lua)[-1])
+        lua.eval("callback")(30, 100.0, 1 / 60, "0123456789abcdef", "0011223344556677")
+        self.assertEqual(self.state_lines(lua), [])
+        self.assertEqual(self.cost_lines(lua), [])
+
+    def test_load_test_sources_and_refusal_tolerance(self):
+        setup = """X4LAN_BUBBLE_API=nil;X4LAN_CONFIG.attention_load_test=true;sets={};refuse=false
+          ships[3001]=ships[1001];ships[3002]=ships[1001]
+          native.set_remote_attention_sources=function(ids)
+           if refuse then return false,'remote proxy is not an operational ship' end
+           sets[#sets+1]=table.concat(ids,',');return true end
+          native.attention_level=function(id) return 9 end
+          native.attention_status=function() return {sources=2,resolved=2,raises=5} end"""
+        lua = self.runtime(setup)
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.execute("X4LAN_ATTENTION_LOAD={sources={3001,3002}}")
+        lua.eval("onUpdate")()
+        self.assertEqual(lua.eval("sets[#sets]"), "3001,3002")
+        self.assertEqual(lua.eval("X4LAN_ENGINE_HOOKS.attentionLevel(3001)"), 9)
+        self.assertEqual(lua.eval("X4LAN_ENGINE_HOOKS.attentionCounters().raises"), 5)
+        lua.execute("refuse=true;X4LAN_ATTENTION_LOAD.sources={3001,3002,1001}")
+        count = lua.eval("#sets")
+        lua.eval("onUpdate")()
+        lua.eval("onUpdate")()
+        self.assertFalse(lua.eval("X4LAN_ENGINE_HOOKS.failed"))
+        self.assertEqual(lua.eval("X4LAN_ENGINE_HOOKS.refusals"), 1)
+        self.assertEqual(lua.eval("X4LAN_ENGINE_HOOKS.attentionSources"), "3001,3002")
+        self.assertEqual(lua.eval("#sets"), count)
+        self.assertEqual(sum("HOOKS_ATTN_REFUSED" in line for line in self.logs(lua)), 1)
+        # Without the test flag the global is ignored and refusal still disarms.
+        lua = self.runtime(setup.replace("X4LAN_CONFIG.attention_load_test=true;", ""))
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.execute("X4LAN_ATTENTION_LOAD={sources={3001,3002}}")
+        lua.eval("onUpdate")()
+        self.assertEqual(lua.eval("#sets"), 0)
+
     def test_lua_has_no_gameplay_writes_or_transport(self):
         text = SOURCE.read_text()
         for forbidden in ("SetObjectSectorPos", "RemoveComponent", "SpawnObject", "ActivateObject",

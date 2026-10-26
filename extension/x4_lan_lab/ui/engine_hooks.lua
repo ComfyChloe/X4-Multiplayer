@@ -30,6 +30,13 @@ local function optional(name)local ok,fn=pcall(function()return C[name]end);retu
 local settings,native
 local ok,err=pcall(function()
  assert(cfg.test_profile=='45841','engine hooks require profile 45841')
+ -- Attention load test only (dev/attention_load_test.lua): the save-folder guard may name
+ -- the task-owned profile 45842; every other guard is unchanged.
+ local profile='45841'
+ if cfg.attention_load_test==true and cfg.attention_load_profile~=nil then
+  assert(cfg.attention_load_profile=='45841' or cfg.attention_load_profile=='45842','unsupported attention load profile')
+  profile=cfg.attention_load_profile
+ end
  assert(package.loadlib,'native Lua modules unavailable')
  if GetUISafeModeOption then assert(GetUISafeModeOption()==false,'disable Protected UI mode')end
  declare('UniverseID','typedef uint64_t UniverseID;')
@@ -42,11 +49,12 @@ local ok,err=pcall(function()
  for _,name in ipairs({'GetSaveFolderPath','IsPlayerValid','IsComponentOperational','GetContextByClass','GetObjectPositionInSector',
   'GetAllFactions','GetNumAllFactionShips','GetAllFactionShips'})do assert(optional(name),'missing game export: '..name)end
  local path=ffi.string(C.GetSaveFolderPath()):gsub('\\','/'):gsub('/+$','')
- assert(path:sub(-11)=='/45841/save','inactive outside isolated profile 45841')
+ assert(path:sub(-11)=='/'..profile..'/save','inactive outside isolated profile '..profile)
  settings={cadence=integer(cfg.engine_hash_cadence,1,3600,30),maxShips=integer(cfg.engine_hash_max_ships,1,20000,4000),
   budgetMs=number(cfg.engine_hash_budget_ms,0.1,1000,8),
   sectors=cfg.engine_hash_sectors or {'cluster_14_sector001_macro','cluster_01_sector001_macro'},
-  run=cfg.engine_hash_run or 'default',session=cfg.build or 'disabled',attentionRows=cfg.engine_hash_attention_rows==true}
+  run=cfg.engine_hash_run or 'default',session=cfg.build or 'disabled',attentionRows=cfg.engine_hash_attention_rows==true,
+  hashing=cfg.engine_hash_enabled~=false,loadTest=cfg.attention_load_test==true,profile=profile}
  assert(atom(settings.run) and #settings.run<=32,'invalid engine hash run')
  assert(type(settings.sectors)=='table' and #settings.sectors<=16,'engine_hash_sectors must have at most 16 entries')
  local wanted={};for _,sector in ipairs(settings.sectors)do assert(atom(sector),'invalid engine hash sector');wanted[sector]=true end
@@ -210,7 +218,7 @@ local function hashCost(frame,complete,stats,started)
   frame,complete and 1 or 0,complete and 1 or 0,stats.scanned,stats.ships,stats.captureMs,stats.hashMs,totalMs,cost.maxMs,cost.totalMs,cost.captures,cost.completed,cost.failed,settings.budgetMs,settings.cadence))
 end
 local function safeSample(frame,gameTime,dt,rng,sessionSeed)
- if M.failed then return end
+ if M.failed or not settings.hashing then return end
  local started=native.walltime()
  local ok,result,reason,stats=pcall(sample,frame,gameTime,dt,rng,sessionSeed)
  if not ok then disabled(result);return end
@@ -229,6 +237,8 @@ local function proxyIds()
   add(state.proxy)
   if type(state.proxies)=='table' then for _,proxy in ipairs(state.proxies)do add(proxy)end end
  end
+ local load=settings.loadTest and rawget(_G,'X4LAN_ATTENTION_LOAD')
+ if load and type(load.sources)=='table' then for _,proxy in ipairs(load.sources)do add(proxy)end end
  table.sort(ids)
  return ids
 end
@@ -236,13 +246,20 @@ local function syncAttention()
  if not M.owner then return true end
  local ids=proxyIds();local text=table.concat(ids,',')
  if text==M.attentionSources then return true end
+ if settings.loadTest and text==M.refusedText then return true end
  local ok,reason
  if #ids>MAX_ATTENTION_SOURCES then ok,reason=false,'too many remote attention sources'
  elseif native.set_remote_attention_sources then ok,reason=native.set_remote_attention_sources(ids)
  elseif #ids<=1 then ok,reason=native.set_remote_attention(ids[1] or '0')
  else ok,reason=false,'hooks module supports one remote attention source' end
+ if not ok and settings.loadTest then
+  -- Load test only: a refused set keeps the previous sources and lets the driver replace
+  -- the proxy instead of disarming the whole module.
+  M.refusedText=text;M.refusals=(M.refusals or 0)+1
+  out('HOOKS_ATTN_REFUSED','reason='..esc(reason or 'refused')..' ids='..text);return true
+ end
  if not ok then disabled(reason or 'remote attention registration refused');return false end
- M.attentionSources=text;M.attentionProxy=ids[1] or '0'
+ M.attentionSources=text;M.refusedText=nil;M.attentionProxy=ids[1] or '0'
  return true
 end
 local function attentionStatus()
@@ -252,6 +269,15 @@ local function attentionStatus()
  return string.format(' attn_sources=%d attn_resolved=%d attn_raises=%d attn_refreshes=%d jitter_fixed=%d jitter_skipped=%d cameras=%d camera_offchain=%d',
   state.sources or 0,state.resolved or 0,state.raises or 0,state.refreshes or 0,state.jitter_fixed or 0,state.jitter_skipped or 0,state.cameras or 0,state.camera_offchain or 0)
 end
+-- Read-only helpers for the attention load test driver.
+function M.attentionLevel(id)
+ if not M.owner or not native.attention_level then return nil,'unavailable' end
+ return native.attention_level(key(id))
+end
+function M.attentionCounters()
+ if not M.owner or not native.attention_status then return nil end
+ local ok,state=pcall(native.attention_status);if ok and type(state)=='table' then return state end
+end
 function M.start()
  if M.failed or M.owner then return end
  local owner,reason=native.start(safeSample,settings.cadence)
@@ -259,7 +285,7 @@ function M.start()
  if not owner then disabled(reason or 'registration refused');return end
  M.owner=owner;M.attentionProxy='0';M.attentionSources=''
  if not syncAttention()then return end
- out('HOOKS_READY',string.format('slot=12 cadence=%d run=%s session=%s maxships=%d budget_ms=%.3f',settings.cadence,esc(settings.run),esc(settings.session),settings.maxShips,settings.budgetMs))
+ out('HOOKS_READY',string.format('slot=12 cadence=%d run=%s session=%s maxships=%d budget_ms=%.3f hashing=%d profile=%s',settings.cadence,esc(settings.run),esc(settings.session),settings.maxShips,settings.budgetMs,settings.hashing and 1 or 0,settings.profile))
 end
 RegisterEvent('X4LAN.Loaded',M.start)
 local nextProbe=0
