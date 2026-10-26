@@ -31,6 +31,8 @@ local function report(now,readyAt)
  for i=1,2 do ships[i]=shipText(i,c and c.ships[i],c and c.pilots[i]) end
  log(string.format('slot=%s t=%.0f other=%s faction=%s name=%s short=%s diplomacy_list=%s uirelation=%s ships=%s;%s',
   cfg.slot,now-readyAt,other,tostring(f),tostring(okd and name),tostring(okd and short),listed,tostring(okr and rel),ships[1],ships[2]))
+ local client=X4LAN_BUBBLE_API and X4LAN_BUBBLE_API.state and X4LAN_BUBBLE_API.state.client
+ if client then log(string.format('DRAIN slot=%s latest=%d max=%d',cfg.slot,client.drained or 0,client.drainedMax or 0)) end
 end
 SetScript('onUpdate',function()
  local ok,err=pcall(function()
