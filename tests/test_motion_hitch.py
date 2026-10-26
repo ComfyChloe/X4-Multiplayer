@@ -196,11 +196,32 @@ class MotionHitchTests(unittest.TestCase):
     def test_watchdog_still_zeroes_on_physical_boundaries(self):
         import xml.etree.ElementTree as ET
         root = ET.parse(COOP_MD).getroot()
-        guard = root.find(".//cue[@name='VelocityWatchdog']/actions/do_all/do_if/do_if").get('value')
+        checks = root.findall(".//cue[@name='VelocityWatchdog']/actions/do_all/do_if/do_if")
+        guard = [c.get('value') for c in checks if c.get('value').startswith('not $ship.isoperational')][0]
         for condition in ('not $ship.isoperational', '$ship.dock', 'player.occupiedship == $ship',
                           '$ship.parent != $velocityParent.{$i}', '$ship.sector != $velocitySector.{$i}',
                           'player.age gt $velocityDeadline.{$i}'):
             self.assertIn(condition, guard)
+
+    def test_watchdog_rebinds_an_aligned_zone_change_before_the_boundary_check(self):
+        # A fast replica changes temp zone through its own pose writes; zeroing the vector
+        # there showed 0 m/s in the HUD. Only an aligned zone of the same sector is rebound.
+        import xml.etree.ElementTree as ET
+        root = ET.parse(COOP_MD).getroot()
+        checks = root.findall(".//cue[@name='VelocityWatchdog']/actions/do_all/do_if/do_if")
+        rebind, guard = checks[0], checks[1]
+        self.assertTrue(guard.get('value').startswith('not $ship.isoperational'))
+        for condition in ('$ship.isoperational', 'not $ship.dock', '$ship.parent != $velocityParent.{$i}',
+                          '$ship.sector == $velocitySector.{$i}'):
+            self.assertIn(condition, rebind.get('value'))
+        self.assertEqual(rebind.find('include_actions').get('ref'), 'AlignedZoneSpace')
+        update = rebind.find('do_if')
+        self.assertEqual(update.get('value'), '$valid')
+        self.assertEqual(update.find('set_value').get('name'), '$velocityParent.{$i}')
+        velocity = root.find(".//cue[@name='Velocity']")
+        self.assertIn('AlignedZoneSpace', [n.get('ref') for n in velocity.iter('include_actions')])
+        library = root.find(".//library[@name='AlignedZoneSpace']")
+        self.assertIn('$basisError lt 0.00000001', ET.tostring(library, encoding='unicode'))
 
     def test_client_drains_a_busy_relay_queue_in_one_update(self):
         # Native: rx ~1000 packets/s, NETRTT median up to 477 ms with 28-48 % loss while the

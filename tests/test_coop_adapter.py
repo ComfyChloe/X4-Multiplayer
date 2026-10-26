@@ -291,8 +291,11 @@ class CoopAdapterTests(unittest.TestCase):
   l=self.moving_remote();l.execute("""
    local old=lastRequest('Velocity');local getContext=api.GetContextByClass
    api.GetContextByClass=function(object,class) if class=='zone' then return 99 end;return getContext(object,class) end
+   -- A zone change inside the sector rebinds the running vector at once, without a fence.
+   local fences=countRequest('VelocityFence')
    now=10.41;frames.onUpdate();local fresh=lastRequest('Velocity')
-   assert(tostring(fresh.parent)=='99' and fresh.generation>old.generation)
+   assert(tostring(fresh.parent)=='99' and fresh.generation==old.generation and fresh.sequence>old.sequence)
+   assert(countRequest('VelocityFence')==fences)
    nav(2,1,2,'cluster_01_sector001_macro',9000)
    assert(not lastRequest('VelocityFence').enabled)
   """)
@@ -335,32 +338,39 @@ class CoopAdapterTests(unittest.TestCase):
    api.GetContextByClass=function(object,class) if class=='zone' then return zone end;if class=='highway' then return 0 end;return base(object,class) end
   """);return l
 
- def test_highway_mode_drives_replica_by_pose_without_velocity_or_fence_churn(self):
+ def test_highway_mode_reports_native_speed_without_fence_churn(self):
+  # Native 7.6: MOTION_DIAG mode=highway velocity=off drift=0.00 at 3-15 km/s, and the HUD
+  # (GetComponentDetails().speed) showed 0 m/s for a remote ship in a highway.
   l=self.high_speed_remote();l.execute("""
    local x=1000
    for k=0,4 do sample(k,100,x,'normal');x=x+5 end
    assert(math.abs(lastRequest('Velocity').x-100)<1e-6 and fenceCount(true)==1, lastRequest('Velocity').x)
-   local velocities,disabled,previous=countRequest('Velocity'),fenceCount(false),positions[42].x
+   local disabled,previous=fenceCount(false),positions[42].x
    for k=5,60 do
     x=x+500;zone=zone+1   -- 10 km/s; the free replica changes temp zone every frame
-    local n=#writes;sample(k,10000,x,'highway')
+    local n,velocities=#writes,countRequest('Velocity');sample(k,10000,x,'highway')
     assert(#writes==n+1 and positions[42].x>=previous, k);previous=positions[42].x
+    local v=lastRequest('Velocity')
+    assert(countRequest('Velocity')==velocities+1 and tostring(v.parent)==tostring(zone), k) -- rebound each zone
+    if k>=20 then assert(math.abs(v.x-10000)<1, k..' '..v.x) end
    end
-   assert(countRequest('Velocity')==velocities and fenceCount(false)==disabled+1 and fenceCount(true)==1)
-   assert(X4LAN_BUBBLE_API.coop.velocity[2]==nil and X4LAN_BUBBLE_API.coop.remote[2].mode=='highway')
-   -- Back in normal flight, native velocity resumes only after the mode hold.
-   for k=61,70 do x=x+5;sample(k,100,x,'normal') end
-   assert(countRequest('Velocity')==velocities)
-   for k=71,100 do x=x+5;sample(k,100,x,'normal') end
-   assert(countRequest('Velocity')>velocities and lastRequest('VelocityFence').enabled)
+   assert(fenceCount(false)==disabled and fenceCount(true)==1)
+   local c=X4LAN_BUBBLE_API.coop
+   assert(c.velocity[2] and c.remote[2].mode=='highway')
+   -- Leaving the highway keeps the same vector generation and slows the vector down.
+   for k=61,100 do x=x+5;sample(k,100,x,'normal') end
+   assert(math.abs(lastRequest('Velocity').x-100)<1 and fenceCount(true)==1 and fenceCount(false)==disabled)
   """)
 
- def test_legacy_stream_at_high_speed_is_inferred_fast_and_pose_only(self):
-  l=self.high_speed_remote();l.execute("""
-   local x=1000
-   for k=0,30 do x=x+250;sample(k,5000,x,nil) end
-   assert(countRequest('Velocity')==0 and X4LAN_BUBBLE_API.coop.remote[2].mode=='fast' and positions[42].x>1000)
-  """)
+ def test_boost_travel_and_legacy_fast_streams_keep_native_velocity(self):
+  for mode,speed in (('boost',800),('travel',4000),(None,5000)):
+   l=self.high_speed_remote();l.execute("""
+    local x=1000;local mode=%s
+    for k=0,30 do x=x+%d*.05;zone=zone+(k%%3==0 and 1 or 0);sample(k,%d,x,mode) end
+    local r=X4LAN_BUBBLE_API.coop.remote[2]
+    assert(r.mode==(mode or 'fast') and math.abs(lastRequest('Velocity').x-%d)<1, r.mode..' '..lastRequest('Velocity').x)
+    assert(fenceCount(false)==0 and fenceCount(true)==1 and positions[42].x>1000)
+   """%(repr(mode) if mode else 'nil',speed,speed,speed))
 
  def test_motion_diagnostics_are_inert_by_default_and_rate_limited_when_enabled(self):
   def rows(l): return [v for v in l.eval('logs').values() if 'MOTION_DIAG' in v]
@@ -370,7 +380,7 @@ class CoopAdapterTests(unittest.TestCase):
   l=self.high_speed_remote('X4LAN_CONFIG.motion_diagnostics=.5')
   l.execute("local x=1000;for k=0,40 do x=x+500;sample(k,10000,x,'highway') end")
   found=rows(l);self.assertTrue(2<=len(found)<=5,found)
-  self.assertIn('mode=highway declared=highway',found[-1]);self.assertIn('fences=0',found[-1])
+  self.assertIn('mode=highway declared=highway',found[-1]);self.assertIn('fences=1',found[-1]);self.assertIn('velocity=native',found[-1])
 
  # Engine doubles of the SetObjectSectorPos zone-frame slip seen natively (constant drift of
  # 51-84 km at 650 m/s). Zone A (origin 20 km) holds 20..60 km, zone B (origin 0) the rest.

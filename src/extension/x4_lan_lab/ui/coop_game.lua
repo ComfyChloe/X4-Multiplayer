@@ -13,8 +13,9 @@
 -- NMODE (entity|epoch|navSeq|sourceTime|mode) accompanies every NAV2 with the same seq and
 -- source time; mode is normal|boost|travel|highway. It is a separate optional message:
 -- relays/clients without it drop it, and receivers without it infer a 'fast' mode from the
--- sampled speed. Outside 'normal' the replica is driven by pose only (no native velocity),
--- with a mode-specific interpolation delay reached through a bounded-rate render clock.
+-- sampled speed. Every mode uses a mode-specific interpolation delay reached through a
+-- bounded-rate render clock; the per-frame pose write places the replica and the native
+-- velocity (all modes) gives it the speed the HUD, target lead and NPC aim read.
 -- A local pause stops fire and drops queued edges. On resume, every FIRE2 frame whose source
 -- time is not newer than the resume cutoff (NAV2 source clock) is adopted without playing.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
@@ -102,7 +103,12 @@ local function applyVelocity(i,sector,linear,now)
  local parent=C.GetContextByClass(c.ships[i],'zone',false)
  if parent==0 then clearVelocity(i);return end
  local v=c.velocity[i];local session=s.client.lease
- if v and (v.session~=session or v.epoch~=c.epochs[i] or v.sector~=sector or v.parent~=parent) then clearVelocity(i);v=nil end
+ if v and (v.session~=session or v.epoch~=c.epochs[i] or v.sector~=sector) then clearVelocity(i);v=nil end
+ -- A zone change inside the sector is caused by the pose write itself (temp zones every
+ -- few frames at highway speed). It is no boundary: rebind the running vector to the new
+ -- zone at once instead of zeroing it (MD revalidates the zone's alignment).
+ local rebound=v and v.parent~=parent
+ if rebound then v.parent=parent end
  if not v then
   c.velocityGeneration=c.velocityGeneration+1
   v={generation=c.velocityGeneration,session=session,epoch=c.epochs[i],sector=sector,parent=parent,sequence=0};c.velocity[i]=v
@@ -112,7 +118,7 @@ local function applyVelocity(i,sector,linear,now)
  local changed=not v.linear
  if v.linear then for n=1,3 do if math.abs(linear[n]-v.linear[n])>.0001 then changed=true end end end
  -- Changed vectors, especially the packet-loss freeze, never wait for a timer.
- if changed or now>=(v.next or 0) then
+ if changed or rebound or now>=(v.next or 0) then
   v.next=now+.1;v.sequence=v.sequence+1;v.linear={linear[1],linear[2],linear[3]}
   local dockStamp,dockAge;local attached=cfg.coop_docks and i<=2
   if attached and c.attachmentWindow then dockStamp,dockAge=c.attachmentWindow(i,now) end
@@ -585,10 +591,11 @@ function c.frame(now)
      r.lastTarget={p[1],p[2],p[3]};r.lastLinear=linear and {linear[1],linear[2],linear[3]} or nil;r.frameAt=now
      if diagnose then diagnose(i,r,ship,p,linear,changed,now) end
      if changed then writePose(i,r,ship,sector,value,written,slip,dx,dy,dz,now) end
-     -- Native velocity only in normal flight. At boost/travel/highway speed the free
-     -- replica's own flight model cannot hold the vector; the per-frame pose write is
-     -- authoritative (pathing SetOffsetOrder, see reports/PROXY-MOTION-20261025.txt).
-     if C.GetPlayerControlledShipID()~=ship and linear and (r.mode or 'normal')=='normal' then
+     -- Native velocity in every mode. The per-frame pose write stays authoritative
+     -- (pathing SetOffsetOrder, see reports/PROXY-MOTION-20261025.txt); the vector is
+     -- what GetComponentDetails().speed, the HUD speed and target lead report. Without
+     -- it a replica in boost, travel or a highway read 0 m/s while it moved at km/s.
+     if C.GetPlayerControlledShipID()~=ship and linear then
       applyVelocity(i,sector,linear,now);velocityApplied=true;r.velocityAt=now
      end
     end
@@ -596,9 +603,9 @@ function c.frame(now)
   end
   -- A frame without a velocity refresh (dock pairing gap, skipped apply) keeps the
   -- running native vector for VELOCITY_HOLD s; MD's 0.3 s deadline still bounds it.
-  -- Real boundaries (no pose, local pilot, dock, pose-only mode) fence at once.
+  -- Real boundaries (no pose, local pilot, dock) fence at once.
   if not velocityApplied then
-   local hold=p and r and r.velocityAt and now-r.velocityAt<=VELOCITY_HOLD and (r.mode or 'normal')=='normal'
+   local hold=p and r and r.velocityAt and now-r.velocityAt<=VELOCITY_HOLD
     and r.dock==0 and c.docks[i]==0 and c.owners[i]~=cfg.slot and C.GetPlayerControlledShipID()~=ship
     and C.IsComponentOperational(ship) and not A.paused()
    if not hold then clearVelocity(i) end

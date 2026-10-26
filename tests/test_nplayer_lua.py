@@ -176,9 +176,9 @@ class FourPlayerCoopTests(unittest.TestCase):
             end
           end
           assert(c.remote[1].mode=='highway' and c.remote[2].mode=='normal')
-          assert(c.velocity[1]==nil, 'highway replica is pose-only')
+          assert(c.velocity[1] and math.abs(c.velocity[1].linear[1]-10000)<1, 'highway replica reports its speed')
           assert(countRequest('Velocity')>velocityBefore and c.velocity[2], 'normal flight keeps native velocity')
-          for _,r in ipairs(requests) do if r[2]=='Velocity' then assert(r[3].ship==2) end end
+          for _,r in ipairs(requests) do if r[2]=='Velocity' then assert(r[3].ship==2 or (r[3].ship==1 and r[3].x>=0)) end end
           assert(prev[62]>1000+40*500 and prev[63]>5000+40*5, 'both replicas advanced')
           assert(c.remote[1].track~=c.remote[2].track, 'one motion track per remote ship')
         ''')
