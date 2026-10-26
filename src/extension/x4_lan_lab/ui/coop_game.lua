@@ -42,12 +42,16 @@ A.coop=c
 local BLEND,VELOCITY_HOLD=.1,.25
 -- Frame slip: at the next frame the engine pose differs from the last written sector pose
 -- by more than SLIP_MIN m (or SLIP_SPEED s of rendered speed). SetObjectSectorPos converts
--- the pose into the ship's current zone and only then re-parents it to the zone at the
--- target, so a ship whose parent is not that zone lands offset by the difference of the
--- two zone origins; the engine then files the misplaced ship back into the wrong zone and
--- every later write repeats the offset (tens of km, parent toggling each frame). A second
--- write in the same frame starts from the target zone and lands exactly; a slip that
--- survives SLIP_WARP s is moved with the MD warp, at most once per second.
+-- the pose into the ship's current zone, re-parents the ship to the zone at the target and
+-- queues the zone-local pose; applied in the new zone it lands offset by the difference of
+-- the two zone origins (51-67 km in native logs), and the engine then files the misplaced
+-- ship back into the old zone, so the next write repeats it. A second write in the same
+-- frame does not help: native 7.6 logs showed 121-164 slips per 5 s with it. The
+-- slip vector of a re-parenting write is that zone offset, so it is kept per source zone
+-- and subtracted from later writes that start in that zone: the queued local pose is then
+-- correct for the target zone and the first write lands. A wrong prediction (another
+-- target zone) falls back to an uncompensated rewrite; a slip that survives SLIP_WARP s is
+-- moved with the MD warp, at most once per second.
 local SLIP_MIN,SLIP_SPEED,SLIP_WARP=5000,2,1
 local function admittedSlot(slot)
  local n=tonumber(tostring(slot):match('^p([1-8])$'));return n and n<=R.players
@@ -440,6 +444,34 @@ local function warp(i,r,sector,value,now)
  end
  AddUITriggeredEvent('X4LAN_Coop','SectorMove',value);return true
 end
+local function zoneOf(ship) return C.GetContextByClass(ship,'zone',false) end
+-- One pose write. slip/dx,dy,dz: slip found before this frame's write (0 if none).
+local function writePose(i,r,ship,sector,value,written,slip,dx,dy,dz,now)
+ if slip>0 and r.wFrom and r.wFrom~=r.wTo then
+  -- The last frame's first write re-parented the ship: its slip is that zone offset
+  -- (plus the error of the compensation it already used).
+  local k=r.wK;r.zoneFix=r.zoneFix or {};r.zoneFixes=(r.zoneFixes or 0)+1
+  if r.zoneFixes>16 then r.zoneFix={};r.zoneFixes=1 end
+  r.zoneFix[tostring(r.wFrom)]={to=r.wTo,k={k[1]+dx,k[2]+dy,k[3]+dz}}
+ end
+ local from=zoneOf(ship);local fix=r.zoneFix and r.zoneFix[tostring(from)];local k=fix and fix.k
+ local x,y,z=value.x,value.y,value.z
+ if k then value.x,value.y,value.z=x-k[1],y-k[2],z-k[3] end
+ C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));r.applied=written
+ local to=zoneOf(ship)
+ r.wFrom,r.wTo,r.wK=from,to,k or {0,0,0}
+ value.x,value.y,value.z=x,y,z
+ local action
+ if k and to~=fix.to then
+  -- Predicted target zone missed: drop the offset and write uncompensated.
+  r.zoneFix[tostring(from)]=nil;C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value));action='rewrite'
+ elseif slip>0 then action=k and 'zone' or 'rewrite' end
+ if slip>0 then
+  if now-r.slipSince>=SLIP_WARP and warp(i,r,sector,value,now) then r.slipSince=nil;action='warp'
+  elseif action=='rewrite' and not k then C.SetObjectSectorPos(ship,sector,ffi.new('UIPosRot',value)) end
+ end
+ if action then logSlip(i,slip,action,now) end
+end
 function c.frame(now)
  if not c.ready or not s.client or not s.client.lease then c.stopVelocity(false);return end
  local controlled=c.entity(C.GetPlayerControlledShipID());local aboard=c.entity(C.GetPlayerContainerID());c.controlled=controlled
@@ -502,17 +534,17 @@ function c.frame(now)
     local value={x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}
     if C.GetContextByClass(ship,'sector',false)~=sector then
      -- The last written pose belongs to the old sector frame; it is no slip reference.
-     if warp(i,r,sector,value,now) then r.applied=nil;r.slipSince=nil end
+     if warp(i,r,sector,value,now) then r.applied=nil;r.slipSince=nil;r.wFrom=nil;r.zoneFix=nil end
     elseif now>=(r.nextApply or 0) then
      -- One shared ship per client (at most seven). Correct their native controller
      -- drift on every render frame, including frame rates above 60 FPS.
      r.nextApply=now
      local changed=not r.applied
      if r.applied then for n=1,6 do if math.abs(p[n]-r.applied[n])>(n<=3 and .01 or .0001) then changed=true end end end
-     local slip=0
+     local slip,dx,dy,dz=0,0,0,0
      if r.applied then
       local a=C.GetObjectPositionInSector(ship)
-      slip=math.sqrt((a.x-r.applied[1])^2+(a.y-r.applied[2])^2+(a.z-r.applied[3])^2)
+      dx,dy,dz=a.x-r.applied[1],a.y-r.applied[2],a.z-r.applied[3];slip=math.sqrt(dx*dx+dy*dy+dz*dz)
      end
      if slip>math.max(SLIP_MIN,SLIP_SPEED*(linear and M.speed(linear) or 0)) then
       changed=true;r.slipSince=r.slipSince or now
@@ -552,13 +584,7 @@ function c.frame(now)
      else r.blend=nil end
      r.lastTarget={p[1],p[2],p[3]};r.lastLinear=linear and {linear[1],linear[2],linear[3]} or nil;r.frameAt=now
      if diagnose then diagnose(i,r,ship,p,linear,changed,now) end
-     if changed then
-      local pose=ffi.new('UIPosRot',value);C.SetObjectSectorPos(ship,sector,pose);r.applied=written
-      if slip>0 then
-       if now-r.slipSince>=SLIP_WARP and warp(i,r,sector,value,now) then r.slipSince=nil;logSlip(i,slip,'warp',now)
-       else C.SetObjectSectorPos(ship,sector,pose);logSlip(i,slip,'rewrite',now) end
-      end
-     end
+     if changed then writePose(i,r,ship,sector,value,written,slip,dx,dy,dz,now) end
      -- Native velocity only in normal flight. At boost/travel/highway speed the free
      -- replica's own flight model cannot hold the vector; the per-frame pose write is
      -- authoritative (pathing SetOffsetOrder, see reports/PROXY-MOTION-20261025.txt).

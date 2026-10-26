@@ -372,77 +372,109 @@ class CoopAdapterTests(unittest.TestCase):
   found=rows(l);self.assertTrue(2<=len(found)<=5,found)
   self.assertIn('mode=highway declared=highway',found[-1]);self.assertIn('fences=0',found[-1])
 
- # Engine double of the SetObjectSectorPos zone-frame slip seen in the live MOTION_DIAG
- # rows (constant drift of 51-84 km at 650 m/s, VelocityFence twice per frame): the pose
- # is made relative to the current zone, the ship is then re-parented to the zone at the
- # target keeping that local pose, and the engine later files the ship into the zone at
- # its actual position. Zone A (origin 20 km) holds 20..60 km, zone B (origin 0) the rest.
+ # Engine doubles of the SetObjectSectorPos zone-frame slip seen natively (constant drift of
+ # 51-84 km at 650 m/s). Zone A (origin 20 km) holds 20..60 km, zone B (origin 0) the rest.
+ # A write converts the sector pose into the ship's current zone and re-parents the ship to
+ # the zone at the target. model 'order' (matches the 7.6 evidence): the move is immediate,
+ # but the zone-local pose is also queued and the first queued pose of a frame is applied
+ # in the new zone at the end of the frame, so a same-frame rewrite cannot repair it.
+ # model 'local': the re-parent keeps the zone-local pose immediately. After each frame the
+ # engine files the ship into the zone at its actual position (world pose kept).
  ZONES="""
   zoneOrigin={A=20000,B=0};function zoneAt(x) return (x>=20000 and x<60000) and 'A' or 'B' end
-  parent={[42]='B'};slipEngine=true
+  parent={[42]='B'};slipEngine=true;model='order';pending=nil;writesThisFrame=0
   api.SetObjectSectorPos=function(object,sector,p)
    writes[#writes+1]={object=object,sector=sector,x=p.x,y=p.y,z=p.z}
    local x=p.x
    if slipEngine and object==42 then
-    local target=zoneAt(p.x);x=p.x-zoneOrigin[parent[42]]+zoneOrigin[target];parent[42]=target
+    writesThisFrame=writesThisFrame+1
+    local localX=p.x-zoneOrigin[parent[42]];local target=zoneAt(p.x);parent[42]=target
+    if model=='local' then x=zoneOrigin[target]+localX elseif not pending then pending=localX end
    end
    positions[object]={x=x,y=p.y,z=p.z,yaw=p.yaw*math.pi/180,pitch=p.pitch*math.pi/180,roll=p.roll*math.pi/180}
   end
-  function rezone() if positions[42] then parent[42]=zoneAt(positions[42].x) end end
+  function endFrame()
+   if pending then positions[42].x=zoneOrigin[parent[42]]+pending;pending=nil end
+   parent[42]=zoneAt(positions[42].x)
+  end
   local base=api.GetContextByClass
-  api.GetContextByClass=function(object,class) if class=='zone' then return parent[object]=='A' and 5 or 6 end;return base(object,class) end
+  api.GetContextByClass=function(object,class)
+   if class=='zone' then return object==42 and (parent[42]=='A' and 5 or 6) or 7 end
+   if class=='highway' then return 0 end;return base(object,class)
+  end
  """
- def slipping_remote(self,setup=''):
-  l=self.high_speed_remote(setup);l.execute(self.ZONES+"""
-   api.GetContextByClass=(function(prev) return function(object,class)
-    if class=='highway' then return 0 end;return prev(object,class) end end)(api.GetContextByClass)
-   positions[42]={x=61000,y=10000,z=0,yaw=0,pitch=0,roll=0};parent[42]='B' -- already slipped
+ def slipping_remote(self,model='order'):
+  l=self.high_speed_remote();l.execute(self.ZONES+"""
+   model='%s'
+   -- Already in the loop: in zone B, displaced by the zone offset.
+   positions[42]={x=61000,y=10000,z=0,yaw=0,pitch=0,roll=0};parent[42]='B'
+   slipped,maxWrites=0,0
    function run(from,to)
-    for k=from,to do rezone();sample(k,650,41000+k*32.5,'normal') end
+    for k=from,to do
+     local r=X4LAN_BUBBLE_API.coop.remote[2]
+     if r and r.applied and math.abs(positions[42].x-r.applied[1])>1000 then slipped=slipped+1 end
+     writesThisFrame=0;sample(k,650,41000+k*32.5,'normal');endFrame()
+     if k>2 then maxWrites=math.max(maxWrites,writesThisFrame) end
+    end
    end
-  """);return l
+   function slipLogs() local n=0;for _,v in ipairs(logs) do if v:find('COOP_FRAME_SLIP',1,true) then n=n+1 end end;return n end
+  """%model);return l
 
- def test_zone_frame_slip_is_rewritten_in_the_same_frame(self):
+ def test_zone_offset_is_learned_once_and_later_first_writes_land(self):
+  for model in ('order','local'):
+   l=self.slipping_remote(model);l.execute("""
+    run(0,60)
+    local r=X4LAN_BUBBLE_API.coop.remote[2]
+    assert(slipped<=1, model..' slipped frames '..slipped)       -- not every frame
+    assert(maxWrites==1, model..' writes per frame '..maxWrites)  -- no same-frame repair
+    assert(math.abs(positions[42].x-r.applied[1])<1 and parent[42]=='A', model)
+    assert(fenceCount(true)<=3 and countRequest('SectorMove')==0, model)
+    local found=false
+    for _,v in ipairs(logs) do if v:find('COOP_FRAME_SLIP ship=2 slip=20000 action=zone',1,true) then found=true end end
+    assert(found, model)
+   """)
+
+ def test_without_compensation_the_order_double_slips_every_frame(self):
+  # Guards the double: a plain write plus a same-frame rewrite (557fad4) still slips on
+  # every frame, as in the native 7.6 COOP_FRAME_SLIP count=128 per 5 s rows.
   l=self.slipping_remote();l.execute("""
-   run(0,2)  -- writes from the wrong zone land 20 km off until the first slip is measured
-   for k=3,40 do
-    rezone();sample(k,650,41000+k*32.5,'normal')
-    assert(math.abs(positions[42].x-writes[#writes].x)<1 and parent[42]=='A', k..' '..positions[42].x)
+   for k=0,20 do
+    writesThisFrame=0;local x=41000+k*32.5
+    api.SetObjectSectorPos(42,22,{x=x,y=10000,z=0,yaw=0,pitch=0,roll=0})
+    api.SetObjectSectorPos(42,22,{x=x,y=10000,z=0,yaw=0,pitch=0,roll=0})
+    endFrame();assert(math.abs(positions[42].x-x-20000)<1 and parent[42]=='B', k)
    end
-   assert(fenceCount(true)<=3 and countRequest('SectorMove')==0)
-   local found=false;for _,v in ipairs(logs) do if v:find('COOP_FRAME_SLIP ship=2 slip=2',1,true) and v:find('action=rewrite',1,true) then found=true end end
-   assert(found)
   """)
 
- def test_without_repair_the_slip_double_repeats_every_frame(self):
-  # Guards the double itself: one write per frame reproduces the live constant offset.
+ def test_a_missed_target_zone_drops_the_offset_and_writes_plainly(self):
   l=self.slipping_remote();l.execute("""
-   for k=0,40 do
-    rezone()
-    api.SetObjectSectorPos(42,22,{x=41000+k*32.5,y=10000,z=0,yaw=0,pitch=0,roll=0})
-    assert(math.abs(positions[42].x-(41000+k*32.5)-20000)<1, k)
-   end
+   run(0,3)
+   local r=X4LAN_BUBBLE_API.coop.remote[2];assert(r.zoneFix and r.zoneFix['6'])
+   -- Zone A disappears: the target is now in zone B, so the B->A offset must not apply.
+   zoneAt=function() return 'B' end;parent[42]='B'
+   run(4,10)
+   assert(r.zoneFix['6']==nil and math.abs(positions[42].x-r.applied[1])<1)
   """)
 
  def test_persistent_slip_falls_back_to_one_warp_per_second(self):
-  l=self.slipping_remote();l.execute("""
-   -- An engine that ignores the second write as well: only the MD warp remains.
+  l=self.slipping_remote('local');l.execute("""
+   -- An engine that drops every write into zone B: no compensation can land.
    local set=api.SetObjectSectorPos
    api.SetObjectSectorPos=function(object,sector,p) set(object,sector,p);parent[42]='B' end
+   endFrame=function() end
    run(0,45)
    local n=countRequest('SectorMove');assert(n>=1 and n<=2, n)
    local move=lastRequest('SectorMove');assert(move.ship==2 and tostring(move.sector)=='22')
-   assert(move.x>=41000 and move.x<=41000+45*32.5) -- the received pose, not the slipped readback
+   assert(move.x>=41000 and move.x<=41000+45*32.5) -- the received pose, not a compensated one
   """)
 
  def test_ordinary_native_velocity_drift_is_not_a_slip(self):
   l=self.slipping_remote();l.execute("""
-   slipEngine=false;local n
+   slipEngine=false;positions[42].x=41000;local n
    for k=0,40 do
-    rezone();sample(k,650,41000+k*32.5,'normal')
+    sample(k,650,41000+k*32.5,'normal')
     if k==5 then n=#writes end
     positions[42].x=positions[42].x+32.5   -- native velocity between writes
    end
-   assert(#writes-n==35 and countRequest('SectorMove')==0)
-   for _,v in ipairs(logs) do assert(not v:find('COOP_FRAME_SLIP',1,true)) end
+   assert(#writes-n==35 and countRequest('SectorMove')==0 and slipLogs()==0)
   """)
