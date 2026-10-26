@@ -24,6 +24,23 @@ function K.index(slot)
  if n and n>=1 and n<=K.POOL and n%1==0 then return n end
 end
 function K.poolFaction(index) return 'x4lan_player'..index end
+-- Per-slot pool icon (libraries/icons.xml); the player's own logo faction_player is never used for another human.
+function K.poolIcon(index) return 'x4lan_player'..index end
+-- The gamestart's default commander name (libraries/gamestarts.xml x4lan_internal): every client that
+-- did not rename itself announces it, so it identifies nobody.
+K.DEFAULT_NAMES={['Multiplayer Pilot']=true}
+-- Name shown for another human `index` on this machine: the announced name, unless it is empty, the
+-- default name, or equal to this machine's own human (then two factions would look alike): "Player N".
+function K.displayName(name,index,localName)
+ if type(name)~='string' or name=='' or K.DEFAULT_NAMES[name] or (localName and name==localName) then
+  return 'Player '..index
+ end
+ return name
+end
+function K.displayIcon(icon,index)
+ if not K.atom(icon) or icon=='faction_player' then return K.poolIcon(index) end
+ return icon
+end
 function K.poolIndex(faction)
  local n=type(faction)=='string' and faction:match('^x4lan_player(%d+)$');n=n and tonumber(n)
  if n and n>=1 and n<=K.POOL and tostring(n)==faction:sub(13) then return n end
@@ -126,6 +143,8 @@ function K.new(cfg,io)
   if not localIndex then return false end
   name=K.cleanName(name) or ('LAN Player '..localIndex)
   icon=K.atom(icon) and icon or 'faction_player'
+  -- A changed own name changes which announced names collide with it: reassign everybody.
+  if p.name~=name then p.roster={} end
   p.name,p.icon=name,icon
   p.seq=p.seq+1
   io.send(table.concat({'PFID','1',lease,p.seq,K.encode(name),icon},'|'))
@@ -180,8 +199,9 @@ function K.new(cfg,io)
   if not row or row.name~=name or row.icon~=icon then
    p.roster[index]={name=name,icon=icon,at=now}
    if index~=localIndex then
-    io.md('Assign',{index=index,faction=K.poolFaction(index),name=name,short=K.shortName(name),icon=icon})
-    io.log(string.format('PLAYER_FACTIONS ASSIGN slot=p%d faction=%s name=%q icon=%s',index,K.poolFaction(index),name,icon))
+    local shown,picture=K.displayName(name,index,p.name),K.displayIcon(icon,index)
+    io.md('Assign',{index=index,faction=K.poolFaction(index),name=shown,short=K.shortName(shown),icon=picture})
+    io.log(string.format('PLAYER_FACTIONS ASSIGN slot=p%d faction=%s name=%q announced=%q icon=%s',index,K.poolFaction(index),shown,name,picture))
    else
     io.log(string.format('PLAYER_FACTIONS ASSIGN slot=p%d faction=player pool=%s name=%q (local human)',index,K.poolFaction(index),name))
    end

@@ -147,8 +147,8 @@
   </add>
   <add sel="/factions">
     <faction id="x4lan_player1" name="LAN Player 1" description="Human player slot 1 (X4 LAN Lab)." shortname="LP1" prefixname="LAN Player 1" behaviourset="default" tags="claimspace police" policefaction="x4lan_player1" active="0" known="0">
-      <color r="0" g="170" b="255" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="255" g="140" b="0" />
+      <icon active="x4lan_player1" inactive="x4lan_player1" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -182,8 +182,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player2" name="LAN Player 2" description="Human player slot 2 (X4 LAN Lab)." shortname="LP2" prefixname="LAN Player 2" behaviourset="default" tags="claimspace police" policefaction="x4lan_player2" active="0" known="0">
-      <color r="255" g="140" b="0" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="230" g="60" b="200" />
+      <icon active="x4lan_player2" inactive="x4lan_player2" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -217,8 +217,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player3" name="LAN Player 3" description="Human player slot 3 (X4 LAN Lab)." shortname="LP3" prefixname="LAN Player 3" behaviourset="default" tags="claimspace police" policefaction="x4lan_player3" active="0" known="0">
-      <color r="60" g="220" b="90" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="255" g="220" b="40" />
+      <icon active="x4lan_player3" inactive="x4lan_player3" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -252,8 +252,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player4" name="LAN Player 4" description="Human player slot 4 (X4 LAN Lab)." shortname="LP4" prefixname="LAN Player 4" behaviourset="default" tags="claimspace police" policefaction="x4lan_player4" active="0" known="0">
-      <color r="230" g="60" b="200" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="150" g="90" b="255" />
+      <icon active="x4lan_player4" inactive="x4lan_player4" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -287,8 +287,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player5" name="LAN Player 5" description="Human player slot 5 (X4 LAN Lab)." shortname="LP5" prefixname="LAN Player 5" behaviourset="default" tags="claimspace police" policefaction="x4lan_player5" active="0" known="0">
-      <color r="255" g="220" b="40" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="255" g="160" b="200" />
+      <icon active="x4lan_player5" inactive="x4lan_player5" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -322,8 +322,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player6" name="LAN Player 6" description="Human player slot 6 (X4 LAN Lab)." shortname="LP6" prefixname="LAN Player 6" behaviourset="default" tags="claimspace police" policefaction="x4lan_player6" active="0" known="0">
-      <color r="150" g="90" b="255" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="200" g="140" b="60" />
+      <icon active="x4lan_player6" inactive="x4lan_player6" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -357,8 +357,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player7" name="LAN Player 7" description="Human player slot 7 (X4 LAN Lab)." shortname="LP7" prefixname="LAN Player 7" behaviourset="default" tags="claimspace police" policefaction="x4lan_player7" active="0" known="0">
-      <color r="0" g="220" b="200" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="235" g="235" b="235" />
+      <icon active="x4lan_player7" inactive="x4lan_player7" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -392,8 +392,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player8" name="LAN Player 8" description="Human player slot 8 (X4 LAN Lab)." shortname="LP8" prefixname="LAN Player 8" behaviourset="default" tags="claimspace police" policefaction="x4lan_player8" active="0" known="0">
-      <color r="255" g="80" b="80" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="190" g="160" b="255" />
+      <icon active="x4lan_player8" inactive="x4lan_player8" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -427,8 +427,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player9" name="LAN Player 9" description="Human player slot 9 (X4 LAN Lab)." shortname="LP9" prefixname="LAN Player 9" behaviourset="default" tags="claimspace police" policefaction="x4lan_player9" active="0" known="0">
-      <color r="170" g="255" b="60" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="255" g="190" b="130" />
+      <icon active="x4lan_player9" inactive="x4lan_player9" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -462,8 +462,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player10" name="LAN Player 10" description="Human player slot 10 (X4 LAN Lab)." shortname="LP10" prefixname="LAN Player 10" behaviourset="default" tags="claimspace police" policefaction="x4lan_player10" active="0" known="0">
-      <color r="255" g="160" b="200" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="170" g="60" b="255" />
+      <icon active="x4lan_player10" inactive="x4lan_player10" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -497,8 +497,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player11" name="LAN Player 11" description="Human player slot 11 (X4 LAN Lab)." shortname="LP11" prefixname="LAN Player 11" behaviourset="default" tags="claimspace police" policefaction="x4lan_player11" active="0" known="0">
-      <color r="120" g="160" b="255" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="255" g="180" b="0" />
+      <icon active="x4lan_player11" inactive="x4lan_player11" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -532,8 +532,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player12" name="LAN Player 12" description="Human player slot 12 (X4 LAN Lab)." shortname="LP12" prefixname="LAN Player 12" behaviourset="default" tags="claimspace police" policefaction="x4lan_player12" active="0" known="0">
-      <color r="200" g="140" b="60" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="255" g="100" b="170" />
+      <icon active="x4lan_player12" inactive="x4lan_player12" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -567,8 +567,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player13" name="LAN Player 13" description="Human player slot 13 (X4 LAN Lab)." shortname="LP13" prefixname="LAN Player 13" behaviourset="default" tags="claimspace police" policefaction="x4lan_player13" active="0" known="0">
-      <color r="90" g="255" b="170" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="210" g="180" b="140" />
+      <icon active="x4lan_player13" inactive="x4lan_player13" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -602,8 +602,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player14" name="LAN Player 14" description="Human player slot 14 (X4 LAN Lab)." shortname="LP14" prefixname="LAN Player 14" behaviourset="default" tags="claimspace police" policefaction="x4lan_player14" active="0" known="0">
-      <color r="255" g="110" b="30" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="200" g="100" b="220" />
+      <icon active="x4lan_player14" inactive="x4lan_player14" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -637,8 +637,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player15" name="LAN Player 15" description="Human player slot 15 (X4 LAN Lab)." shortname="LP15" prefixname="LAN Player 15" behaviourset="default" tags="claimspace police" policefaction="x4lan_player15" active="0" known="0">
-      <color r="180" g="180" b="180" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="240" g="240" b="120" />
+      <icon active="x4lan_player15" inactive="x4lan_player15" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />
@@ -672,8 +672,8 @@
       </relations>
     </faction>
     <faction id="x4lan_player16" name="LAN Player 16" description="Human player slot 16 (X4 LAN Lab)." shortname="LP16" prefixname="LAN Player 16" behaviourset="default" tags="claimspace police" policefaction="x4lan_player16" active="0" known="0">
-      <color r="240" g="240" b="120" />
-      <icon active="faction_player" inactive="faction_player" />
+      <color r="170" g="170" b="170" />
+      <icon active="x4lan_player16" inactive="x4lan_player16" />
       <licences>
         <licence type="generaluseship" name="{1001,61}" tags="basic hidden" />
         <licence type="generaluseequipment" factions="alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity" />

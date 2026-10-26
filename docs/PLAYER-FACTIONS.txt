@@ -21,7 +21,17 @@ x4lan_player1 .. x4lan_player16, one per slot (p1 -> 1, p2 -> 2, ...). The pool 
 not 2: the host's human must also have a pool faction, because on every OTHER machine the host's
 assets belong to x4lan_player1. Mod-prefixed ids suffice; nothing requires a plain "player2".
 - active="0" known="0" until assigned; fixed distinct inline colour each (colour cannot be
-  changed at runtime); default icon faction_player.
+  changed at runtime). The palette has no greens (the player's own colour), no azure (friendly/
+  neutral relation colour) and no reds (enemy/hostile), so a pool faction never looks like "own"
+  when the UI uses faction colours (target HUD option "factioncolortargetsystem", map).
+- Own icon per slot: x4lan_playerN (libraries/icons.xml; assets/textures/ui/x4lan/*.dds, a disc
+  in the slot colour with the slot number, tools/dev/build_player_faction_icons.py). The player's
+  own logo faction_player is never given to another human: an announced faction_player icon
+  is replaced by the slot icon.
+- Displayed name: the announced player name, except when it is empty, the gamestart default
+  "Multiplayer Pilot" or equal to this machine's own name: then "Player N" (N = slot number).
+  Reported 26 October 2026 on the 8-player build: two clients left at the default name and icon
+  showed the other human as an identical "Multiplayer Pilot"/faction_player faction.
 - tags "claimspace police", policefaction = itself, exactly like vanilla faction "player";
   no "economic" tag; no factionlogic.xml manager, no jobs, no god entries. So no faction AI,
   no economy and no diplomacy agents act for them. Diplomacy stays inactive (vanilla default).

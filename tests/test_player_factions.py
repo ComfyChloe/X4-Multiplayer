@@ -44,6 +44,20 @@ class FactionPoolDiff(unittest.TestCase):
         self.tree = E.parse(FACTIONS)
         self.pool = self.tree.getroot().findall("add[@sel='/factions']/faction")
 
+    def test_icons_are_generated_per_slot_and_never_the_player_logo(self):
+        import importlib.util
+        spec = importlib.util.spec_from_file_location('gen', ROOT / 'tools/dev/build_player_factions.py')
+        gen = importlib.util.module_from_spec(spec); spec.loader.exec_module(gen)
+        self.assertEqual((EXT / 'libraries/icons.xml').read_text(encoding='utf-8'), gen.build_icons())
+        for f in self.pool:
+            index = f.get('id')[len('x4lan_player'):]
+            self.assertEqual((f.find('icon').get('active'), f.find('icon').get('inactive')), (f.get('id'),) * 2)
+            self.assertTrue((EXT / f'assets/textures/ui/x4lan/x4lan_player{index}.dds').is_file())
+            r, g, b = (int(f.find('color').get(k)) for k in 'rgb')
+            self.assertFalse(g > r + 40 and g > b + 40, f.get('id') + ' reads as the player green')
+            self.assertFalse(b > r + 40 and b > 150 and g > 100 and r < 100, f.get('id') + ' reads as friendly azure')
+            self.assertFalse(r > 200 and g < 110 and b < 110, f.get('id') + ' reads as hostile red')
+
     def test_generator_matches_committed_file(self):
         import importlib.util
         spec = importlib.util.spec_from_file_location('gen', ROOT / 'tools/dev/build_player_factions.py')
@@ -369,6 +383,27 @@ class LuaCore(unittest.TestCase):
             table.sort(seen);assert(table.concat(seen,',')=='1-2,1-3,2-3',table.concat(seen,','))
         ''')
 
+    def test_default_or_colliding_names_and_player_icon_are_replaced(self):
+        lua = self.runtime()
+        lua.execute('''
+            local K=X4LAN_PLAYERS_CORE
+            assert(K.displayName('Multiplayer Pilot',3,'Alice')=='Player 3')
+            assert(K.displayName('',2,nil)=='Player 2' and K.displayName(nil,2,nil)=='Player 2')
+            assert(K.displayName('Alice',2,'Alice')=='Player 2' and K.displayName('Bob',2,'Alice')=='Bob')
+            assert(K.displayIcon('faction_player',4)=='x4lan_player4' and K.displayIcon('faction_argon',4)=='faction_argon')
+            -- Both clients left at the gamestart default name (live 8-player report): distinct pool identities.
+            local g,io=make('p2')
+            g.identity('L2','Multiplayer Pilot','faction_player')
+            local mp='4d756c7469706c617965722050696c6f74'
+            g.receive('L2',split('PFROSTER|1|L2|2|'..mp..'|faction_player|1'),1)
+            g.receive('L2',split('PFROSTER|1|L2|3|'..mp..'|faction_player|1'),1)
+            local a=io.calls[1].args
+            assert(io.calls[1].action=='Assign' and a.faction=='x4lan_player3' and a.name=='Player 3' and a.short=='Player3' and a.icon=='x4lan_player3')
+            -- A renamed client: reassigned under its real name.
+            g.receive('L2',split('PFROSTER|1|L2|3|426f62|faction_player|2'),2)
+            assert(io.calls[#io.calls].args.name=='Bob')
+        ''')
+
     def test_host_ship_ownership_only_after_baseline(self):
         lua = self.runtime()
         lua.execute('''
@@ -411,8 +446,8 @@ class LuaCore(unittest.TestCase):
             pump(t * 1.0)
         host_md = [(m.action, dict(m.args)) for m in g.hio.calls.values()]
         guest_md = [(m.action, dict(m.args)) for m in g.gio.calls.values()]
-        self.assertIn(('Assign', {'index': 2, 'faction': 'x4lan_player2', 'name': 'Bob', 'short': 'Bob', 'icon': 'faction_player'}), host_md)
-        self.assertIn(('Assign', {'index': 1, 'faction': 'x4lan_player1', 'name': 'Alice', 'short': 'Alice', 'icon': 'faction_player'}), guest_md)
+        self.assertIn(('Assign', {'index': 2, 'faction': 'x4lan_player2', 'name': 'Bob', 'short': 'Bob', 'icon': 'x4lan_player2'}), host_md)
+        self.assertIn(('Assign', {'index': 1, 'faction': 'x4lan_player1', 'name': 'Alice', 'short': 'Alice', 'icon': 'x4lan_player1'}), guest_md)
         rel = [a for k, a in guest_md if k == 'Relation']
         self.assertEqual((rel[-1]['fa'], rel[-1]['fb'], rel[-1]['value']), ('x4lan_player1', 'player', .75))
         ok, how = g.g.setRelation(l2, 'p1', 'hostile')

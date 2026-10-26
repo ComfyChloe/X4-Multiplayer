@@ -17,6 +17,25 @@ local cfg=X4LAN_CONFIG
 if not cfg or cfg.player_factions~=true then return end
 local ffi=require('ffi');local C=ffi.C
 pcall(ffi.cdef,[[bool DropCargo(UniverseID,const char*,uint32_t);void SetLootMagnetActive(bool);const char* GetPlayerName(void);]])
+-- What the target HUD (ui/core/lua/targetsystem.lua) and the map use for another object: relation
+-- status 0 hostile, 1 enemy, 2 neutral, 3 friendly, 4 member, 5 own property; the owner's faction
+-- name, icon and colour (used instead of relation colours when "factioncolortargetsystem" is on).
+pcall(ffi.cdef,[[typedef struct { uint32_t red; uint32_t green; uint32_t blue; uint32_t alpha; } Color;]])
+pcall(ffi.cdef,[[typedef struct { const char* factionID; const char* factionName; const char* factionIcon; Color factionColor; float glowfactor; } FactionDetails2;
+typedef struct { int relationStatus; int relationValue; int relationLEDValue; bool isBoostedValue; const char* owningFactionID; } RelationDetails2;
+FactionDetails2 GetOwnerDetails2(UniverseID componentid);
+RelationDetails2 GetRelationStatus4(const UniverseID componentid, const char*const connectionname);
+int GetConfigSetting(const char*const setting);]])
+local function hudText(ship)
+ local ok,text=pcall(function()
+  local r=C.GetRelationStatus4(ship,'');local o=C.GetOwnerDetails2(ship)
+  local s=function(p) return p~=nil and ffi.string(p) or 'nil' end
+  return string.format('relation_status=%d relation_value=%d owning=%s faction_name=%s faction_icon=%s faction_color=%d,%d,%d,%d factioncolortargetsystem=%s',
+   r.relationStatus,r.relationValue,s(r.owningFactionID),s(o.factionName),s(o.factionIcon),
+   o.factionColor.red,o.factionColor.green,o.factionColor.blue,o.factionColor.alpha,tostring(C.GetConfigSetting('factioncolortargetsystem')))
+ end)
+ return ok and text or ('unavailable '..tostring(text))
+end
 local function log(v) DebugError('[X4LAN] PFSESSION '..v) end
 -- 7.x: client 1 (p1, authority) and client 2 (p2). Dedicated server: the clients are p2 and p3 and
 -- every relation change is a request to the server (p1 has no human).
@@ -58,6 +77,11 @@ local function report(now,readyAt)
   local header='unavailable'
   local okt,details=pcall(GetTargetMonitorDetails,id,'',false)
   if okt and details and details.header and details.header.text then header=details.header.text end
+  log(string.format('HUD slot=%s other_ship=%s %s',cfg.slot,otherIndex,hudText(otherShip)))
+  local ownShip=c.ships[3-otherIndex]
+  if ownShip and ownShip~=0 then log(string.format('HUD_OWN slot=%s own_ship=%s %s',cfg.slot,3-otherIndex,hudText(ownShip))) end
+  local okf,ficon,fcolor=pcall(GetFactionData,P.faction(other),'icon','color')
+  log(string.format('FACTION slot=%s faction=%s icon=%s',cfg.slot,tostring(P.faction(other)),tostring(okf and ficon)))
   log(string.format('RADAR slot=%s other_ship=%s known=%s radar=%s owner=%s ownername=%s header=%s',cfg.slot,otherIndex,
    tostring(okc and known),tostring(okc and radar),tostring(okc and owner),tostring(okc and ownername),tostring(header)))
  end
