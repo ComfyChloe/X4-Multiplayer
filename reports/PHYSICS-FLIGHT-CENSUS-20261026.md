@@ -55,7 +55,7 @@ replay verifies the model remains unchanged when that output is present, and
 reports model differences separately from slot differences. A two-worker C
 capture test verifies persistent mutations are captured; the 2,000-record
 original-machine-code replay also covers v2 and an injected model-output error.
-These are offline/synthetic checks; native v2 capture validation is pending.
+These offline/synthetic checks are complemented by the native capture below.
 
 The first native v2 run, `.local/evidence-084-withheld`, failed at startup
 with `capture already used`. X4 loaded UI twice at game time zero; the first
@@ -63,8 +63,7 @@ instance armed the one-shot buffer while loading and the second could not reuse
 it. The game closed gracefully and the lane was restored. No capture or native
 equivalence evidence came from this run. The harness now waits for a non-loading
 stats window with at least one second of game time before arming.35 LuaJIT probe
-tests pass, including the observed zero-time UI-reload sequence. Native retry
-remains required.
+tests pass, including the observed zero-time UI-reload sequence. The native retry below passed this startup sequence.
 
 ## Remaining model object sizes verified
 
@@ -80,3 +79,26 @@ test passes all six model sizes with after-state and buffer-boundary checks.
 Captures of these classes remain observations, not complete replay inputs:
 pointer targets, external configuration and (for steering) worker RNG state
 are not yet included. Unsupported replay classes continue to fail explicitly.
+
+## Native ForcedFlight v2 replay
+
+Released lane run `forced-v2-001` completed gracefully at03:39:53 on2026-10-26,
+restoring its lane. Its disposable three-ship fixture produced500 records,
+592056 bytes, record size1184. Capture SHA256:
+`c5d88df4cdb2a2e5c8407ac86dba1c0e96c8e3494a11713008bd0fc3e9726788`.
+The local evidence stays in `.local/evidence-085-withheld` and
+`.local/evidence-060-withheld` and is not committed.
+
+Replay found zero slot or model mismatches. There were349 cheap updates,
+three distinct input poses, three distinct target poses and167 distinct time
+steps. Six records changed slot state; none changed model state. Thus this
+establishes native equivalence for the captured mostly stationary fixture,
+not broad moving-flight acceptance or permission to shadow/switch gameplay.
+The one dropped record is buffer capacity overflow at the500-record limit;
+the capture is not a complete census of every call in its final frame.
+
+Negative controls flipped one bit in record123 of separate local copies.
+Slot+0x40 and model-after+0x20 each yielded exactly one mismatch and exit1,
+with the correct location reported. The original capture remained unchanged.
+The run used native147e5c9, Lua864600e and fixtureb97b325; later cleanup
+anchoring in64a400f was not retroactively applied to its frozen extension.
