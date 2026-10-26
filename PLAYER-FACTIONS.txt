@@ -1,0 +1,109 @@
+PLAYER FACTIONS (config flag player_factions) - INTERNAL, NOT YET NATIVELY TESTED
+
+Each human gets an own faction. Data, MD and Lua only; no engine hooks. Source config is
+inert (player_factions = false); internal packages enable it (session_launcher.py).
+
+POOL
+libraries/factions.xml (generated: python dev/build_player_factions.py) adds
+x4lan_player1 .. x4lan_player16, one per slot (p1 -> 1, p2 -> 2, ...). The pool starts at 1,
+not 2: the host's human must also have a pool faction, because on every OTHER machine the host's
+assets belong to x4lan_player1. Mod-prefixed ids suffice; nothing requires a plain "player2".
+- active="0" known="0" until assigned; fixed distinct inline colour each (colour cannot be
+  changed at runtime); default icon faction_player.
+- tags "claimspace police", policefaction = itself, exactly like vanilla faction "player";
+  no "economic" tag; no factionlogic.xml manager, no jobs, no god entries. So no faction AI,
+  no economy and no diplomacy agents act for them. Diplomacy stays inactive (vanilla default).
+- Licences: the same basic set the vanilla player starts with (base-game issuers).
+- Relations: allied (0.75; ally range 0.5..1) to "player" and to every other pool faction,
+  neutral to everyone else. Both sides of the "player" pair are written.
+
+MAPPING
+Machine of human L: human L = real "player"; human K != L = x4lan_playerK. The same rule is used
+for identities, relations, ships and sectors (ui/player_factions_core.lua: factionFor, tokenFor).
+Machine-neutral owner tokens on the wire: S<K> for human K, otherwise the NPC faction id.
+
+PROTOCOL (relay x4lan/players.py, routed in Relay.step; old relays drop PF* packets)
+  PFID     client -> relay   own name (UTF-8 hex, plain text, max 48 bytes) and icon id, every 2 s
+  PFROSTER relay -> clients  every connected human, 1 Hz
+  PFREL    host -> relay -> guests   authoritative relation per human pair, revisioned
+  PFREQ    guest -> relay -> host    relation intent; the relay stamps the sender's index
+  PFSEC    host -> relay -> guests   sector owner rows (cached, every 5 s and on change)
+           guest -> relay -> host    claim intent, only for the sender's own token S<own>
+A new host lease clears cached relations/sectors (new authority epoch).
+
+FLOW
+1. After the bubble is ready and the relay lease exists, Lua sends Setup; MD resolves the pool
+   via lookup.faction (no static faction refs, so a missing pool cannot break script load) and
+   answers Ready with the count. Missing pool or no answer -> FEATURE player_factions DISABLED.
+2. Each machine sends its player name (GetPlayerName) and icon (cfg.player_faction_icon, default
+   faction_player). For every OTHER human, MD runs set_faction_identity (name, shortname,
+   prefixname, description, icon), set_faction_known true, set_faction_active true.
+3. The host authors the default alliance per pair and publishes it; guests mirror revisions in
+   order. Intent: X4LAN_PLAYERS.setRelation('p2', 'allied'|'neutral'|'hostile'|-1..1). The host
+   applies directly; a guest sends PFREQ, the host validates (sender must be in the pair and in
+   the roster), applies and reflects it back. No UI buttons yet (follow-up).
+4. Ships: host-side NPC scene capture (universe_game.lua) now also publishes player-owned ships
+   that did NOT exist when player factions became ready, with owner x4lan_player1. On the guest
+   they become ordinary scene replicas owned by the host's faction: host colour, not commandable.
+5. Sectors: MD polls every 5 s and reports sectors owned by player/pool factions (and later
+   changes of those). The host publishes S<K> rows; guests apply set_owner with the mapping.
+   A guest's local claim becomes an intent; the host applies x4lan_player<guest> and reflects it.
+Logs: [X4LAN] PLAYER_FACTIONS READY/ASSIGN/IDENTITY/IDENTITY_APPLIED/RELATION/RELATION_APPLIED/
+RELATION_REQUEST/SECTOR/SECTOR_CLAIM/SECTOR_APPLY/SECTOR_OWNER/REFUSED and
+FEATURE player_factions DISABLED reason=core_missing|bubble_adapter_inactive|requires_coop|
+invalid_slot|md_unavailable|pool_missing count=N|relay_unsupported|error.
+
+DELIBERATELY UNCHANGED
+- The two shared co-op ships (md.X4LAN_Bubble.Arena.$ships), the test station, donor, targets
+  and drops stay player/ownerless-owned on both machines. Either human may pilot either co-op
+  ship (handoff), dock, trade and drop cargo; re-owning them would make the other human's ship
+  uncommandable and break the accepted radar/cargo/Cooperative Trial/docking results.
+- Player-owned assets that already exist when the feature starts (fixtures and the pristine
+  save's own assets) exist in BOTH worlds and stay "player" on both; re-publishing them would
+  spawn a duplicate replica on top of the guest's own copy.
+- Guest-only new ships are not replicated to the host (the guest has no world authority).
+
+WHAT WORKS WITHOUT HOOKS (per faction, native engine features)
+Faction name/short name/icon, known/active, colour, relations between any two factions,
+diplomacy list entry (menu_diplomacy lists GetLibrary("factions") minus "player"), ownership of
+ships and sectors (set_owner), per-faction money account and licences, knowledge lists.
+
+WHAT STILL NEEDS THE ENGINE HOOKS (only "player" is the player)
+- Each client only controls its own "player"; a pool faction is never treated as a human: no
+  orders, no player money UI, no isplayerowned, no logbook/notifications, no player price
+  modifiers or inventory for it (single player entity; 874/962 compare sites per RE report).
+- On a dedicated server, pool factions would have to BE the players there: faction.player and
+  isplayerowned per acting player (RE report section 7: stop folding faction.player, capture
+  script context, resolve per context).
+- Personal logo files (set_faction_identity personal="true") need the logo/banner files on every
+  machine: distribution of player logo files is a follow-up. Only built-in icon ids are carried.
+
+PLOTS AND SECTOR CLAIMS FOR POOL FACTIONS
+- Natively per faction: sector owner is a faction field (set_owner); claimspace tag makes the
+  faction eligible where vanilla checks $faction.hastag.claimspace / willclaimspace; build plots
+  belong to the station (owner = station's faction) and payment uses the builder faction's account.
+- In this mod no pool faction builds anything: no faction logic, and the other human's stations
+  are not replicated, so a pool faction never acquires plots by itself. A sector owned by
+  x4lan_playerK on a machine exists because the authority mirrored it.
+- Player-only paths: buying/expanding plots, construction ordering, plot licence checks and
+  achievements go through the player UI and C++ sites comparing with the one player faction
+  (RE report: buildplot/canbuildmacro/build-plot rules at Win 0x7fe600, 0x992d80). A pool faction
+  cannot buy a plot or pay for one from its account until the hooks make it the acting player.
+- Unverified natively: whether the engine recomputes sector ownership from stations and reverts a
+  mirrored owner (the authority republishes rows every 5 s; a guest reapplies only on change).
+  Whether set_faction_identity plain-text names survive save/load (docs recommend {page,line}).
+
+NATIVE TEST STEPS (two matched internal packages, new disposable world, profile 45841)
+1. Both logs: PLAYER_FACTIONS READY, then ASSIGN slot=pX (local human) and ASSIGN for the
+   other slot, IDENTITY_APPLIED, RELATION_APPLIED ... 0.75. No FEATURE player_factions DISABLED.
+2. Diplomacy (host): a faction named after the guest's player name, its colour, ally status;
+   no "LAN Player 1" entry for the host itself. Guest: the host's name, ally status.
+3. Host: X4LAN_PLAYERS.setRelation('p2','hostile') via Lua console -> both diplomacy views show
+   enemy/kill relation; then 'allied' again. Guest: X4LAN_PLAYERS.setRelation('p1','neutral')
+   -> host applies, both sides show neutral.
+4. Host buys or spawns a new ship in the guest's sector: on the guest map/target monitor it shows
+   the host's faction name and colour, cannot be given orders. Co-op ships stay commandable and
+   swappable for both humans exactly as before; radar, cargo and Cooperative Trial unchanged.
+5. Sector: host claims a sector (or debug set_owner to faction.player) -> guest map shows that
+   sector owned by the host's faction within ~5 s.
+6. Save/load the disposable world on one side and repeat 2 (name persistence check).

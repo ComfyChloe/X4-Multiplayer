@@ -61,6 +61,7 @@ end
 local function receiveExtension(client,f,now)
  if X4LAN_BUBBLE_API.universe and X4LAN_BUBBLE_API.universe.receive(f,now) then return true end
  if X4LAN_BUBBLE_API.missions and X4LAN_BUBBLE_API.missions.receive(f,now) then return true end
+ if X4LAN_BUBBLE_API.players and X4LAN_BUBBLE_API.players.receive(f,now) then return true end
  if X4LAN_BUBBLE_API.quest and X4LAN_BUBBLE_API.quest.receive(f,now) then return true end
  if X4LAN_BUBBLE_API.coop and X4LAN_BUBBLE_API.coop.receive(f,now) then return true end
  if X4LAN_BUBBLE_API.life and X4LAN_BUBBLE_API.life.receive(client,f,now) then return true end
@@ -213,6 +214,7 @@ local function frame()
  if X4LAN_BUBBLE_API.trade then X4LAN_BUBBLE_API.trade.frame(now) end
  if X4LAN_BUBBLE_API.missions then X4LAN_BUBBLE_API.missions.frame(now) end
  if X4LAN_BUBBLE_API.quest then X4LAN_BUBBLE_API.quest.frame(now) end
+ if X4LAN_BUBBLE_API.players then X4LAN_BUBBLE_API.players.frame(now) end
  if not cfg.coop and client.lease and now>=(s.nextFire or 0) then
   s.transport:send('FIRE|1|'..client.lease..'|'..tostring(s.fire));s.nextFire=now+.05
  end

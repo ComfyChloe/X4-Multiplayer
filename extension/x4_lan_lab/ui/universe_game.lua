@@ -100,6 +100,8 @@ local function scanStep(scan)
       C.GetContextByClass(object,'sector',false)==scan.sector then
     local macro,owner=GetComponentData(A.id(object),'macro','owner')
     assert(P.atom(macro,true) and P.atom(owner),'NPC descriptor unavailable; refusing incomplete baseline')
+    -- player_factions: a host ship owned only by the host's human replicates as its pool faction.
+    if owner=='player' and cfg.slot=='p1' and A.players then owner=A.players.personalOwner(object) or owner end
     if owner~='player' then
      scan.objects[#scan.objects+1]={object=object,key=k,macro=macro,owner=owner}
      assert(#scan.objects<=P.limit,'sector object limit exceeded; refusing a truncated baseline')

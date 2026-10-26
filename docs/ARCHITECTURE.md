@@ -103,6 +103,15 @@ Controlled native host and guest checks cover drop/magnet, duplicate intentions,
 lost completion, capacity and partial quantity. Two-native acceptance remains
 separate. Arbitrary NPC loot, multi-ware crates and all cargo categories are open.
 
+## Player factions
+
+`player_factions` (internal packages; inert in source) gives every human an own faction from the
+pool `x4lan_player1..16` (`libraries/factions.xml`). Each machine maps its own human to `player`
+and every other human K to `x4lan_playerK`. `PFID`/`PFROSTER` carry names, the host authors
+relations (`PFREL`, guest intents `PFREQ`) and sector owners (`PFSEC`); the relay
+(`x4lan/players.py`) only routes and caches. Shared co-op fixtures stay `player`-owned. Details,
+limits and native test steps: [PLAYER-FACTIONS.txt](PLAYER-FACTIONS.txt).
+
 ## Display identity and shared ship observations
 
 `IDENT|1|lease|hostEpoch|sequence|scope|id|code|UTF8nameHex|known|contact` is

@@ -18,6 +18,7 @@ X4LAN_CONFIG = {
     local_ship = 0, -- 0 derives p1->1, p2->2, p3->1, pK->K-1.
     dedicated_control_path = "", -- Installed server config supplies an absolute local path.
     dedicated_heartbeat_interval = 5,
+    player_factions = false, -- INTERNAL: own faction per human (pool x4lan_playerN), relations, sector owners.
     frame_profile = false, -- Diagnostic only: per-second FRAMECOST wall time of the mod's UI Lua by subsystem.
     net_probe = false, -- Diagnostic only: RTTPING/RTTPONG round trips to the relay, NETRTT every 5 s.
     npc_target_diag = false, -- Diagnostic only: logs NPC orders, targets, attention and radar near the shared ships.
