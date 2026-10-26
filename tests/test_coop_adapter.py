@@ -362,6 +362,43 @@ class CoopAdapterTests(unittest.TestCase):
    assert(math.abs(lastRequest('Velocity').x-100)<1 and fenceCount(true)==1 and fenceCount(false)==disabled)
   """)
 
+ def test_engine_highway_attached_replica_gets_no_pose_warp_or_vector(self):
+  # Dedicated server hang 18:19 during a highway chain: guard the case that the engine
+  # itself attaches a replica to a highway. The highway then moves it; the mod stays out.
+  l=self.high_speed_remote();l.execute("""
+   local hw,sectorOf=0,{};local base=api.GetContextByClass
+   api.GetContextByClass=function(object,class)
+    if class=='highway' then return object==42 and hw or 0 end
+    if class=='sector' and sectorOf[object] then return sectorOf[object] end
+    return base(object,class)
+   end
+   local x=1000
+   for k=0,9 do x=x+500;zone=zone+1;sample(k,10000,x,'highway') end
+   assert(X4LAN_BUBBLE_API.coop.velocity[2] and fenceCount(false)==0)
+   hw=77;local n,moves,velocities=#writes,countRequest('SectorMove'),countRequest('Velocity')
+   for k=10,40 do
+    x=x+500;zone=zone+1;if k==20 then sectorOf[42]=23 end  -- even a sector mismatch
+    sample(k,10000,x,'highway')
+   end
+   assert(#writes==n and countRequest('SectorMove')==moves and countRequest('Velocity')==velocities)
+   assert(fenceCount(false)==1 and X4LAN_BUBBLE_API.coop.velocity[2]==nil and X4LAN_BUBBLE_API.coop.remote[2].applied==nil)
+   local attached,released=0,0
+   for _,v in ipairs(logs) do
+    if v:find('REPLICA_HIGHWAY ship=2 state=attached',1,true) then attached=attached+1 end
+    if v:find('REPLICA_HIGHWAY ship=2 state=released',1,true) then released=released+1 end
+   end
+   assert(attached==1 and released==0)
+   -- Released by the engine: pose and vector resume, without a slip from the old pose.
+   hw=0;sectorOf[42]=nil
+   for k=41,45 do x=x+500;zone=zone+1;sample(k,10000,x,'highway') end
+   assert(#writes>n and countRequest('Velocity')>velocities and X4LAN_BUBBLE_API.coop.velocity[2])
+   for _,v in ipairs(logs) do
+    if v:find('REPLICA_HIGHWAY ship=2 state=released',1,true) then released=released+1 end
+    assert(not v:find('COOP_FRAME_SLIP',1,true))
+   end
+   assert(released==1)
+  """)
+
  def test_boost_travel_and_legacy_fast_streams_keep_native_velocity(self):
   for mode,speed in (('boost',800),('travel',4000),(None,5000)):
    l=self.high_speed_remote();l.execute("""

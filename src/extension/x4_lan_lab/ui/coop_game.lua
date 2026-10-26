@@ -127,6 +127,14 @@ local function applyVelocity(i,sector,linear,now)
    dockGeneration=attached and c.attachmentGeneration and c.attachmentGeneration(i) or nil,dockStamp=dockStamp,dockAge=dockAge})
  end
 end
+-- A replica the engine has attached to a highway (its highway context differs from its
+-- sector) is moved by the highway itself. No pose write, warp or native vector may touch
+-- it then: the mod never puts a replica on a highway, so this only guards an engine capture
+-- (for example a pose written into a highway entry) and leaves the ship to the engine.
+local function replicaOnHighway(ship)
+ local highway=C.GetContextByClass(ship,'highway',false)
+ return highway~=0 and highway~=C.GetContextByClass(ship,'sector',false)
+end
 -- Local motion mode of an owned ship. Only the piloted ship exposes boost/travel state.
 -- A highway context equal to the sector is not a highway (engine doubles return one id).
 local function localMode(ship,sector)
@@ -536,7 +544,15 @@ function c.frame(now)
    -- network sample must not pull a locally docked ship out of its parent.
    -- Dock attachment covers ships 1/2; ships 3.. follow the received pose only.
    local dockAllowed=not cfg.coop_docks or i>2 or (c.dockPoseAllowed and c.dockPoseAllowed(i,r,now))
-   if dockAllowed and sector and r.dock==0 and c.docks[i]==0 and GetComponentData(A.id(ship),'isdocked')~=true then
+   local attached=replicaOnHighway(ship)
+   if attached~=(r.highwayAttached==true) then
+    r.highwayAttached=attached or nil
+    log(string.format('REPLICA_HIGHWAY ship=%d state=%s mode=%s',i,attached and 'attached' or 'released',r.mode or 'legacy'))
+   end
+   if attached then
+    -- The last written pose and zone offsets do not survive the engine's highway move.
+    r.applied=nil;r.slipSince=nil;r.wFrom=nil;r.zoneFix=nil
+   elseif dockAllowed and sector and r.dock==0 and c.docks[i]==0 and GetComponentData(A.id(ship),'isdocked')~=true then
     local value={x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}
     if C.GetContextByClass(ship,'sector',false)~=sector then
      -- The last written pose belongs to the old sector frame; it is no slip reference.
@@ -605,7 +621,7 @@ function c.frame(now)
   -- running native vector for VELOCITY_HOLD s; MD's 0.3 s deadline still bounds it.
   -- Real boundaries (no pose, local pilot, dock) fence at once.
   if not velocityApplied then
-   local hold=p and r and r.velocityAt and now-r.velocityAt<=VELOCITY_HOLD
+   local hold=p and r and r.velocityAt and now-r.velocityAt<=VELOCITY_HOLD and not r.highwayAttached
     and r.dock==0 and c.docks[i]==0 and c.owners[i]~=cfg.slot and C.GetPlayerControlledShipID()~=ship
     and C.IsComponentOperational(ship) and not A.paused()
    if not hold then clearVelocity(i) end

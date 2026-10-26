@@ -223,6 +223,20 @@ class MotionHitchTests(unittest.TestCase):
         library = root.find(".//library[@name='AlignedZoneSpace']")
         self.assertIn('$basisError lt 0.00000001', ET.tostring(library, encoding='unicode'))
 
+    def test_md_never_drives_a_highway_attached_ship(self):
+        # A highway is a zone class: the alignment check must reject it, and no velocity
+        # zeroing may hit a ship that the highway moves.
+        import xml.etree.ElementTree as ET
+        root = ET.parse(COOP_MD).getroot()
+        library = root.find(".//library[@name='AlignedZoneSpace']/actions/do_if").get('value')
+        self.assertIn('$ship.parent.isclass.zone and not $ship.parent.isclass.highway', library)
+        zeroing = [d.get('value') for d in root.iter('do_if')
+                   if d.find('set_object_velocity') is not None
+                   and d.find('set_object_velocity').get('constantvel') == 'false']
+        self.assertEqual(len(zeroing), 3)
+        for value in zeroing:
+            self.assertIn('not $ship.parent.isclass.highway', value)
+
     def test_client_drains_a_busy_relay_queue_in_one_update(self):
         # Native: rx ~1000 packets/s, NETRTT median up to 477 ms with 28-48 % loss while the
         # client read only 32 datagrams per frame. A frame must drain the queue.
