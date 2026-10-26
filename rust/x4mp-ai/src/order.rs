@@ -128,6 +128,7 @@ impl Agent {
                     Frame::Patrol(_) => "Patrol",
                     Frame::Seek(_) => "move.seekenemies",
                     Frame::TargetSel(_) => "lib.target.selection",
+                    Frame::MoveGen(_) => "MoveGeneric",
                     Frame::Opaque { .. } => "opaque",
                 };
                 OrderStatus::Running { order, top: top.name().to_string(), waiting: *w }

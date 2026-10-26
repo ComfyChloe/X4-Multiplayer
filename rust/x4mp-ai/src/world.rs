@@ -225,6 +225,10 @@ pub enum Prop {
     OrderAllowOtherTargets,
     /// order: the `$primarytarget` parameter (Attack).
     OrderPrimaryTarget,
+    /// Global: X4's debug output channel for script `debug_text` conditions is on (`-debug scripts`;
+    /// lanes run with it, a player's game usually without). Condition-level `debugchance` rolls draw
+    /// only then.
+    DebugChannel,
 }
 
 impl Prop {
@@ -303,6 +307,7 @@ impl Prop {
             OrderTarget => "$target",
             OrderAllowOtherTargets => "$allowothertargets",
             OrderPrimaryTarget => "$primarytarget",
+            DebugChannel => "debug.channel",
         }
     }
     pub fn parse(s: &str) -> Option<Prop> {
@@ -380,6 +385,7 @@ impl Prop {
             OrderTarget,
             OrderAllowOtherTargets,
             OrderPrimaryTarget,
+            DebugChannel,
         ];
         ALL.iter().copied().find(|p| p.name() == s)
     }

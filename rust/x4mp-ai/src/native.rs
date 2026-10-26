@@ -219,6 +219,10 @@ pub fn wait_rule(script: &str, line: u32) -> Option<WaitRule> {
         ("order.fight.patrol", 317) => WaitRule::Range(0.001, 1.0),
         ("order.fight.patrol", 480 | 509) => WaitRule::Range(1.0, 2.0),
         ("move.seekenemies", 146) => WaitRule::Forever,
+        ("move.generic", 382 | 1027 | 1237) => WaitRule::Exact(0.001),
+        ("move.generic", 920) => WaitRule::Exact(1.0),
+        // L616 depends on whether the destination is in a highway; L1022 depends on
+        // ship class/pilot skill. A bracket capture alone does not contain those facts.
         ("orders.base", 121) => WaitRule::Exact(60.0),
         ("orders.base", 144 | 386) => WaitRule::Exact(0.1),
         ("orders.base", 366) => WaitRule::Range(0.25, 1.0),
@@ -475,6 +479,24 @@ mod tests {
     fn extract_strips_the_prefix_and_ignores_other_output() {
         let log = "Starting X4\nAITR\tX4AITRACE\t1\tbuild=23660954\nnoise\nAITR\ttrack\tc:0x1\tx\tslot=i:0\n";
         assert_eq!(extract(log), "X4AITRACE\t1\tbuild=23660954\ntrack\tc:0x1\tx\tslot=i:0\n");
+    }
+
+    #[test]
+    fn move_generic_exact_waits_check_and_variable_waits_remain_unclaimed() {
+        let mut c = parse(&synthetic()).unwrap();
+        c.brackets.truncate(1);
+        let b = &mut c.brackets[0];
+        b.script = "move.generic".into();
+        b.line = 382;
+        b.until = b.t + 0.001;
+        let r = check(&c);
+        assert_eq!(r.waits[&("move.generic".into(), 382)], (1, 1));
+        c.brackets[0].until = f64::from_bits(c.brackets[0].until.to_bits() + 1);
+        let r = check(&c);
+        assert_eq!(r.waits[&("move.generic".into(), 382)], (1, 0));
+        assert!(r.first_wait_mismatch.is_some());
+        assert_eq!(wait_rule("move.generic", 616), None);
+        assert_eq!(wait_rule("move.generic", 1022), None);
     }
 
     #[test]

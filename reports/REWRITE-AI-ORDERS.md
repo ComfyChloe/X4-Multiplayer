@@ -10,7 +10,9 @@ M2a **native**: two bracket captures of Patrol job ships (section 9a) confirm th
 contradiction (51/51 wait wake times bit-exact over both runs, constant draw counts per bracket class);
 `lib.target.selection` is native too (section 6a). The measured census (section 1.3) puts the AI time in
 move.generic, trade.find.free and fight.attack.object.fighter; **M3 = move.generic** (lead, 26 Oct), then
-trade.find.free. Everything else below is offline unless marked native.
+trade.find.free. M3 now has a resumable `move.generic` port and nine synthetic replay/regression tests
+(section 9b); no live M3 switch or native value-replay acceptance yet. Everything else below is offline
+unless marked native.
 
 ## 1. Ranking of AI orders
 
@@ -315,7 +317,9 @@ Cross-sector reads are facts from the frame-start snapshot.
 
 ## 9. Tests (offline)
 
-`cargo test -p x4mp-ai`: 33 tests pass (Windows 11, Rust 1.94.1); clippy clean.
+`cargo test -p x4mp-ai`: 44 tests pass (Windows 11, Rust 1.94.1);
+`cargo clippy -p x4mp-ai --all-targets -- -D warnings` passes. The original test breakdown below
+is historical M1/M2; M3 additions are described in section 9b.
 
 - unit (20): rng 11 (engine constants by bits, step vs native 150-step evidence, inverse step,
   FloatState/U64 edge cases: no draw on n=0 or negative max, max returned at the top; chance comiss
@@ -371,6 +375,49 @@ The probe armed twice at game start (UI reload), so the log holds two sessions: 
 | move.seekenemies start -> move_to L187 | 4 (7x) or 6 (7x): get_safe_pos engine draws still vary |
 | gravidar scans during seek's move_to | **346/346 drew exactly 1** (distress roll); global scan deliveries drew 0 (89/89) except one matched move.generic handler (1) |
 | now captured as callees | move.generic, move.gate, order.fight.attack.object, move.attack.object.capital.steering, order.fight.protect.position (draw classes listed by `x4ai-check`) |
+
+## 9b. M3 move.generic offline checkpoint (26 October 2026)
+
+`orders::movegeneric::MoveGeneric` implements the supported subset of version 23 as resumable
+states. Parameters keep the XML defaults. Supported paths include ordinary zone/sector/cluster and
+object destinations, safe-position reservations, long/short movement, gate calls (the `move.gate`
+callee remains opaque), stagger waits, path retries, cleanup and selected global/blocking interrupts.
+The module-level comment lists unsupported branches. Those return `Stop::Unsupported`; this is
+replay-stage behavior, not a transactional live fallback. Prior supported actions in the same run
+may already have emitted effects before a later unsupported branch. Do not enable a production
+switch or replay those effects against a live ship without a proven engine-state handoff.
+
+`Frame::MoveGen` can be a called script or a directly replayed order. The typed external `OrderSpec`
+still exposes Patrol only. Global and blocking delivery now receive `Io`: conditions may query the
+engine, consume RNG, and mutate script variables. `consume=false` handlers queue their actions and
+continue the handler walk. Replay resets to the captured pre-delivery RNG state and compares the
+post-delivery state whenever every visited condition was native. Opaque conditions remain explicitly
+outside this check. The Tide handler checks its event selector first, so unrelated events do not
+silently suppress RNG validation. The per-entity stream design is unchanged; no approval of altered
+vanilla roll sequences or live parallel RNG behavior is inferred.
+
+Nine **SYNTHETIC**, manually constructed replay/regression tests cover:
+- small-ship inter-sector movement with a blocking zone-change interrupt;
+- capital-ship gate call, opaque gate execution, planned sector change, then short movement;
+- gravidar target -> immediate Attack order and abort cleanup;
+- reinitialize signal -> check label;
+- incorrect delivery query-draw count (negative control);
+- unrelated global delivery with correct and deliberately changed post-delivery RNG;
+- destination destruction: non-consuming handler followed by cleanup;
+- expired reservation: clear it and do not cancel it again on abort;
+- blocking delivery with debugging off, then duplicate ignored without another draw.
+
+Each trace compares effects, query arguments, yield/interrupt outcomes, action-level draw records
+and bracket-end RNG states. These fixtures do not establish complete script coverage, native value
+replay, or M3 multi-thread equivalence. Existing Patrol/system invariance checks remain passing.
+The unfinished capital fixture was completed by publishing its short-move distance input before the
+last observed action preceding the conditional read, and correcting its count to 11 native runs plus
+2 opaque gate runs. Input facts must be visible before the decision that reads them.
+
+The native bracket checker additionally recognizes move.generic's fixed waits at L382/L1027/L1237
+(1 ms) and L920 (1 s), with a one-ULP negative test. It deliberately does not predict L616 (highway
+state) or L1022 (ship class/pilot skill) from a bracket that lacks those inputs. A new wider capture
+using `filter=move.generic` is the next validation step; full value capture M2b remains outstanding.
 
 ## 10. Native steps needed (next stage)
 

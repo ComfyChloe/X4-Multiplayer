@@ -2,6 +2,7 @@
 //! continuation after a blocking action; comments cite the XML line of every action
 //! (`x4-re/gamescripts/resolved/base/aiscripts/<script>.xml`, X4 9.00).
 
+pub mod movegeneric;
 pub mod patrol;
 pub mod seekenemies;
 pub mod targetselection;

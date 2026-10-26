@@ -8,6 +8,7 @@
 //! script, return values), interrupt outcomes, and the RNG state at the end of every bracket. The first
 //! difference stops that entity's replay and is reported with its trace line.
 
+use crate::orders::movegeneric::MoveGeneric;
 use crate::orders::patrol::{Patrol, PatrolParams};
 use crate::orders::start_params;
 use crate::rng::Stream;
@@ -365,6 +366,8 @@ fn step(
                 "order.fight.patrol" => {
                     Frame::Patrol(Box::new(Patrol::new(PatrolParams::from_params(&ps, radar)?, ship)))
                 }
+                // Also an order (`MoveGeneric`); its parameters are resolved at the first run.
+                "move.generic" => Frame::MoveGen(Box::new(MoveGeneric::new(ps, ship))),
                 other => Frame::Opaque { script: other.to_string() },
             };
             let mut a = Agent::new(ent, 0);
@@ -445,7 +448,13 @@ fn step(
                 agents.get_mut(&ent).ok_or_else(|| mismatch(Some(r), "event for an entity without start".into()))?;
             rep.deliveries += 1;
             let ev = event_of(r);
-            match r.get("path").and_then(|v| v.as_key()) {
+            // Conditions run at delivery time on the engine's stream: start from the captured state.
+            let before = r.get("rng").and_then(|v| v.as_u64());
+            let after = r.get("rng_after").and_then(|v| v.as_u64());
+            if let Some(b) = before {
+                a.rng.reset_to(b);
+            }
+            let opaque = match r.get("path").and_then(|v| v.as_key()) {
                 Some("global") => {
                     let verdict = match r.get("verdict") {
                         Some(Val::Key(k)) if k == "none" => GlobalVerdict::None,
@@ -462,15 +471,7 @@ fn step(
                             ))
                         }
                     };
-                    a.deliver_global(&ev, &verdict, view).map_err(|e| at(r, e))?;
-                    // Handler conditions never draw in base AI.
-                    if let (Some(b), Some(after)) =
-                        (r.get("rng").and_then(|v| v.as_u64()), r.get("rng_after").and_then(|v| v.as_u64()))
-                    {
-                        if b != after {
-                            return Err(mismatch(Some(r), "global handler conditions drew from the RNG".into()));
-                        }
-                    }
+                    a.deliver_global(&ev, &verdict, view, io).map_err(|e| at(r, e))?.1
                 }
                 Some("block") => {
                     let verdict = match r.get("verdict").and_then(|v| v.as_key()) {
@@ -481,9 +482,19 @@ fn step(
                         }
                         _ => return Err(mismatch(Some(r), "block ev needs verdict=k:none|k:ignored|k:matched".into())),
                     };
-                    a.deliver_block(&ev, &verdict).map_err(|e| at(r, e))?;
+                    a.deliver_block(&ev, &verdict, view, io).map_err(|e| at(r, e))?
                 }
                 _ => return Err(mismatch(Some(r), "ev needs path=k:global or k:block".into())),
+            };
+            // Native conditions must leave the stream where the engine's did; opaque ones are the engine's.
+            if let (Some(_), Some(want)) = (before, after) {
+                if !opaque && a.rng.state() != want {
+                    return Err(mismatch(
+                        Some(r),
+                        format!("RNG after the delivery: native {:016x}, trace {want:016x}", a.rng.state()),
+                    ));
+                }
+                a.rng.reset_to(want);
             }
         }
         "irun" => {

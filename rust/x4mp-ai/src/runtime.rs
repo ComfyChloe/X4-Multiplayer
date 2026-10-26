@@ -23,6 +23,7 @@
 //!   handler's frame (their `<on_abort>` runs, top first) and restarts that frame at the label (default:
 //!   the label passed last). A blocking interrupt that does not `<resume>` ends the blocking action.
 
+use crate::orders::movegeneric::MoveGeneric;
 use crate::orders::patrol::Patrol;
 use crate::orders::seekenemies::SeekEnemies;
 use crate::orders::targetselection::{TargetSelection, TsParams};
@@ -149,6 +150,7 @@ pub enum Frame {
     Patrol(Box<Patrol>),
     Seek(Box<SeekEnemies>),
     TargetSel(Box<TargetSelection>),
+    MoveGen(Box<MoveGeneric>),
     /// A script that is not ported; replay takes its runs from the capture.
     Opaque {
         script: String,
@@ -161,6 +163,7 @@ impl Frame {
             Frame::Patrol(_) => Patrol::NAME,
             Frame::Seek(_) => SeekEnemies::NAME,
             Frame::TargetSel(_) => TargetSelection::NAME,
+            Frame::MoveGen(_) => MoveGeneric::NAME,
             Frame::Opaque { script } => script,
         }
     }
@@ -170,6 +173,7 @@ impl Frame {
             Frame::Patrol(p) => p.resume(cx, wake),
             Frame::Seek(s) => s.resume(cx, wake),
             Frame::TargetSel(t) => t.resume(cx, wake),
+            Frame::MoveGen(m) => m.resume(cx, wake),
             Frame::Opaque { script } => Err(Stop::Mismatch(format!("opaque frame {script} cannot run natively"))),
         }
     }
@@ -178,17 +182,35 @@ impl Frame {
         match self {
             Frame::Patrol(_) => Patrol::HANDLERS,
             Frame::Seek(_) => SeekEnemies::HANDLERS,
+            Frame::MoveGen(_) => MoveGeneric::HANDLERS,
             Frame::TargetSel(_) | Frame::Opaque { .. } => &[],
         }
     }
 
-    /// Conditions of global handler `i`: `Some(true/false)` when ported (never draws), `None` when
-    /// opaque.
-    pub fn matches(&self, facts: &dyn Facts, ent: Uid, i: usize, ev: &Event) -> Option<bool> {
+    /// Whether global handler `i` consumes the event (`consume="false"` passes it on to lower frames).
+    pub fn consumes(&self, i: usize) -> bool {
         match self {
-            Frame::Patrol(p) => p.matches(facts, i, ev),
-            Frame::Seek(s) => s.matches(facts, ent, i, ev),
-            Frame::TargetSel(_) | Frame::Opaque { .. } => None,
+            Frame::MoveGen(_) => MoveGeneric::consumes(i),
+            _ => true,
+        }
+    }
+
+    /// Conditions of global handler `i`: `Some(true/false)` when ported, `None` when opaque. Ported
+    /// conditions may query the engine and draw (through `cx`) and set the frame's variables.
+    pub fn matches(&mut self, cx: &mut Cx<'_>, i: usize, ev: &Event) -> R<Option<bool>> {
+        match self {
+            Frame::Patrol(p) => Ok(p.matches(cx.facts, i, ev)),
+            Frame::Seek(s) => Ok(s.matches(cx.facts, cx.ent, i, ev)),
+            Frame::MoveGen(m) => m.matches(cx, i, ev),
+            Frame::TargetSel(_) | Frame::Opaque { .. } => Ok(None),
+        }
+    }
+
+    /// Conditions of the blocking action's `<interrupt>` (`None` = opaque, the engine verdict decides).
+    fn block_matches(&mut self, cx: &mut Cx<'_>, ev: &Event) -> R<Option<bool>> {
+        match self {
+            Frame::MoveGen(m) => m.block_matches(cx, ev),
+            _ => Ok(None),
         }
     }
 
@@ -197,6 +219,7 @@ impl Frame {
             Frame::Patrol(p) => p.handler_actions(cx, i, ev),
             Frame::Seek(s) => s.handler_actions(cx, i, ev),
             Frame::TargetSel(_) => Err(Stop::Mismatch("lib.target.selection has no handlers".into())),
+            Frame::MoveGen(m) => m.handler_actions(cx, i, ev),
             Frame::Opaque { script } => Err(Stop::Mismatch(format!("handler actions of opaque frame {script}"))),
         }
     }
@@ -204,6 +227,7 @@ impl Frame {
     fn block_interrupt(&mut self, cx: &mut Cx<'_>, ev: &Event, detected: Option<&[Uid]>) -> R<Outcome> {
         match self {
             Frame::Seek(s) => s.block_interrupt(cx, ev, detected),
+            Frame::MoveGen(m) => m.block_interrupt(cx, ev),
             Frame::Patrol(_) | Frame::TargetSel(_) => Err(Stop::Mismatch(format!(
                 "{} has no blocking action with an interrupt (event {})",
                 self.name(),
@@ -217,6 +241,7 @@ impl Frame {
     fn has_block_interrupt(&self) -> bool {
         match self {
             Frame::Seek(s) => s.blocked_with_interrupt(),
+            Frame::MoveGen(m) => m.blocked_with_interrupt(),
             _ => false,
         }
     }
@@ -224,6 +249,7 @@ impl Frame {
     fn on_abort(&mut self, cx: &mut Cx<'_>) -> R<()> {
         match self {
             Frame::Seek(s) => s.on_abort(cx),
+            Frame::MoveGen(m) => m.on_abort(cx),
             _ => Ok(()),
         }
     }
@@ -232,6 +258,7 @@ impl Frame {
         match self {
             Frame::Patrol(p) => p.restart_at(label),
             Frame::Seek(s) => s.restart_at(label),
+            Frame::MoveGen(m) => m.restart_at(label),
             Frame::TargetSel(_) | Frame::Opaque { .. } => Ok(()),
         }
     }
@@ -377,6 +404,9 @@ impl Agent {
                     Frame::Opaque { script: script.to_string() }
                 } else if let Some(f) = native {
                     f
+                } else if *script == MoveGeneric::NAME {
+                    let ps: Vec<(String, Val)> = params.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
+                    Frame::MoveGen(Box::new(MoveGeneric::new(ps, self.ship_of_top(top))))
                 } else if *script == TargetSelection::NAME {
                     let ps: Vec<(String, Val)> = params.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
                     match TsParams::from_params(&ps) {
@@ -406,6 +436,7 @@ impl Agent {
             Frame::Patrol(p) => p.ship(),
             Frame::Seek(s) => s.ship(),
             Frame::TargetSel(t) => t.ship(),
+            Frame::MoveGen(m) => m.ship(),
             Frame::Opaque { .. } => Uid::NULL,
         }
     }
@@ -453,23 +484,34 @@ impl Agent {
         Ok(())
     }
 
-    /// Delivery to the global handlers (conditions only). Native conditions are evaluated; the
-    /// engine `verdict` decides for opaque ones and is checked against the native ones.
-    /// Returns the matched (script, handler) if any.
+    /// Delivery to the global handlers (conditions only). Native conditions are evaluated (they may
+    /// query the engine and draw on the agent's stream); the engine `verdict` decides for opaque ones
+    /// and is checked against the native ones. A matching `consume="false"` handler is queued and the
+    /// walk goes on. Returns the consuming match (script, handler) if any and whether opaque
+    /// conditions were in the walk (their draws are the engine's).
     pub fn deliver_global(
         &mut self,
         ev: &Event,
         verdict: &GlobalVerdict,
         facts: &dyn Facts,
-    ) -> R<Option<(String, String)>> {
+        io: &mut dyn Io,
+    ) -> R<(Option<(String, String)>, bool)> {
+        let ent = self.ent;
+        let mut opaque_seen = false;
         for depth in (0..self.stack.len()).rev() {
             let script = self.stack[depth].name().to_string();
-            for (i, h) in self.stack[depth].handlers().iter().enumerate() {
+            let handlers = self.stack[depth].handlers();
+            for (i, h) in handlers.iter().enumerate() {
                 let named =
                     matches!(verdict, GlobalVerdict::Handler { script: s, handler: n } if *s == script && n == h);
-                match self.stack[depth].matches(facts, self.ent, i, ev) {
+                let consumes = self.stack[depth].consumes(i);
+                let native = {
+                    let mut cx = Cx { ent, facts, io: &mut *io, rng: &mut self.rng };
+                    self.stack[depth].matches(&mut cx, i, ev)?
+                };
+                match native {
                     Some(true) => {
-                        if !named {
+                        if consumes && !named {
                             return Err(Stop::Mismatch(format!(
                                 "native {script}/{h} matches {}, engine verdict is {verdict:?}",
                                 ev.name
@@ -482,7 +524,9 @@ impl Agent {
                             opaque: false,
                             detected: None,
                         });
-                        return Ok(Some((script, h.to_string())));
+                        if consumes {
+                            return Ok((Some((script, h.to_string())), opaque_seen));
+                        }
                     }
                     Some(false) => {
                         if named {
@@ -493,6 +537,7 @@ impl Agent {
                         }
                     }
                     None => {
+                        opaque_seen = true;
                         if named {
                             self.pending_global.push(Pending {
                                 depth,
@@ -501,17 +546,27 @@ impl Agent {
                                 opaque: true,
                                 detected: None,
                             });
-                            return Ok(Some((script, h.to_string())));
+                            return Ok((Some((script, h.to_string())), opaque_seen));
                         }
                     }
                 }
             }
         }
+        // A verdict naming a non-consuming handler that matched natively is satisfied by the walk.
+        if let GlobalVerdict::Handler { script, handler } = verdict {
+            let queued = self.pending_global.iter().any(|p| {
+                self.stack.get(p.depth).is_some_and(|f| f.name() == script)
+                    && p.handler.and_then(|i| self.stack[p.depth].handlers().get(i)) == Some(&handler.as_str())
+            });
+            if queued {
+                return Ok((None, opaque_seen));
+            }
+        }
         match verdict {
-            GlobalVerdict::None => Ok(None),
+            GlobalVerdict::None => Ok((None, opaque_seen)),
             // A frame below the native stack (orders.base): handled by the replay as opaque.
             GlobalVerdict::Handler { script, handler } if script == "orders.base" => {
-                Ok(Some((script.clone(), handler.clone())))
+                Ok((Some((script.clone(), handler.clone())), true))
             }
             GlobalVerdict::Handler { script, handler } => {
                 Err(Stop::Mismatch(format!("verdict names {script}/{handler}, which is not on the native stack")))
@@ -519,22 +574,42 @@ impl Agent {
         }
     }
 
-    /// Delivery to the blocking action's `<interrupt>` (conditions are opaque in M1: the engine's
-    /// verdict is applied, after checking that the native state allows it).
-    pub fn deliver_block(&mut self, ev: &Event, verdict: &BlockVerdict) -> R<()> {
+    /// Delivery to the blocking action's `<interrupt>`. Ported conditions (move.generic) are evaluated
+    /// and must agree with the engine's verdict; opaque ones (move.seekenemies) take the verdict after
+    /// checking that the native state allows it. Returns whether the conditions were opaque.
+    pub fn deliver_block(&mut self, ev: &Event, verdict: &BlockVerdict, facts: &dyn Facts, io: &mut dyn Io) -> R<bool> {
         let top = match self.stack.len().checked_sub(1) {
             Some(t) => t,
             None => return Err(Stop::Mismatch(format!("{} delivered to an agent without frames", ev.name))),
         };
+        let mut opaque = true;
+        if self.pending_block.is_none() && self.stack[top].has_block_interrupt() {
+            let ent = self.ent;
+            let native = {
+                let mut cx = Cx { ent, facts, io, rng: &mut self.rng };
+                self.stack[top].block_matches(&mut cx, ev)?
+            };
+            if let Some(m) = native {
+                opaque = false;
+                let engine = matches!(verdict, BlockVerdict::Matched { .. });
+                if m != engine {
+                    return Err(Stop::Mismatch(format!(
+                        "blocking interrupt of {} on {}: native conditions {m}, engine verdict {verdict:?}",
+                        self.stack[top].name(),
+                        ev.name
+                    )));
+                }
+            }
+        }
         match verdict {
-            BlockVerdict::None => Ok(()),
+            BlockVerdict::None => Ok(opaque),
             BlockVerdict::Ignored => {
                 if self.pending_block.is_none() {
                     return Err(Stop::Mismatch(
                         "engine ignored a blocking interrupt but none is queued natively".into(),
                     ));
                 }
-                Ok(())
+                Ok(false)
             }
             BlockVerdict::Matched { detected } => {
                 if self.pending_block.is_some() {
@@ -553,7 +628,7 @@ impl Agent {
                     opaque: false,
                     detected: detected.clone(),
                 });
-                Ok(())
+                Ok(opaque)
             }
         }
     }
