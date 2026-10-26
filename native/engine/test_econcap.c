@@ -280,6 +280,10 @@ int main(void) {
 
     assert(econ_order(tid) == trade && !econ_order(tid ^ (1ull << 18)));
     /* First frame: header, ware/method definitions, frame marker, station and module records. */
+    {
+        int64_t prices[3] = {6600, 4400, 8900};
+        memcpy((unsigned char *)metal + 0xc8, prices, sizeof(prices));
+    }
     assert(econcap_watch(sid));
     econcap_frame(12.5, 100, 0xabcdef);
     int n = drain(lines, 256);
@@ -291,6 +295,7 @@ int main(void) {
     assert(count_prefix(lines, n, "W ") == 3);
     assert(count_prefix(lines, n, "W energycells 6 1 7") == 1 && count_prefix(lines, n, "W refinedmetals 14 1 7") == 1);
     assert(count_prefix(lines, n, "W ore 10 1 8") == 1);
+    assert(count_prefix(lines, n, "W refinedmetals 14 1 7 prices 6600 4400 8900") == 1);
     assert(count_prefix(lines, n, "S 0x") == 1);
     for (int i = 0; i < n; ++i)
         if (!strncmp(lines[i], "S ", 2)) assert(strstr(lines[i], " 50000 1 7 2 0 810 1 2160"));

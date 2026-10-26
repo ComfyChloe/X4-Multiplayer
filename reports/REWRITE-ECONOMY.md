@@ -14,7 +14,7 @@ with the log path). Nothing in this report is a native economy result unless mar
 |---|---|
 | 1 data model crate `rust/x4mp-economy` | done: ef13948, da802ad |
 | 2 stress scenario + simprof on a lane | done [native]: `stress3` pass (160 clones, 306 station traders); economy ~2 % of MoveWorker, scales with trade activity (2.2; rewrite-coord/results/2026-10-26-economy-stress.md) |
-| 3 production capture/replay | lab5 native isolated factories: 3762 catch-ups, 2992 exact + 639 with one recorded retry draw, 131 RNG-undecidable, zero mismatches (section 9); trading capture pending |
+| 3 production capture/replay | lab5: 3762 catch-ups, 2992 exact + 639 recorded-draw, 131 undecidable; trade1: 935 catch-ups, 532 exact + 202 recorded-draw, 147 undecidable, 54 external; zero observed mismatches in both (section 9) |
 | 4 trade offers + reservations with the barrier snapshot | reservations at the owner applied at the barrier, price curve, reservation totals (693712d) [synthetic]; UpdateTradeOffers structure (section 6.3) [static]; offer amounts next |
 | 5 shadow | not started |
 
@@ -358,6 +358,7 @@ key, sector, seq; the AI driver can set the original order key); the offers are 
 | stress3 (12 trading clones; no A/S records) | 896 | 579 | 97 | 16 | 140 | 63 | 1: partial store of pending products (allocation) |
 | lab4 (40 isolated clones; A records, no S records) | 1722 | 646 | 387 | - | 517 | 0 | 172: products blocked by full physical storage |
 | lab5 (40 isolated clones; A/S records; short-gap reads every 3 s) | 3762 | 2992 | 639 | 0 | 131 | 0 | 0 |
+| trade1 (12 observed stations amid 160 clones / 314 traders; A/S/V records) | 935 | 532 | 202 | 0 | 147 | 54 | 0 |
 
   Every mismatch so far was a storage decision; the production state machine, the catch-up order,
   the efficiency factors and the retry arithmetic reproduced the engine everywhere else. lab4's
@@ -367,13 +368,36 @@ key, sector, seq; the AI driver can set the original order key); the offers are 
   Replayed using the hardened comparator at `60db4b5`, it has zero observed mismatches. The 639
   recorded-draw cases are conditional on one draw inferred from the recorded retry time; the 131
   multi-draw cases remain undecidable. This is bounded isolated production replay, not complete
-  native economy equivalence. `trade1` (active traders with the full capture) remains queued.
+  native economy equivalence. The subsequent `trade1` result is recorded below.
   Evidence: `.local/evidence-086-withheld,x4lan-debug.txt}`, native b3/profile 45853,
   `timing_trustworthy=false`, lane restored. Log SHA-256:
   `c7d9fa8975c984b7483b354435a4323b6178ec05bd545a006af9f89ae8e8e210`.
+  `trade1` subsequently completed at 03:47 EDT on b2 with zero observed production mismatches,
+  147 multi-draw cases undecidable and 54 cargo-only differences classified external. It captures
+  12 stations / 25 production modules, 7456 offer observations and 4198 reservation observations
+  (94 reservation identities / 93 linked orders). No independent reservation equivalence is
+  established merely by recording these fields. Log SHA-256:
+  `1318edeae52d4572e8baf0e43bd573c6709329ea1c936449c7b6d16e1a188d36`.
+  Evidence: `.local/evidence-098-withheld`, lane restored, timing untrustworthy.
 - Lab scenario `dev/econ_scenario/x4mp_econ_lab`: 40 isolated factory clones (trade offers disabled,
   no traders); each resource filled to 1 %, 50 % or 25 % of what fits; cargo read every 3 s (even)
   and 61 s (odd stations).
+
+### Trade-price investigation after trade1 [native observations, incomplete candidate model]
+
+The research candidate `x4-re/scripts/rw-economy/offer_model.py` predicts 1196/1283 modeled buy
+observations and 789/933 modeled sell observations exactly; 5240 other observations have no
+candidate. Most differences repeat unchanged offer records while cargo changes. Restricting to
+new/changed observed offer fields leaves 81 exact / 5 different buys and 20 exact / 5 different
+sells; a changed amount alone is not proof of a price refresh. No native offer-price acceptance.
+
+For example, medical supplies repeatedly have a recorded 4400-cent sell price while the base
+XML minimum is 4300 and the candidate predicts 4300. Captures now optionally append
+`prices <avg> <min> <max>` to each `W` record, reading the already documented loaded WareClass
+fields +0xc8/+0xd0/+0xd8. This eliminates an unverified base-XML assumption in future analysis;
+it does not establish the mismatch's cause. The extension passes synthetic C capture and Rust
+backward-compatible parser tests (32 Rust tests total); it was added after trade1 and has no
+native verification yet. Existing captures and the completed run overlay are unchanged.
 
 ## 10. Tests
 
@@ -389,9 +413,9 @@ key, sector, seq; the AI driver can set the original order key); the offers are 
 
 ## 11. Native steps needed
 
-Next: collect the already-queued `trade1` from `.local/evidence-073-withheld`, replay its
-production transitions, then check offer targets/reservations against its full capture.
-Preserve the earlier failed captures and distinguish external trades from model differences.
+Next: verify the loaded reference-price capture extension natively, then continue the
+offer-target/reservation investigation. lab5 and trade1 production replays are complete within
+the limits in section 9. Preserve earlier failed captures and distinguish external trades from model differences.
 Historical run plans below describe how the lab/stress captures were prepared.
 
 ### Replay validation hardening (26 October, Codex continuation)

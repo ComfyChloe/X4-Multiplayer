@@ -323,6 +323,19 @@ fn nan_times_are_rejected() {
 }
 
 #[test]
+fn loaded_ware_prices_are_optional_and_preserved() {
+    let cap =
+        Capture::parse("X4ECON 1 build=23660954\nW old 1\nW tagged 2 1 7\nW loaded 3 2 7 8 prices 6600 4400 8900\n")
+            .unwrap();
+    assert_eq!(cap.wares[0].reference_prices, None);
+    assert_eq!(cap.wares[1].reference_prices, None);
+    let w = &cap.wares[2];
+    assert_eq!(w.tags, vec![7, 8]);
+    assert_eq!(w.reference_prices, Some(x4mp_economy::prices::WarePrices { avg: 6600, min: 4400, max: 8900 }));
+    assert!(Capture::parse("X4ECON 1 build=23660954\nW truncated 3 0 prices 6600 4400\n").is_err());
+}
+
+#[test]
 fn incomplete_or_cross_station_records_are_rejected() {
     let text = synthetic_capture();
     let lines: Vec<&str> = text.lines().collect();

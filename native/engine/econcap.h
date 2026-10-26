@@ -318,11 +318,19 @@ static int econ_ware_index(uintptr_t ware) {
     memcpy(saved, econ.line, keep);
     int ok = 1;
     int32_t volume = (int32_t)econ_d((const unsigned char *)ware + 0xc0, &ok);
+    /* Capture the loaded game's reference prices, rather than assuming an extracted
+       wares.xml includes every content patch. WareClass+0xc8/+0xd0/+0xd8: avg/min/max. */
+    int prices_ok = 1;
+    int64_t price_avg = (int64_t)econ_q((const unsigned char *)ware + 0xc8, &prices_ok);
+    int64_t price_min = (int64_t)econ_q((const unsigned char *)ware + 0xd0, &prices_ok);
+    int64_t price_max = (int64_t)econ_q((const unsigned char *)ware + 0xd8, &prices_ok);
     uint32_t tags[16];
     int nt = econ_tags((const unsigned char *)ware + 0x100, tags, 16);
     econ.len = 0;
     econ_put("W %s %d %d", id, ok ? volume : 0, nt < 0 ? 0 : nt);
     for (int i = 0; i < nt; ++i) econ_put(" %u", tags[i]);
+    if (prices_ok)
+        econ_put(" prices %lld %lld %lld", (long long)price_avg, (long long)price_min, (long long)price_max);
     econ_end_line();
     memcpy(econ.line, saved, keep);
     econ.len = keep;

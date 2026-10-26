@@ -9,6 +9,8 @@
 //! W <ware> <volume> [<ntags> {<tag>}*]        ware table entry (index = order of W lines;
 //!                                              volume 0 in captures before the allocation
 //!                                              record; tags = WareClass+0x100 in newer ones)
+//!                                          [prices <avg cents> <min cents> <max cents>]
+//!                                              optional loaded WareClass reference prices
 //! D <method#> <time:f64> <product-ware#> <amount> <special> <n1> {<ware#> <amount>}*n1 <n2> .. <n3> ..
 //! P 0x5130 {<qword>}*18                       economy settings block (*(0x6cf1538) +0x5130..)
 //! F <frame> <time:f64> <rng:u64>               frame marker; rng = MoveWorker TLS+0x318 at the sample
@@ -66,6 +68,8 @@ pub struct WareInfo {
     pub volume: u32,
     /// WareClass+0x100 (sorted), empty in older captures.
     pub tags: Vec<u32>,
+    /// Loaded-game reference prices at +0xc8/+0xd0/+0xd8, absent in older captures.
+    pub reference_prices: Option<crate::prices::WarePrices>,
 }
 
 /// One operational storage module of a station (`S` record).
@@ -253,8 +257,17 @@ impl Capture {
                             tags.push(t.u64()? as u32);
                         }
                     }
+                    let reference_prices = match t.it.next() {
+                        Some("prices") => Some(crate::prices::WarePrices {
+                            avg: t.next()?.parse().map_err(|_| t.err("average price"))?,
+                            min: t.next()?.parse().map_err(|_| t.err("minimum price"))?,
+                            max: t.next()?.parse().map_err(|_| t.err("maximum price"))?,
+                        }),
+                        None => None,
+                        Some(_) => return Err(t.err("unknown ware metadata")),
+                    };
                     cap.ware_volumes.push(volume);
-                    cap.wares.push(WareInfo { id, volume, tags });
+                    cap.wares.push(WareInfo { id, volume, tags, reference_prices });
                 }
                 "P" => {
                     let _base = t.next()?;
