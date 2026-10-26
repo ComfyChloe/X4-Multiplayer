@@ -85,6 +85,8 @@ pub struct Capture {
     pub post: Vec<Post>,
     /// Trace events, if traced.
     pub trace: Option<Vec<[u32; 4]>>,
+    /// Byte offset of the post-state section in the file (tests and tools).
+    pub post_at: usize,
 }
 
 struct R<'a>(&'a [u8], usize);
@@ -203,6 +205,7 @@ impl Capture {
             nodes.push(node);
         }
         nodes.push(Node { id: u64::MAX, refs: 0, ..Node::default() });
+        let post_at = r.1;
         let mut post = Vec::with_capacity(n);
         for _ in 0..n {
             post.push(Post {
@@ -243,6 +246,7 @@ impl Capture {
             tree: CacheTree { nodes, drop_pose_blocks: flags & 1 != 0 },
             post,
             trace,
+            post_at,
         })
     }
 

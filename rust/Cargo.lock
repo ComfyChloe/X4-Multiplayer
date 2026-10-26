@@ -31,3 +31,10 @@ dependencies = [
 [[package]]
 name = "x4mp-transform"
 version = "7.5.0"
+
+[[package]]
+name = "x4mp-transform-ffi"
+version = "7.5.0"
+dependencies = [
+ "x4mp-transform",
+]

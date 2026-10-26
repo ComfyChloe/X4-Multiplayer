@@ -101,7 +101,24 @@ typedef struct {
     double last_walk_ms, last_build_ms, last_write_ms, last_time;
     const char *last_skip;
     char last_file[512];
+    /* shadow: on every shadow_every-th frame the model replays the frame and compares */
+    uint32_t shadow_every;
+    uint64_t shadow_frames, shadow_bad_frames, shadow_mismatches, shadow_refs, shadow_errors;
+    uint64_t shadow_components, shadow_refreshes, shadow_first_frame;
+    double shadow_ms_sum, shadow_ms_max;
+    char shadow_first[200];
 } owner;
+
+/* x4mp_transform_ffi.dll (rust/x4mp-transform/ffi), same layout as its XformCheck. */
+typedef struct {
+    uint64_t components, visits, open, refreshes, with_work, poses, velocities, connections, expired;
+    uint64_t mismatches, refs_only;
+    uint32_t first_field, first_node;
+    uint64_t first_id;
+    char message[200];
+} xform_check;
+typedef int32_t (*shadow_check_fn)(const uint8_t *capture, size_t len, xform_check *out);
+typedef uint32_t (*shadow_abi_fn)(void);
 
 /* The state is static so that the hook never reads Lua memory; the userdata is a handle. */
 static owner state;
@@ -127,6 +144,7 @@ static uint32_t (*trace)[4];
 static size_t trace_n, trace_cap;
 static int tracing;
 static int64_t qpc_freq;
+static shadow_check_fn shadow_check;
 
 static int readable(const void *ptr, size_t length) {
     MEMORY_BASIC_INFORMATION m;
@@ -434,6 +452,44 @@ static void capture(owner *o, void *galaxy, unsigned idx, double time) {
     o->last_skip = NULL;
 }
 
+static void shadow(owner *o, void *galaxy, unsigned idx, double time) {
+    xc_meta meta = {0xffffffffu, o->frames, 0};
+    int ran = 0;
+    LARGE_INTEGER t0;
+    QueryPerformanceCounter(&t0);
+    const char *why = xc_capture_frame(&cap, &buf, galaxy, idx, time, &meta, run_plain, NULL, &ran);
+    if (!ran) original_build_cache(galaxy, idx, time);
+    if (why) {
+        ++o->shadow_errors;
+        o->last_skip = why;
+        return;
+    }
+    xform_check r;
+    memset(&r, 0, sizeof r);
+    int32_t rc = shadow_check(buf.b, buf.n, &r);
+    double ms = ms_since(t0);
+    if (rc != 0) {
+        ++o->shadow_errors;
+        o->last_skip = "shadow check refused the capture";
+        return;
+    }
+    ++o->shadow_frames;
+    o->shadow_ms_sum += ms;
+    if (ms > o->shadow_ms_max) o->shadow_ms_max = ms;
+    o->shadow_components = r.components;
+    o->shadow_refreshes = r.refreshes;
+    o->shadow_refs += r.refs_only;
+    if (r.mismatches) {
+        ++o->shadow_bad_frames;
+        o->shadow_mismatches += r.mismatches;
+        if (!o->shadow_first[0]) {
+            memcpy(o->shadow_first, r.message, sizeof o->shadow_first);
+            o->shadow_first[sizeof o->shadow_first - 1] = 0;
+            o->shadow_first_frame = o->frames;
+        }
+    }
+}
+
 static void hook_build_cache(void *galaxy, unsigned idx, double time) {
     owner *o = current;
     if (!o || !o->armed) { original_build_cache(galaxy, idx, time); return; }
@@ -444,6 +500,10 @@ static void hook_build_cache(void *galaxy, unsigned idx, double time) {
     if (o->captures + o->failures < o->max_captures && time >= o->next_s) {
         o->next_s = time + o->every_s;
         capture(o, galaxy, idx, time);
+        return;
+    }
+    if (o->shadow_every && shadow_check && o->frames % o->shadow_every == 0) {
+        shadow(o, galaxy, idx, time);
         return;
     }
     original_build_cache(galaxy, idx, time);
@@ -457,9 +517,17 @@ static void disarm(owner *o) {
 }
 
 /* Everything start() does after the Lua checks: verify, stub page, sites, arm, patch. */
-static const char *arm(double first_s, double every_s, uint32_t count, uint32_t trace_every, int with_file) {
+static const char *arm(double first_s, double every_s, uint32_t count, uint32_t trace_every, int with_file,
+                       uint32_t shadow_every, const WCHAR *shadow_path) {
     const char *why = verify_image(with_file);
     if (why) return why;
+    if (shadow_every) {
+        HMODULE m = LoadLibraryW(shadow_path);
+        if (!m) return "shadow library not found";
+        shadow_abi_fn abi = (shadow_abi_fn)(void *)GetProcAddress(m, "x4mp_xform_abi");
+        shadow_check = (shadow_check_fn)(void *)GetProcAddress(m, "x4mp_xform_check");
+        if (!abi || !shadow_check || abi() != 1) { shadow_check = NULL; return "shadow library ABI mismatch"; }
+    }
     void **table = *(void ***)(image + VBI_RVA);
     if (table && *(int *)((unsigned char *)table + 0x130)) return "loading";
     LARGE_INTEGER f;
@@ -487,6 +555,7 @@ static const char *arm(double first_s, double every_s, uint32_t count, uint32_t 
     o->next_s = first_s;
     o->max_captures = count;
     o->trace_every = trace_every;
+    o->shadow_every = shadow_every;
     owner_thread = GetCurrentThreadId();
     current = o;
     o->armed = 1;
@@ -558,15 +627,44 @@ static int stats(lua_State *L) {
     number_field(L, "capture_ms", o->last_walk_ms);
     number_field(L, "write_ms", o->last_write_ms);
     number_field(L, "time", o->last_time);
+    number_field(L, "shadow_every", o->shadow_every);
+    number_field(L, "shadow_frames", (double)o->shadow_frames);
+    number_field(L, "shadow_bad_frames", (double)o->shadow_bad_frames);
+    number_field(L, "shadow_mismatches", (double)o->shadow_mismatches);
+    number_field(L, "shadow_refs", (double)o->shadow_refs);
+    number_field(L, "shadow_errors", (double)o->shadow_errors);
+    number_field(L, "shadow_components", (double)o->shadow_components);
+    number_field(L, "shadow_refreshes", (double)o->shadow_refreshes);
+    number_field(L, "shadow_ms_mean", o->shadow_frames ? o->shadow_ms_sum / (double)o->shadow_frames : 0.0);
+    number_field(L, "shadow_ms_max", o->shadow_ms_max);
+    if (o->shadow_first[0]) {
+        string_field(L, "shadow_first", o->shadow_first);
+        number_field(L, "shadow_first_frame", (double)o->shadow_first_frame);
+    }
     if (o->last_file[0]) string_field(L, "file", o->last_file);
     if (o->last_skip) string_field(L, "skip", o->last_skip);
     if (o->reason) string_field(L, "reason", o->reason);
     return 1;
 }
 
-/* start(dir, first_s, every_s, count, trace_every) on the main Lua thread (MoveWorker, slot 6). */
+/* start(dir, first_s, every_s, count, trace_every[, shadow_every, shadow_dll]) on the main Lua thread
+   (MoveWorker, slot 6). */
 static int start(lua_State *L) {
-    if (p_lua_gettop(L) != 5 || p_lua_type(L, 1) != LUA_TSTRING) return failure(L, "usage: start(dir, first_s, every_s, count, trace_every)");
+    int top = p_lua_gettop(L);
+    WCHAR shadow_path[400] = L"";
+    uint32_t shadow_every = 0;
+    if (top == 7) {
+        if (p_lua_type(L, 6) != LUA_TNUMBER || p_lua_type(L, 7) != LUA_TSTRING)
+            return failure(L, "usage: start(dir, first_s, every_s, count, trace_every)");
+        double se = p_lua_tonumber(L, 6);
+        const char *sp = p_lua_tolstring(L, 7, NULL);
+        if (!(se >= 0 && se <= 1000) || !sp || !MultiByteToWideChar(CP_UTF8, 0, sp, -1, shadow_path, 400))
+            return failure(L, "invalid arguments");
+        shadow_every = (uint32_t)se;
+        p_lua_settop(L, 5);
+        top = 5;
+    }
+    if (top != 5 || p_lua_type(L, 1) != LUA_TSTRING) return failure(L, "usage: start(dir, first_s, every_s, count, trace_every)");
     for (int i = 2; i <= 5; ++i)
         if (p_lua_type(L, i) != LUA_TNUMBER) return failure(L, "usage: start(dir, first_s, every_s, count, trace_every)");
     if (current) return failure(L, "an owner already exists; stop it first");
@@ -584,7 +682,7 @@ static int start(lua_State *L) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, (LPCWSTR)&hook_build_cache, &pinned))
         return failure(L, "cannot pin module");
-    const char *why = arm(first_s, every_s, (uint32_t)count, (uint32_t)trace_every, 1);
+    const char *why = arm(first_s, every_s, (uint32_t)count, (uint32_t)trace_every, 1, shadow_every, shadow_path);
     if (why) return failure(L, why);
     handle *h = p_lua_newuserdata(L, sizeof *h);
     h->generation = ++generation;

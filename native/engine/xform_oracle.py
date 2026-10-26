@@ -89,9 +89,25 @@ def main() -> int:
                 return 1
         for f in (caps / f'{p.stem}-p').glob('*.cap'):
             f.rename(caps / f'{p.stem}-p-{f.name}')
+    # Shadow: the embedded probe checks every frame with the Rust model (x4mp_transform_ffi.dll).
+    subprocess.run(['cargo', 'build', '-q', '--release', '-p', 'x4mp-transform-ffi'], cwd=rust, check=True)
+    shadow_env = dict(os.environ, XFORM_ORACLE_SHADOW=str(rust / 'target' / 'release' / 'x4mp_transform_ffi.dll'))
+    shadow_frames = 0
+    for p in sorted(cases.glob('*.scn'))[:args.captures]:
+        target = caps / f'{p.stem}-s'
+        target.mkdir()
+        res = caps / f'{p.stem}-shadow.res'
+        r = subprocess.run([str(exe), 'probe', str(args.x4), str(p), str(res), str(target)], capture_output=True, text=True,
+                           env=shadow_env)
+        line = next((ln for ln in r.stdout.splitlines() if ln.startswith('SHADOW ')), '')
+        if r.returncode != 0 or ' bad=0 ' not in line or final_state(res.read_bytes()) != final_state(p.with_suffix('.res').read_bytes()):
+            print(f'oracle shadow {p.name} failed ({r.returncode}): {line or r.stderr.strip()}')
+            return 1
+        shadow_frames += int(line.split('frames=')[1].split()[0])
+    print(f'shadow: {shadow_frames} frames checked by the Rust model inside the embedded probe, 0 with differences')
     env = dict(os.environ, X4MP_XFORM_ORACLE_DIR=str(cases), X4MP_XFORM_CAPTURE_DIR=str(caps))
-    r = subprocess.run(['cargo', 'test', '-q', '--release', '-p', 'x4mp-transform', '--test', 'oracle', '--test', 'capture',
-                        '--', '--nocapture'], cwd=rust, env=env, capture_output=True, text=True)
+    r = subprocess.run(['cargo', 'test', '-q', '--release', '-p', 'x4mp-transform', '-p', 'x4mp-transform-ffi', '--test', 'oracle',
+                        '--test', 'capture', '--lib', '--', '--nocapture'], cwd=rust, env=env, capture_output=True, text=True)
     lines = [ln for ln in (r.stdout + r.stderr).splitlines()
              if ln.startswith(('oracle:', 'captures:')) or 'panicked' in ln or 'differs' in ln]
     print('\n'.join(lines))

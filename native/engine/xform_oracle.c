@@ -460,7 +460,11 @@ static int run_cache(const char *scn_path, const char *res_path, const char *cap
     propagate_fn propagate = (propagate_fn)(image + RVA_PROPAGATE);
     if (probe_dir) {
         if (!MultiByteToWideChar(CP_UTF8, 0, probe_dir, -1, capture_dir, sizeof capture_dir / sizeof capture_dir[0])) return 2;
-        const char *why = arm(time0, 0.0, frames, 2, 0);
+        /* XFORM_ORACLE_SHADOW=<x4mp_transform_ffi.dll>: shadow every frame instead of capturing */
+        WCHAR shadow_path[400] = L"";
+        DWORD sl = GetEnvironmentVariableW(L"XFORM_ORACLE_SHADOW", shadow_path, 400);
+        int shadowing = sl > 0 && sl < 400;
+        const char *why = shadowing ? arm(1e300, 0.0, 1, 0, 0, 1, shadow_path) : arm(time0, 0.0, frames, 2, 0, 0, NULL);
         if (why) { fprintf(stderr, "xform_oracle: probe refused: %s\n", why); return 3; }
     }
     event_cap = 1u << 22;
@@ -518,6 +522,15 @@ static int run_cache(const char *scn_path, const char *res_path, const char *cap
                        !trace_sites[1].patched && !trace_sites[2].patched &&
                        sha256(image + 0x3d4a80u, 1792, d) && digest_matches(d, code_checks[0].sha) &&
                        sha256(image + 0x9fe500u, 128, d) && digest_matches(d, code_checks[2].sha);
+        if (o && o->shadow_every) {
+            int clean = o->shadow_frames == frames && !o->shadow_bad_frames && !o->shadow_errors && restored;
+            printf("SHADOW frames=%llu bad=%llu mismatches=%llu refs=%llu errors=%llu components=%llu first=%s\n",
+                   (unsigned long long)o->shadow_frames, (unsigned long long)o->shadow_bad_frames,
+                   (unsigned long long)o->shadow_mismatches, (unsigned long long)o->shadow_refs,
+                   (unsigned long long)o->shadow_errors, (unsigned long long)o->shadow_components, o->shadow_first);
+            if (!clean) return 4;
+            got = frames;
+        }
         if (got != frames || failed || !restored) {
             fprintf(stderr, "xform_oracle: probe captured %llu of %u frames, %llu failures (%s), code restored=%d\n",
                     (unsigned long long)got, frames, (unsigned long long)failed, skip, restored);
