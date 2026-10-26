@@ -56,7 +56,9 @@ local function logStats(now)
     string.format(' extWakes=%.2f timedDue=%.2f wakeOwn=%.2f wakeForeign=%.2f evOwn=%.2f evForeign=%.2f evCue=%.2f evDirector=%.2f hazard=%.3f keyless=%.2f',
     a.ext_wakes or 0,a.timed_due or 0,a.wake_own or 0,a.wake_foreign or 0,a.ev_own or 0,a.ev_foreign or 0,a.ev_cue or 0,a.ev_director or 0,a.hazard or 0,a.keyless_runs or 0)..
     string.format(' sectors=%.2f secSumMs=%.3f secMaxMs=%.3f serialMs=%.3f speedup=%.2f maxShare=%.3f fleets=%.2f fleetSpeedup=%.2f dropped=%d',
-    a.sectors or 0,a.sector_sum_ms or 0,a.sector_max_ms or 0,a.serial_ms or 0,a.speedup or 0,a.max_share or 0,a.fleets or 0,a.fleet_speedup or 0,a.dropped or 0))
+    a.sectors or 0,a.sector_sum_ms or 0,a.sector_max_ms or 0,a.serial_ms or 0,a.speedup or 0,a.max_share or 0,a.fleets or 0,a.fleet_speedup or 0,a.dropped or 0)..
+    string.format(' fleetResolver=%d fleetMaxShare=%.3f wakeFleetSame=%.2f evFleetSame=%.3f evPendingForeign=%.3f',
+    a.fleet_resolver or 0,a.fleet_max_share or 0,a.wake_fleet_same or 0,a.ev_fleet_same or 0,a.ev_pending_foreign or 0))
    DebugError('[X4LAN] AIPROF scripts '..(a.scripts or ''))
    DebugError('[X4LAN] AIPROF sectors '..(a.top_sectors or ''))
    if a.mode~='census' or (a.driver_frames or 0)>0 then

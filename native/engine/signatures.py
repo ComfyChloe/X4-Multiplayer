@@ -120,8 +120,14 @@ AIDRIVER_HELPERS = {
     'ai_tls_init': (0x174F5FC, 32, '1995a81f504d7d52e7d6b8e5ac3fa31dc5b6dd83b5796b45f29a73a41e445d1d'),
 }
 
+# Census fleet-root resolver (aidriver.h): read-only engine calls made after AIDirector::Move returns.
+AIDRIVER_FLEET = {
+    'ai_get_commander': (0x1F4350, 32, 'f30f0a4c24aac64ba5183f8b6310cf93fb14214bd3221e65ce0b95ca6cb16ce4'),
+    'ai_component_find': (0xCED70, 32, 'de126e38d2532250fc386f851f355cdb4812bf6b4507ace0549728e27505f268'),
+}
+
 SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **AIDRIVER_CODE_SITES,
-         **AIDRIVER_HELPERS}
+         **AIDRIVER_HELPERS, **AIDRIVER_FLEET}
 
 
 def c_header() -> str:
@@ -155,6 +161,10 @@ def c_header() -> str:
     lines.append('};')
     lines.append('static const x4_signature_check x4_aidriver_helper_checks[] = {')
     for rva, length, sha in AIDRIVER_HELPERS.values():
+        lines.append(f'    {{0x{rva:x}, {length}, "{sha}"}},')
+    lines.append('};')
+    lines.append('static const x4_signature_check x4_aidriver_fleet_checks[] = {')
+    for rva, length, sha in AIDRIVER_FLEET.values():
         lines.append(f'    {{0x{rva:x}, {length}, "{sha}"}},')
     lines.append('};')
     lines.append('typedef struct { const char *name; size_t site; size_t target; } x4_ai_call;')

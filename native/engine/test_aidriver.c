@@ -63,6 +63,27 @@ static void *make_ctx(int sec) {
     return c;
 }
 
+/* Fleet resolver fakes: vtables whose slot 572 (IsRealClass) answers "controllable" for ships only,
+   GetCommander from a small table, Find over the fake entities and ships. */
+static uintptr_t fake_is_real_ship(void *self, uintptr_t cls) { (void)self; return cls == AD_CLASS_CONTROLLABLE; }
+static uintptr_t fake_is_real_none(void *self, uintptr_t cls) { (void)self; (void)cls; return 0; }
+static void *fake_vt_ship[600], *fake_vt_plain[600];
+static unsigned char *fake_ships[2], *fake_entities[2];
+static void *fake_get_commander(ad_commander_info *out, uint64_t id, uint64_t fleet) {
+    (void)fleet;
+    memset(out, 0, sizeof(*out));
+    if (id == 0xB0) out->controllable = 0xA0;   /* B's commander is A; A has none */
+    return out;
+}
+static void *fake_find(void *map, uint64_t id, uint32_t flags) {
+    (void)map; (void)flags;
+    for (int i = 0; i < 2; ++i) {
+        if (fake_ships[i] && *(uint64_t *)(fake_ships[i] + AD_COMP_ID) == id) return fake_ships[i];
+        if (fake_entities[i] && *(uint64_t *)(fake_entities[i] + AD_COMP_ID) == id) return fake_entities[i];
+    }
+    return NULL;
+}
+
 static uint32_t dir_widx(void) { return *(uint32_t *)(fake_dir + AD_D_WIDX); }
 static void vec_set(unsigned which, void **store, size_t n) {
     void **v = (void **)(fake_dir + AD_D_WAKE + 0x18 * which);
@@ -109,6 +130,9 @@ static void setup_image(void) {
     image = VirtualAlloc(NULL, X4_IMAGE_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     assert(image);
     sector_vt = image + AD_SECTOR_VTABLE_RVA;
+    fake_vt_ship[AD_IS_REAL_CLASS_SLOT] = (void *)fake_is_real_ship;
+    fake_vt_plain[AD_IS_REAL_CLASS_SLOT] = (void *)fake_is_real_none;
+    *(void **)(image + AD_SECTOR_VTABLE_RVA + 8 * AD_IS_REAL_CLASS_SLOT) = (void *)fake_is_real_none;
     *(void **)(image + AD_DIRECTOR_RVA) = &fake_dir;
     *(uint32_t *)(image + AD_TLS_INDEX_RVA) = 0x7fffffff;    /* bounded out by ad_engine_tls -> no TLS */
     for (size_t k = 0; k < sizeof(x4_ai_calls) / sizeof(x4_ai_calls[0]); ++k) {
@@ -250,6 +274,34 @@ int main(void) {
         assert(ad.run_hazard == 1);
     }
 
+    /* ---- fleet-root resolver: ship B (sector 1) is commanded by ship A (sector 0) -------------- */
+    setup_world();
+    memset(&ad.win, 0, sizeof(ad.win)); ad_btable_clear(&ad.w_sec);
+    {
+        static unsigned char shipA[0x100], shipB[0x100];
+        memset(shipA, 0, sizeof(shipA)); memset(shipB, 0, sizeof(shipB));
+        set_ptr(shipA, 0, fake_vt_ship); set_u64(shipA, AD_COMP_ID, 0xA0); set_ptr(shipA, AD_COMP_PARENT, sectors[0]);
+        set_ptr(shipB, 0, fake_vt_ship); set_u64(shipB, AD_COMP_ID, 0xB0); set_ptr(shipB, AD_COMP_PARENT, sectors[1]);
+        fake_ships[0] = shipA; fake_ships[1] = shipB;
+        void *onB = make_ctx(1), *onA = make_ctx(0);           /* entities re-parented onto the ships */
+        set_ptr(entities[0], 0, fake_vt_plain); set_ptr(entities[0], AD_COMP_PARENT, shipB); set_u64(entities[0], AD_COMP_ID, 0xE0);
+        set_ptr(entities[1], 0, fake_vt_plain); set_ptr(entities[1], AD_COMP_PARENT, shipA); set_u64(entities[1], AD_COMP_ID, 0xE1);
+        fake_entities[0] = entities[0]; fake_entities[1] = entities[1];
+        ad_fl.ok = 1; ad_fl.get_commander = fake_get_commander; ad_fl.find = fake_find;
+        *(void **)(image + AD_UIDMAP_RVA) = (void *)0x5000;
+        static int plan[32]; for (int i = 0; i < 32; ++i) plan[i] = -1;
+        plan[0] = 1;                                          /* the run on B wakes the context on A */
+        g_wake_plan = plan;
+        run_cost_us[0] = 2000; run_cost_us[1] = 1000;
+        vec_push(dir_widx(), onB); vec_push(dir_widx(), onA);
+        census_frame();
+        assert(ad.win.wake_foreign == 1);                       /* sector 1 -> sector 0 */
+        assert(ad.win.wake_fleet_same == 1);                    /* same fleet root (A, sector 0) */
+        assert(ad.win.sec_buckets == 2 && ad.win.fleet_buckets == 1);   /* both runs in A's sector */
+        assert(fabs(ad.win.fleet_max_ms - 3.0) < 1e-6 && ad.win.fleet_hops >= 1);
+        ad_fl.ok = 0;
+    }
+
     ad_uninstall();
     assert(!ad.installed);
     VirtualFree(image, 0, MEM_RELEASE);
@@ -258,5 +310,6 @@ int main(void) {
     puts("PASS: aidriver census buckets runs per sector, counts passes, external wakes and sum/max speedup");
     puts("PASS: aidriver classifies cross-sector wakes, keyless serial contexts and hazards");
     puts("PASS: aidriver event split counts same-sector, foreign, cue and director deliveries");
+    puts("PASS: aidriver fleet-root resolver: commander chain after the phase, fleet buckets, cross-sector wakes inside a fleet");
     return 0;
 }

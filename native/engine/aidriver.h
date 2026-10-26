@@ -110,6 +110,7 @@ typedef struct {
     uint64_t sec_buckets, fleet_buckets;
     uint64_t dropped_keys, dropped_scripts;
     uint64_t ev_pending_foreign;      /* census: event to a still-queued context of another sector */
+    uint64_t wake_fleet_same, ev_fleet_same, fleet_hops, fleet_dropped;   /* fleet-root resolver */
     /* stage 1 driver */
     uint64_t driver_frames, preflight_refusals, loop_logs, global_applied, attention_restarts, removed;
     uint64_t bad_caller, rounds_fallback, buckets_run, deferred;
@@ -191,8 +192,114 @@ static void *ad_sector_of(const void *component) {
 static void *ad_ctx_entity(const void *ctx) { return ctx ? *(void *const *)((const unsigned char *)ctx + AD_C_ENTITY) : NULL; }
 static void *ad_ctx_sector(const void *ctx) { return ad_sector_of(ad_ctx_entity(ctx)); }
 
-/* Fleet-root key: see ad_fleet_root (filled in with the commander chain); the owner's sector until then. */
-static void *(*ad_fleet_root)(const void *ctx) = ad_ctx_sector;
+/* ---- fleet-root resolver (census) ----------------------------------------------------------------
+   The partition report proposes keying buckets on the sector of a context's fleet root (top commander)
+   so a commander and its subordinates share a bucket. During the phase the hooks only record UniverseIDs
+   (pure reads); after AIDirector::Move returns, each distinct entity is resolved once: Find(id) (stale ids
+   return null), climb parents to the controllable (IsRealClass 0x70, vtable slot 572, a class-bitmap test),
+   follow the engine's exported GetCommander chain (the UI calls it on this thread), take the root's sector.
+   GetCommander reports a commander that is a fleet unit (not a ship) as no controllable; such a chain stops
+   there (counted as its own root). Disabled unless both functions match their pinned signatures. */
+#define AD_UIDMAP_RVA 0x6cf1500u
+#define AD_GET_COMMANDER_RVA 0x1f4350u
+#define AD_FIND_RVA 0xced70u
+#define AD_IS_REAL_CLASS_SLOT 572
+#define AD_CLASS_CONTROLLABLE 0x70
+#define AD_FLEET_RECORDS 16384
+#define AD_FLEET_PAIRS 8192
+#define AD_FLEET_CACHE 4096
+
+typedef struct { uint64_t controllable, fleetunit; int32_t group, pad; } ad_commander_info;
+typedef struct { uint64_t eid; double ms; const void *sector; } ad_run_rec;
+typedef struct { uint64_t a, b; const void *sa, *sb; int kind; } ad_pair;   /* kind 0 wake, 1 event */
+static struct {
+    int ok;
+    void *(*get_commander)(ad_commander_info *out, uint64_t controllable, uint64_t fleetunit);
+    void *(*find)(void *map, uint64_t id, uint32_t flags);
+    ad_run_rec runs[AD_FLEET_RECORDS];
+    unsigned nruns;
+    ad_pair pairs[AD_FLEET_PAIRS];
+    unsigned npairs;
+    struct { uint64_t eid; const void *key; } cache[AD_FLEET_CACHE];
+    uint16_t used[AD_FLEET_CACHE];
+    unsigned nused;
+} ad_fl;
+
+static uint64_t ad_ctx_eid(const void *ctx) {
+    const unsigned char *e = ad_ctx_entity(ctx);
+    return e ? *(const uint64_t *)(e + AD_COMP_ID) : 0;
+}
+
+static void *ad_controllable_of(void *component) {
+    unsigned char *c = component;
+    for (int depth = 0; c && depth < AD_MAX_DEPTH; ++depth) {
+        uintptr_t (*is_real)(void *, uintptr_t) = (*(uintptr_t (***)(void *, uintptr_t))c)[AD_IS_REAL_CLASS_SLOT];
+        if (is_real(c, AD_CLASS_CONTROLLABLE) & 0xff) return c;
+        c = *(unsigned char **)(c + AD_COMP_PARENT);
+    }
+    return NULL;
+}
+
+static unsigned ad_fl_slot(uint64_t eid) { return (unsigned)((eid * 0x9E3779B97F4A7C15ull) >> 52) & (AD_FLEET_CACHE - 1); }
+
+/* Fleet-root sector of an entity id; `fallback` (the sector seen at run time) when it is gone. */
+static const void *ad_fleet_key(uint64_t eid, const void *fallback) {
+    unsigned i = ad_fl_slot(eid);
+    for (unsigned n = 0; n < AD_FLEET_CACHE; ++n, i = (i + 1) & (AD_FLEET_CACHE - 1)) {
+        if (!ad_fl.cache[i].eid) break;
+        if (ad_fl.cache[i].eid == eid) return ad_fl.cache[i].key;
+    }
+    void *map = *(void **)(image + AD_UIDMAP_RVA);
+    void *ent = map && eid ? ad_fl.find(map, eid, 4) : NULL;
+    const void *key = fallback;
+    if (ent) {
+        void *ctl = ad_controllable_of(ent);
+        if (!ctl) key = ad_sector_of(ent);
+        else {
+            void *root = ctl;
+            uint64_t id = *(uint64_t *)((unsigned char *)ctl + AD_COMP_ID);
+            for (int depth = 0; depth < 16; ++depth) {
+                ad_commander_info info;
+                memset(&info, 0, sizeof(info));
+                ad_fl.get_commander(&info, id, 0);
+                if (!info.controllable || info.controllable == id) break;
+                void *c = ad_fl.find(map, info.controllable, 4);
+                if (!c || c == root) break;
+                root = c; id = info.controllable;
+                ++ad.win.fleet_hops;
+            }
+            key = ad_sector_of(root);
+        }
+    }
+    if (eid && ad_fl.nused < AD_FLEET_CACHE / 2 && !ad_fl.cache[i].eid) {
+        ad_fl.cache[i].eid = eid; ad_fl.cache[i].key = key; ad_fl.used[ad_fl.nused++] = (uint16_t)i;
+    }
+    return key;
+}
+
+static void ad_fl_pair(int kind, const void *a_ctx, const void *b_ctx, const void *sa, const void *sb) {
+    if (!ad_fl.ok) return;
+    if (ad_fl.npairs >= AD_FLEET_PAIRS) { ++ad.win.fleet_dropped; return; }
+    ad_fl.pairs[ad_fl.npairs++] = (ad_pair){ad_ctx_eid(a_ctx), ad_ctx_eid(b_ctx), sa, sb, kind};
+}
+
+static void ad_bucket_add(ad_btable *t, const void *key, double ms);
+
+/* After the phase: bucket the frame's runs by fleet-root sector, and count cross-sector wakes/events
+   whose two ends share a fleet-root sector (own-bucket under fleet keying). */
+static void ad_fl_resolve(void) {
+    if (!ad_fl.ok) return;
+    for (unsigned k = 0; k < ad_fl.nruns; ++k)
+        ad_bucket_add(&ad.f_fleet, ad_fleet_key(ad_fl.runs[k].eid, ad_fl.runs[k].sector), ad_fl.runs[k].ms);
+    for (unsigned k = 0; k < ad_fl.npairs; ++k) {
+        const ad_pair *p = &ad_fl.pairs[k];
+        if (ad_fleet_key(p->a, p->sa) == ad_fleet_key(p->b, p->sb)) {
+            if (p->kind) ++ad.win.ev_fleet_same; else ++ad.win.wake_fleet_same;
+        }
+    }
+    for (unsigned k = 0; k < ad_fl.nused; ++k) ad_fl.cache[ad_fl.used[k]].eid = 0;
+    ad_fl.nused = 0; ad_fl.nruns = 0; ad_fl.npairs = 0;
+}
 
 /* ---- bucket tables ----------------------------------------------------------------------------- */
 
@@ -305,8 +412,9 @@ static void ad_wake_scan(const void *key) {
     for (size_t i = ad.last_wsize; i < size; ++i) {
         void *woken = begin[i];
         if (!woken) continue;
-        if (ad_ctx_sector(woken) == key) ++ad.win.wake_own;
-        else { ++ad.win.wake_foreign; ad.run_hazard = 1; }
+        const void *wkey = ad_ctx_sector(woken);
+        if (wkey == key) ++ad.win.wake_own;
+        else { ++ad.win.wake_foreign; ad.run_hazard = 1; ad_fl_pair(0, ad.run_ctx, woken, key, wkey); }
     }
     ad.last_wsize = size;
 }
@@ -367,6 +475,7 @@ static void ad_frame_end(void *dir) {
     if (ad.f_passes > w->max_passes) w->max_passes = ad.f_passes;
     if (ad.f_passes > AD_LOOP_PASS) ++w->loop_frames;
     ad_btable_fold(&ad.f_sec, &w->sec_sum_ms, &w->sec_max_ms, &w->sec_buckets, &w->serial_ms);
+    ad_fl_resolve();   /* after Move returned: read-only engine lookups, outside the interpreter */
     ad_btable_fold(&ad.f_fleet, &w->fleet_sum_ms, &w->fleet_max_ms, &w->fleet_buckets, NULL);
     w->dropped_keys += ad.f_sec.dropped + ad.f_fleet.dropped;
     ad.director = NULL;
@@ -398,7 +507,10 @@ static void ad_run_end(ad_run_frame *f, void *es) {
     ad_wake_scan(ad.run_key);
     ad.win.run_ms += ms;
     ad_bucket_add(&ad.f_sec, ad.run_key, ms);
-    ad_bucket_add(&ad.f_fleet, ad_fleet_root(ctx), ms);
+    if (ad_fl.ok) {   /* resolved after the phase (ad_fl_resolve) */
+        if (ad_fl.nruns < AD_FLEET_RECORDS) ad_fl.runs[ad_fl.nruns++] = (ad_run_rec){ad_ctx_eid(ctx), ms, ad.run_key};
+        else { ++ad.win.fleet_dropped; ad_bucket_add(&ad.f_fleet, ad.run_key, ms); }
+    } else ad_bucket_add(&ad.f_fleet, ad.run_key, ms);
     ad_bucket_add(&ad.w_sec, ad.run_key, ms);
     if (!ad.run_key) ++ad.win.keyless_runs;
     if (!f->irq) {
@@ -486,9 +598,11 @@ static void ad_event_note(int kind, void *self) {
     if (!ad.in_run) { ++ad.win.ev_director; return; }
     if (kind == AD_V_CUE) { ++ad.win.ev_cue; ad.run_hazard = 1; return; }
     void *ctx = kind == AD_V_CTX ? self : *(void **)((unsigned char *)self + AD_S_CURRENT);
-    if (ad_ctx_sector(ctx) == ad.run_key) { ++ad.win.ev_own; return; }
+    const void *rkey = ad_ctx_sector(ctx);
+    if (rkey == ad.run_key) { ++ad.win.ev_own; return; }
     ++ad.win.ev_foreign;
     ad.run_hazard = 1;
+    if (ctx) ad_fl_pair(1, ad.run_ctx, ctx, ad.run_key, rkey);
     /* still queued in this pass's read vector (slot of the read buffer set): a rounds order could
        run it before or after the poster, so the event is order-visible there */
     if (ctx && ad.director) {
@@ -625,6 +739,14 @@ static const char *ad_install_hooks(int verify_code) {
         sizeof(x4_ai_vsites) / sizeof(x4_ai_vsites[0]) != AD_VSITES) return "signature table mismatch";
     if (verify_code && !verify_checks(x4_aidriver_checks, sizeof(x4_aidriver_checks) / sizeof(x4_aidriver_checks[0])))
         return "AI driver code signature mismatch";
+    /* optional: the fleet-root resolver (census falls back to sector keys without it) */
+    ad_fl.ok = 0;
+    if (verify_code && verify_checks(x4_aidriver_fleet_checks, sizeof(x4_aidriver_fleet_checks) / sizeof(x4_aidriver_fleet_checks[0])) &&
+        readable(image + AD_UIDMAP_RVA, sizeof(void *), 0)) {
+        ad_fl.get_commander = (void *)(image + AD_GET_COMMANDER_RVA);
+        ad_fl.find = (void *)(image + AD_FIND_RVA);
+        ad_fl.ok = 1;
+    }
     if (!readable(image + AD_DIRECTOR_RVA, sizeof(void *), 0) || !readable(image + AD_TLS_INDEX_RVA, 4, 0) ||
         !readable(image + AD_SECTOR_VTABLE_RVA, sizeof(void *), 0)) return "AI director globals unavailable";
     for (int k = 0; k < AD_CALLS; ++k) {
@@ -855,6 +977,11 @@ static int ad_lua_stats(lua_State *L) {
     number_field(L, "fleet_max_share", w->fleet_sum_ms > 0.0 ? w->fleet_max_ms / w->fleet_sum_ms : 0.0);
     number_field(L, "dropped", (double)(w->dropped_keys + w->dropped_scripts));
     number_field(L, "ev_pending_foreign", (double)w->ev_pending_foreign / frames);
+    number_field(L, "fleet_resolver", ad_fl.ok);
+    number_field(L, "wake_fleet_same", (double)w->wake_fleet_same / frames);
+    number_field(L, "ev_fleet_same", (double)w->ev_fleet_same / frames);
+    number_field(L, "fleet_hops", (double)w->fleet_hops / frames);
+    number_field(L, "fleet_dropped", (double)w->fleet_dropped);
     /* stage-1 driver (zero in census mode) */
     number_field(L, "engine_ok", ad.engine_ok);
     number_field(L, "evbuf", ad_evbuf != NULL);

@@ -49,6 +49,12 @@ line('speedup', '(ideal sum/max)'); line('maxShare', '(largest sector share)')
 line('fleets'); line('fleetSpeedup')
 line('dropped', fns=('max',))
 # foreign-wake and foreign-touch rates as fractions
+if col('fleetResolver') and max(col('fleetResolver')) > 0:
+    print('Fleet-root keying:')
+    line('fleetMaxShare', '(largest fleet-root sector share)'); line('wakeFleetSame', '(foreign wakes inside one fleet root)')
+    line('evFleetSame'); line('evPendingForeign', '(events to a still-queued foreign context)')
+    fs, fw0 = sum(col('wakeFleetSame')), sum(col('wakeForeign'))
+    if fw0: print(f'  foreign wakes that fleet keying makes own-bucket: {100*fs/fw0:.1f}%')
 fw, wo = sum(col('wakeForeign')), sum(col('wakeOwn'))
 ef, eo, ec = sum(col('evForeign')), sum(col('evOwn')), sum(col('evCue'))
 if fw + wo: print(f'  foreign-wake rate: {100*fw/(fw+wo):.2f}%  ({fw:.0f}/{fw+wo:.0f})')
