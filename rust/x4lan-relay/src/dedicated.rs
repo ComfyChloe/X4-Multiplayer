@@ -8,7 +8,7 @@ use std::time::{Duration, Instant};
 
 use crate::json::{quote, Json};
 use crate::relay::Relay;
-use crate::session::{LeaseSource, Level, Session};
+use crate::session::{LeaseSource, Level, Session, LEGACY_DEDICATED_PLAYERS};
 use crate::wire::Slot;
 
 const LINUX_X4_SHA256: &str = "113f73d74570084f6ce18a659b365009eccf579fb66dbabb5dad2b1718045f20";
@@ -216,6 +216,28 @@ pub struct Prepared {
     pub build: String,
     pub bubble: String,
     pub port: u16,
+    /// Slots p1..=max_players (authority plus guests).
+    pub max_players: u8,
+}
+
+/// N-player protocol tag carried in the build label of every new session; a peer with
+/// another tag (older build) is refused at HELLO by the exact build comparison.
+pub const NPLAYER_PROTOCOL: &str = "np1";
+
+/// `max_players` of a dedicated session. Absent means the legacy three-slot session.
+/// When present it must be 2..=8 and the build label must carry `-np1-p<N>-`, so a
+/// guest prepared for another player count never matches the authority's build.
+pub fn session_max_players(session: &Json, build: &str) -> Result<u8, String> {
+    let Some(value) = session.get("max_players") else { return Ok(LEGACY_DEDICATED_PLAYERS) };
+    let players = value
+        .as_f64()
+        .filter(|v| v.fract() == 0.0 && (2.0..=f64::from(crate::wire::MAX_SLOTS)).contains(v))
+        .ok_or_else(|| format!("max_players must be an integer from 2 to {}", crate::wire::MAX_SLOTS))?
+        as u8;
+    if !build.contains(&format!("-{NPLAYER_PROTOCOL}-p{players}-")) {
+        return Err(format!("build label does not declare {NPLAYER_PROTOCOL} with {players} players"));
+    }
+    Ok(players)
 }
 
 pub fn preflight(config: &Config) -> Result<Prepared, String> {
@@ -289,6 +311,7 @@ pub fn preflight(config: &Config) -> Result<Prepared, String> {
     if port.fract() != 0.0 || !(1.0..=65535.0).contains(&port) {
         return Err("session port is invalid".into());
     }
+    let max_players = session_max_players(&session, &build)?;
     let installed_config = game_root.join("extensions/x4_lan_lab/ui/config.lua");
     regular_file(&installed_config)?;
     let lua = fs::read_to_string(&installed_config).map_err(|e| e.to_string())?;
@@ -309,6 +332,9 @@ pub fn preflight(config: &Config) -> Result<Prepared, String> {
         format!("token={}", quote(&token)),
         format!("dedicated_control_path={}", quote(&config.control().to_string_lossy())),
     ];
+    if session.get("max_players").is_some() {
+        required.push(format!("max_players={max_players}"));
+    }
     required.retain(|value| !compact.contains(value.as_str()));
     if !required.is_empty() {
         return Err("installed Lua config is not the expected dedicated authority configuration".into());
@@ -321,7 +347,7 @@ pub fn preflight(config: &Config) -> Result<Prepared, String> {
         return Err(format!("display {} is unavailable; WSLg/X11 must be running", config.display));
     }
     if session.get("dedicated") != Some(&Json::Bool(true)) {
-        return Err("session does not enable dedicated authority plus two guest slots".into());
+        return Err("session does not enable a dedicated authority with guest slots".into());
     }
     let level = if session.get("world_sync").is_some_and(Json::truthy) {
         Level::Universe
@@ -330,7 +356,7 @@ pub fn preflight(config: &Config) -> Result<Prepared, String> {
     } else {
         Level::Economy
     };
-    Ok(Prepared { session, level, token, build, bubble: seed, port: port as u16 })
+    Ok(Prepared { session, level, token, build, bubble: seed, port: port as u16, max_players })
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -447,12 +473,13 @@ impl Supervisor {
         fs::create_dir_all(config.work.join("tmp"))
             .map_err(|e| format!("cannot create dedicated temp directory: {e}"))?;
         regular_dir(&config.work)?;
-        let session = Session::new_dedicated(
+        let session = Session::new_dedicated_players(
             prepared.level,
             &prepared.token,
             &prepared.build,
             &prepared.bubble,
             LeaseSource::Os,
+            prepared.max_players,
         )?;
         let bind = relay_bind_address(std::env::var("X4LAN_RELAY_BIND").ok().as_deref())?;
         let relay = Relay::bind(&bind, prepared.port, session).map_err(|e| format!("cannot bind relay: {e}"))?;
@@ -809,6 +836,20 @@ mod tests {
         assert!(command(&config, "restart").is_err());
     }
 
+    #[test]
+    fn max_players_needs_a_matching_build_label() {
+        let parse = |text: &str| Json::parse(text).unwrap();
+        assert_eq!(session_max_players(&parse("{}"), "world1-x"), Ok(3));
+        let four = parse("{\"max_players\":4}");
+        assert_eq!(session_max_players(&four, "world1-7.5.0-np1-p4-9.00-steam23660954"), Ok(4));
+        assert!(session_max_players(&four, "world1-7.5.0-np1-p3-9.00-steam23660954").is_err());
+        assert!(session_max_players(&four, "world1-7.5.0-9.00-steam23660954").is_err());
+        for bad in ["1", "9", "4.5", "\"4\""] {
+            let session = parse(&format!("{{\"max_players\":{bad}}}"));
+            assert!(session_max_players(&session, "world1-x-np1-p4-y").is_err(), "{bad}");
+        }
+    }
+
     fn scratch() -> PathBuf {
         let unique = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_nanos();
         let path = std::env::temp_dir().join(format!("x4lan-dedicated-{}-{unique}", std::process::id()));
@@ -865,6 +906,7 @@ mod tests {
             build: "world1-test".into(),
             bubble: "b".repeat(32),
             port: 0,
+            max_players: 3,
         };
         let session =
             Session::new(Level::Universe, &"a".repeat(32), "world1-test", &"b".repeat(32), LeaseSource::Os).unwrap();
@@ -921,6 +963,7 @@ mod tests {
             build: "world1-test".into(),
             bubble: "b".repeat(32),
             port: 0,
+            max_players: 3,
         };
         let mut supervisor = Supervisor {
             config,

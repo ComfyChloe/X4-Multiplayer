@@ -160,7 +160,7 @@ fn dedicated_admits_second_guest_and_hands_it_ship_one() {
     join(&mut s, "p2", p2(), '2', 0.0);
     let guest = join(&mut s, "p3", foreign(), '3', 0.0);
     assert!(s.receive(format!("CREW|1|{guest}|1|1|1").as_bytes(), foreign(), 0.1).is_empty());
-    assert_eq!(s.owner(x4lan_relay::wire::Ship::One), Slot::P3);
+    assert_eq!(s.owner(x4lan_relay::wire::Ship::ONE), Slot::P3);
     for address in [p1(), p2(), foreign()] {
         let auth = text(&s.snapshots(0.2), address).into_iter().find(|p| p.starts_with("AUTH|")).unwrap();
         assert!(auth.contains("|p3|2|p3|"), "{auth}");

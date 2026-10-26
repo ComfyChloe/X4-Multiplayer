@@ -156,7 +156,8 @@ pub fn parse(raw: &[u8]) -> Parsed<(Hex32, Message)> {
     let lease = Hex32::parse(f[2])?;
     let entity = positive(f[HEAD])?;
     let head = Head {
-        entity: Ship::from_number(i128::from(entity)).ok_or(Reject)?,
+        // Projectile visuals are a fixture-ship subsystem (ships 1/2 in every session size).
+        entity: Ship::from_number(i128::from(entity)).filter(|s| s.is_fixture()).ok_or(Reject)?,
         epoch: positive(f[HEAD + 1])?,
         gen: positive(f[HEAD + 2])?,
         id: positive(f[HEAD + 3])?,
@@ -433,7 +434,7 @@ mod tests {
         let bend = format!("BEND|1|{}|1|2|3|4|5.5", lease());
         let (sender, message) = parse(bend.as_bytes()).unwrap();
         assert_eq!(sender.as_str(), lease());
-        assert!(matches!(message, Message::End(Head { entity: Ship::One, id: 4, .. })));
+        assert!(matches!(message, Message::End(Head { entity: Ship::ONE, id: 4, .. })));
         for bad in [
             format!("BEND|1|{}|3|2|3|4|5.5", lease()),  // entity
             format!("BEND|1|{}|1|02|3|4|5.5", lease()), // leading zero

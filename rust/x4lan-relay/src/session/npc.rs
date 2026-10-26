@@ -96,7 +96,8 @@ impl NpcCombat {
 impl Session {
     /// This guest pilots `ship` under live health generation `gen`.
     fn npc_pilot(&mut self, ship: u32, gen: u32, slot: Slot) -> bool {
-        let Some(ship) = Ship::from_number(i128::from(ship)) else { return false };
+        // NPC hit claims need live pilot health, which only the fixture ships 1/2 have.
+        let Some(ship) = Ship::from_number(i128::from(ship)).filter(|s| s.is_fixture()) else { return false };
         if slot == Slot::P1 || self.owner(ship) != slot || self.pilot(ship) != Some(slot) {
             return false;
         }

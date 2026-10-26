@@ -114,67 +114,78 @@ pub fn is_ware(text: &str) -> bool {
         && b.iter().all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || *c == b'_')
 }
 
-/// Authority p1, human guest p2, and a second human guest p3 in dedicated sessions.
+/// Upper bound on player slots in any session (`p1`..`p8`). A session admits only
+/// `p1..=max_players`; non-dedicated sessions stay at two.
+pub const MAX_SLOTS: u8 = 8;
+/// Upper bound on shared co-op ships (`entity` 1..=8 on the wire).
+pub const MAX_SHIPS: u8 = 8;
+/// Ships 1 and 2 own the fixed WORLD rows, fixture drops/targets, pilot-reported
+/// health, shot claims, cargo, market orders, dock attachment and projectile visuals.
+/// Ships beyond this are motion/fire/authority/body only; their health is
+/// host-authoritative through `XSHIP`. See DEDICATED-SERVER.md "N-player limits".
+pub const FIXTURE_SHIPS: u8 = 2;
+
+const SLOT_NAMES: [&str; MAX_SLOTS as usize] = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];
+
+/// A player slot: `p1` is the authority (or the human host outside dedicated mode),
+/// `p2..` are human guests. Admission against the session's `max_players` is the
+/// session's job; the parser only bounds the vocabulary.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub enum Slot {
-    P1,
-    P2,
-    P3,
-}
+pub struct Slot(u8);
 
 impl Slot {
+    pub const P1: Slot = Slot(1);
+    pub const P2: Slot = Slot(2);
+    pub const P3: Slot = Slot(3);
+
+    /// `p1`..`p8` exactly (no leading zeros, no other spelling).
     pub fn parse(text: &str) -> Parsed<Self> {
-        match text {
-            "p1" => Ok(Slot::P1),
-            "p2" => Ok(Slot::P2),
-            "p3" => Ok(Slot::P3),
-            _ => Err(Reject),
-        }
+        SLOT_NAMES.iter().position(|name| *name == text).map(|i| Slot(i as u8 + 1)).ok_or(Reject)
+    }
+
+    pub fn from_number(n: u8) -> Option<Self> {
+        (1..=MAX_SLOTS).contains(&n).then_some(Slot(n))
+    }
+
+    pub fn number(self) -> u8 {
+        self.0
     }
 
     pub fn as_str(self) -> &'static str {
-        match self {
-            Slot::P1 => "p1",
-            Slot::P2 => "p2",
-            Slot::P3 => "p3",
-        }
-    }
-
-    pub fn other(self) -> Self {
-        match self {
-            Slot::P1 => Slot::P2,
-            Slot::P2 | Slot::P3 => Slot::P1,
-        }
+        SLOT_NAMES[usize::from(self.0 - 1)]
     }
 }
 
-/// One of the two stable co-op ships (`entity` 1/2 on the wire).
+/// A stable co-op ship (`entity` 1..=MAX_SHIPS on the wire). The session decides how
+/// many exist ([`crate::session::Core::ship_count`]); handlers validate against it.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug, PartialOrd, Ord)]
-pub enum Ship {
-    One,
-    Two,
-}
+pub struct Ship(u8);
 
 impl Ship {
-    pub const BOTH: [Ship; 2] = [Ship::One, Ship::Two];
+    pub const ONE: Ship = Ship(1);
+    pub const TWO: Ship = Ship(2);
 
+    /// Syntactic bound only (1..=MAX_SHIPS); sessions also check their ship count.
     pub fn from_number(n: i128) -> Option<Self> {
-        match n {
-            1 => Some(Ship::One),
-            2 => Some(Ship::Two),
-            _ => None,
-        }
+        (1..=i128::from(MAX_SHIPS)).contains(&n).then_some(Ship(n as u8))
     }
 
     pub fn number(self) -> u32 {
-        match self {
-            Ship::One => 1,
-            Ship::Two => 2,
-        }
+        u32::from(self.0)
     }
 
     pub fn index(self) -> usize {
-        self.number() as usize - 1
+        usize::from(self.0) - 1
+    }
+
+    /// Ships 1/2: WORLD rows, fixtures and pilot-health subsystems.
+    pub fn is_fixture(self) -> bool {
+        self.0 <= FIXTURE_SHIPS
+    }
+
+    /// Ships `1..=count`.
+    pub fn all(count: u8) -> impl Iterator<Item = Ship> {
+        (1..=count.min(MAX_SHIPS)).map(Ship)
     }
 }
 
@@ -216,9 +227,10 @@ pub fn uint(text: &str, limit: u32) -> Parsed<u32> {
     integer(text, i128::from(limit), false).map(|v| v as u32)
 }
 
-/// A ship number from `integer(f, 2)`: 0 is valid syntax but not a ship.
-pub fn ship_field(text: &str) -> Parsed<Option<Ship>> {
-    Ok(Ship::from_number(integer(text, 2, false)?))
+/// A ship number from `integer(f, count)`: 0 is valid syntax but not a ship. With
+/// `count == 2` this is the two-player `integer(f, 2)` rule byte for byte.
+pub fn ship_field(text: &str, count: u8) -> Parsed<Option<Ship>> {
+    Ok(Ship::from_number(integer(text, i128::from(count), false)?))
 }
 
 /// `float()` of a field (see [`crate::pynum::py_float`]).
@@ -333,6 +345,23 @@ mod tests {
             integer("-12", 12, false).is_err() && integer("13", 12, true).is_err() && integer("-", 5, true).is_err()
         );
         assert_eq!(integer(&"9".repeat(60), 5, false), Err(Reject));
+    }
+
+    #[test]
+    fn slots_and_ships_are_bounded() {
+        assert_eq!(Slot::parse("p1"), Ok(Slot::P1));
+        assert_eq!(Slot::parse("p8").map(Slot::number), Ok(8));
+        for bad in ["p0", "p9", "p01", "P1", "p", "p10", " p1"] {
+            assert!(Slot::parse(bad).is_err(), "{bad}");
+        }
+        assert_eq!(Slot::parse("p4").unwrap().as_str(), "p4");
+        assert_eq!(ship_field("2", 2), Ok(Some(Ship::TWO)));
+        assert!(ship_field("3", 2).is_err());
+        assert_eq!(ship_field("3", 4).map(|s| s.map(Ship::number)), Ok(Some(3)));
+        assert_eq!(ship_field("0", 4), Ok(None));
+        assert!(Ship::from_number(9).is_none() && Ship::from_number(0).is_none());
+        assert_eq!(Ship::all(3).map(Ship::number).collect::<Vec<_>>(), vec![1, 2, 3]);
+        assert!(Ship::TWO.is_fixture() && !Ship::from_number(3).unwrap().is_fixture());
     }
 
     #[test]

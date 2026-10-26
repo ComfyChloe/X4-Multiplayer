@@ -348,7 +348,7 @@ impl Session {
                     out.push((peer.address, packet.into_bytes()));
                 }
             }
-            if let Some(other) = self.core.peers.get(&slot.other()) {
+            for (_, other) in self.core.peers.iter().filter(|(other, _)| *other != slot) {
                 if let (true, false, Some((seq, market))) = (publish_docks, coop, e.docks.get(&other.lease)) {
                     let packet = format!("DOCKSTATE|1|{}|{}|{seq}|{market}", peer.lease, other.lease);
                     out.push((peer.address, packet.into_bytes()));

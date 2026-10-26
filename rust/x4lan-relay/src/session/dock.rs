@@ -7,7 +7,7 @@ use std::net::SocketAddr;
 
 use super::{Fields, Packet, Session};
 use crate::ordmap::OrderedMap;
-use crate::wire::{seq, ship_field, uint, Hex32, Parsed, Reject, Ship, Slot};
+use crate::wire::{seq, uint, Hex32, Parsed, Reject, Ship, Slot};
 
 const MAX_DOCK: u32 = 250_000;
 const FRESH: f64 = 0.75;
@@ -86,9 +86,10 @@ impl Session {
             return Err(Reject);
         }
         let (slot, lease) = self.authenticated(f[2], address).ok_or(Reject)?;
-        let (ship, epoch, sequence) = (ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
+        let (ship, epoch, sequence) = (self.ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
         let (mode, dock) = (f[6], uint(f[7], MAX_DOCK)?);
-        let ship = ship.ok_or(Reject)?;
+        // Native dock attachment arbitration covers the fixture ships 1/2 only.
+        let ship = ship.filter(|s| s.is_fixture()).ok_or(Reject)?;
         if self.owner(ship) != slot || self.epoch(ship) != u64::from(epoch) || self.dead(ship) {
             return Err(Reject);
         }

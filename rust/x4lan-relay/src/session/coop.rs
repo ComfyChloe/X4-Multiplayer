@@ -14,9 +14,7 @@ use super::quests::QuestState;
 use super::{Fields, Level, Packet, Session};
 use crate::ordmap::OrderedMap;
 use crate::pynum::fmt_f;
-use crate::wire::{
-    bounded, float, is_shot_digest, pose, seq, ship_field, uint, Atom, Hex32, Parsed, Reject, Ship, Slot,
-};
+use crate::wire::{bounded, float, is_shot_digest, pose, seq, uint, Atom, Hex32, Parsed, Reject, Ship, Slot};
 
 pub const POSITION_LIMIT: f64 = 50_000_000.0;
 /// Seconds without a pilot frame before a live health generation ends.
@@ -110,17 +108,19 @@ pub struct Metrics {
 /// (sequence, granted ship or 0, aboard ship or 0) per lease.
 type Crew = (u32, u32, u32);
 
+/// Per-ship vectors are indexed by `Ship::index()` and sized to the session's ship
+/// count. Pilot-reported health only runs for the fixture ships 1/2.
 pub struct Coop {
-    pub owners: [Slot; 2],
-    pub epochs: [u64; 2],
+    pub owners: Vec<Slot>,
+    pub epochs: Vec<u64>,
     pub crew: OrderedMap<Hex32, Crew>,
     pub navigation: OrderedMap<Ship, Navigation>,
     fire2: OrderedMap<Ship, Fire2>,
     health: OrderedMap<Ship, Health>,
-    pub health_gen: [u64; 2],
-    health_key: [Option<(Slot, u64, Pilot)>; 2],
-    pub health_live: [u64; 2],
-    health_seen: [f64; 2],
+    pub health_gen: Vec<u64>,
+    health_key: Vec<Option<(Slot, u64, Pilot)>>,
+    pub health_live: Vec<u64>,
+    health_seen: Vec<f64>,
     shots: OrderedMap<ShotKey, Shot>,
     pub projectiles: ProjectileRelay,
     body_sectors: OrderedMap<Hex32, String>,
@@ -131,19 +131,23 @@ pub struct Coop {
     pub missions: MissionJournal,
 }
 
-impl Default for Coop {
-    fn default() -> Self {
+impl Coop {
+    /// Ship 2 starts with guest p2 (two-player semantics); every other ship starts with
+    /// the authority p1 until a guest takes it through the normal CREW handoff.
+    pub fn new(ships: u8) -> Self {
+        let n = usize::from(ships.max(2));
+        let owners = (1..=n).map(|i| if i == 2 { Slot::P2 } else { Slot::P1 }).collect();
         Coop {
-            owners: [Slot::P1, Slot::P2],
-            epochs: [1, 1],
+            owners,
+            epochs: vec![1; n],
             crew: OrderedMap::new(),
             navigation: OrderedMap::new(),
             fire2: OrderedMap::new(),
             health: OrderedMap::new(),
-            health_gen: [0, 0],
-            health_key: [None, None],
-            health_live: [0, 0],
-            health_seen: [0.0, 0.0],
+            health_gen: vec![0; n],
+            health_key: vec![None; n],
+            health_live: vec![0; n],
+            health_seen: vec![0.0; n],
             shots: OrderedMap::new(),
             projectiles: ProjectileRelay::default(),
             body_sectors: OrderedMap::new(),
@@ -202,7 +206,11 @@ impl Session {
     }
 
     pub fn dead(&self, ship: Ship) -> bool {
-        self.bubble.world.is_some_and(|w| w[ship.index() * 3] <= 1.01)
+        if ship.is_fixture() {
+            self.bubble.world.is_some_and(|w| w[ship.index() * 3] <= 1.01)
+        } else {
+            self.bubble.extra.get(&ship).is_some_and(|row| row.hull <= 1.01)
+        }
     }
 
     fn end_health(&mut self, ship: Ship) {
@@ -223,9 +231,15 @@ impl Session {
         self.coop.health_gen[i]
     }
 
+    /// A SHOT victim: 1/2 are the fixture co-op ships, 3/4 the LAN targets, in every
+    /// session size. Ships 3.. are never shot victims (their health stays host-owned).
+    fn victim_ship(victim: u32) -> Option<Ship> {
+        Ship::from_number(i128::from(victim)).filter(|s| s.is_fixture())
+    }
+
     /// Co-op ships carry their health generation; LAN targets (3, 4) are host objects.
     fn victim_generation(&mut self, victim: u32) -> u64 {
-        match Ship::from_number(i128::from(victim)) {
+        match Self::victim_ship(victim) {
             Some(ship) => self.health_generation(ship),
             None => 0,
         }
@@ -234,7 +248,7 @@ impl Session {
     /// The slot whose world decides the victim: a co-op ship's remote pilot while its
     /// health generation is live, otherwise the host.
     fn victim_authority(&mut self, victim: u32) -> Slot {
-        if let Some(ship) = Ship::from_number(i128::from(victim)) {
+        if let Some(ship) = Self::victim_ship(victim) {
             let slot = self.owner(ship);
             let gen = self.health_generation(ship);
             if slot != Slot::P1 && self.pilot(ship) == Some(slot) && self.coop.health_live[ship.index()] == gen {
@@ -257,7 +271,7 @@ impl Session {
         c.health.retain(|_, v| live.contains(&v.lease));
         // Each authority transition gets its own generation; a live generation whose
         // pilot stream stopped is an authority boundary too.
-        for ship in Ship::BOTH {
+        for ship in [Ship::ONE, Ship::TWO] {
             let gen = self.health_generation(ship);
             if self.coop.health_live[ship.index()] == gen && now - self.coop.health_seen[ship.index()] > HEALTH_STALE {
                 self.end_health(ship);
@@ -311,7 +325,7 @@ impl Session {
             if old_leases.iter().any(|(s, l)| *s == slot && *l == lease) {
                 continue;
             }
-            for ship in Ship::BOTH {
+            for ship in Ship::all(self.core.ship_count) {
                 let stale = self.coop.navigation.get(&ship).is_some_and(|nav| nav.lease != lease);
                 if self.owner(ship) == slot && stale {
                     self.coop.epochs[ship.index()] += 1;
@@ -331,9 +345,10 @@ impl Session {
         }
         let slot = cmd.slot;
         let entity = self.core.peers.get(&slot).map_or(0, |p| self.coop.crew.get(&p.lease).map_or(0, |c| c.1));
-        let ship = Ship::from_number(i128::from(entity));
+        let ship = Ship::from_number(i128::from(entity)).filter(|s| s.number() <= u32::from(self.core.ship_count));
+        // Legacy fixture actions (energy-cell drops/station transfer) exist for ships 1/2 only.
         let rejected = match ship {
-            Some(ship) => self.owner(ship) != slot || self.dead(ship),
+            Some(ship) => self.owner(ship) != slot || self.dead(ship) || !ship.is_fixture(),
             None => true,
         };
         let cmd = self.bubble.commands.get_mut(&key).expect("present");
@@ -360,8 +375,9 @@ impl Session {
             ("NAV", 15) | ("NAV2", 22) => self.navigation(fields, slot, lease, now)?,
             ("FIRE2", 11) => self.fire2(fields, slot, lease, now)?,
             ("HEALTH", 8) => {
-                let (ship, gen, sequence) = (ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
-                let ship = ship.ok_or(Reject)?;
+                let (ship, gen, sequence) = (self.ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
+                // Pilot-reported health is a fixture-ship subsystem (fail closed beyond 2).
+                let ship = ship.filter(|s| s.is_fixture()).ok_or(Reject)?;
                 if self.owner(ship) != slot || self.pilot(ship) != Some(slot) {
                     return Err(Reject);
                 }
@@ -386,8 +402,8 @@ impl Session {
                 self.receive_projectile(slot, lease, raw, now);
             }
             ("HACK", 5) => {
-                let (ship, gen) = (ship_field(f[3])?, u64::from(seq(f[4])?));
-                if let Some(ship) = ship {
+                let (ship, gen) = (self.ship_field(f[3])?, u64::from(seq(f[4])?));
+                if let Some(ship) = ship.filter(|s| s.is_fixture()) {
                     if self.owner(ship) == slot
                         && self.pilot(ship) == Some(slot)
                         && gen == self.health_generation(ship)
@@ -400,8 +416,8 @@ impl Session {
             }
             ("HSTALE", 5) => {
                 // The host's own freshness release ends the generation it names.
-                let (ship, gen) = (ship_field(f[3])?, u64::from(seq(f[4])?));
-                if let (Slot::P1, Some(ship)) = (slot, ship) {
+                let (ship, gen) = (self.ship_field(f[3])?, u64::from(seq(f[4])?));
+                if let (Slot::P1, Some(ship)) = (slot, ship.filter(|s| s.is_fixture())) {
                     if gen == self.health_generation(ship) {
                         self.end_health(ship);
                     }
@@ -453,7 +469,8 @@ impl Session {
     }
 
     fn crew(&mut self, f: &[&str], slot: Slot, lease: Hex32) -> Parsed<Vec<Vec<u8>>> {
-        let (sequence, controlled, aboard) = (seq(f[3])?, uint(f[4], 2)?, uint(f[5], 2)?);
+        let ships = u32::from(self.core.ship_count);
+        let (sequence, controlled, aboard) = (seq(f[3])?, uint(f[4], ships)?, uint(f[5], ships)?);
         let old = self.coop.crew.get(&lease).copied();
         let old_seq = old.map_or(-1, |c| i64::from(c.0));
         if i64::from(sequence) <= old_seq || (controlled != 0 && controlled != aboard) {
@@ -483,7 +500,7 @@ impl Session {
 
     fn navigation(&mut self, fields: &Fields, slot: Slot, lease: Hex32, now: f64) -> Parsed<()> {
         let f = &fields.f;
-        let (ship, epoch, sequence) = (ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
+        let (ship, epoch, sequence) = (self.ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
         let ship = ship.ok_or(Reject)?;
         if self.owner(ship) != slot || u64::from(epoch) != self.epoch(ship) {
             return Err(Reject);
@@ -524,7 +541,7 @@ impl Session {
     fn fire2(&mut self, fields: &Fields, slot: Slot, lease: Hex32, now: f64) -> Parsed<()> {
         // entity|epoch|seq|sourceTime|primaryGroup|secondaryGroup|primaryShots|secondaryShots
         let f = &fields.f;
-        let (ship, epoch, sequence) = (ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
+        let (ship, epoch, sequence) = (self.ship_field(f[3])?, seq(f[4])?, seq(f[5])?);
         let ship = ship.ok_or(Reject)?;
         if self.owner(ship) != slot || u64::from(epoch) != self.epoch(ship) {
             return Err(Reject);
@@ -561,9 +578,11 @@ impl Session {
         // shooter|shooterGen|victim|victimGen|seq|hits|digest: cumulative hits the
         // sender's own piloted ship scored; the victim's authority applies them.
         let f = &fields.f;
-        let (shooter, sgen, victim, vgen) = (ship_field(f[3])?, seq(f[4])?, uint(f[5], 4)?, uint(f[6], 2_147_483_647)?);
+        let (shooter, sgen, victim, vgen) =
+            (self.ship_field(f[3])?, seq(f[4])?, uint(f[5], 4)?, uint(f[6], 2_147_483_647)?);
         let (sequence, hits) = (seq(f[7])?, uint(f[8], 1_000_000)?);
-        let shooter = shooter.ok_or(Reject)?;
+        // Shot claims are a fixture-ship subsystem: ships 3.. neither claim nor receive.
+        let shooter = shooter.filter(|s| s.is_fixture()).ok_or(Reject)?;
         let (sgen, vgen) = (u64::from(sgen), u64::from(vgen));
         let accepted = self.owner(shooter) == slot
             && self.pilot(shooter) == Some(slot)
@@ -596,7 +615,7 @@ impl Session {
         now: f64,
     ) -> Parsed<Vec<Vec<u8>>> {
         let (request, host, entity, epoch, market, lines) = (f[3], f[4], f[5], f[6], f[7], f[8]);
-        let (ship, epoch) = (ship_field(entity)?, seq(epoch)?);
+        let (ship, epoch) = (self.ship_field(entity)?, seq(epoch)?);
         let ship = ship.ok_or(Reject)?;
         let key = Hex32::parse(request)?;
         parse_lines(lines)?;
@@ -604,6 +623,9 @@ impl Session {
             if self.coop.order_ships.get(&key) != Some(&(ship, epoch)) {
                 return Err(Reject);
             }
+        } else if !ship.is_fixture() {
+            // Market cargo rows and native trade execution cover ships 1/2 only.
+            return Ok(vec![Self::order_reply(lease, key, "REJECTED")]);
         } else if self.owner(ship) != slot
             || u64::from(epoch) != self.epoch(ship)
             || self.pilot(ship) != Some(slot)
@@ -626,7 +648,7 @@ impl Session {
             self.core.peers.iter().map(|(s, p)| (*s, p.lease, p.address)).collect();
         for &(slot, lease, address) in &slots {
             let mut authority = format!("AUTH|1|{lease}|{}", self.coop.authority_revision);
-            for ship in Ship::BOTH {
+            for ship in Ship::all(self.core.ship_count) {
                 authority +=
                     &format!("|{}|{}|{}", self.owner(ship).as_str(), self.epoch(ship), pilot_str(self.pilot(ship)));
             }
@@ -651,9 +673,10 @@ impl Session {
                 out.push((address, packet.into_bytes()));
             }
             // HGEN names the generations of THIS authority revision.
-            let (g1, g2) = (self.health_generation(Ship::One), self.health_generation(Ship::Two));
+            // HGEN and pilot health stay two-ship in every session size.
+            let (g1, g2) = (self.health_generation(Ship::ONE), self.health_generation(Ship::TWO));
             out.push((address, format!("HGEN|1|{lease}|{}|{g1}|{g2}", self.coop.authority_revision).into_bytes()));
-            for ship in Ship::BOTH {
+            for ship in [Ship::ONE, Ship::TWO] {
                 let gen = self.health_generation(ship);
                 if let Some(hp) = self.coop.health.get(&ship) {
                     if self.owner(ship) != slot && now - hp.at <= 0.75 && !self.dead(ship) {

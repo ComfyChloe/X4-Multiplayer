@@ -163,7 +163,8 @@ impl Session {
         let (host, ship, epoch, verb, object, ware, amount) = (f[4], f[5], f[6], f[7], f[8], f[9], f[10]);
         let (ship, epoch, object, amount) = (seq(ship)?, seq(epoch)?, seq(object)?, seq(amount)?);
         let host = Hex32::parse(host)?;
-        let ship = Ship::from_number(i128::from(ship)).ok_or(Reject)?;
+        // Native cargo drop/pickup covers the fixture ships 1/2 only (fail closed beyond).
+        let ship = Ship::from_number(i128::from(ship)).filter(|s| s.is_fixture()).ok_or(Reject)?;
         let verb = CargoVerb::parse(verb, object)?;
         if epoch < 1 || !is_ware(ware) || !(1..=1_000_000).contains(&amount) {
             return Err(Reject);

@@ -25,11 +25,13 @@ use std::net::SocketAddr;
 
 use crate::ordmap::OrderedMap;
 use crate::pynum::fmt_g;
-use crate::wire::{float, seq, Atom, Hex32, Slot, MAX_PACKET};
+use crate::wire::{float, seq, Atom, Hex32, Ship, Slot, MAX_PACKET, MAX_SLOTS};
 
 pub const LEASE_SECONDS: f64 = 30.0;
 pub const STATE_SECONDS: f64 = 0.75;
 pub const TICK_HZ: u32 = 20;
+/// Players of a legacy dedicated session (authority p1 plus guests p2/p3).
+pub const LEGACY_DEDICATED_PLAYERS: u8 = 3;
 
 /// One outgoing datagram.
 pub type Packet = (SocketAddr, Vec<u8>);
@@ -93,6 +95,11 @@ pub struct Core {
     pub build: Atom,
     pub bubble: Atom,
     pub dedicated: bool,
+    /// Admitted slots are `p1..=max_players`; 2 outside dedicated mode.
+    pub max_players: u8,
+    /// Shared co-op ships `1..=ship_count`: 2 outside dedicated mode, otherwise one per
+    /// human guest (the authority's observer never consumes one) and at least 2.
+    pub ship_count: u8,
     pub sector: Option<Atom>,
     pub peers: OrderedMap<Slot, Peer>,
     pub tick: u64,
@@ -158,9 +165,10 @@ impl<'a> Fields<'a> {
 
 impl Session {
     pub fn new(level: Level, token: &str, build: &str, bubble: &str, leases: LeaseSource) -> Result<Self, String> {
-        Self::with_mode(level, token, build, bubble, leases, false)
+        Self::with_mode(level, token, build, bubble, leases, false, 2)
     }
 
+    /// A legacy dedicated session: authority p1 plus guests p2/p3 on ships 2/1.
     pub fn new_dedicated(
         level: Level,
         token: &str,
@@ -168,7 +176,32 @@ impl Session {
         bubble: &str,
         leases: LeaseSource,
     ) -> Result<Self, String> {
-        Self::with_mode(level, token, build, bubble, leases, true)
+        Self::new_dedicated_players(level, token, build, bubble, leases, LEGACY_DEDICATED_PLAYERS)
+    }
+
+    /// A dedicated session with `max_players` slots (authority p1 plus `max_players - 1`
+    /// human guests, 2..=8) and `max(2, max_players - 1)` shared ships.
+    pub fn new_dedicated_players(
+        level: Level,
+        token: &str,
+        build: &str,
+        bubble: &str,
+        leases: LeaseSource,
+        max_players: u8,
+    ) -> Result<Self, String> {
+        if !(2..=MAX_SLOTS).contains(&max_players) {
+            return Err(format!("max_players must be from 2 to {MAX_SLOTS}"));
+        }
+        Self::with_mode(level, token, build, bubble, leases, true, max_players)
+    }
+
+    /// Ships of a session with `max_players` slots.
+    pub fn ships_for(dedicated: bool, max_players: u8) -> u8 {
+        if dedicated {
+            max_players.saturating_sub(1).max(2)
+        } else {
+            2
+        }
     }
 
     fn with_mode(
@@ -178,6 +211,7 @@ impl Session {
         bubble: &str,
         leases: LeaseSource,
         dedicated: bool,
+        max_players: u8,
     ) -> Result<Self, String> {
         let token = Hex32::parse(token).map_err(|_| "token must be 32 lowercase hexadecimal characters".to_string())?;
         let (Ok(build), Ok(bubble)) = (Atom::parse(build), Atom::parse(bubble)) else {
@@ -186,6 +220,7 @@ impl Session {
         if level == Level::Universe && !build.as_str().starts_with("world1-") {
             return Err("world synchronization requires a world1- build label".into());
         }
+        let ship_count = Self::ships_for(dedicated, max_players);
         Ok(Session {
             level,
             core: Core {
@@ -193,6 +228,8 @@ impl Session {
                 build,
                 bubble,
                 dedicated,
+                max_players,
+                ship_count,
                 sector: None,
                 peers: OrderedMap::new(),
                 tick: 0,
@@ -202,7 +239,7 @@ impl Session {
             },
             bubble: bubble::Bubble::default(),
             economy: economy::Economy::default(),
-            coop: coop::Coop::default(),
+            coop: coop::Coop::new(ship_count),
             dock: dock::Docks::default(),
             universe: universe::Universe::default(),
             leases,
@@ -213,12 +250,32 @@ impl Session {
         self.core.peers.get(&slot)
     }
 
+    /// Whether this session admits `slot` (`p1..=max_players`).
+    pub fn admits(&self, slot: Slot) -> bool {
+        slot.number() <= self.core.max_players
+    }
+
+    /// The session's shared ships, `1..=ship_count`.
+    pub fn ships(&self) -> impl Iterator<Item = Ship> {
+        Ship::all(self.core.ship_count)
+    }
+
+    /// A ship field validated against this session's ship count (`integer(f, count)`).
+    pub fn ship_field(&self, text: &str) -> crate::wire::Parsed<Option<Ship>> {
+        crate::wire::ship_field(text, self.core.ship_count)
+    }
+
+    /// Every live peer except `slot`, in slot-insertion order.
+    pub fn others(&self, slot: Slot) -> impl Iterator<Item = (&Slot, &Peer)> {
+        self.core.peers.iter().filter(move |(s, _)| **s != slot)
+    }
+
     /// bubble.py `_peer`: the slot whose lease and source address both match.
     pub fn authenticated(&self, lease: &str, address: SocketAddr) -> Option<(Slot, Hex32)> {
         self.core
             .peers
             .iter()
-            .filter(|(slot, _)| **slot != Slot::P3 || self.core.dedicated)
+            .filter(|(slot, _)| self.admits(**slot))
             .find(|(_, p)| p.address == address && p.lease.matches(lease))
             .map(|(s, p)| (*s, p.lease))
     }
@@ -315,7 +372,7 @@ impl Session {
         if !core.token.matches(token) || build != core.build.as_str() || bubble != core.bubble.as_str() {
             return None;
         }
-        let slot = Slot::parse(slot).ok().filter(|slot| *slot != Slot::P3 || core.dedicated)?;
+        let slot = Slot::parse(slot).ok().filter(|slot| slot.number() <= core.max_players)?;
         let (previous, lease, nonce) = (Hex32::parse(f[7]).ok()?, Hex32::parse(f[8]).ok()?, Hex32::parse(f[9]).ok()?);
         let sector = Atom::parse(sector).ok()?;
         let live = core.peers.get(&slot).is_some();
@@ -360,7 +417,7 @@ impl Session {
         if !self.core.token.matches(token) || build != self.core.build.as_str() || bubble != self.core.bubble.as_str() {
             return None;
         }
-        let slot = Slot::parse(slot).ok().filter(|slot| *slot != Slot::P3 || self.core.dedicated)?;
+        let slot = Slot::parse(slot).ok().filter(|slot| self.admits(*slot))?;
         let nonce = Hex32::parse(nonce).ok()?;
         let sector = Atom::parse(sector).ok()?;
         if self.core.sector.as_ref().is_some_and(|s| *s != sector) {
@@ -374,7 +431,7 @@ impl Session {
             if self.core.retired.contains(&(slot, nonce)) {
                 return None;
             }
-            // A single endpoint must not own both slots.
+            // A single endpoint must not own two slots.
             if self.core.peers.values().any(|p| p.address == address) {
                 return None;
             }
@@ -463,18 +520,24 @@ impl Session {
         let tick = self.core.tick;
         let mut out = Vec::new();
         for (slot, peer) in self.core.peers.iter() {
-            let remote = self.core.peers.get(&slot.other());
-            let fresh = remote.and_then(|r| r.pose.filter(|_| now - r.state_at < STATE_SECONDS).map(|pose| (r, pose)));
-            match fresh {
-                None => out.push((peer.address, format!("EMPTY|1|{}|{tick}", peer.lease).into_bytes())),
-                // Co-op never forwards legacy transform frames.
-                Some(_) if self.level >= Level::Coop => {}
-                Some((remote, pose)) => {
-                    let pose: Vec<String> = pose.iter().map(|x| fmt_g(*x, 9)).collect();
-                    let packet =
-                        format!("PEER|1|{}|{tick}|{}|{}|{}", peer.lease, remote.lease, remote.seq, pose.join("|"));
-                    out.push((peer.address, packet.into_bytes()));
-                }
+            // Every other live peer with a fresh pose, in slot-insertion order. With two
+            // slots this is Python's single `other()` lookup.
+            let fresh: Vec<(&Peer, [f64; 6])> = self
+                .others(*slot)
+                .filter_map(|(_, r)| r.pose.filter(|_| now - r.state_at < STATE_SECONDS).map(|pose| (r, pose)))
+                .collect();
+            if fresh.is_empty() {
+                out.push((peer.address, format!("EMPTY|1|{}|{tick}", peer.lease).into_bytes()));
+                continue;
+            }
+            // Co-op never forwards legacy transform frames.
+            if self.level >= Level::Coop {
+                continue;
+            }
+            for (remote, pose) in fresh {
+                let pose: Vec<String> = pose.iter().map(|x| fmt_g(*x, 9)).collect();
+                let packet = format!("PEER|1|{}|{tick}|{}|{}|{}", peer.lease, remote.lease, remote.seq, pose.join("|"));
+                out.push((peer.address, packet.into_bytes()));
             }
         }
         out

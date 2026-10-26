@@ -10,9 +10,21 @@ use std::net::{IpAddr, SocketAddr};
 use super::{Fields, Level, Packet, Session};
 use crate::ordmap::OrderedMap;
 use crate::pynum::fmt_g;
-use crate::wire::{bounded, float, seq, Hex32, Parsed, Reject, Slot};
+use crate::wire::{bounded, float, seq, uint, Hex32, Parsed, Reject, Ship, Slot};
 
 pub const WORLD_FIELDS: usize = 17;
+/// Seconds between forwarded `XSHIP` rows per ship and peer (5 Hz; health is slow).
+pub const XSHIP_INTERVAL: f64 = 0.2;
+
+/// Host-authoritative state of a co-op ship beyond the two WORLD rows:
+/// `XSHIP|1|lease|revision|ship|hull|shield|cargo|dock`. `fields` keep the validated
+/// sender text from the revision on.
+#[derive(Clone, Debug)]
+pub struct ExtraShip {
+    pub revision: u32,
+    pub hull: f64,
+    pub fields: Vec<String>,
+}
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum Verb {
@@ -149,6 +161,10 @@ pub struct Bubble {
     pub bodies: OrderedMap<Hex32, Body>,
     pub suit_kills: OrderedMap<Hex32, (Hex32, u32)>,
     walkers: OrderedMap<Hex32, Walker>,
+    /// Ships 3.. (dedicated N-player sessions only); cleared with the host's world.
+    pub extra: OrderedMap<Ship, ExtraShip>,
+    pub extra_owner: Option<Hex32>,
+    pub next_extra: f64,
 }
 
 impl Session {
@@ -158,6 +174,8 @@ impl Session {
             b.world = None;
             b.world_owner = None;
             b.world_revision = -1;
+            b.extra.clear();
+            b.extra_owner = None;
             for cmd in b.commands.values_mut() {
                 if cmd.result == CommandResult::Pending {
                     cmd.result = CommandResult::Cancelled;
@@ -195,7 +213,7 @@ impl Session {
         if f[0] == "ACTION" && f.len() == 7 {
             return self.action(f, address, now).into_iter().collect();
         }
-        if !matches!(f[0], "WORLD" | "FIRE" | "DONE" | "BODY" | "SUITKILL" | "WALK") {
+        if !matches!(f[0], "WORLD" | "FIRE" | "DONE" | "BODY" | "SUITKILL" | "WALK" | "XSHIP") {
             return self.receive_core(raw, address, now);
         }
         let _ = self.bubble_update(&fields, address, now);
@@ -208,7 +226,7 @@ impl Session {
             return None;
         }
         let request = Hex32::parse(request).ok()?;
-        let slot = Slot::parse(slot).ok().filter(|slot| *slot != Slot::P3 || self.core.dedicated)?;
+        let slot = Slot::parse(slot).ok().filter(|slot| self.admits(*slot))?;
         let verb = Verb::parse(verb)?;
         if target != "energycells" {
             return None;
@@ -252,6 +270,7 @@ impl Session {
     fn bubble_update(&mut self, fields: &Fields, address: SocketAddr, now: f64) -> Parsed<()> {
         let f = &fields.f;
         let (slot, lease) = self.authenticated(fields.get(2).ok_or(Reject)?, address).ok_or(Reject)?;
+        let ship_count = self.core.ship_count;
         let b = &mut self.bubble;
         match (f[0], f.len()) {
             ("WALK", 11) => {
@@ -285,16 +304,42 @@ impl Session {
                 b.bodies.insert(lease, Body { seq: sequence, mode, dead, generation, pose: fields.tail(7) });
             }
             ("SUITKILL", 4) if slot == Slot::P1 => {
+                // The packet names only a suit generation. Apply it to the one guest whose
+                // live suit has it; an ambiguous generation (several guests) is refused.
                 let generation = seq(f[3])?;
-                if let Some(guest) = self.core.peers.get(&Slot::P2) {
-                    let suited = b
-                        .bodies
-                        .get(&guest.lease)
-                        .is_some_and(|body| body.mode == BodyMode::Suit && body.generation == generation);
-                    if suited {
-                        b.suit_kills.insert(guest.lease, (lease, generation));
-                    }
+                let suited: Vec<Hex32> = self
+                    .core
+                    .peers
+                    .iter()
+                    .filter(|(s, _)| **s != Slot::P1)
+                    .map(|(_, p)| p.lease)
+                    .filter(|guest| {
+                        b.bodies
+                            .get(guest)
+                            .is_some_and(|body| body.mode == BodyMode::Suit && body.generation == generation)
+                    })
+                    .collect();
+                if let [guest] = suited[..] {
+                    b.suit_kills.insert(guest, (lease, generation));
                 }
+            }
+            ("XSHIP", 9) if slot == Slot::P1 => {
+                let (revision, ship) = (seq(f[3])?, uint(f[4], u32::from(ship_count))?);
+                let ship = Ship::from_number(i128::from(ship)).filter(|s| !s.is_fixture()).ok_or(Reject)?;
+                let (hull, shield) = (float(f[5])?, float(f[6])?);
+                let (_cargo, dock) = (uint(f[7], 1_000_000)?, uint(f[8], 1)?);
+                let _ = dock;
+                if ![hull, shield].iter().all(|v| v.is_finite() && (0.0..=100.0).contains(v)) {
+                    return Err(Reject);
+                }
+                if b.extra_owner != Some(lease) {
+                    b.extra.clear();
+                    b.extra_owner = Some(lease);
+                }
+                if b.extra.get(&ship).is_some_and(|old| revision <= old.revision) {
+                    return Err(Reject);
+                }
+                b.extra.insert(ship, ExtraShip { revision, hull, fields: fields.tail(3) });
             }
             ("WORLD", n) if slot == Slot::P1 && n == 4 + WORLD_FIELDS => {
                 let revision = seq(f[3])?;
@@ -344,6 +389,7 @@ impl Session {
         let coop = self.level >= Level::Coop;
         let b = &self.bubble;
         let host = self.core.peers.get(&Slot::P1);
+        let publish_extra = now >= b.next_extra && !b.extra.is_empty();
         for (slot, peer) in self.core.peers.iter() {
             if let (Some(world), Some(host)) = (&b.world, host) {
                 let payload: Vec<String> = world.iter().map(|v| fmt_g(*v, 9)).collect();
@@ -351,7 +397,13 @@ impl Session {
                     format!("WORLD|1|{}|{}|{}|{}", peer.lease, host.lease, b.world_revision, payload.join("|"));
                 out.push((peer.address, packet.into_bytes()));
             }
-            if let Some(other) = self.core.peers.get(&slot.other()) {
+            if let (true, Some(host)) = (publish_extra, host) {
+                for row in b.extra.values() {
+                    let packet = format!("XSHIP|1|{}|{}|{}", peer.lease, host.lease, row.fields.join("|"));
+                    out.push((peer.address, packet.into_bytes()));
+                }
+            }
+            for (_, other) in self.others(*slot) {
                 if let Some(w) = b.walkers.get(&other.lease).filter(|w| now - w.at < 1.0) {
                     let packet =
                         format!("WALK|1|{}|{}|{}|{}|{}", peer.lease, other.lease, w.seq, w.context, w.pose.join("|"));
@@ -376,6 +428,10 @@ impl Session {
                 }
             }
         }
+        if publish_extra {
+            self.bubble.next_extra = now + XSHIP_INTERVAL;
+        }
+        let b = &self.bubble;
         if let Some(host) = host {
             // One transaction at a time. The receiver deduplicates before dispatch to MD.
             if let Some((request, cmd)) = b.commands.iter().find(|(_, c)| c.result == CommandResult::Pending) {
