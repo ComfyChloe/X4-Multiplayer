@@ -31,3 +31,10 @@ version = "7.5.0"
 dependencies = [
  "x4mp-core",
 ]
+
+[[package]]
+name = "x4mp-sim"
+version = "7.5.0"
+dependencies = [
+ "x4mp-core",
+]

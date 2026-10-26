@@ -6,12 +6,18 @@ per system, test in parallel"). Base branch: `contrib/ferrite-rewrite-base`. Lea
 overhaul session (Ferrite coordination). Local coordination folder (not in git):
 `C:\Users\developer\Documents\X4Mods\rewrite-coord\` (README.md there is the live protocol).
 
+## Terminology
+
+User decision (26 Oct 2026, design doc commit 7698736): the dedicated X4 is the **server** (not a
+player); players connect as **clients** (player 1 ... N, all equal). No "host"/"guest" in new code,
+docs or logs; old identifiers, profiles and paths stay until that code is touched anyway.
+
 ## Goal
 
 Progressively replace X4's single-threaded simulation, one system at a time, with our own code
 (Rust where it is new logic, C only for build-pinned engine glue). Each sector becomes its own
 small world run as a job on a worker thread; cross-sector effects go through ordered messages
-applied at a frame barrier. X4 stays the host (rendering, UI, input, content, and every system not
+applied at a frame barrier. X4 itself keeps running everything else (rendering, UI, input, content, and every system not
 yet replaced). The replaced systems must keep the game's behaviour: same decisions, same state,
 output identical where the data is discrete and bit-identical or within a documented bound where it
 is floating point.
@@ -77,10 +83,21 @@ incl), 0x1165ee0 (2.3%), 0x314fa0 (1.7%), 0x81c7a0 (1.2%), 0x1399c40 (7.5%, UI p
 | native AI order behaviours (Rust, per sector) | ai-orders | contrib/ferrite-rw-ai-orders | rust/x4mp-ai/, reports/REWRITE-AI-ORDERS.md | top orders by census, first behaviour in shadow |
 | component walk parallelism + deferred events (stages 0/1 of x4-re/coord/reports/parallel-walk-design.md; reviewer: the "Second sandbox" session, which wrote the design) | walk | contrib/ferrite-rw-walk | native/engine/walkpar*, reports/REWRITE-WALK.md | stage 0 census, stage 1 single-threaded deferred replay with normal-vs-replay comparison |
 | MD | stays serial on X4 (x4-re/coord/reports/sector-partition-scripts.md) | | | |
+| faction AI (SupCom-style strategic AIs running NPC factions instead of jobs spawning; a deliberate gameplay change, switchable feature, not an equivalence rewrite; user rule: the AI OPERATES X4's existing economy through vanilla mechanics and never changes its rules — no new resources, rebalancing, treasury or free spawns; economy-altering knobs only optional and off by default) | design workflow, then faction-ai agent | contrib/ferrite-rw-faction-ai | reports/FACTION-AI-DESIGN.md, later rust/x4mp-faction/ | design with verified feasibility claims |
 
 Background reports to read before touching a system: `x4-re/coord/reports/parallel-sim.md`,
 `parallel-walk-design.md`, `sector-partition-scripts.md`, `simtick.md`, `entity.md`, `script.md`,
 `rng.md`, `time.md`, `motion.md`, and `X4-Multiplayer-design/preparation/TARGET-ARCHITECTURE-PROPOSAL.md`.
+
+## Working cadence (user decision, 26 Oct 2026)
+
+Agents keep going. When a stage is done: commit it, update your status line, write a short result note
+to `rewrite-coord/results/<date>-<agent>-<stage>.md`, send the lead a short message (to `main`: commit,
+result, next stage, at most 150 words), and continue with the next stage of your system without waiting.
+Follow the method through to "switch" for your system, then move on to the next hottest piece of your
+domain. Stop and return only when blocked on something only the lead or the user can decide (permission,
+ownership conflict, a quiet timing window, a design choice with real trade-offs), or when your system's
+plan is complete.
 
 ## Rules
 
