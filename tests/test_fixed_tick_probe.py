@@ -66,6 +66,14 @@ class FixedTickProbeTests(unittest.TestCase):
           ui();assert(logs[2]:find('catchup=1 steps=120 zeroStep=200 multiStep=3 dropped=0 lastSteps=0 acc=0.004000',1,true))
         ''')
 
+    def test_simulation_cost_fields_are_logged(self):
+        self.runtime().execute('''
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.sim_hooks=1;s.sim_win_frames=60
+            s.sim_win_mean_ms=4.25;s.sim_win_p95_ms=6.5;s.sim_win_max_ms=9.125;return s end
+          ui();ui();assert(logs[2]:find('simHooks=1 simFrames=60 simMeanMs=4.250 simP95Ms=6.50 simMaxMs=9.125',1,true))
+        ''')
+
     def test_fixed60_refusal_is_an_error(self):
         with self.assertRaisesRegex(Exception, 'frame-rate limit is not 60'):
             self.runtime().execute('''

@@ -49,6 +49,12 @@ API(void *, luaL_checkudata, (lua_State *, int, const char *));
 #define FRAME_QPC_RVA 0x6b60e80u
 #define COLLISION_STEPS_PTR_RVA 0x6cf1510u
 #define MAX_CATCHUP 4u
+/* Simulation cost: empty VBI slots 0 and 15 bracket the MoveWorker slot loop, so their
+   time difference is the per-frame cost of slots 1..14 (input, timers, universe update,
+   UI, render-list preparation, jobs). Data-only, like slot 5. */
+#define SIM_BEGIN_SLOT 0
+#define SIM_END_SLOT 15
+#define SIM_BUCKETS 128 /* 0.25 ms buckets up to 32 ms, last bucket = overflow */
 #define LUA_TSTRING 4
 static const unsigned short branch_original = 0x0874; /* je +8 */
 static const unsigned short branch_patched = 0x9066;  /* 66 90 */
@@ -82,6 +88,13 @@ typedef struct {
     uint64_t multi_step_frames;
     uint64_t dropped_ticks;
     unsigned last_steps;
+    int sim_hooks;
+    uint64_t sim_frames;
+    double sim_total_ms;
+    uint64_t win_count;
+    double win_sum_ms;
+    double win_max_ms;
+    uint32_t win_hist[SIM_BUCKETS];
 } owner;
 typedef struct { void **vtable; } handler;
 static unsigned char *image;
@@ -195,6 +208,13 @@ static void move(handler *self);
 static void no_op(handler *self) { (void)self; }
 static void *vtable[] = {(void *)no_op, (void *)move, (void *)no_op};
 static handler hook = {vtable};
+static void sim_begin(handler *self);
+static void sim_end(handler *self);
+static void *begin_vtable[] = {(void *)no_op, (void *)sim_begin, (void *)no_op};
+static void *end_vtable[] = {(void *)no_op, (void *)sim_end, (void *)no_op};
+static handler hook_begin = {begin_vtable};
+static handler hook_end = {end_vtable};
+static int64_t sim_begin_qpc;
 
 static void **table_now(void) {
     return image ? *(void ***)(image + VBI_RVA) : NULL;
@@ -271,11 +291,61 @@ static void schedule_next(owner *o) {
     if (!k) ++o->zero_step_frames; else if (k > 1) ++o->multi_step_frames;
 }
 
+static void unregister_sim_hooks(void) {
+    if (!registered_table || !readable(registered_table, 0x138, 1) || table_now() != registered_table) return;
+    InterlockedCompareExchangePointer((void *volatile *)&registered_table[SIM_BEGIN_SLOT], NULL, &hook_begin);
+    InterlockedCompareExchangePointer((void *volatile *)&registered_table[SIM_END_SLOT], NULL, &hook_end);
+    if (current) current->sim_hooks = 0;
+}
+
 static void disarm_because(const char *reason) {
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
+    unregister_sim_hooks();
     if (table_owned())
         InterlockedCompareExchangePointer((void *volatile *)&registered_table[SLOT], NULL, &hook);
+}
+
+static int sim_frame_ok(void) {
+    owner *o = current;
+    return o && o->armed && o->sim_hooks && GetCurrentThreadId() == owner_thread && table_owned() &&
+           !*(int *)((unsigned char *)registered_table + 0x130);
+}
+
+static void sim_begin(handler *self) {
+    (void)self;
+    LARGE_INTEGER now;
+    sim_begin_qpc = (sim_frame_ok() && qpc_read(&now)) ? now.QuadPart : 0;
+}
+
+static void sim_end(handler *self) {
+    (void)self;
+    owner *o = current;
+    LARGE_INTEGER now;
+    if (!sim_begin_qpc || !sim_frame_ok() || !qpc_read(&now) || qpc_frequency <= 0) return;
+    double ms = (double)(now.QuadPart - sim_begin_qpc) * 1000.0 / (double)qpc_frequency;
+    sim_begin_qpc = 0;
+    if (ms < 0.0) return;
+    ++o->sim_frames;
+    o->sim_total_ms += ms;
+    ++o->win_count;
+    o->win_sum_ms += ms;
+    if (ms > o->win_max_ms) o->win_max_ms = ms;
+    unsigned bucket = (unsigned)(ms * 4.0);
+    o->win_hist[bucket < SIM_BUCKETS ? bucket : SIM_BUCKETS - 1]++;
+}
+
+/* p95 of the current window in ms (bucket upper edge), then reset the window. */
+static double take_window_p95(owner *o) {
+    double p95 = 0.0;
+    if (o->win_count) {
+        uint64_t need = (o->win_count * 95 + 99) / 100, seen = 0;
+        for (unsigned b = 0; b < SIM_BUCKETS; ++b) {
+            seen += o->win_hist[b];
+            if (seen >= need) { p95 = (b + 1) * 0.25; break; }
+        }
+    }
+    return p95;
 }
 
 static void disarm(void) { disarm_because(NULL); }
@@ -336,7 +406,7 @@ static void number_field(lua_State *L, const char *name, double value) {
 
 static int stats(lua_State *L) {
     owner *o = p_luaL_checkudata(L, 1, META);
-    p_lua_createtable(L, 0, 26);
+    p_lua_createtable(L, 0, 34);
     number_field(L, "frames", (double)o->frames);
     number_field(L, "loading_skips", (double)o->loading_skips);
     number_field(L, "paused_frames", (double)o->paused_frames);
@@ -359,6 +429,15 @@ static int stats(lua_State *L) {
     number_field(L, "dropped_ticks", (double)o->dropped_ticks);
     number_field(L, "last_steps", o->last_steps);
     number_field(L, "accumulator", o->accumulator);
+    number_field(L, "sim_hooks", o->sim_hooks);
+    number_field(L, "sim_frames", (double)o->sim_frames);
+    number_field(L, "sim_total_ms", o->sim_total_ms);
+    number_field(L, "sim_win_frames", (double)o->win_count);
+    number_field(L, "sim_win_mean_ms", o->win_count ? o->win_sum_ms / (double)o->win_count : 0.0);
+    number_field(L, "sim_win_p95_ms", take_window_p95(o));
+    number_field(L, "sim_win_max_ms", o->win_max_ms);
+    o->win_count = 0; o->win_sum_ms = 0.0; o->win_max_ms = 0.0;
+    memset(o->win_hist, 0, sizeof(o->win_hist));
     if (o->reason) { p_lua_pushlstring(L, o->reason, strlen(o->reason)); p_lua_setfield(L, -2, "reason"); }
     return 1;
 }
@@ -438,6 +517,15 @@ static int start(lua_State *L) {
             *collision_steps = 1;
             o->catchup = 1;
             o->last_steps = 1;
+        }
+    }
+    /* Optional simulation-cost brackets; their absence never blocks the probe. */
+    if (!table[SIM_BEGIN_SLOT] && !table[17 + SIM_BEGIN_SLOT] && !table[SIM_END_SLOT] && !table[17 + SIM_END_SLOT]) {
+        if (!InterlockedCompareExchangePointer((void *volatile *)&table[SIM_BEGIN_SLOT], &hook_begin, NULL)) {
+            if (!InterlockedCompareExchangePointer((void *volatile *)&table[SIM_END_SLOT], &hook_end, NULL))
+                o->sim_hooks = 1;
+            else
+                InterlockedCompareExchangePointer((void *volatile *)&table[SIM_BEGIN_SLOT], NULL, &hook_begin);
         }
     }
     o->armed = 1;

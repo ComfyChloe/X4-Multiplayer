@@ -179,9 +179,32 @@ int main(void) {
     assert(!patched && fake_collision_steps == 2 && *capture_dt() == 1.0 / 30.0);
     assert(*(unsigned short *)(image + DT_BRANCH_RVA) == branch_original);
 
+    /* Simulation-cost brackets: slot 0/15 handlers measure the slot loop; p95 window. */
+    setup();
+    fake_owner.sim_hooks = 1;
+    fake_table[SIM_BEGIN_SLOT] = &hook_begin; fake_table[SIM_END_SLOT] = &hook_end;
+    for (int i = 0; i < 100; ++i) {
+        sim_begin(&hook_begin);
+        fake_now.QuadPart += (i < 95) ? 20000 : 100000; /* 2 ms, then five 10 ms frames */
+        sim_end(&hook_end);
+    }
+    assert(fake_owner.sim_frames == 100 && fake_owner.win_count == 100);
+    assert(fabs(fake_owner.win_max_ms - 10.0) < 1e-6);
+    assert(fabs(take_window_p95(&fake_owner) - 2.25) < 1e-9);
+    *(int *)((unsigned char *)fake_table + 0x130) = 1;
+    sim_begin(&hook_begin); fake_now.QuadPart += 20000; sim_end(&hook_end);
+    assert(fake_owner.sim_frames == 100);
+    *(int *)((unsigned char *)fake_table + 0x130) = 0;
+    ++owner_thread; sim_begin(&hook_begin); fake_now.QuadPart += 20000; sim_end(&hook_end);
+    assert(fake_owner.sim_frames == 100);
+    --owner_thread;
+    stop(&fake_lua);
+    assert(!fake_table[SIM_BEGIN_SLOT] && !fake_table[SIM_END_SLOT] && !fake_table[SLOT]);
+
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: fixedtick read-only cadence, pause/loading, lifetime and fail-closed guards");
     puts("PASS: fixed60 dt branch patch, per-frame guards and restore on every disarm");
+    puts("PASS: simulation-cost brackets measure the slot loop, skip loading/foreign threads, unregister on stop");
     puts("PASS: fixed60catchup tracks wall time at 30/60/144/1000 fps, bounded catch-up, Jolt sub-steps, restore");
     return 0;
 }

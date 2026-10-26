@@ -20,7 +20,9 @@ local function logStats(now)
   s.fixed or 0,s.fixed_frames or 0,s.wall_elapsed or 0,s.game_elapsed or 0)..
   string.format(' catchup=%d steps=%d zeroStep=%d multiStep=%d dropped=%d lastSteps=%d acc=%.6f',
   s.catchup or 0,s.steps_total or 0,s.zero_step_frames or 0,s.multi_step_frames or 0,
-  s.dropped_ticks or 0,s.last_steps or 0,s.accumulator or 0))
+  s.dropped_ticks or 0,s.last_steps or 0,s.accumulator or 0)..
+  string.format(' simHooks=%d simFrames=%d simMeanMs=%.3f simP95Ms=%.2f simMaxMs=%.3f',
+  s.sim_hooks or 0,s.sim_win_frames or 0,s.sim_win_mean_ms or 0,s.sim_win_p95_ms or 0,s.sim_win_max_ms or 0))
  nextLog=now+1
 end
 SetScript('onUpdate',function()
