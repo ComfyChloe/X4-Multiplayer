@@ -11,15 +11,20 @@ contexts once per simulation frame. The Rust per-sector *order behaviours* are t
 
 ## 0. Status
 
-- **Stage 0 (measurement-only census): built and tested offline. Not yet run natively** (lanes not ready;
-  `quiet.lock` held during the live two-client test). Native numbers below are **profiler-derived estimates**,
-  clearly marked; no AI census has run in X4 yet.
-- **Stage 1 (single-threaded per-sector rounds driver): designed (section 5), not yet implemented.**
+- **Stage 0 (measurement-only census): native on lanes for idle and attnload (8 high-attention sectors);
+  the combat load is queued** (the first combat run hit script errors in the scenario v1 and is invalid).
+  Results: `rewrite-coord/results/2026-10-26-ai-driver-census.md`, summary in section 3a. Timing values are
+  not trustworthy (shared PC); the structural numbers are.
+- **Stage 1 (our AIDirector::Move, single-threaded, normal / rounds / compare): built and tested offline**
+  (section 5, `native/engine/aidriver_move.h`, `test_aidriver_move.c`). **Not yet run natively**; the first
+  native step is a short `normal` smoke run (the 38 engine-helper calling conventions can only be checked
+  in X4).
 
-Own files: `native/engine/aidriver.h`, `native/engine/test_aidriver.c`, this report, and the additive AIPROF
-logging in `dev/fixed_tick_probe.lua`. Shared-file edits (additive): `native/engine/signatures.py`
-(AI sites + hashes), `native/engine/build.py` (`test_aidriver` in the `--test` list),
-`tests/test_fixed_tick_probe.py` (3 AIPROF cases).
+Own files: `native/engine/aidriver.h` (census, hooks, Lua), `native/engine/aidriver_move.h` (stage 1),
+`native/engine/test_aidriver.c`, `native/engine/test_aidriver_move.c`, `dev/aiprof_report.py`, this report,
+and the additive AIPROF/AIDRIVE logging in `dev/fixed_tick_probe.lua`. Shared-file edits (additive):
+`native/engine/signatures.py` (AI sites, 38 stage-1 helper pins), `native/engine/build.py` (two suites in the
+`--test` list), `native/engine/fixedtick.c` (include + four calls), `tests/test_fixed_tick_probe.py` (6 cases).
 
 ## 1. What the AI phase is (RE, high confidence)
 
@@ -93,6 +98,24 @@ like WALKPROF, emitting one `AIPROF` line per second via `handle:aistats()`. Per
 
 All counters are per-frame means over the window; the window resets on each `aistats()` read.
 
+## 3a. Native census results (lanes, 2026-10-26; timing not trustworthy)
+
+| measure | idle (463 s) | attnload, 8 sectors (292 s) |
+|---|---|---|
+| AI phase share of the slot loop | 9.1 % | 9.2 % |
+| contexts run / interrupt runs per frame | 48.7 / 5.1 | 71.2 / 8.4 |
+| passes per frame (max) | 6.3 (14) | 7.5 (15) |
+| foreign-sector share of wakes made during runs | 33.8 % | 35.6 % |
+| events during runs: own / foreign / MD cue | 5.5 / 0.31 / 3.5 | 8.1 / 0.21 / 4.9 |
+| runs touching a foreign sector or cue | 5.0 % | 6.2 % |
+| AI-active sectors; largest sector's share | 26.7; 26 % | 36.9; 20 % |
+
+Script ranking (both loads): move.generic ≈ 24 %, trade.find.free 15-20 %, fight.attack.object.fighter
+13-15 % (most runs), order.dock ≈ 8 %, move.idle ≈ 8 %. Against the partition report's rule the AI phase
+is under the 20 % bar at these loads (threads for the AI phase alone do not pay; combat pending); balance
+and hazard are within bounds; a third of the wakes cross sectors, which a pass-synchronous rounds driver
+absorbs (they land in the next pass in both orders) but threads would turn into outbox traffic.
+
 ## 4. Hooks and safety (ENGINE-INSTRUMENTATION.txt; registered in `rewrite-coord/hooks.tsv`)
 
 | site | kind | what |
@@ -117,23 +140,59 @@ All counters are per-frame means over the window; the window resets on each `ais
 - No hook of mine touches `PostEvent` / `DeliverEvent` / `CancelPendingEvents` / the networking transport.
   Wrappers pass straight through off the owner thread or when not armed.
 
-## 5. Stage 1 — single-threaded per-sector rounds driver (design; implements partition report §6)
+## 5. Stage 1 — our AIDirector::Move (built; `native/engine/aidriver_move.h`)
 
-Replace the `AIDirector::Move` loop (not the engine helpers it calls) with a driver that, each original pass
-("round"), groups the pass's woken contexts into **buckets** keyed by the owner entity's sector (fleet root
-when it has a commander), runs them bucket-by-bucket, and defers every cross-bucket/global effect to a barrier:
-- **own-bucket wake** → the bucket's own queue; **foreign wake** → a per-round outbox merged at the barrier
-  (hook `RequestWake` 0x106f910 + the inlined copy in Move, which the driver replaces, and in 0x1062f70).
-- **events posted during a run** (MD, foreign AI) → **buffered and replayed at the barrier**, reusing the
-  walk agent's PostEvent buffer, not a second one (coordination Q4). MD then runs serially at the barrier.
-- the serial bucket (keyless + player + migrated hazardous contexts) runs at the barrier with original
-  semantics. Comparison mode: run normal vs rounds over the same contexts, same order-visible outcomes, and
-  diff state hashes (the partition report's §6.2 invariants: cue/context counts, wake counts, list integrity).
-- Fail closed to the original loop on any mismatch.
+**What it is.** A behavioural reimplementation of the whole Move loop, written from the full disassembly and
+the decompile of the pinned body (the report describes behaviour; no decompiled code is copied). The control
+flow is ours; every engine operation is the engine's own helper called with the original's arguments (38
+helpers, first 32 bytes SHA-256 pinned in `signatures.py AIDRIVER_HELPERS`, verified before a driver mode is
+allowed; calling conventions read from each call site, e.g. `GetAttentionBlock(script, attention)`,
+`AbortContextStack` with 8 arguments, the interrupt runner's byte flag on the stack). Covered behaviour:
+- outer loop: up to 0x40 passes; flip the write index except in pass 0x21; the pre-flip write vector is the
+  read vector; when empty, harvest due timed wakes in time order (each node released into the director's
+  node pool, leftmost cache and size updated exactly as the original's inline code), leave when still empty;
+  pass 0x21 can therefore only run timed wakes, and wakes made in pass 0x20 carry to the next frame;
+- per context: dequeue (slot of the read buffer = -1), current entity, wake mask (timed pass: timed mask
+  when the wake time is due, else 0), the pass-0x20 "Possibly infinite wake request loop" diagnostic (same
+  text through the engine's formatter and logger), global interrupt handlers (mask 0x40: first pending
+  record whose chosen handler has no script or a script whose priority beats the holder's; unknown script ->
+  the engine's error; apply: optional label, abort of the context stack, target cleanup, push or restart
+  with the 0x80 re-wake), cleanup when the mask is empty or a nested frame runs, interrupt restart (mask 4),
+  attention-block restart, resume, ExecState_Run, completion (run_script / run_order_script return value or
+  the engine's "did not provide a return value" error, caller re-woken with 0x20 or restored), removal;
+- end of frame: current entity cleared, refresh lists (dry list first).
+Deviations: only where the original would dereference a null caller / blocking action (it would fault);
+counted (`bad_caller`).
 
-The census decides the bucket key (fleet-root vs sector) and whether Stage 2 (threads) is worth it; Stage 1 is
-built first regardless, as the semantic harness. Blockers B1 (value live-lists) and B2 (non-atomic refcounts)
-are only relevant once threads run; Stage 1 does not touch them.
+**Modes.** `normal`: original order. `rounds`: each pass grouped by bucket (sector of the owner entity;
+keyless = serial bucket), buckets in order of first appearance in the pass's read vector, stable inside a
+bucket; with the walk agent's buffer bound (integrated build, `#ifdef X4LAN_WALKPAR_H`, Q4/Q7/Q9) every post
+made while a bucket runs is deferred in a scope keyed by the sector UniverseID and replayed **at the end of
+the pass, before the next flip**, in bucket order = rounds execution order. Because cross-sector wakes go into
+the write vector, they run in the next pass in both orders: rounds keeps the original **pass structure**. Without
+the buffer (this branch alone) rounds only reorders. `compare`: rounds plus these order-equivalence counters,
+which define exactly when a pass's outcome can differ from the original order:
+1. `cmp_null_lost`: a context of another bucket that the original would already have run (smaller index) was
+   nulled (ClearWake) before its turn — rounds skipped a run the original makes;
+2. `cmp_wake_absorb`: a wake of a context of another bucket that sits in this pass's read vector — it is
+   absorbed (ClearWake of the processed context nulls the new entry) iff the wakee runs later in the pass;
+   counted when the original and rounds orders disagree on that;
+3. `cmp_event_pending` / `cmp_event_ran`: an event delivered during a run to a context of another bucket
+   that has not run yet, or ran although the original would run it after the poster;
+4. `cmp_post_cancel`: a cancel and a post for the same source and type from different buckets whose rounds
+   order is the opposite of the original order of the two issuing contexts (immediate posts counted too,
+   conservative, until the buffer readout exposes the flag).
+A pass with none of these is order-equivalent (`cmp_passes_clean`); shared-state writes (blackboards,
+`global.$`) are not observed by these counters. A per-frame AI state hash (contexts, masks, wake time, queue
+membership, frame pcs, wake vectors) is logged in compare mode.
+
+**Fail closed.** Driver modes need the helper signatures; a structural pre-flight (write index, vector
+bounds, slot-index consistency of the first read vector, timed tree) runs before every frame and again
+after it; any failure runs the original Move and switches to census mode with a loud `FEATURE aidriver
+DISABLED reason=... (census continues)`. Census hooks stay installed in all modes.
+
+Blockers B1 (value live-lists) and B2 (non-atomic refcounts) matter only once threads run; stage 1 does not
+touch them.
 
 ## 6. Offline tests (synthetic; `native/engine/test_aidriver.c`, `tests/test_fixed_tick_probe.py`)
 
@@ -148,35 +207,56 @@ would) covers:
   `ext_wakes=4`; cross-sector wake and keyless (serial) context classification and hazard count;
   event own/foreign/cue/director split.
 
-`tests/test_fixed_tick_probe.py` (real LuaJIT): **20 pass** (3 new) — AIPROF line logged, loud
-`FEATURE aidriver DISABLED` on refusal, and no AI hooks unless `X4LAN_AIDRIVER` is set.
+The stage-1 suite (`test_aidriver_move.c`) uses a fake engine whose helpers reproduce the reverse-engineered
+behaviour (RequestWake slot rule, ClearWake nulling of both buffers, ClearTimedWake(IfDue), RemoveContext,
+the timed tree with its node pool, interrupt runner and handler selection) and a walkpar-semantics event
+buffer (scoped buffering, a cancel kills buffered scheduled posts of any task, immediate posts survive,
+replay of listed tasks then a sweep). It checks, per branch, the helper-call order against the original's
+(cleanup, interrupt restart, attention restart, completion with run_script / run_order_script / restore,
+the six global-interrupt cases), the pass structure (timed harvest order and node pool, 0x20 diagnostic text,
+0x21 without a flip, wake carried to the next frame), normal == rounds when buckets do not interact (run
+multiset, per-sector order, state hash), each compare counter on a constructed case (cross-bucket ClearWake,
+wake absorption), and the walk review's post/cancel cases (post earlier in bucket B / cancel later in bucket
+A and the reverse; an order inversion is flagged; replaying tasks against execution order breaks the result,
+a negative control). **All pass.**
 
-`python dev/check_hook_signatures.py ..\x4-re\bin\X4.exe`: PASS, executable + 25 hook signatures, no files
-modified.
+`tests/test_fixed_tick_probe.py` (real LuaJIT): **23 pass** (6 for the AI driver) — AIPROF and AIDRIVE lines,
+actual mode logged, loud `FEATURE aidriver DISABLED` on refusal / driver refusal / mid-run fallback, no AI
+hooks unless `X4LAN_AIDRIVER` is set.
 
-## 7. Native steps needed (scheduled on a lane, not run yet)
+`python dev/check_hook_signatures.py ..\x4-re\bin\X4.exe`: PASS, executable + 63 hook signatures (25 sites +
+38 stage-1 helpers), no files modified. Note: `build.py --test` runs the suites in order and the simprof
+suite's 3 %-overhead timing assertion fails on a saturated PC (7 X4 instances); simprof is untouched by this
+branch, and the aidriver suites were run directly with the same compiler flags.
 
-Once `rewrite-coord/native-lane.md` starts with READY and `quiet.lock` is gone, via `dev/x4lane.py`
-(profiles 45850/45851, lane game views):
-1. Load a disposable world; `X4LAN_FIXEDTICK_MODE` unset (or `profile`), `X4LAN_AIDRIVER='census'`. Confirm
-   `FEATURE aidriver ENABLED mode=census` and collect ~10 min of `AIPROF` lines under three loads: single
-   client on a highway; several clients in several sectors; a large fleet / many trading ships in one sector
-   (the heavy-AI case the 8% estimate does not cover).
-2. Read off: AI-phase share, per-sector/per-fleet balance and ideal speedup, foreign-wake and foreign-touch
-   (hazard) rate, passes per frame, cue-event rate. Record in `rewrite-coord/results/`.
-3. Decision: if hazard rate is low and a load shows AI-phase share high with balanced sectors, Stage 2 is
-   worth prototyping; otherwise Stage 1 remains the deliverable and the lever is data-level (script intervals).
+## 7. Native steps (stage 0 done for two loads; stage 1 next)
+
+Stage 0: done on lanes for idle and attnload (section 3a); combat rerun with scenario v2 queued.
+Stage 1, in order (lane runs with `--overlay .local/evidence-068-withheld`, release x4lane):
+1. `X4LAN_AIDRIVER='normal'`, idle, short: the driver takes every frame (`AIDRIVE driverFrames` = frames,
+   `preflightRefusals=0`), no crash, no new engine script errors vs the census-idle log; this is the only
+   check of the helper calling conventions.
+2. `normal`, idle and attnload, ~8 min: census distributions (runs, passes, interrupt runs, attention
+   restarts, wakes) match the census runs of the same load within noise; zero `bad_caller`.
+3. `compare`, idle and attnload: fraction of order-equivalent passes and the four counters; reorder only on
+   this branch (no walkpar), deferral in the integrated build (walkpar `WP_REPLAY`, see Q9).
+4. Before ours becomes authoritative outside tests (method step 2): capture the original's per-context
+   decision trace natively (more call-site hooks inside the pinned Move body, census-only) and replay it
+   offline against `ad_process_context`; zero differences required.
 
 ## 8. Open items / coordination (`rewrite-coord/questions.md`)
 
-- **Q4 → walk**: Stage 1 must reuse the walk agent's PostEvent/Cancel/SendImmediate buffer (scoped begin/end +
-  barrier replay) for AI-phase event deferral; I will not build a second buffer. Awaiting the real API shape.
-- **Q5 → ecs-core**: barrier bucket order — I propose first-appearance-in-the-wake-vector order (deterministic,
-  thread-count invariant, no tree index); confirm vs SectorIx order from `mirror.h`.
-- **Q1 (ai-orders → me)**: the slot-565 event hooks and the Move/ExecState_Run brackets can emit the X4AITRACE
-  `run`/`ev` capture fields (ctx/entity/script/pc/wake-mask/TLS+0x318/yield) or offer a chain callback on the
-  same sites, so ai-orders does not register a second hook there. `aidriver.h` already carries an `ad_observer`
-  callback table (run_begin/run_end/event_begin/event_end) for exactly this; I will answer Q1 with its shape.
+- **Q4/Q7 (walk)**: answered — one buffer, `walkpar_api()` scopes + ordered replay; bound under
+  `#ifdef X4LAN_WALKPAR_H`. **Q9 → walk** (open): an AI-only replay mode (WP_REPLAY also defers the walk) and
+  `get_mode()`; the immediate flag in `buffer_op`; confirm `wp_cancel` kills scheduled posts of any task (the
+  code) rather than only its own (the comment).
+- **Q5 → ecs-core** (open): barrier bucket order — first appearance in the pass's read vector (deterministic,
+  thread-count invariant) vs SectorIx order.
+- **Q1 (ai-orders)**: answered — `ad.observer` callbacks (run_begin/run_end/event_begin/event_end) on my sites;
+  census script ranking published for their order choice.
+- Fleet-root keying (commander chain) is not resolved; the census reports fleets == sectors.
+- Lane-check lesson: anchor `--expect`/`--until` on real marker lines; MD error-context dumps repeat the
+  marker text (`* Expression: '... COMBATSCN engaged ...'`).
 - B6 property-lookup (partition report §10, "not located") is **located**: `Expression_PropertyLookup` 0xcec1a0
   / `EvaluateComponentProperty` 0xcedeb0 under the evaluator 0xc97cf0 — relevant to foreign-blackboard access
   inside expressions. Noted for ai-orders and a future finding row.
