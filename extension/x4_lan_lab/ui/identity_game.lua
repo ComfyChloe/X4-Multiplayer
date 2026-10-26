@@ -1,5 +1,7 @@
 -- Host display codes/names and shared sensor contacts. Native engine IDs stay local.
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
+local F=X4LAN_FEATURES
+if F then F.gate('identity',cfg and cfg.world_sync,A and A.universe,'world_sync adapter') end
 if not A or not A.universe or not cfg.world_sync then return end
 local ffi=require('ffi');local C=ffi.C;local U=A.universe;local P=X4LAN_UNIVERSE_PROTOCOL;local s=A.state
 ffi.cdef[[const char* GetObjectIDCode(UniverseID);const char* GetComponentName(UniverseID);
@@ -131,5 +133,5 @@ local original=U.frame
 function U.frame(now)
  original(now)
  if I.failed then return end
- local ok,err=pcall(frame,now);if not ok then I.failed=true;log('STOPPED '..tostring(err)) end
+ local ok,err=pcall(frame,now);if not ok then I.failed=true;log('STOPPED '..tostring(err));if F then F.disable('identity',err) end end
 end

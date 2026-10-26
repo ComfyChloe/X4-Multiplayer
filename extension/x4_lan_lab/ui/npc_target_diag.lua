@@ -1,6 +1,7 @@
 -- Log-only NPC targeting diagnostic (npc_target_diag). Starts the MD sampler once the
 -- shared ships exist and writes NPCDIAG lines; it never changes game objects.
 local cfg=X4LAN_CONFIG
+if X4LAN_FEATURES then X4LAN_FEATURES.declare('npc_target_diag',cfg and cfg.npc_target_diag,'config') end
 if not cfg or not cfg.npc_target_diag then return end
 local d={ready=false,nextTry=0}
 X4LAN_NPC_TARGET_DIAG=d

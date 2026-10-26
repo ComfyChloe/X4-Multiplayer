@@ -17,7 +17,8 @@
 -- with a mode-specific interpolation delay reached through a bounded-rate render clock.
 -- A local pause stops fire and drops queued edges. On resume, every FIRE2 frame whose source
 -- time is not newer than the resume cutoff (NAV2 source clock) is adopted without playing.
-local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
+local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API;local F=X4LAN_FEATURES
+if F then F.gate('coop',cfg and cfg.coop,A,'bubble_actions',A and A.state.active,'active bubble') end
 if not cfg or not cfg.coop or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
 pcall(ffi.cdef,[[uint32_t GetDefensibleActiveWeaponGroup(UniverseID,bool);
@@ -29,6 +30,7 @@ local fire2Ready=fire2Mode and getGroup~=nil and setGroup~=nil
 if fire2Mode and not fire2Ready then
  DebugError('[X4LAN] FIRE2_UNAVAILABLE: weapon-group API missing; remote fire disabled (no NAV fallback in fire2 mode)')
 end
+if F then if fire2Ready then F.declare('fire2',true) elseif fire2Mode then F.disable('fire2','missing prerequisite weapon-group API') else F.declare('fire2',false,'config') end end
 local M=assert(X4LAN_MOTION,'motion buffer missing')
 local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0},
  fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}},velocity={},velocityGeneration=0,modes={},fences={0,0}}
@@ -347,6 +349,7 @@ end
 -- Opt-in (cfg.motion_diagnostics = seconds between rows, or true for 0.5 s): requested
 -- vs actual replica motion. Inert and unallocated by default; no session data is logged.
 local diagnose
+if F then F.declare('motion_diagnostics',cfg.motion_diagnostics,'config') end
 if cfg.motion_diagnostics then
  local interval=tonumber(cfg.motion_diagnostics) or .5;local d={}
  local function dist(a,b) return math.sqrt((a[1]-b[1])^2+(a[2]-b[2])^2+(a[3]-b[3])^2) end

@@ -1,5 +1,7 @@
 -- The existing X4 trade sliders build the basket; only the host executes it.
 local cfg=X4LAN_CONFIG
+if X4LAN_FEATURES then X4LAN_FEATURES.gate('trading',cfg and cfg.trading,cfg and cfg.enabled,'enabled',X4LAN_BUBBLE_API,'bubble_actions',
+ X4LAN_BUBBLE_API and X4LAN_BUBBLE_API.state.active,'active bubble') end
 if not cfg or not cfg.enabled or not cfg.trading or not X4LAN_BUBBLE_API then return end
 local A=X4LAN_BUBBLE_API
 local s=A.state

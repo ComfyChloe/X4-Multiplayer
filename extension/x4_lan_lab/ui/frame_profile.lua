@@ -3,6 +3,7 @@
 -- Loaded early (before the adapters) so it can count Lua->MD and MD->Lua events;
 -- frame_profile_install.lua wraps the subsystem entry points after they exist.
 local cfg=X4LAN_CONFIG
+if X4LAN_FEATURES then X4LAN_FEATURES.gate('frame_profile',cfg and cfg.frame_profile==true,cfg and cfg.enabled,'enabled',X4LAN_MEASURE,'measure_clock') end
 if not cfg or not cfg.enabled or cfg.frame_profile~=true then return end
 local M=X4LAN_MEASURE
 if not M then return end

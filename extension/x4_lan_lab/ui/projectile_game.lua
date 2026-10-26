@@ -1,6 +1,9 @@
 -- Guarded observed shots. No native or network
 -- work occurs without the complete damage/proof/capture stack and explicit flag.
-local A,cfg=X4LAN_BUBBLE_API,X4LAN_CONFIG
+local A,cfg,F=X4LAN_BUBBLE_API,X4LAN_CONFIG,X4LAN_FEATURES
+if F then F.gate('projectile_visuals',cfg and cfg.projectile_visuals,cfg and cfg.shot_visual,'shot_visual',cfg and cfg.shot_capture,'shot_capture',
+ cfg and cfg.shot_claims,'shot_claims',cfg and cfg.pilot_health,'pilot_health',cfg and cfg.fire2,'fire2',A and A.coop,'coop adapter',
+ A and A.health,'pilot_health adapter',A and A.shot,'shot_claims adapter',A and A.shotVisual,'shot_visual adapter') end
 if not cfg or not cfg.projectile_visuals or not cfg.shot_visual or not cfg.shot_capture
  or not cfg.shot_claims or not cfg.pilot_health or not cfg.fire2 or not A
  or not A.coop or not A.health or not A.shot or not A.shotVisual then return end
@@ -233,6 +236,7 @@ end
 function x.fail(err)
  if x.failed then return end
  x.failed=true;log('STOPPED '..tostring(err));x.captures={}
+ if F then F.disable('projectile_visuals',err) end
  pcall(event,'Stop');for _,q in pairs(x.contexts) do q.enabled=false end;x.slots={}
 end
 local frame,receive=c.frame,c.receive

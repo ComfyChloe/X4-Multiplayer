@@ -17,6 +17,7 @@ from concurrent.futures import ThreadPoolExecutor
 from .host import LEASE_SECONDS, STATE_SECONDS, Relay
 from .economy import EconomySession
 from .coop import CoopSession
+from .features import relay_features
 
 
 def addresses():
@@ -121,8 +122,9 @@ def combat(session, now):
 
 
 class Monitor:
-    def __init__(self, relay, now, version='unversioned'):
+    def __init__(self, relay, now, version='unversioned', features=None):
         self.relay = relay
+        self.features = features if features is not None else relay_features(relay.session)
         self.version = version
         self.started = self.previous_at = now
         self.previous = {}
@@ -132,6 +134,10 @@ class Monitor:
         self.revisions = {}
         self.cpu_at = time.process_time()
         self.event('SERVER STARTED', now)
+        counts = self.features.as_dict().values()
+        self.event(f'FEATURES {sum(v["state"] == "on" for v in counts)} on, '
+                   f'{sum(v["state"] == "off" for v in counts)} off, '
+                   f'{sum(v["state"] == "auto_disabled" for v in counts)} auto-disabled', now)
 
     def event(self, message, now):
         self.events.append({'at': round(now - self.started, 1), 'message': message})
@@ -215,7 +221,7 @@ class Monitor:
                                 'rx_hz': round((rx - self.totals[0]) / elapsed, 1),
                                 'tx_hz': round((tx - self.totals[1]) / elapsed, 1),
                                 'send_errors': self.relay.send_errors},
-                    'events': list(self.events),
+                    'events': list(self.events), 'features': self.features.as_dict(),
                     'relay_process': {'cpu_percent_one_core': round(cpu_percent,2), 'peak_memory_mib': round(memory_mib,1) if memory_mib is not None else None}}
         if isinstance(session, CoopSession):
             snapshot['fleet'] = [{'ship': i, 'owner': session.owners[i], 'pilot': session.pilot(i),
@@ -280,6 +286,14 @@ def render(state, width=100, attached=False):
     if quest:
         status = 'COMPLETED' if quest['stage']==3 else 'DELIVERY' if quest['stage']==1 else 'COMBAT'
         lines.append(f' Shared mission: {status}  Energy Cells {quest["delivered"]}/20  Targets {quest["destroyed"]}/2')
+    features = state.get('features') or {}
+    if features:
+        on = sum(v['state'] == 'on' for v in features.values())
+        lines.append(f' FEATURES  {on}/{len(features)} on')
+        for name, item in features.items():
+            if item['state'] != 'on':
+                label = 'AUTO-DISABLED' if item['state'] == 'auto_disabled' else 'off'
+                lines.append(f'   {label:<13} {name}: {item["reason"]}')
     net = state['network']
     lines += [f'   Pending trades: {state["pending_trades"]}   Container actions: {state["pending_actions"]}',
               f' Network packets/s  IN {net["rx_hz"]:.1f}  OUT {net["tx_hz"]:.1f}  Send errors {net["send_errors"]}',
@@ -375,7 +389,13 @@ def run(config, logs: Path, version='unversioned'):
         raise RuntimeError(f'UDP port {config["port"]} is used by another server or package pair. '
                            'Close that server before starting this one.') from None
     now = time.monotonic()
-    monitor = Monitor(relay, now, version)
+    startup = []
+    features = relay_features(relay.session, config, log=startup.append)
+    startup.append(features.summary())
+    for line in startup:  # printed before the full-screen view, so it stays in the terminal history
+        print(line, flush=True)
+    features.log = lambda line: print(line, flush=True)
+    monitor = Monitor(relay, now, version, features)
     screen = Screen()
     path = logs / ('server-' + datetime.now().strftime('%Y%m%d-%H%M%S-%f') + '.jsonl')
     next_refresh = next_addresses = 0
@@ -392,6 +412,7 @@ def run(config, logs: Path, version='unversioned'):
         screen.show(state)
     try:
         with path.open('w', buffering=1) as log:
+            log.write(json.dumps({'log': startup}, ensure_ascii=True) + '\n')
             try:
                 while True:
                     now = time.monotonic()

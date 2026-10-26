@@ -36,4 +36,5 @@ if type(A.frame)=='function' then
  X4LAN_MEASURE.log('FRAMECOST installed root=bubble wrappers='..#installed..' '..table.concat(installed,','))
 else
  X4LAN_MEASURE.log('FRAMECOST inactive: bubble frame root unavailable')
+ if X4LAN_FEATURES then X4LAN_FEATURES.disable('frame_profile','bubble frame root unavailable') end
 end

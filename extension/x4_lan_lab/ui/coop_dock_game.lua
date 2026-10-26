@@ -1,7 +1,8 @@
 -- Optional saved-bay observations. A matching NAV/CDOCK pair is required before
 -- free-flight writes; neither a missing packet nor an unknown dock means FREE.
 -- Attachment execution is separate and is not enabled by this observer alone.
-local cfg,A=X4LAN_CONFIG,X4LAN_BUBBLE_API
+local cfg,A,F=X4LAN_CONFIG,X4LAN_BUBBLE_API,X4LAN_FEATURES
+if F then F.gate('coop_docks',cfg and cfg.coop_docks,A and A.coop,'coop adapter') end
 if not cfg or not cfg.coop_docks or not A or not A.coop then return end
 local c,s=A.coop,A.state
 local C=require('ffi').C
@@ -20,6 +21,7 @@ local function send(v) if s.client and s.client.lease then s.transport:send(v) e
 local function stop(reason)
  d.closed=true;d.ready=false;d.localRows={};d.remote={}
  c.stopVelocity(false);log('STOPPED '..tostring(reason))
+ if F then F.disable('coop_docks',reason) end
 end
 local function localRow(e,now)
  local r=d.localRows[e]

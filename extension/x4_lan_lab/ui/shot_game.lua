@@ -10,6 +10,8 @@
 --  forwarded to the victim's authority with the source lease after the recipient lease.
 -- Generations are the relay's health generations (HGEN, health_game.lua); LAN targets use 0.
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
+local F=X4LAN_FEATURES
+if F then F.gate('shot_claims',cfg and cfg.shot_claims,cfg and cfg.coop,'coop',cfg and cfg.pilot_health,'pilot_health',A and A.coop,'coop adapter',A and A.health,'pilot_health adapter',A and A.state.active,'active bubble') end
 if not cfg or not cfg.coop or not cfg.shot_claims or not cfg.pilot_health or not A or not A.coop or not A.health or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C
 pcall(ffi.cdef,[[typedef struct {
@@ -206,6 +208,7 @@ end
 function d.fail(err)
  if d.failed then return end
  d.failed=true;log('SHOT STOPPED '..tostring(err))
+ if F then F.disable('shot_claims',err) end
  d.totals,d.pending,d.inflight={},{},{}
  pcall(AddUITriggeredEvent,'X4LAN_Shot','Stop')
  for e=1,2 do pcall(AddUITriggeredEvent,'X4LAN_Shot','Support',{entity=e,strength=0}) end

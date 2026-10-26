@@ -1,5 +1,6 @@
 -- Shared mission display; the host MD script owns progression and the reward.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
+if X4LAN_FEATURES then X4LAN_FEATURES.gate('quests',cfg and cfg.coop,A,'bubble_actions',A and A.state.active,'active bubble') end
 if not cfg or not cfg.coop or not A or not A.state.active then return end
 local s=A.state;local q={revision=-1};A.quest=q
 local function integer(v,max)

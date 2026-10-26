@@ -1,6 +1,7 @@
 -- Player life state is independent of the original shared ship and its cargo.
 local cfg=X4LAN_CONFIG
 local A=X4LAN_BUBBLE_API
+if X4LAN_FEATURES then X4LAN_FEATURES.gate('life',cfg and cfg.enabled and cfg.bubble_actions,A and A.state.active,'active bubble') end
 if not cfg or not cfg.enabled or not cfg.bubble_actions or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
 ffi.cdef[[void RemoveComponent(UniverseID);]]

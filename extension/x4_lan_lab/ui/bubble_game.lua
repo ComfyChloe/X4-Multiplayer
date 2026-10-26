@@ -1,5 +1,6 @@
 -- Host-authoritative test bubble. Coordinates, damage and inventory are separate channels.
-local cfg=X4LAN_CONFIG
+local cfg=X4LAN_CONFIG;local F=X4LAN_FEATURES
+if F then F.gate('bubble_actions',cfg and cfg.bubble_actions,cfg and cfg.enabled,'enabled') end
 if not cfg or not cfg.enabled or not cfg.bubble_actions then return end
 local ffi=require('ffi')
 local C=ffi.C
@@ -205,8 +206,9 @@ end
 -- Looked up per frame so the opt-in frame profiler can wrap it; nothing else replaces it.
 X4LAN_BUBBLE_API.frame=frame
 local function safeFrame()
+ if F then pcall(F.tick) end -- also ticked by features.lua's own onUpdate
  local ok,e=pcall(X4LAN_BUBBLE_API.frame)
- if not ok then log('BUBBLE STOPPED: '..tostring(e));pcall(closeNetwork);s.failed=true end
+ if not ok then log('BUBBLE STOPPED: '..tostring(e));pcall(closeNetwork);s.failed=true;if F then F.disable('bubble_actions',e) end end
 end
 local ok,e=pcall(function()
  local path=ffi.string(C.GetSaveFolderPath()):gsub('\\','/'):gsub('/+$','')
@@ -228,13 +230,14 @@ local ok,e=pcall(function()
   if not r or s.failed or s.shipsReady then return end
   if not r.own or not r.proxy or r.own==r.proxy or r.own==r.original or r.proxy==r.original or
      r.own==0 or r.proxy==0 or not C.IsComponentOperational(r.own) or not C.IsComponentOperational(r.proxy) then
-   s.failed=true;log('BUBBLE STOPPED: incomplete native shared ship preparation');return
+   s.failed=true;log('BUBBLE STOPPED: incomplete native shared ship preparation')
+   if F then F.disable('bubble_actions','incomplete native shared ship preparation') end;return
   end
   s.shipsReady=true;log('shared ship ready: '..cfg.ship_macro)
  end)
  RegisterEvent('X4LAN_Bubble.ShipsRefused',function(_,reason)
   log('BUBBLE STOPPED: shared ship '..tostring(cfg.ship_macro)..' refused ('..tostring(reason)..'); no substitute ship is used')
-  pcall(closeNetwork);s.failed=true
+  pcall(closeNetwork);s.failed=true;if F then F.disable('bubble_actions','shared ship refused') end
  end)
  RegisterEvent('X4LAN_Bubble.Fire',function() s.fire=s.fire+1 end)
  RegisterEvent('X4LAN_Bubble.World',function(_,payload)
@@ -256,4 +259,4 @@ local ok,e=pcall(function()
  SetScript('onUpdate',safeFrame)
  log('authoritative bubble adapter armed; slot='..cfg.slot)
 end)
-if not ok then log('bubble initialisation failed: '..tostring(e)) end
+if not ok then log('bubble initialisation failed: '..tostring(e));if F then F.disable('bubble_actions',e) end end

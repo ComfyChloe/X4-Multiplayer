@@ -1,6 +1,7 @@
 -- Optional pristine-host-save admission. The launcher verifies bytes/content
 -- before staging save_010; the native gate verifies the loaded MD world marker.
-local cfg=X4LAN_CONFIG
+local cfg=X4LAN_CONFIG;local F=X4LAN_FEATURES
+if F then F.declare('seed_gate',cfg and cfg.enabled and cfg.seed_id~=nil,'config: no seed_id') end
 if not cfg or not cfg.enabled or cfg.seed_id==nil then return end
 local G={ready=false};X4LAN_SEED_GATE=G
 local ffi=require('ffi');local C=ffi.C
@@ -9,7 +10,7 @@ bool IsPlayerValid(void);bool IsSaveListLoadingComplete(void);
 void ReloadSaveList(void);const char* GetSaveFolderPath(void);
 ]]
 local function log(text) DebugError('[X4LAN] SEED_GATE '..text) end
-local function fail(reason) G.failed=reason;G.ready=false;log('STOPPED '..reason) end
+local function fail(reason) G.failed=reason;G.ready=false;log('STOPPED '..reason);if F then F.disable('seed_gate',reason) end end
 local function valid()
  if cfg.seed_content then X4LAN_SEED_CONTENT(cfg.seed_content) end
  assert(cfg.test_profile=='45841' and cfg.bubble_actions and cfg.coop and cfg.world_sync,

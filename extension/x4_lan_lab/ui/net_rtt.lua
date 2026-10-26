@@ -5,9 +5,10 @@
 -- echo_relay_ms/hold_ms return the newest RTTPONG relay time and how long the client held
 -- it, so the relay can measure RTT from its side as well ('-' when none is available).
 -- RTT samples are read once per frame by the UI, so they include up to one frame interval.
-local cfg=X4LAN_CONFIG
+local cfg=X4LAN_CONFIG;local M=X4LAN_MEASURE
+if X4LAN_FEATURES then X4LAN_FEATURES.gate('net_probe',cfg and cfg.net_probe==true,cfg and cfg.enabled,'enabled',M,'measure_clock',
+ X4LAN_CLIENT,'client.lua',X4LAN_TRANSPORT,'transport.lua') end
 if not cfg or not cfg.enabled or cfg.net_probe~=true then return end
-local M=X4LAN_MEASURE
 if not M or not X4LAN_CLIENT or not X4LAN_TRANSPORT then return end
 local clock=M.clock
 local interval=tonumber(cfg.net_probe_interval) or .25

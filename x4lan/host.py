@@ -272,6 +272,8 @@ def main() -> None:
     relay = Relay(args.bind, port, session)
     print(f"X4 LAN transform relay on {args.bind}:{port}; build={build}; bubble={bubble}", flush=True)
     print("Experimental host-authoritative test bubble." if args.bubble_actions or args.trading else "Experiment: client poses only; no shared physics, damage, AI or economy.", flush=True)
+    from .features import relay_features
+    print(relay_features(session, config, log=lambda line: print(line, flush=True)).summary(), flush=True)
     last_status = ""
     try:
         while True:

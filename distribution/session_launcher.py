@@ -131,6 +131,8 @@ def session_package_id(session, slot):
 
 
 def session_config(session, slot, host):
+    # Development rule: features are on in internal packages unless they break something; a flag
+    # left false needs a recorded reason in x4lan.features.INTERNAL_OFF_REASONS (see print_config_features).
     cfg = dict(enabled=True, interaction_test=False, bubble_actions=True, trading=True,
                walking_avatars=False, test_profile=PROFILE, host=host, port=PORT,
                token=session['token'], build=BUILD, bubble=session['bubble'], coop=True, fire2=True,
@@ -210,6 +212,18 @@ def recover_session_metadata():
                 raise RuntimeError('Recovery rollback incomplete. Preserve backup: ' + str(backup)) from error
             raise
     print('Recovered existing session metadata; session key and installed world are unchanged.')
+    print_config_features(session_config(saved, slot, saved['host']))
+
+
+def print_config_features(config_text):
+    """Log the features of a generated internal config.lua (FEATURES line, dev rule)."""
+    from x4lan.features import config_features
+    settings = {m[1]: json.loads(m[2]) for m in re.finditer(r'^    (\w+) = (.*),$', config_text, re.M)}
+    features = config_features(settings)
+    print('Generated internal config: ' + features.summary())
+    for name, item in features.as_dict().items():
+        if item['state'] == 'off' and item['reason'] == 'no recorded reason':
+            print('WARNING: feature ' + name + ' is off in the internal config without a recorded reason.')
 
 
 def configure(role, server=None, invite=None):
@@ -241,6 +255,7 @@ def configure(role, server=None, invite=None):
         if role == 'host': write_json(ROOT / 'JOIN-SESSION.json', session)
         write_json(ROOT / 'session.json', {**session, 'host': host})
     print('Session configured as ' + role.upper() + ' (' + package['slot'] + ').')
+    print_config_features(session_config(session, package['slot'], host))
     if role == 'host':
         print('Send JOIN-SESSION.json privately to your other player. Keep it out of public downloads.')
 

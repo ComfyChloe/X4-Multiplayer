@@ -2,6 +2,15 @@
 -- still needs live validation on the user's exact Linux and Windows builds.
 local cfg = X4LAN_CONFIG
 local function log(message) DebugError("[X4LAN] " .. tostring(message)) end
+local F = X4LAN_FEATURES
+-- Legacy telemetry/proxy adapter, used only without bubble_actions; interaction_test is its
+-- destructive fixture and stays off unless a test names it.
+if F then
+    local legacy = cfg and cfg.enabled and not cfg.bubble_actions
+    F.declare("legacy_adapter", legacy and not cfg.seed_id, cfg and cfg.bubble_actions and "superseded by bubble_actions" or "config")
+    F.declare("interaction_test", legacy and not cfg.seed_id and cfg.interaction_test, legacy and not cfg.seed_id and "destructive fixture; config" or "legacy adapter inactive")
+    if legacy and cfg.seed_id then F.disable("legacy_adapter", "seed admission requires bubble_actions") end
+end
 if not cfg or not cfg.enabled then log("disabled; prepare a client package first"); return end
 if cfg.bubble_actions then return end
 if cfg.seed_id then log("ADAPTER STOPPED: seed admission requires cooperative bubble mode"); return end
@@ -176,11 +185,13 @@ local function frame()
     end
 end
 local function safeFrame()
+    if F then pcall(F.tick) end -- also ticked by features.lua's own onUpdate
     local ok, err = pcall(frame)
     if not ok then
         log("STOPPED: " .. tostring(err))
         pcall(function() reset(false) end)
         state.failed = true
+        if F then F.disable("legacy_adapter", err) end
     end
 end
 local ok, err = pcall(function()
@@ -206,4 +217,7 @@ local ok, err = pcall(function()
     SetScript("onUpdate", safeFrame)
     log("adapter armed in isolated profile " .. profile .. "; awaiting world readiness")
 end)
-if not ok then log("initialisation failed: " .. tostring(err)) end
+if not ok then
+    log("initialisation failed: " .. tostring(err))
+    if F then F.disable("legacy_adapter", err) end
+end

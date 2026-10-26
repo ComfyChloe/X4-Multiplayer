@@ -1,6 +1,7 @@
 -- One-time host bootstrap. Saves a pristine native world before any MP fixtures,
 -- then exits through the normal game API. Loading/playing is a separate launch.
-local cfg=X4LAN_CONFIG
+local cfg=X4LAN_CONFIG;local F=X4LAN_FEATURES
+if F then F.declare('seed_capture',cfg and cfg.seed_capture,'config: world preparation only') end
 if not cfg or not cfg.seed_capture then return end
 local ffi=require('ffi');local C=ffi.C
 ffi.cdef[[bool IsPlayerValid(void);bool IsGamePaused(void);
@@ -9,6 +10,7 @@ local s={};X4LAN_SEED_CAPTURE=s
 local function log(text) DebugError('[X4LAN] WORLD_CAPTURE '..text) end
 local function fail(reason)
  s.failed=tostring(reason);log('STOPPED '..s.failed)
+ if F then F.disable('seed_capture',s.failed) end
  if s.paused and C.IsGamePaused() then Pause() end
  s.paused=false
 end

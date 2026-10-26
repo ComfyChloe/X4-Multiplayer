@@ -1,5 +1,7 @@
 -- Original native jettison/magnet bridge. Inventory and drop lifetime belong to host X4.
 local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
+local F=X4LAN_FEATURES
+if F then F.gate('cargo',cfg and cfg.world_sync,A and A.universe,'world_sync adapter') end
 if not A or not A.universe or not cfg.world_sync then return end
 local ffi=require('ffi');local C=ffi.C;local U=A.universe;local P=X4LAN_UNIVERSE_PROTOCOL;local s=A.state
 local g={drops={},queue={},held={},executed={},inventory={},inventorySeq=0,counter=0,creationSeq=0};A.cargo=g
@@ -135,7 +137,7 @@ function U.frame(now)
  originalFrame(now)
  if g.failed then return end
  local ok,err=pcall(frame,now)
- if not ok then g.failed=true;log('STOPPED '..tostring(err)) end
+ if not ok then g.failed=true;log('STOPPED '..tostring(err));if F then F.disable('cargo',err) end end
 end
 RegisterEvent('X4LAN_Cargo.Ready',function() g.ready=true;log('READY slot='..cfg.slot) end)
 RegisterEvent('X4LAN_Cargo.HostDrop',function(_,payload)
@@ -209,5 +211,6 @@ RegisterEvent('X4LAN_Cargo.CreateFailed',function(_,payload)
  local f=P.split(payload,'|');local id=P.integer(f[1]);local generation=P.integer(f[2]);local r=id and U.replicas[id]
  if #f~=4 or not r or not generation or r.creating~=generation then return end
  r.creating=nil;g.failed=true;log('STOPPED native donor cannot create cargo: '..payload)
+ if F then F.disable('cargo','native donor cannot create cargo') end
  AddUITriggeredEvent('X4LAN_Trade','Notice','Cargo replication stopped: the native container could not be created. Please end this internal test and collect diagnostics.')
 end)

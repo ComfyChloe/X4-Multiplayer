@@ -6,7 +6,12 @@
 -- (maxcombatrange.lasers.all, reported by MD) over the admitted weapon's library bulletspeed,
 -- times a margin; nothing is assumed, a missing value refuses capture. MD's native cumulative
 -- counts feed shot_game.lua as totals, never as increments.
-local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
+local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG;local F=X4LAN_FEATURES
+if F then
+ local on=F.gate('shot_capture',cfg and cfg.shot_capture,cfg and cfg.coop,'coop',cfg and cfg.shot_claims,'shot_claims',cfg and cfg.pilot_health,'pilot_health',
+  A and A.shot,'shot_claims adapter',A and A.health,'pilot_health adapter',A and A.coop,'coop adapter')
+ F.declare('shot_undo',on and cfg.shot_undo==true,on and 'diagnostic; delays shield recharge' or 'requires shot_capture')
+end
 if not cfg or not cfg.coop or not cfg.shot_capture or not cfg.shot_claims or not cfg.pilot_health or not A or not A.shot or not A.health or not A.coop then return end
 local c,s,h,d=A.coop,A.state,A.health,A.shot
 local k={revision=0,range={}};A.shotCapture=k
@@ -65,6 +70,7 @@ end
 function k.fail(err)
  if k.failed then return end
  k.failed=true;log('SHOT_CAPTURE STOPPED '..tostring(err))
+ if F then F.disable('shot_capture',err) end
  pcall(AddUITriggeredEvent,'X4LAN_ShotCapture','Stop',{})
 end
 

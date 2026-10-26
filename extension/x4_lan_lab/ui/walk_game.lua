@@ -1,6 +1,8 @@
 -- Basic standing avatar; only the four explicitly shared containers are mapped.
 local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API
 -- Experimental room mapping is not yet visually verified; release packages leave this off.
+if X4LAN_FEATURES then X4LAN_FEATURES.gate('walking_avatars',cfg and cfg.walking_avatars==true,cfg and cfg.enabled and cfg.trading,'trading',
+ A and A.state.active,'active bubble') end
 if not cfg or not cfg.enabled or not cfg.trading or cfg.walking_avatars~=true or not A or not A.state.active then return end
 local s=A.state;local w={sequence=0,remoteSequence=-1};A.walk=w
 local function pose(fields,start)

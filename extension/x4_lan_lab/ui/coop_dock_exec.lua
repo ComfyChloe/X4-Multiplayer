@@ -1,6 +1,7 @@
 -- Optional exact-bay execution. Prepared operations are local capabilities;
 -- native handles are obtained locally and are never accepted from the network.
 local A,cfg=X4LAN_BUBBLE_API,X4LAN_CONFIG
+if X4LAN_FEATURES then X4LAN_FEATURES.gate('coop_dock_exec',cfg and cfg.coop_docks,A and A.coopDocks,'coop_docks adapter') end
 if not A or not A.coopDocks or not cfg.coop_docks then return end
 local d,c,s=A.coopDocks,A.coop,A.state
 local x={generation={0,0},ack={0,0},keys={},operation=0,epoch=A.nonce()};d.execution=x

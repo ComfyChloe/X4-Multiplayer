@@ -242,6 +242,22 @@ process CPU/peak RSS, ship pilots, world/economy revisions and quest progress.
 These distinguish relay workload from gaps in game updates, not rendering FPS or
 network ping. Logs omit session keys. Their IP addresses are diagnostic data.
 
+Feature visibility (dev rule). `ui/features.lua` loads right after `config.lua` and
+before every adapter. Each adapter reports its flag once at load with
+`X4LAN_FEATURES.gate(name, flag, prerequisite, label, ...)` or `declare(name, enabled,
+reason)`; its failure path calls `disable(name, reason)`, which logs exactly one
+`[X4LAN] FEATURE <name> DISABLED reason=...` per transition (`resume(name)` logs
+`FEATURE <name> RESUMED`). On the first frame, and again at most every 10 s when the
+set changed, the client logs `[X4LAN] FEATURES on=a,b off=c(reason) auto_disabled=d(reason)`.
+A config flag no loaded adapter declared is listed too; a set one is auto-disabled with
+`not declared by any loaded adapter`. Adapters must also work without the helper
+(`if F then ... end`). The relay (`x4lan/features.py`) prints the same `FEATURES` line
+for its session features at startup, writes it as the first record of
+`server-*.jsonl`, and publishes `features` in `server-status.json`; the dashboard lists
+off and auto-disabled features with reasons. The launcher prints the `FEATURES` line of
+each generated internal config; a flag left false there needs a reason in
+`INTERNAL_OFF_REASONS`. Client features are not sent to the relay.
+
 Profile 45841 is required for activation. Launchers protect links and existing
 saves, back up config changes, disable autosave and apply Full HD exclusive Low
 with a 60 FPS cap. Development harnesses run only in a backed-up test installation

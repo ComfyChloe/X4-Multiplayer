@@ -20,7 +20,8 @@
 -- MD readback they were derived from (MD's own player.systemtime, as x4lan_attachment.xml); MD
 -- executes them only unpaused, in that same second and window, so nothing queued before a pause
 -- or a stall lands after it. A refused write is simply issued again from a fresh readback.
-local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
+local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG;local F=X4LAN_FEATURES
+if F then F.gate('pilot_health',cfg and cfg.pilot_health,cfg and cfg.coop,'coop',A and A.coop,'coop adapter',A and A.state.active,'active bubble') end
 if not cfg or not cfg.coop or not cfg.pilot_health or not A or not A.coop or not A.state.active then return end
 local c=A.coop;local s=A.state
 local h={seq=0,valid={},gen={0,0},last={0,0},closed={0,0},stale={0,0},remote={},auth={{0,false},{0,false}}};A.health=h
@@ -77,6 +78,7 @@ local function valid(e,gen) return gen==h.valid[e] and gen>h.closed[e] end
 function h.fail(err)
  if h.failed then return end
  h.failed=true;log('HEALTH STOPPED '..tostring(err))
+ if F then F.disable('pilot_health',err) end
  for e=1,2 do
   local used=math.max(h.gen[e],h.valid[e] or 0,h.remote[e] and h.remote[e].gen or 0)
   for _,k in ipairs({'live','basing'}) do if h[k] and h[k].entity==e then used=math.max(used,h[k].gen) end end

@@ -1,6 +1,7 @@
 -- INTERNAL opt-in NPC combat. Native MD owns capture, health and deduplication.
 -- Initially free-flying S/M NPC hulls only, with the existing admitted stock guns.
-local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG
+local A=X4LAN_BUBBLE_API;local cfg=X4LAN_CONFIG;local F=X4LAN_FEATURES
+if F then F.gate('npc_combat',cfg and cfg.npc_combat,A and A.universe,'world_sync adapter',A and A.shotCapture,'shot_capture adapter') end
 if not cfg or not cfg.npc_combat or not A or not A.universe or not A.shotCapture then return end
 local ffi=require('ffi');local C=ffi.C
 pcall(ffi.cdef,'const char* GetObjectIDCode(UniverseID);')
@@ -27,6 +28,7 @@ function n.code(object) return ffi.string(nativeCode(object)) end
 function n.fail(reason)
  if n.failed then return end
  n.failed=true;log('STOPPED '..tostring(reason));AddUITriggeredEvent('X4LAN_NpcCombat','Stop',{})
+ if F then F.disable('npc_combat',reason) end
 end
 local function safe(r)
  if r.retired then return false end

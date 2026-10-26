@@ -1,7 +1,9 @@
 -- Inert, opt-in projectile macro proof. Native preparation ACK precedes switching.
 -- Legacy replay is stopped; observed mode excludes scripted replay before Prepare.
 -- Original installed guns, equipment mods and weapon groups are never replaced.
-local A,cfg=X4LAN_BUBBLE_API,X4LAN_CONFIG
+local A,cfg,F=X4LAN_BUBBLE_API,X4LAN_CONFIG,X4LAN_FEATURES
+if F then F.gate('shot_visual',cfg and cfg.shot_visual,cfg and cfg.fire2,'fire2',cfg and cfg.shot_claims,'shot_claims',cfg and cfg.pilot_health,'pilot_health',
+ A and A.shot,'shot_claims adapter',A and A.health,'pilot_health adapter',A and A.coop,'coop adapter') end
 if not cfg or not cfg.shot_visual or not cfg.fire2 or not cfg.shot_claims or not cfg.pilot_health
  or not A or not A.shot or not A.health or not A.coop then return end
 local ffi=require('ffi');local C=ffi.C
@@ -97,6 +99,7 @@ end
 function v.fail(err)
  if v.failed then return end
  v.failed=true;log('STOPPED '..tostring(err))
+ if F then F.disable('shot_visual',err) end
  pcall(AddUITriggeredEvent,'X4LAN_ShotVisual','Stop',{})
  d.fail('visual proof stopped')
 end

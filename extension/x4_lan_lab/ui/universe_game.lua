@@ -1,6 +1,7 @@
 -- Original INTERNAL W01 NPC replication adapter. No third-party framework.
 -- Native cargo uses a separate authority adapter; NPC combat remains separate work.
-local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API;local P=X4LAN_UNIVERSE_PROTOCOL
+local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API;local P=X4LAN_UNIVERSE_PROTOCOL;local F=X4LAN_FEATURES
+if F then F.gate('world_sync',cfg and cfg.world_sync,A,'bubble_actions',A and A.state.active,'active bubble') end
 if not cfg or not cfg.world_sync or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
 local M=assert(X4LAN_MOTION,'motion buffer missing')
@@ -31,7 +32,10 @@ u.npcMotion=NPC
 -- false in the inert source config). Counts only; nothing is computed when off.
 local diagEvery=cfg.npc_motion_diagnostics==true and 1 or tonumber(cfg.npc_motion_diagnostics)
 if diagEvery and diagEvery<=0 then diagEvery=nil end
-local function feature(name,reason) DebugError('[X4LAN] FEATURE '..name..' DISABLED reason='..reason) end
+local function feature(name,reason)
+ if F then F.disable(name,reason) else DebugError('[X4LAN] FEATURE '..name..' DISABLED reason='..reason) end
+end
+if F then F.declare('npc_motion_diagnostics',diagEvery,'config');F.declare('npc_replicas',cfg.world_mode=='replica','config: world_mode='..tostring(cfg.world_mode)) end
 if not diagEvery and cfg.npc_motion_diagnostics then feature('npc_motion_diagnostics','invalid_value') end
 local diag={}
 local function count(name,n) if diagEvery then diag[name]=(diag[name] or 0)+(n or 1) end end
@@ -318,7 +322,7 @@ local function frame(now)
   if cfg.world_mode=='replica' and u.latest and now-u.acceptedAt>=15 then
    count('paused')
    if not u.renderPaused then u.renderPaused=true;feature('npc_replicas','baseline_stale age='..string.format('%.1f',now-u.acceptedAt)) end
-  elseif u.renderPaused and u.latest then u.renderPaused=nil;log('FEATURE_RESUMED npc_replicas') end
+  elseif u.renderPaused and u.latest then u.renderPaused=nil;if F then F.resume('npc_replicas') else log('FEATURE_RESUMED npc_replicas') end end
   if cfg.world_mode=='replica' and u.latest and now-u.acceptedAt<15 then
    render(now,sector)
    if not u.scan and now>=(u.nextScan or 0) then u.scan=beginScan(name,sector) end

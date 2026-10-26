@@ -1,5 +1,6 @@
 -- Native host missions, mirrored in the guest's ordinary mission interface.
 local cfg,A=X4LAN_CONFIG,X4LAN_BUBBLE_API
+if X4LAN_FEATURES then X4LAN_FEATURES.gate('faction_missions',cfg and cfg.faction_missions,A and A.coop,'coop adapter',A and A.health,'pilot_health adapter') end
 if not cfg or not cfg.faction_missions or not A or not A.coop or not A.health then return end
 local P,M=X4LAN_UNIVERSE_PROTOCOL,X4LAN_MISSION_PROTOCOL
 local s,h=A.state,A.health
