@@ -11,7 +11,7 @@ Timing is only trustworthy without any X4 running and without other heavy load: 
 `x4lane hold --agent ecs-core -- python rust/x4mp-sim/bench/matrix.py ...` in the quiet window.
 
   python rust/x4mp-sim/bench/matrix.py [--shape CAPTURE.x4cap] [--passes 3] [--frames 200]
-      [--warmup 20] [--out DIR] [--smoke]
+      [--warmup 20] [--out DIR] [--bench EXE] [--no-build] [--smoke]
 """
 import argparse
 import csv
@@ -78,14 +78,20 @@ def main():
     ap.add_argument('--out', type=Path)
     ap.add_argument('--smoke', action='store_true', help='tiny matrix to test the runner')
     ap.add_argument('--no-build', action='store_true')
+    ap.add_argument('--bench', type=Path, help='benchmark binary (default: target/release; implies --no-build)')
     a = ap.parse_args()
+    global BENCH
+    if a.bench:
+        BENCH = a.bench.resolve()
+        a.no_build = True
 
     stamp = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
     out = a.out or ROOT / '.local' / 'bench' / stamp
     out.mkdir(parents=True, exist_ok=True)
     meta = {'started': datetime.datetime.now().astimezone().isoformat(timespec='seconds'), 'machine': machine(),
-            'x4_before': x4_processes(), 'args': vars(a) | {'shape': str(a.shape) if a.shape else None,
-                                                            'out': str(out)}}
+            'x4_before': x4_processes(), 'bench': str(BENCH),
+            'args': vars(a) | {'shape': str(a.shape) if a.shape else None, 'out': str(out),
+                               'bench': str(a.bench) if a.bench else None}}
     if not a.no_build:
         subprocess.run(['cargo', 'build', '--release', '-p', 'x4mp-sim', '--bin', 'x4mp-sim-bench'],
                        cwd=RUST, check=True)
