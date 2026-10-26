@@ -77,6 +77,26 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(split['frames']['ids'], 2)
         self.assertEqual(split['stats']['splitRenderSteps'], 90000)
 
+    def test_stability_reports_cadence_commit_and_errors(self):
+        log = write([
+            '[=ERROR=] 10.00 [X4LAN] FRAMEDIET mode=diet sites=all phase=all t=10.000 frames=600 commitMb=2000.0',
+            '[=ERROR=] 40.00 [X4LAN] FRAMEDIET mode=diet sites=all phase=all t=40.000 frames=2400 commitMb=2010.5',
+            '[=ERROR=] 40.00 [X4LAN] FRAMEDIET phase=pass t=40.000 frames=2400',
+            '[=ERROR=] 75.00 [X4LAN] FRAMEDIET mode=diet sites=all phase=pass t=75.000 frames=4500 commitMb=2011.0',
+            '[General] 50.00 Lua error: ui/addons/foo.lua:12: attempt to index nil',
+            '[General] 60.00 Lua error: ui/addons/foo.lua:12: attempt to index nil',
+            '[=ERROR=] 80.00 [X4LAN] FEATURE framediet DISABLED reason=vtable entry changed',
+        ])
+        r = fa.stability(log)
+        self.assertEqual(r['reports'], 3)
+        self.assertAlmostEqual(r['max_gap_s'], 35.0)
+        self.assertEqual((r['frames_first'], r['frames_last']), (600, 4500))
+        self.assertEqual(r['commit_mb']['start'], (2000.0, 2010.5))
+        self.assertEqual(r['commit_mb']['pass'], (2011.0, 2011.0))
+        self.assertEqual(len(r['features']), 1)
+        self.assertEqual(sum(r['errors'].values()), 2)
+        self.assertEqual(len(r['errors']), 1)
+
     def test_attribution_splits_lua_from_presentation(self):
         log = write([
             '[=ERROR=] 9.00 [X4LAN] FRAMEPROBE frames=600 simFrames=100 simMeanMs=10',

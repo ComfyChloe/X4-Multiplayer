@@ -147,6 +147,39 @@ def audit_phases(path: Path) -> list:
     return out[1:] if out and out[0][0] == 'start' and not any(out[0][1].values()) else out
 
 
+ERROR_LINE = re.compile(r'(?i)lua error|\berror\b|exception|assert')
+
+
+def stability(path: Path) -> dict:
+    """Diet stability evidence: FRAMEDIET report cadence (onUpdate alive), frames, commit size per phase,
+    FEATURE ... DISABLED lines and error lines that are not X4LAN/X4LANE output."""
+    reports, phase, commit = [], 'start', collections.OrderedDict()
+    features, errors, frames = [], collections.Counter(), []
+    with path.open(encoding='utf-8', errors='replace') as source:
+        for raw in source:
+            line = raw.rstrip('\n')
+            m = LINE.match(line)
+            body = m.group(2) if m else ''
+            if m and body.startswith('FRAMEDIET phase='):
+                phase = fields(body)['phase']
+            elif m and body.startswith('FRAMEDIET mode='):
+                f = fields(body)
+                reports.append(number(f, 't'))
+                frames.append(number(f, 'frames'))
+                if 'commitMb' in f:
+                    lo, hi = commit.get(phase, (float('inf'), 0.0))
+                    commit[phase] = (min(lo, number(f, 'commitMb')), max(hi, number(f, 'commitMb')))
+            elif m and 'FEATURE' in body and 'DISABLED' in body:
+                features.append(body)
+            elif '[X4LAN]' not in line and '[X4LANE]' not in line and ERROR_LINE.search(line):
+                errors[re.sub(r'\d+(\.\d+)?', '#', line)[:160]] += 1
+    gaps = [b - a for a, b in zip(reports, reports[1:])]
+    return {'reports': len(reports), 'max_gap_s': max(gaps) if gaps else 0.0,
+            'first_t': reports[0] if reports else 0.0, 'last_t': reports[-1] if reports else 0.0,
+            'frames_first': frames[0] if frames else 0, 'frames_last': frames[-1] if frames else 0,
+            'commit_mb': dict(commit), 'features': features, 'errors': dict(errors)}
+
+
 def load_names(x4re: Path) -> dict:
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
     from dev.simprof_report import load_labels
@@ -211,6 +244,7 @@ def main(argv=None):
     p.add_argument('--reference', default='pass', help='phase the others are compared with, per step')
     a = sub.add_parser('audit'); a.add_argument('log', type=Path)
     a.add_argument('--phases', action='store_true', help='per-phase deltas of the cumulative counters')
+    st = sub.add_parser('stability'); st.add_argument('log', type=Path)
     t = sub.add_parser('attribution'); t.add_argument('log', type=Path)
     t.add_argument('--window', action='append', default=[], help='LO:HI log-time range of window ends')
     args = parser.parse_args(argv)
@@ -222,6 +256,18 @@ def main(argv=None):
             print(f'{ph:24s} {st:>5s} {n:7d} {frames:7d} {fps:6.1f} {ms:9.3f} {p95:6.2f}')
         for line in compare(rows, args.reference):
             print(line)
+    elif args.cmd == 'stability':
+        r = stability(args.log)
+        print(f"FRAMEDIET reports: {r['reports']} from t={r['first_t']:.1f} to {r['last_t']:.1f} s, "
+              f"largest gap {r['max_gap_s']:.1f} s; frames {r['frames_first']:.0f} -> {r['frames_last']:.0f}")
+        for ph, (lo, hi) in r['commit_mb'].items():
+            print(f'  commit MB in {ph}: {lo:.1f} .. {hi:.1f}')
+        print(f"  FEATURE DISABLED lines: {len(r['features'])}")
+        for line in r['features'][:5]:
+            print('   ', line)
+        print(f"  error-like lines outside X4LAN: {sum(r['errors'].values())}")
+        for line, n in sorted(r['errors'].items(), key=lambda kv: -kv[1])[:10]:
+            print(f'    {n:4d} {line}')
     elif args.cmd == 'audit' and args.phases:
         for name, delta in audit_phases(args.log):
             print(f'== phase {name}')
