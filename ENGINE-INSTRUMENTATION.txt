@@ -1,18 +1,45 @@
 X4 MULTIPLAYER - ENGINE INSTRUMENTATION POLICY
-25 October 2026 | INTERNAL DEVELOPMENT
+26 October 2026 | INTERNAL DEVELOPMENT
 
 SCOPE
 
-Until now the project used only supported extension surfaces: Lua UI, Mission
-Director, AI scripts and a hook-free native UDP module. Engine instrumentation is
-now permitted as opt-in work, following discussion with the project owner. It
-covers runtime function hooks, game-memory offsets/signatures and patched engine
-behavior, for example seeding or replacing RNG state, fixing the simulation
-timestep or exposing engine state that the Lua/MD APIs do not provide.
+Engine instrumentation is part of normal development, following discussion with
+the project owner and the project lead. It covers runtime function hooks,
+game-memory offsets/signatures and patched engine behaviour, for example seeding
+or replacing RNG state, fixing the simulation timestep, making the player faction
+context-dependent, or exposing engine state that the Lua/MD APIs do not provide.
 
-Motivating research: reducing simulation divergence between matched games so a
-hybrid of local simulation plus hash-checked resynchronization can replace full
-replication of distant NPCs. Instrumentation is a tool for that research, . Windows and Linux builds use
-different compilers; do not assume identical floating-point results across them.
+Instrumentation is a tool, not an assumption that X4 can be made deterministic.
+Windows and Linux builds use different compilers; do not assume identical
+floating-point results across them.
 
-Instrumentation changes are reviewed as their own PRs
+RULES
+
+1. Runtime only. Never modify, replace or redistribute X4 executables, Egosoft
+   archives or other game files. Instrumentation is applied in memory by native
+   modules shipped with the extension or loaded by the dedicated server.
+   Removing the mod restores the unmodified game.
+2. Hook-free transport crate. The transport library (x4lan_net) contains no
+   engine hooks and no engine offsets, so it stays testable on its own. Hook
+   layers and the Rust core may link it and drive it from a frame callback.
+3. Build-pinned and fail closed. Every hook verifies platform, Steam build,
+   executable identity and a signature of each target range in the running
+   process before writing. On any mismatch that hook installs nothing.
+4. Loud, never silent. A hook or feature that refuses or disarms logs one line
+   with its name and reason (FEATURE <name> DISABLED reason=...) and appears in
+   the status output. Every process logs one FEATURES line at startup listing
+   what is on, off and auto-disabled, so a missing feature is visible at once.
+5. On by default during development. Hooks and features are enabled by default
+   in development and internal test packages, and switched off only when they
+   break something; a disabled feature records why. Each one keeps its own flag
+   so it can be turned off individually. Destructive test fixtures (for example
+   interaction_test) stay off unless a test names them. Defaults for public or
+   release packages are decided separately when such a release is prepared.
+6. Documented. For each hook record the target, purpose, signatures, builds,
+   observable effect and how it was verified, in a short report under reports/.
+   Claims about synchronization need a measurement with and without the hook;
+   say whether results are same-OS or Windows/Linux.
+7. Original work. Write hooks from your own analysis. Do not copy decompiled
+   Egosoft code, other projects' hook tables or Neresco sources/binaries.
+8. Existing test boundaries still apply: profile 45841, autosave disabled, no
+   normal saves, and native tests coordinated on the machine that runs them.

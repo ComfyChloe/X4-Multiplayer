@@ -17,13 +17,21 @@
 - Write original code. Neresco projects are research references only; do not copy
   or embed their multiplayer sources, binaries or framework.
 - Engine instrumentation (runtime hooks, game-memory offsets, patched engine
-  functions such as RNG or timestep) is permitted as opt-in work under
-  `ENGINE-INSTRUMENTATION.txt`. Never modify or redistribute X4 or Egosoft files;
-  verify the exact build before patching and fail closed on any mismatch. Keep the
-  `x4lan_net` transport free of hooks.
+  functions such as RNG, timestep or the player faction) is normal development
+  work under `ENGINE-INSTRUMENTATION.txt`. Never modify or redistribute X4 or
+  Egosoft files; verify the exact build before patching and fail closed on any
+  mismatch. The `x4lan_net` transport library itself stays free of hooks; hook
+  layers may link and drive it.
+- During development, features and hooks are ON by default in internal/dev
+  packages and are switched off only when they break something. Each keeps its own
+  flag. A refusing or disarmed feature logs `FEATURE <name> DISABLED reason=...`,
+  and every process logs one `FEATURES` line at startup. Destructive test fixtures
+  (e.g. `interaction_test`) stay off unless a test names them.
 - A visual NPC replica is not proof of shared combat, inventory or economy. State
   measured limits and distinguish native X4 tests from mocks/synthetic peers.
-- Keep source `extension/x4_lan_lab/ui/config.lua` inert and free of credentials.
+- Keep source `extension/x4_lan_lab/ui/config.lua` free of credentials and
+  not connecting by itself (`enabled = false` until a package configures it);
+  its feature flags follow the on-by-default rule above.
   Store local environments, generated packages, logs, installation state and
   session credentials under `.local/` or outside this checkout. Never commit them.
 - Do not copy `.venv` between computers. Use `python3 dev/bootstrap.py`, then
