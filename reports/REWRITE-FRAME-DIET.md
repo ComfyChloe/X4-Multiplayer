@@ -41,7 +41,7 @@ players connect as **clients**.
 
 ## 1. Attribution (where the server's frame goes)
 
-Source: `X4-Multiplayer-fixed-tick/.local/sandbox-baseline/evidence/simcost/simprof-8sectors-x4lan-debug.txt`,
+Source: `X4-Multiplayer-fixed-tick/.local/evidence-238-withheld`,
 per-window `SIMPROF fold` lines; baseline = windows ending 40-80 s, load = 110-260 s; ms per MoveWorker frame =
 samples (1 kHz) / frames (FRAMEPROBE simFrames). Reproduce: `python native/engine/framediet_analyze.py
 attribution <log> --window 35:81 --window 105:261`.
@@ -345,7 +345,7 @@ state and with it the mod. What it does get, without hooks:
 
 ```
 python native/engine/build.py --zig <zig> --framediet --test
-python native/engine/framediet_lua_abi.py --lua-runtime <lua51_64.dll copy> --module .local/engine/x4lan_framediet_64.dll
+python native/engine/framediet_lua_abi.py --lua-runtime <lua51_64.dll copy> --module .local/evidence-037-withheld
 x4lane run --agent frame-diet --overlay <wt>\.local\lane\overlays\probe --overlay <wt>\.local\lane\overlays\framediet ^
     --lua "X4LAN_FRAMEDIET_MODE='audit'" --lua "X4LAN_FRAMEDIET_SITES='ui_scenes,ui_render,camera'" ^
     --until "\[X4LAN\] FRAMEDIET_AUDIT row=control" --until-count 30 --timeout 1200 ^
@@ -386,7 +386,7 @@ Equivalence of `ui_elements` and the RNG split (functional lane run): mode `audi
 
 ## 11. UI liveness failure and fail-closed correction (26 Oct 2026)
 
-Native evidence (all under this worktree's `.local/lane/runs/`; functional runs under contention):
+Native evidence (all under this worktree's `.local/evidence-075-withheld`; functional runs under contention):
 
 - `stability-002`: all skips plus `ui_elements,rng_split` stopped UI updates immediately after arming.
   The agent stopped the lane, verdict fail / exit 9. This was not a passing stability test.
@@ -450,10 +450,10 @@ Private listings remain in x4-re/work/rw-frame-diet/out/; no engine source/listi
 ## 13. Safe-site native stability after correction (26 Oct 2026, 03:31)
 
 `codex-safe-stability-001` used the b75b3bf native/loader correction with frozen overlay
-`.local/lane/overlays/framediet-codex` (DLL SHA-256
+`.local/evidence-066-withheld` (DLL SHA-256
 7f5ca1b011fd555e378346042547d66169da9f09b5ad87fe0b93af72441033a6).
 The released lane tool ran a new disposable world on b6/profile45856 and collected logs at
-`.local/lane/runs/codex-safe-stability-001/`.
+`.local/evidence-081-withheld`.
 
 Sequence: server,rng_split at t10.045, pass at 70.057, server,rng_split at 130.077, pass at 190.082,
 then server,rng_split at 250.095. There are 29 UI reports through t250.301 (240.256s covered),
@@ -489,7 +489,7 @@ weighted by simFrames, giving these MoveWorker slot-loop mean times:
 
 Median paired difference: 2.523 ms / 16.6%. Counting the diet->pass neighbours too, all five adjacent pairs
 are lower in diet (1.135-4.135 ms; re-derived from the raw log with the step-aware helper
-`.local/framediet/timing8_pairs.py`, same transient rule). Main-thread CPU time divided by wall time was 12.4-12.9%
+`.local/evidence-h036391-withheld`, same transient rule). Main-thread CPU time divided by wall time was 12.4-12.9%
 of one logical core in pass and 5.4-5.7% in diet. This separate reduction is consistent with disabling
 the main-thread draw; it is not additional MoveWorker time to add to the slot-loop saving.
 
@@ -505,8 +505,8 @@ in both modes; their absolute overhead was not independently subtracted. Quiet a
 other X4 instances, not the absence of every unrelated OS/background workload. No simulation/RNG
 state was reset between phases, so this is paired timing evidence, not a deterministic replay.
 
-Evidence: `.local/lane/runs/codex-safe-timing-001/{result.json,x4lan-debug.txt,paired-summary.json}`.
-The local analysis helper `.local/framediet/codex_timing_pairs.py` closes each phase at the next phase
+Evidence: `.local/evidence-082-withheld` (result.json, x4lan-debug.txt, paired-summary.json).
+The local analysis helper `.local/evidence-042-withheld` closes each phase at the next phase
 marker, excludes the first FRAMEPROBE sample and never includes the final incomplete pass phase.
 Recheck liveness with `framediet_analyze.py stability <log> --check --min-duration 180 --max-gap 15`.
 
@@ -569,7 +569,7 @@ Windows PC); synthetic C suite and the real Lua ABI check pass.
 min. 32.2 GB free, timing_trustworthy = true. Same frozen DLL as sections 13/14. Attention-load harness step 0
 (240 s) then step 8 (360 s); loader pass / `server,rng_split` every 30 s, RNG split on in both modes. MoveWorker
 slots 1-14, simFrames-weighted, first sample after each switch dropped, phases spanning a step change excluded
-(`.local/framediet/timing8_pairs.py`).
+(`.local/evidence-h036391-withheld`).
 
 | step | pass ms | diet ms | adjacent pairs lower in diet | median saving, pass-first pairs |
 |---|---|---|---|---|
@@ -579,10 +579,10 @@ slots 1-14, simFrames-weighted, first sample after each switch dropped, phases s
 Main-thread CPU: pass 8.8-14.5 %, diet 4.8-6.8 % of one core. The saving is the predicted ~2 ms of the scene
 layer walk plus the draw's main-thread share, independent of the simulation load.
 
-Non-X4 load (the lane tool only checks other X4 instances; `.local/framediet/cpu_sampler.py` sampled all processes
+Non-X4 load (the lane tool only checks other X4 instances; `.local/evidence-h3dfc5c-withheld` sampled all processes
 every 10 s): about 4.3 of 32 logical CPUs on average during the measured part (max 9.8 for ~30 s early in step 8;
 machine total mean 28 %, max 59 %), mostly cpptools.exe (VS Code IntelliSense), MsMpEng.exe (Defender), dwm.exe,
 Code.exe, claude.exe, Taskmgr.exe and firefox.exe. At the start 6.4 cores (cpptools 101 %), at the end 6.0
 (python 98 %, cpptools 81 %). Paired adjacent phases share that background. Limits: one world, 3 + 5
 pass-first pairs, no confidence interval, probe and wrapper overhead in both modes. Evidence:
-`.local/lane/runs/timing8-002/`, `timing8-002-cpu.jsonl`; rewrite-coord/results/2026-10-26-frame-diet-timing8.md.
+`.local/evidence-h3232a1-withheld`, `timing8-002-cpu.jsonl`; rewrite-coord/results/2026-10-26-frame-diet-timing8.md.
