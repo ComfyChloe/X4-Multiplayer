@@ -14,7 +14,7 @@ with the log path). Nothing in this report is a native economy result unless mar
 |---|---|
 | 1 data model crate `rust/x4mp-economy` | done: ef13948, da802ad |
 | 2 stress scenario + simprof on a lane | done [native]: `stress3` pass (160 clones, 306 station traders); economy ~2 % of MoveWorker, scales with trade activity (2.2; rewrite-coord/results/2026-10-26-economy-stress.md) |
-| 3 production capture/replay, exact | first native replay (stress3 capture, 896 catch-ups): all explained except 1 partial store (storage allocation not modelled, 9); lab capture `lab4` queued |
+| 3 production capture/replay | lab5 native isolated factories: 3762 catch-ups, 2992 exact + 639 with one recorded retry draw, 131 RNG-undecidable, zero mismatches (section 9); trading capture pending |
 | 4 trade offers + reservations with the barrier snapshot | reservations at the owner applied at the barrier, price curve, reservation totals (693712d) [synthetic]; UpdateTradeOffers structure (section 6.3) [static]; offer amounts next |
 | 5 shadow | not started |
 
@@ -357,12 +357,20 @@ key, sector, seq; the AI driver can set the original order key); the offers are 
 |---|---|---|---|---|---|---|---|
 | stress3 (12 trading clones; no A/S records) | 896 | 579 | 97 | 16 | 140 | 63 | 1: partial store of pending products (allocation) |
 | lab4 (40 isolated clones; A records, no S records) | 1722 | 646 | 387 | - | 517 | 0 | 172: products blocked by full physical storage |
+| lab5 (40 isolated clones; A/S records; short-gap reads every 3 s) | 3762 | 2992 | 639 | 0 | 131 | 0 | 0 |
 
   Every mismatch so far was a storage decision; the production state machine, the catch-up order,
   the efficiency factors and the retry arithmetic reproduced the engine everywhere else. lab4's
   storage-full stations (two container wares filled to half of what fits each) led to the S records
-  and the physical check; lab5 (S records, 3 s short-gap readers) and trade1 (the stress scenario
-  with the full capture) are queued.
+  and the physical check. lab5 completed on 26 October 03:33 EDT: all 40 clones and 74 production
+  modules appear in the capture, with 3803 station records, 7122 storage records and 28 methods.
+  Replayed using the hardened comparator at `60db4b5`, it has zero observed mismatches. The 639
+  recorded-draw cases are conditional on one draw inferred from the recorded retry time; the 131
+  multi-draw cases remain undecidable. This is bounded isolated production replay, not complete
+  native economy equivalence. `trade1` (active traders with the full capture) remains queued.
+  Evidence: `.local/evidence-086-withheld,x4lan-debug.txt}`, native b3/profile 45853,
+  `timing_trustworthy=false`, lane restored. Log SHA-256:
+  `c7d9fa8975c984b7483b354435a4323b6178ec05bd545a006af9f89ae8e8e210`.
 - Lab scenario `dev/econ_scenario/x4mp_econ_lab`: 40 isolated factory clones (trade offers disabled,
   no traders); each resource filled to 1 %, 50 % or 25 % of what fits; cargo read every 3 s (even)
   and 61 s (odd stations).
@@ -380,6 +388,11 @@ key, sector, seq; the AI driver can set the original order key); the offers are 
   cues with only non-event conditions and no check interval (stress2 log), which the schema cannot see.
 
 ## 11. Native steps needed
+
+Next: collect the already-queued `trade1` from `.local/evidence-073-withheld`, replay its
+production transitions, then check offer targets/reservations against its full capture.
+Preserve the earlier failed captures and distinguish external trades from model differences.
+Historical run plans below describe how the lab/stress captures were prepared.
 
 ### Replay validation hardening (26 October, Codex continuation)
 
