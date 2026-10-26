@@ -317,7 +317,7 @@ Cross-sector reads are facts from the frame-start snapshot.
 
 ## 9. Tests (offline)
 
-`cargo test -p x4mp-ai`: 44 tests pass (Windows 11, Rust 1.94.1);
+`cargo test -p x4mp-ai`: 47 tests pass (Windows 11, Rust 1.94.1);
 `cargo clippy -p x4mp-ai --all-targets -- -D warnings` passes. The original test breakdown below
 is historical M1/M2; M3 additions are described in section 9b.
 
@@ -415,7 +415,13 @@ last observed action preceding the conditional read, and correcting its count to
 2 opaque gate runs. Input facts must be visible before the decision that reads them.
 
 The native bracket checker additionally recognizes move.generic's fixed waits at L382/L1027/L1237
-(1 ms) and L920 (1 s), with a one-ULP negative test. It deliberately does not predict L616 (highway
+(1 ms) and L920 (1 s), with a one-ULP negative test. The CLI now exits 2 on a numerical wait
+mismatch or a file with no complete brackets; earlier versions printed mismatches but returned 0.
+Three process-level tests cover a one-ULP error, multiple sessions with one bad session, and empty or
+unfinished captures. Other unmatched records and draw histograms remain reported diagnostics; an exit
+0 is not full equivalence acceptance. Rechecking existing native patrol-capture-002 with the new M3
+wait rules finds five move.generic L382 waits, **5/5 bit-exact** (in addition to the historical Patrol
+checks), with 149 complete brackets and zero unmatched records across its two sessions. It deliberately does not predict L616 (highway
 state) or L1022 (ship class/pilot skill) from a bracket that lacks those inputs. A new wider capture
 using `filter=move.generic` is the next validation step; full value capture M2b remains outstanding.
 

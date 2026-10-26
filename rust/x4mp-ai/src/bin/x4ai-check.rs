@@ -15,15 +15,25 @@ fn main() {
     };
     let sessions = if raw.contains("AITR\t") { x4mp_ai::native::extract_sessions(&raw) } else { vec![raw] };
     let mut failed = false;
+    let mut brackets = 0;
     for (i, text) in sessions.iter().enumerate() {
         println!("== session {}", i + 1);
         match x4mp_ai::native::parse(text) {
-            Ok(c) => print!("{}", x4mp_ai::native::check(&c).render()),
+            Ok(c) => {
+                let report = x4mp_ai::native::check(&c);
+                brackets += report.brackets;
+                failed |= report.first_wait_mismatch.is_some();
+                print!("{}", report.render());
+            }
             Err(e) => {
                 eprintln!("x4ai-check: session {}: {e}", i + 1);
                 failed = true;
             }
         }
+    }
+    if brackets == 0 {
+        eprintln!("x4ai-check: no complete interpreter brackets found");
+        failed = true;
     }
     if failed {
         std::process::exit(2);
