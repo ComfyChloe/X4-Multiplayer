@@ -22,6 +22,13 @@
  * Usage:
  *   xform_oracle cache <X4.exe> <scenario.scn> <result.res>
  *   xform_oracle pose  <X4.exe> <cases.pos> <result.por>
+ *   xform_oracle capture <X4.exe> <scenario.scn> <result.res> <prefix>
+ *       as cache, but every frame goes through the in-game capture core (xform_capture.h),
+ *       writing <prefix>_NNN.cap, so the capture format and replay are proven offline too
+ *   xform_oracle probe <X4.exe> <scenario.scn> <result.res> <dir>
+ *       every frame goes through the in-game probe's hook (xform_probe.c, embedded): the call
+ *       sites of this private copy are patched as in game, every second capture is traced, and
+ *       all code bytes must be back to the pinned hashes afterwards
  * File formats: rust/x4mp-transform/src/scenario.rs and tests/oracle.rs.
  * Exit status: 0 ok, 2 usage/input, 3 refused (file mismatch), 4 engine fault or
  * unexpected virtual call.
@@ -56,13 +63,17 @@ enum { SPEC_CAP = 0x80, SPEC_COUNT = 0x88, SPEC_SIZE = 0x90, ENTRY_SIZE = 0x20 }
 enum { VTBL_SLOTS = 0x1600 / 8 };
 
 typedef void (*build_cache_fn)(void *c, unsigned idx, double time);
-typedef void (*propagate_fn)(void *c, unsigned idx, unsigned *flags);
+typedef void (*propagate_fn)(void *c, unsigned idx, const uint32_t *flags);
 typedef void (*local_transform_fn)(void *c, float *mat, double time, unsigned char reset, unsigned char incl);
 typedef void (*relative_fn)(void *c, float *mat, double time, void *target, unsigned char flag);
 
 static unsigned char *image;
 static size_t image_size;
 static unsigned char *text_start, *text_end;
+
+#include "xform_capture.h"
+#define XFORM_PROBE_EMBED
+#include "xform_probe.c"
 
 static int digest_hex(const unsigned char d[32], const char *expected) {
     static const char hex[] = "0123456789abcdef";
@@ -178,7 +189,9 @@ static LONG CALLBACK on_fault(EXCEPTION_POINTERS *e) {
         if (ip >= image && ip < image + image_size)
             fprintf(stderr, "xform_oracle: engine fault 0x%lx at rva 0x%llx\n", code, (unsigned long long)(ip - image));
         else
-            fprintf(stderr, "xform_oracle: fault 0x%lx at %p\n", code, (void *)ip);
+            fprintf(stderr, "xform_oracle: fault 0x%lx at %p (access %llu at %p)\n", code, (void *)ip,
+                    (unsigned long long)e->ExceptionRecord->ExceptionInformation[0],
+                    (void *)e->ExceptionRecord->ExceptionInformation[1]);
         fflush(stderr);
         ExitProcess(4);
     }
@@ -297,7 +310,15 @@ static void *alloc0(size_t n) {
     return p;
 }
 
-static int run_cache(const char *scn_path, const char *res_path) {
+static void oracle_run_original(void *galaxy, unsigned idx, double time, void *ctx) {
+    (void)ctx;
+    ((build_cache_fn)(image + RVA_BUILD_CACHE))(galaxy, idx, time);
+}
+
+/* probe_dir: run every frame through the in-game probe's hook (xform_probe.c, embedded), which
+   patches the call sites of this private copy exactly as in game, captures with and without trace,
+   and must restore every byte; captures go to probe_dir. */
+static int run_cache(const char *scn_path, const char *res_path, const char *capture_prefix, const char *probe_dir) {
     size_t size = 0;
     unsigned char *buf = read_file(scn_path, &size);
     if (!buf) return 2;
@@ -437,6 +458,11 @@ static int run_cache(const char *scn_path, const char *res_path) {
 
     build_cache_fn build_cache = (build_cache_fn)(image + RVA_BUILD_CACHE);
     propagate_fn propagate = (propagate_fn)(image + RVA_PROPAGATE);
+    if (probe_dir) {
+        if (!MultiByteToWideChar(CP_UTF8, 0, probe_dir, -1, capture_dir, sizeof capture_dir / sizeof capture_dir[0])) return 2;
+        const char *why = arm(time0, 0.0, frames, 2, 0);
+        if (why) { fprintf(stderr, "xform_oracle: probe refused: %s\n", why); return 3; }
+    }
     event_cap = 1u << 22;
     events = malloc(event_cap * sizeof *events);
     if (!events) return 2;
@@ -450,11 +476,53 @@ static int run_cache(const char *scn_path, const char *res_path) {
         unsigned root_flags = *(uint32_t *)(comp[root] + C_FLAGS) | 0x6bu;
         tls_enter(frame_time);
         if (root_flags) propagate(comp[root], idx, &root_flags);
-        build_cache(comp[root], idx, frame_time);
-        tls_leave();
+        if (probe_dir) {
+            /* enter exactly as UniverseFrameUpdate does: through the patched rel32 of 0x9fe549 */
+            int32_t rel;
+            memcpy(&rel, image + SITE_FRAME + 1, 4);
+            xc_build_cache_fn via = (xc_build_cache_fn)(image + SITE_FRAME + 5 + rel);
+            if ((unsigned char *)via != stub_page) { fprintf(stderr, "xform_oracle: frame site not redirected\n"); return 4; }
+            via(comp[root], idx, frame_time);
+            tls_leave();
+        } else if (capture_prefix) {
+            static xc_capture cap;
+            static xc_buf buf;
+            xc_meta meta = {k, k, 0};
+            int ran = 0;
+            const char *why = xc_capture_frame(&cap, &buf, comp[root], idx, frame_time, &meta, oracle_run_original, NULL, &ran);
+            if (!ran) build_cache(comp[root], idx, frame_time);
+            tls_leave();
+            if (why) { fprintf(stderr, "xform_oracle: capture %u: %s\n", k, why); return 2; }
+            char path[4096];
+            snprintf(path, sizeof path, "%s_%03u.cap", capture_prefix, k);
+            writer cw = {buf.b, buf.n, buf.cap};
+            if (!write_file(path, &cw)) return 2;
+        } else {
+            build_cache(comp[root], idx, frame_time);
+            tls_leave();
+        }
         if (event_count > event_cap) { fprintf(stderr, "xform_oracle: event buffer overflow\n"); return 2; }
         wr_u32(&w, (uint32_t)event_count);
         wr(&w, events, event_count * sizeof *events);
+    }
+    if (probe_dir) {
+        owner *o = current;
+        uint64_t got = o ? o->captures : 0, failed = o ? o->failures : 0;
+        const char *skip = o && o->last_skip ? o->last_skip : "";
+        disarm(o);
+        current = NULL;
+        int32_t now;
+        memcpy(&now, image + SITE_FRAME + 1, 4);
+        unsigned char d[32];
+        int restored = !frame_site.patched && now == frame_site.original_rel && !trace_sites[0].patched &&
+                       !trace_sites[1].patched && !trace_sites[2].patched &&
+                       sha256(image + 0x3d4a80u, 1792, d) && digest_matches(d, code_checks[0].sha) &&
+                       sha256(image + 0x9fe500u, 128, d) && digest_matches(d, code_checks[2].sha);
+        if (got != frames || failed || !restored) {
+            fprintf(stderr, "xform_oracle: probe captured %llu of %u frames, %llu failures (%s), code restored=%d\n",
+                    (unsigned long long)got, frames, (unsigned long long)failed, skip, restored);
+            return 4;
+        }
     }
     for (uint32_t i = 0; i < node_count; ++i) {
         unsigned char *c = comp[i];
@@ -580,14 +648,20 @@ static int run_pose(const char *in_path, const char *out_path) {
 }
 
 int main(int argc, char **argv) {
-    if (argc != 5 || (strcmp(argv[1], "cache") != 0 && strcmp(argv[1], "pose") != 0)) {
-        fprintf(stderr, "usage: xform_oracle cache|pose <X4.exe> <input> <output>\n");
+    int capture = argc == 6 && strcmp(argv[1], "capture") == 0;
+    int probe = argc == 6 && strcmp(argv[1], "probe") == 0;
+    if (!capture && !probe && (argc != 5 || (strcmp(argv[1], "cache") != 0 && strcmp(argv[1], "pose") != 0))) {
+        fprintf(stderr, "usage: xform_oracle cache|pose <X4.exe> <input> <output>\n"
+                        "       xform_oracle capture <X4.exe> <scenario> <result> <capture prefix>\n"
+                        "       xform_oracle probe <X4.exe> <scenario> <result> <capture dir>\n");
         return 2;
     }
     AddVectoredExceptionHandler(1, on_fault);
     int rc = map_image(argv[2]);
     if (rc) return rc;
-    rc = strcmp(argv[1], "cache") == 0 ? run_cache(argv[3], argv[4]) : run_pose(argv[3], argv[4]);
+    if (capture) rc = run_cache(argv[3], argv[4], argv[5], NULL);
+    else if (probe) rc = run_cache(argv[3], argv[4], NULL, argv[5]);
+    else rc = strcmp(argv[1], "cache") == 0 ? run_cache(argv[3], argv[4], NULL, NULL) : run_pose(argv[3], argv[4]);
     if (rc) fprintf(stderr, "xform_oracle: %s failed (%d)\n", argv[1], rc);
     return rc;
 }

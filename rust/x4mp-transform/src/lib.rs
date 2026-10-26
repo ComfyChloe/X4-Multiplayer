@@ -13,12 +13,15 @@
 //!   that the log and the final state are identical, with explicit fallback hazards.
 //! - [`scenario`]: scenario/result files shared with the offline oracle, and a generator
 //!   of engine-like universes.
+//! - [`capture`]: frame captures written by the in-game probe (and the oracle's capture mode)
+//!   and their replay with the model, field by field.
 //!
 //! The crate has no hooks and no engine access. Exactness claims are checked offline
 //! against the original machine code by `native/engine/xform_oracle.c` (see
 //! `tests/oracle.rs`); native in-game capture and shadow runs are separate milestones.
 
 pub mod cache;
+pub mod capture;
 pub mod parallel;
 pub mod posecases;
 pub mod posrot;
