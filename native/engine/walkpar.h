@@ -35,7 +35,7 @@ enum {
     WP_REPLAY = 2,  /* stage 1: buffer posts/cancels in the walk, replay after it */
     WP_AI_REPLAY = 3, /* buffer explicit AI scopes only; galaxy walk stays inline */
 };
-enum { WP_READY_IDLE = 0, WP_READY_OK = 1, WP_READY_REFUSED = 2 };
+enum { WP_READY_IDLE = 0, WP_READY_OK = 1, WP_READY_REFUSED = 2, WP_READY_DEGRADED = 3 };
 
 /* Event type ids read from each event's vtable slot 1 (mov eax,imm; ret), build 23660954. */
 #define WP_TYPE_ADD_TEMP_ZONE 0x0a
@@ -313,7 +313,8 @@ static void wp_record(int task, int type, uint32_t seq, uint64_t src_id, uint64_
 
 /* Returns 1 when the post was buffered (the detour must then skip the original), 0 to pass through. */
 static int wp_post(void *src, void *event, double time, int imm) {
-    if (wp_mode == WP_OFF || !wp_on_thread() || !wp_active()) return 0;
+    /* The original PostEvent explicitly accepts a null event (entry null branch). */
+    if (!event || wp_mode == WP_OFF || !wp_on_thread() || !wp_active()) return 0;
     int type = wp_event_type(event);
     int task = wp_ref_task(src);
     ++wp_frame.posts;
@@ -874,7 +875,14 @@ static void walkpar_disarm_native(void) {
 /* Armed lazily once per frame until the thread freeze takes (a Rip clash on a hot function entry is
    transient); set by start(), cleared on disarm. A degraded replay frame disarms here (safe point). */
 static void walkpar_tick(void) {
-    if (wp_replay_abort) { walkpar_disarm_native(); walkpar_disarm(); return; }
+    if (wp_replay_abort) {
+        walkpar_disarm_native();
+        walkpar_disarm();
+        /* Sticky until the next arm: a sub-second degraded frame must still be
+           visible to the slower Lua logger and the lane failure gate. */
+        wp_ready = WP_READY_DEGRADED;
+        return;
+    }
     if (wp_want && !wp_det_n) walkpar_arm_native(wp_want);
 }
 #else

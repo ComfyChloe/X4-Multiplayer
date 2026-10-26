@@ -128,6 +128,33 @@ class FixedTickProbeTests(unittest.TestCase):
           assert(refusals==1 and replay)
         ''')
 
+    def test_walk_replay_abort_stays_visible_after_mode_is_off(self):
+        self.runtime().execute('''
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.walkpar_ready=3;s.walkpar_mode=0
+            s.walkpar_frames=0;return s end
+          ui();ui();now=2;ui()
+          local n=0
+          for _,l in ipairs(logs) do
+            if l:find('FEATURE walkpar DISABLED reason=degraded deferred-event replay',1,true) then n=n+1 end
+          end
+          assert(n==1)
+        ''')
+
+    def test_walk_ai_replay_mode_is_reported(self):
+        self.runtime().execute('''
+          X4LAN_FIXEDTICK_MODE='aireplay'
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.walkpar_mode=3;s.walkpar_frames=1;return s end
+          ui();ui();assert(modes[1]=='aireplay')
+          local census,replay=false,false
+          for _,l in ipairs(logs) do
+            if l:find('WALKCENSUS mode=ai-replay',1,true) then census=true end
+            if l:find('WALKREPLAY',1,true) then replay=true end
+          end
+          assert(census and replay)
+        ''')
+
     def test_walk_profile_refusal_is_loud(self):
         self.runtime().execute('''
           local base=handle.stats

@@ -186,7 +186,10 @@ int main(void) {
         assert(wp_frame.replayed == 0 && wp_frame.replay_dropped == 0);
         assert(wp_frame.degraded_frames == 2 && wp_replay_abort);
     }
-    wp_replay_abort = 0;
+    walkpar_tick();
+    assert(wp_ready == WP_READY_DEGRADED && wp_mode == WP_OFF && !wp_want);
+    walkpar_tick();
+    assert(wp_ready == WP_READY_DEGRADED);  /* survives until Lua's next log tick */
 
     /* native sector resolver: +0x70 parent walk to the Sector vtable, cached per frame */
     {
@@ -427,10 +430,12 @@ int main(void) {
     scene_init();
     assert(wp_get_mode() == WP_AI_REPLAY);
     wp_walk_begin();
+    assert(wp_post(&o0, NULL, 10, 1) == 0 && wp_frame.posts == 0);
     engine_post(&o0, &e_sched, 20, 0);
     assert(wp_count == 0 && g_scheduled == 1);
     wp_walk_end();
     wp_scope_begin(100);
+    assert(wp_post(&o0, NULL, 10, 1) == 0 && wp_count == 0);
     engine_post(&o0, &e_same, 10, 1);
     assert(wp_count == 1 && wp_frame.replayed == 0);
     /* replay closes buffering itself, even when the caller left the scope open */

@@ -300,6 +300,13 @@ machine load; this is recorded as a failure, not a fully green suite. Corrected
 native replay still requires a new run with positive replay counts and explicit
 dropped-event checks. Full same-frame behavioural equivalence remains unproven.
 
+The auto-abort reason is now sticky (`WP_READY_DEGRADED`) until rearming, so a
+degraded frame followed by disarm cannot disappear before the one-second Lua
+logging interval. The log emits `FEATURE walkpar DISABLED` even when mode has
+already returned to off and the reporting window is empty. The detour also keeps
+the original PostEvent null-event pass-through. Updated C regressions and 22
+LuaJIT probe tests pass; this does not change the recorded simprof timing failure.
+
 - The DeliverEvent per-listener histogram wants each dispatched listener's RTTI; the cheapest native hook is
   to read GetListenersForType at the Deliver enter (walk src+0x28) rather than a per-listener callback —
   confirm with the first census run.

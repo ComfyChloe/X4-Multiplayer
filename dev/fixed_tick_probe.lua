@@ -14,7 +14,7 @@ local native=initialise()
 local owner,reason
 local walkRefusedLogged
 local walkparRefusedLogged
-local walkparModes={[0]='off',[1]='census',[2]='replay'}
+local walkparModes={[0]='off',[1]='census',[2]='replay',[3]='ai-replay'}
 local sectorHooks={[0]='pending',[1]='original',[2]='chained',[3]='refused'}
 local nextTry=0
 local nextLog=0
@@ -46,6 +46,9 @@ local function logStats(now)
  if (s.walkpar_ready or 0)==2 and not walkparRefusedLogged then
   walkparRefusedLogged=true
   DebugError('[X4LAN] FEATURE walkpar DISABLED reason=deferred-event detour signature mismatch')
+ elseif (s.walkpar_ready or 0)==3 and not walkparRefusedLogged then
+  walkparRefusedLogged=true
+  DebugError('[X4LAN] FEATURE walkpar DISABLED reason=degraded deferred-event replay')
  end
  if (s.walkpar_frames or 0)>0 then
   -- walkpar no longer times sectors (no Sector::Move body patch); per-sector timing + ideal speedup
@@ -58,7 +61,7 @@ local function logStats(now)
    s.walkpar_xsector_listener or 0,s.walkpar_creates or 0,s.walkpar_effects or 0,s.walkpar_temp_zones or 0,
    s.walkpar_hits or 0,s.walkpar_cue_runactions or 0,s.walkpar_request_wakes or 0)..
    ' topImm=['..tostring(s.walkpar_top_imm_types or '')..']')
-  if (s.walkpar_mode or 0)==2 then
+  if (s.walkpar_mode or 0)==2 or (s.walkpar_mode or 0)==3 then
    DebugError(string.format('[X4LAN] WALKREPLAY buffered=%.1f replayed=%.1f dropped=%d degraded=%d',
     s.walkpar_buffered or 0,s.walkpar_replayed or 0,s.walkpar_replay_dropped or 0,s.walkpar_degraded_frames or 0))
   end
