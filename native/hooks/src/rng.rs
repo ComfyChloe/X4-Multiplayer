@@ -25,11 +25,10 @@
 use core::ffi::{c_char, c_int, c_void};
 use std::fmt::Write as _;
 use std::ptr;
-use std::slice;
 use std::sync::atomic::{AtomicPtr, Ordering};
 
 use crate::{
-    api, context_valid, failure, hex64, method, readable, role_seed, sha256, table_now,
+    api, context_valid, failure, hex64, method, readable, role_seed, table_now,
     thread_block, GetCurrentThreadId, GetModuleHandleW, GetProcAddress, LeaveCriticalSection,
     LuaState, TryEnterCriticalSection, CURRENT, IMAGE, OWNER_THREAD, REGISTERED_TABLE,
 };
@@ -277,11 +276,7 @@ static mut RESOLVER: Resolver = teb_tls_block;
 
 unsafe fn verify() -> bool {
     CHECKS.iter().all(|&(rva, length, expected)| {
-        readable((IMAGE + rva) as *const c_void, length, false)
-            && sha256(
-                slice::from_raw_parts((IMAGE + rva) as *const u8, length),
-                expected,
-            )
+        crate::site_matches(rva, length, expected)
     })
 }
 
