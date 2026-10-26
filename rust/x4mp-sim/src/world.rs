@@ -408,44 +408,67 @@ impl World {
         if !self.has_staged() {
             return false;
         }
-        let n_old = self.entities.len();
+        let mut first_changed = self.entities.len();
+        // 1. Removals: stable in-place compaction (memmove speed, no reallocation).
+        if self.removed > 0 {
+            first_changed = self.dead.iter().position(|d| *d).unwrap_or(first_changed);
+            retain_alive(&mut self.entities, &self.dead);
+            retain_alive(&mut self.uids, &self.dead);
+            retain_alive(&mut self.keys, &self.dead);
+            for col in &mut self.columns {
+                col.compact(&self.dead);
+            }
+            self.dead.clear();
+            self.removed = 0;
+        }
+        // 2. Staged rows, sorted by (key, staging order).
         let mut order: Vec<u32> =
             (0..self.staged.entities.len() as u32).filter(|&i| !self.staged.cancelled[i as usize]).collect();
         order.sort_by_key(|&i| (self.staged.keys[i as usize], i));
-        let mut plan = Vec::with_capacity(n_old - self.removed + order.len());
-        let (mut i, mut j) = (0usize, 0usize);
-        loop {
-            while i < n_old && self.is_dead(i) {
-                i += 1;
+        let n = self.entities.len();
+        if !order.is_empty() && (n == 0 || self.staged.keys[order[0] as usize] >= self.keys[n - 1]) {
+            // Common case (spawn/migrate to the end): append.
+            first_changed = first_changed.min(n);
+            for &i in &order {
+                self.entities.push(self.staged.entities[i as usize]);
+                self.uids.push(self.staged.uids[i as usize]);
+                self.keys.push(self.staged.keys[i as usize]);
             }
-            let take_old = match (i < n_old, j < order.len()) {
-                (false, false) => break,
-                (true, false) => true,
-                (false, true) => false,
-                (true, true) => self.keys[i] <= self.staged.keys[order[j] as usize],
-            };
-            if take_old {
-                plan.push(Src::Old(i as u32));
-                i += 1;
-            } else {
-                plan.push(Src::New(order[j]));
-                j += 1;
+            for (col, staged) in self.columns.iter_mut().zip(self.staged.columns.iter_mut()) {
+                col.append_from(staged.as_mut(), &order);
             }
-        }
-        self.entities = pick(&plan, &self.entities, &self.staged.entities);
-        self.uids = pick(&plan, &self.uids, &self.staged.uids);
-        self.keys = pick(&plan, &self.keys, &self.staged.keys);
-        for (col, staged) in self.columns.iter_mut().zip(self.staged.columns.iter_mut()) {
-            col.rebuild(&plan, staged.as_mut());
+        } else if !order.is_empty() {
+            // General case: stable merge by key (existing rows first on equal keys).
+            let mut plan = Vec::with_capacity(n + order.len());
+            let (mut i, mut j) = (0usize, 0usize);
+            while i < n || j < order.len() {
+                let take_old = j >= order.len() || (i < n && self.keys[i] <= self.staged.keys[order[j] as usize]);
+                if take_old {
+                    plan.push(Src::Old(i as u32));
+                    i += 1;
+                } else {
+                    plan.push(Src::New(order[j]));
+                    j += 1;
+                }
+            }
+            first_changed = first_changed.min(plan.iter().position(|s| matches!(s, Src::New(_))).unwrap_or(n));
+            self.entities = pick(&plan, &self.entities, &self.staged.entities);
+            self.uids = pick(&plan, &self.uids, &self.staged.uids);
+            self.keys = pick(&plan, &self.keys, &self.staged.keys);
+            for (col, staged) in self.columns.iter_mut().zip(self.staged.columns.iter_mut()) {
+                col.rebuild(&plan, staged.as_mut());
+            }
+        } else {
+            for col in &mut self.staged.columns {
+                col.clear();
+            }
         }
         self.staged.entities.clear();
         self.staged.uids.clear();
         self.staged.keys.clear();
         self.staged.cancelled.clear();
-        self.dead.clear();
-        self.removed = 0;
-        for (row, e) in self.entities.iter().enumerate() {
-            ids.set_loc(*e, Loc { sector: self.ix, row: row as u32 });
+        for row in first_changed..self.entities.len() {
+            ids.set_loc(self.entities[row], Loc { sector: self.ix, row: row as u32 });
         }
         true
     }
@@ -611,6 +634,15 @@ fn pick<T: Copy>(plan: &[Src], old: &[T], new: &[T]) -> Vec<T> {
             Src::New(k) => new[k as usize],
         })
         .collect()
+}
+
+fn retain_alive<T>(v: &mut Vec<T>, dead: &[bool]) {
+    let mut i = 0usize;
+    v.retain(|_| {
+        let keep = !dead.get(i).copied().unwrap_or(false);
+        i += 1;
+        keep
+    });
 }
 
 fn permute_copy<T: Copy>(v: &mut Vec<T>, perm: &[u32]) {

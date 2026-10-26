@@ -28,6 +28,11 @@ pub(crate) trait AnyColumn: Send + Sync {
     fn rebuild(&mut self, plan: &[Src], staged: &mut dyn AnyColumn);
     /// Applies a permutation: new row i = old row perm[i].
     fn permute(&mut self, perm: &[u32]);
+    /// Removes the rows flagged in `dead` in place, keeping the order of the others.
+    fn compact(&mut self, dead: &[bool]);
+    /// Appends `staged` rows in `order` (moving them out), then empties `staged`.
+    fn append_from(&mut self, staged: &mut dyn AnyColumn, order: &[u32]);
+    fn clear(&mut self);
     fn hash_into(&self, h: &mut Fnv64);
     fn hash_row(&self, row: usize, h: &mut Fnv64);
     fn compare_row(&self, row: usize, other: &dyn AnyColumn, other_row: usize, c: &mut Comparator);
@@ -91,6 +96,25 @@ impl<T: Component> AnyColumn for Column<T> {
             out.push(std::mem::take(&mut self.0[i as usize]));
         }
         self.0 = out;
+    }
+    fn compact(&mut self, dead: &[bool]) {
+        let mut i = 0usize;
+        self.0.retain(|_| {
+            let keep = !dead.get(i).copied().unwrap_or(false);
+            i += 1;
+            keep
+        });
+    }
+    fn append_from(&mut self, staged: &mut dyn AnyColumn, order: &[u32]) {
+        let staged = &mut staged.as_any_mut().downcast_mut::<Column<T>>().expect("column type mismatch").0;
+        self.0.reserve(order.len());
+        for &i in order {
+            self.0.push(std::mem::take(&mut staged[i as usize]));
+        }
+        staged.clear();
+    }
+    fn clear(&mut self) {
+        self.0.clear();
     }
     fn hash_into(&self, h: &mut Fnv64) {
         for v in &self.0 {
