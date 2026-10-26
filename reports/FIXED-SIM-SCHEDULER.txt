@@ -143,6 +143,18 @@ writes to frame time or collision steps, and restore everything on stop; real
 LuaJIT probe tests 8/8; lua51_64.dll ABI PASS; 10 signatures PASS on the copied
 and installed X4.exe. No native run yet.
 
+Native run (26 October 2026, one unsandboxed Windows instance from the task-owned
+host game view, profile 45841, new custom_creative world, fixed60catchup):
+- 30 fps cap: steady 30.0 fps; game/wall median 1.000 (min 0.984); 59.3 steps
+  per wall second; 2680 of 2726 frames took multiple steps, 1 took none.
+- 60 fps cap: steady 60.5 fps; game/wall median 0.998 (min 0.988); 58.8 steps
+  per wall second; 100 zero-step and 121 multi-step frames absorbed jitter.
+- No disarm or refusal. About 2.7k ticks were dropped in each run at the first
+  frame after world loading (the loading wall time), as bounded catch-up intends;
+  this accounts for the ~1.1 s total game/wall lag. Steady play tracks wall time.
+- Not measured: 144 fps (run interrupted to free the PC) and uncapped.
+- Evidence: .local/evidence-242-withheld, fps60-*.
+
 NEXT STAGES (unchanged plan): 3 render continues while simulation is held without
 semaphore misuse; 4 explicit input/UI/Lua cadence and pause/loading/SETA/save/load
 rules; 5 render-only interpolation without feedback into authoritative state.
