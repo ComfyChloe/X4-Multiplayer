@@ -25,6 +25,12 @@ M.speedCap = {boost=20000, travel=20000, highway=50000}
 M.leak = .002
 -- Bounded render-clock slew (seconds per second) and the step that snaps instead.
 M.slew, M.snap = .1, 1
+-- Opt-in adaptive delay (track.adaptive): arrival latency above the minimum (the clock
+-- offset) is queueing/jitter. Its decaying peak (half-life M.excessHalfLife s) widens the
+-- interpolation delay up to M.maxDelay, so late samples interpolate instead of being
+-- extrapolated past the horizon and corrected with a visible hop.
+-- Widening slews at M.widen s/s (the replica runs briefly slower), narrowing at M.slew.
+M.excessHalfLife, M.maxDelay, M.excessMargin, M.widen = 4, .8, .03, .5
 function M.angle(v) return (v + math.pi) % (2 * math.pi) - math.pi end
 function M.valid(p, velocity)
  if type(p)~='table' or #p~=6 or type(velocity)~='table' or #velocity~=6 then return false end
@@ -85,6 +91,12 @@ function M.push(track,time,p,velocity,arrival)
   track.offset=track.offset+track.leak*(arrival-track.arrival)
  end
  track.offset=math.min(track.offset or math.huge,arrival-time)
+ if track.adaptive then
+  -- A gap/jump reset (pause, teleport) is not network jitter; bound one sample's share.
+  local excess=reset and 0 or math.min(M.maxDelay,math.max(0,arrival-time-track.offset));local old=track.excess or 0
+  if track.excessAt and arrival>track.excessAt then old=old*.5^((arrival-track.excessAt)/M.excessHalfLife) end
+  track.excess,track.excessAt=math.max(excess,old),arrival
+ end
  local pp,vv={},{}
  for i=1,6 do pp[i]=p[i];vv[i]=velocity[i] end
  samples[#samples+1]={time=time,pose=pp,velocity=vv}
@@ -101,11 +113,16 @@ function M.clock(track,now,delay,rate)
  local lag,at=track.lag,track.lagAt
  if not lag or not at or now<at or math.abs(want-lag)>M.snap then lag=want
  else
-  local step=(rate or M.slew)*(now-at)
+  local step=((track.adaptive and want>lag) and M.widen or rate or M.slew)*(now-at)
   lag=want>lag and math.min(want,lag+step) or math.max(want,lag-step)
  end
  track.lag,track.lagAt=lag,now
  return now-lag
+end
+-- Interpolation delay for a track: the profile delay, widened by the observed excess.
+function M.delayFor(track,base)
+ if not track.adaptive or not track.excess then return base end
+ return math.max(base,math.min(M.maxDelay,track.excess+M.excessMargin))
 end
 function M.renderAt(track,target,horizon)
  local samples=track.samples
