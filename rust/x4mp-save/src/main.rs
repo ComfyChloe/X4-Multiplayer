@@ -1,10 +1,10 @@
-//! `x4mp-save`: analyze, trim and verify X4 savegames (offline; read-only on inputs).
+﻿//! `x4mp-save`: analyze, trim and verify X4 savegames (offline; read-only on inputs).
 
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 use std::time::Instant;
 
-use x4mp_save::index::{build_index, SaveIndex};
+use x4mp_save::index::{build_index, build_index_with, SaveIndex};
 use x4mp_save::io::{open_input, ThreadedGzWriter};
 use x4mp_save::trim::{plan, summarize, write_trimmed, ScriptRefs, TrimOptions};
 use x4mp_save::{analyze, peak_rss_bytes, verify};
@@ -14,11 +14,13 @@ usage:
   x4mp-save analyze <save> [--keep-owner <faction>] [--top N]
   x4mp-save trim <save> --sector <macro> [--sector <macro>...] [--neighbours N]
                  --keep-owner <faction> -o <out.xml.gz> [--script-refs weak|strong] [--client] [--top N]
+                 [--hard] [--drop-class <class>...] [--prune-md <Script>:<$var>...] [--masstraffic-off]
+                 [--space-overrides god=0,job=0,factionlogic=0 [--override-class sector,cluster,galaxy]]
   x4mp-save verify <save> [--baseline <original save>] [--strict]
 
 Inputs are only read. <save> may be gzipped (.xml.gz) or plain XML.";
 
-const FLAGS: &[&str] = &["--strict", "--client"];
+const FLAGS: &[&str] = &["--strict", "--client", "--hard", "--masstraffic-off"];
 
 type Res<T> = Result<T, Box<dyn std::error::Error>>;
 
@@ -104,7 +106,23 @@ fn cmd_analyze(a: &Args) -> Res<ExitCode> {
 }
 
 fn cmd_trim(a: &Args) -> Res<ExitCode> {
-    a.check(&["sector", "neighbours", "neighbors", "keep-owner", "o", "out", "top", "script-refs", "client"])?;
+    a.check(&[
+        "sector",
+        "neighbours",
+        "neighbors",
+        "keep-owner",
+        "o",
+        "out",
+        "top",
+        "script-refs",
+        "client",
+        "hard",
+        "drop-class",
+        "prune-md",
+        "masstraffic-off",
+        "space-overrides",
+        "override-class",
+    ])?;
     let input = PathBuf::from(a.positional.get(1).ok_or("trim: missing <save>")?);
     let out = PathBuf::from(a.one("o").or(a.one("out")).ok_or("trim: missing -o <out>")?);
     let sectors = a.all("sector");
@@ -118,10 +136,37 @@ fn cmd_trim(a: &Args) -> Res<ExitCode> {
         return Err("trim: output must not overwrite the input".into());
     }
     let t0 = Instant::now();
-    let idx = index_file(&input)?;
+    let drop_classes: Vec<String> =
+        a.all("drop-class").iter().flat_map(|v| v.split(',')).map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    let idx = build_index_with(open_input(&input)?, &drop_classes)?;
     let script_refs: ScriptRefs = a.one("script-refs").unwrap_or("weak").parse()?;
     let client = a.flag("client");
-    let opts = TrimOptions { sectors, neighbours, keep_owner, script_refs, client };
+    let hard = a.flag("hard");
+    let masstraffic_off = a.flag("masstraffic-off");
+    let mut prune_md = Vec::new();
+    for v in a.all("prune-md") {
+        let (s, var) = v.split_once(':').ok_or(format!("--prune-md expects <Script>:<$var>, not '{v}'"))?;
+        prune_md.push((s.to_string(), var.to_string()));
+    }
+    let mut space_overrides = Vec::new();
+    for kv in a.one("space-overrides").unwrap_or("").split(',').filter(|s| !s.is_empty()) {
+        let (k, v) = kv.split_once('=').ok_or(format!("--space-overrides expects attr=value, not '{kv}'"))?;
+        space_overrides.push((k.trim().to_string(), v.trim().to_string()));
+    }
+    let override_classes: Vec<String> =
+        a.one("override-class").unwrap_or("sector").split(',').map(|s| s.trim().to_string()).filter(|s| !s.is_empty()).collect();
+    let opts = TrimOptions {
+        sectors,
+        neighbours,
+        keep_owner,
+        script_refs,
+        client,
+        hard,
+        prune_md,
+        masstraffic_off,
+        space_overrides,
+        override_classes,
+    };
     let t1 = Instant::now();
     let p = plan(&idx, &opts)?;
     let plan_time = t1.elapsed();
@@ -159,6 +204,24 @@ fn cmd_trim(a: &Args) -> Res<ExitCode> {
         "dropped: {} components, {} ai entities, {} script pool entries; pruned {} listeners, {} group members",
         st.skipped_components, st.skipped_entities, st.skipped_pool, st.pruned_listeners, st.pruned_members
     );
+    if !drop_classes.is_empty() || hard {
+        println!("sector-only: hard={hard} extra dynamic classes {drop_classes:?}");
+    }
+    for (k, v) in &st.pruned_structural {
+        println!("  pruned structural reference element {k:<32} {v:>8}");
+    }
+    for (k, v) in &st.pruned_md {
+        println!("  pruned MD instances of {k:<32} {v:>8}");
+    }
+    if !opts.space_overrides.is_empty() {
+        println!(
+            "space overrides {:?} on {:?}: {} merged into existing <overrides>, {} added",
+            opts.space_overrides, opts.override_classes, st.overrides_merged, st.overrides_added
+        );
+    }
+    if masstraffic_off {
+        println!("<jobs masstraffic> {} -> 0", idx.jobs.masstraffic.as_deref().unwrap_or("absent"));
+    }
     if p.client {
         let j = &idx.jobs;
         println!(

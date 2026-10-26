@@ -1,4 +1,4 @@
-//! Keep-set computation (reference closure) and pass 2: the filtering writer.
+﻿//! Keep-set computation (reference closure) and pass 2: the filtering writer.
 
 use std::collections::{BTreeMap, HashMap, VecDeque};
 use std::io::{BufRead, Write};
@@ -24,6 +24,20 @@ pub struct TrimOptions {
     /// off (`<jobs enabled="0">`), mark every job inactive, clear first-spawn flags and
     /// spawn timers, and drop the job queue (`job/waiting`, `job/requested`).
     pub client: bool,
+    /// Sector-only mode: dynamic units in sectors outside the detail set are dropped even when
+    /// a kept unit references them (only containment of a kept unit and `keep_owner` keep
+    /// them). Structural references left dangling by this are pruned by the writer.
+    pub hard: bool,
+    /// `(script name, variable)` pairs: MD cue instances of that script whose own variable
+    /// (e.g. `NPC_State_Machines` / `$NPC`) holds a dropped component are removed.
+    pub prune_md: Vec<(String, String)>,
+    /// Set `<jobs masstraffic="0">` (the save-level mass traffic switch).
+    pub masstraffic_off: bool,
+    /// Per-space flags written into `<overrides>` of every component of these classes
+    /// (e.g. `sector`), merged with existing overrides: `(attribute, value)` such as
+    /// `("god", "0")`. The save-level form of MD `set_space_god_allowed` and friends.
+    pub space_overrides: Vec<(String, String)>,
+    pub override_classes: Vec<String>,
 }
 
 /// Policy for component references in typed script values (MD cue variables, AI
@@ -80,6 +94,11 @@ pub struct Plan {
     pub reason: Vec<Option<Reason>>,
     /// Sector component id -> hop distance (only kept-detail sectors).
     pub detail_sectors: BTreeMap<u64, u32>,
+    pub hard: bool,
+    pub prune_md: Vec<(String, String)>,
+    pub masstraffic_off: bool,
+    pub space_overrides: Vec<(String, String)>,
+    pub override_classes: Vec<String>,
 }
 
 #[derive(Debug)]
@@ -214,6 +233,18 @@ pub fn plan(idx: &SaveIndex, opts: &TrimOptions) -> Result<Plan, PlanError> {
         e.dedup_by_key(|x| x.0);
     }
 
+    // Sector-only mode: units placed in a sector without detail are never pinned by references.
+    let distant: Vec<bool> = idx
+        .units
+        .iter()
+        .map(|u| {
+            opts.hard
+                && u.kind == UnitKind::Dynamic
+                && u.sector.is_some_and(|s| !detail.contains_key(&s))
+                && !u.has_player
+                && !keep_owner.is_some_and(|o| u.owners.contains(&o))
+        })
+        .collect();
     let mut keep = vec![false; n];
     let mut reason: Vec<Option<Reason>> = vec![None; n];
     let mut queue: VecDeque<u32> = VecDeque::new();
@@ -276,7 +307,7 @@ pub fn plan(idx: &SaveIndex, opts: &TrimOptions) -> Result<Plan, PlanError> {
         }
         for &(t, attr, ctx) in &edges[u as usize] {
             let t = t as usize;
-            if !keep[t] {
+            if !keep[t] && !distant[t] {
                 keep[t] = true;
                 reason[t] = Some(Reason::Ref { attr, ctx, from_kind: kind_code(unit.kind), from_class: unit.class });
                 queue.push_back(t as u32);
@@ -299,7 +330,18 @@ pub fn plan(idx: &SaveIndex, opts: &TrimOptions) -> Result<Plan, PlanError> {
             }
         }
     }
-    Ok(Plan { client: opts.client, client_queue_kept, keep, reason, detail_sectors: detail })
+    Ok(Plan {
+        client: opts.client,
+        client_queue_kept,
+        keep,
+        reason,
+        detail_sectors: detail,
+        hard: opts.hard,
+        prune_md: opts.prune_md.clone(),
+        masstraffic_off: opts.masstraffic_off,
+        space_overrides: opts.space_overrides.clone(),
+        override_classes: opts.override_classes.clone(),
+    })
 }
 
 pub fn reason_label(idx: &SaveIndex, r: Reason) -> String {
@@ -338,6 +380,14 @@ pub struct WriteStats {
     /// Client mode: `<job>` elements rewritten, job-queue elements removed.
     pub client_jobs_rewritten: u64,
     pub client_queue_elements: u64,
+    /// `prune_md`: removed MD cue instances, per script.
+    pub pruned_md: BTreeMap<String, u64>,
+    /// `hard`: elements removed because a structural reference of theirs points at a dropped
+    /// unit, per `element@attribute`.
+    pub pruned_structural: BTreeMap<String, u64>,
+    /// `space_overrides`: overrides elements merged / added.
+    pub overrides_merged: u64,
+    pub overrides_added: u64,
 }
 
 /// Pass 2: copy the save event by event, skipping dropped subtrees and pruning weak
@@ -362,6 +412,16 @@ pub fn write_trimmed<R: BufRead, W: Write>(
     let mut st = WriteStats::default();
     let dropped = |unit: u32| !plan.keep[unit as usize];
     let comp_dropped = |id: u64| idx.comps.get(&id).is_some_and(|c| dropped(c.unit));
+    // MD instance pruning: current script and the depths of open <instances> elements.
+    let mut md_script: Vec<u8> = Vec::new();
+    let mut md_inst: Vec<usize> = Vec::new();
+    // Hard mode: ids of station build tasks pruned because their ship was dropped; the build
+    // processor's <build order=..> that runs such a task follows it (it comes later in the file).
+    let mut pruned_builds: std::collections::HashSet<u64> = std::collections::HashSet::new();
+    // Depths of open space components that receive `space_overrides`.
+    let mut space_depth: Vec<usize> = Vec::new();
+    let ov: Vec<(&[u8], Option<&[u8]>)> =
+        plan.space_overrides.iter().map(|(k, v)| (k.as_bytes(), Some(v.as_bytes()))).collect();
 
     loop {
         let ev = reader.read_event_into(&mut buf)?;
@@ -372,12 +432,110 @@ pub fn write_trimmed<R: BufRead, W: Write>(
                     section.clear();
                     section.extend_from_slice(e.name().as_ref());
                 }
+                if section == b"md" && is_start {
+                    let name = e.name();
+                    if depth == 2 && name.as_ref() == b"script" {
+                        md_script = attr(e, b"name").map(|v| v.into_owned()).unwrap_or_default();
+                    } else if name.as_ref() == b"instances" {
+                        md_inst.push(depth);
+                    } else if name.as_ref() == b"cue" && md_inst.last().is_some_and(|&d| d + 1 == depth) {
+                        let var = plan
+                            .prune_md
+                            .iter()
+                            .find(|(s, _)| s.as_bytes() == md_script.as_slice())
+                            .map(|(_, v)| v.as_bytes().to_vec());
+                        if let Some(var) = var {
+                            let owned = e.to_owned();
+                            let open = md_instance(&mut reader, &mut skip_buf, owned, &var, &comp_dropped, &mut writer)?;
+                            match open {
+                                None => {
+                                    *st.pruned_md.entry(String::from_utf8_lossy(&md_script).into_owned()).or_default() += 1;
+                                }
+                                Some((n, inst)) => {
+                                    if inst {
+                                        md_inst.push(depth + n - 1);
+                                    }
+                                    depth += n;
+                                }
+                            }
+                            buf.clear();
+                            continue;
+                        }
+                    }
+                }
                 let mut decision = decide(idx, e, depth, &section, &mut pool_type, &dropped, &comp_dropped);
-                if plan.client && decision.is_none() {
+                if decision.is_none() && plan.hard && section != b"md" {
+                    let name = e.name();
+                    if let Some(key) = structural_to_dropped(idx, e, &section, &dropped) {
+                        if name.as_ref() == b"build" {
+                            if let Some(id) = attr(e, b"id").and_then(|v| parse_hex_id(&v)) {
+                                pruned_builds.insert(id);
+                            }
+                        }
+                        *st.pruned_structural.entry(key).or_default() += 1;
+                        decision = Some(Skip::Structural);
+                    } else if name.as_ref() == b"build"
+                        && attr(e, b"order").and_then(|v| parse_hex_id(&v)).is_some_and(|o| pruned_builds.contains(&o))
+                    {
+                        *st.pruned_structural.entry("build@order (task pruned)".into()).or_default() += 1;
+                        decision = Some(Skip::Structural);
+                    }
+                }
+                if !ov.is_empty() && decision.is_none() && section == b"universe" {
+                    let name = e.name();
+                    if name.as_ref() == b"overrides" && space_depth.last().is_some_and(|&d| d + 1 == depth) {
+                        st.overrides_merged += 1;
+                        let new = rewrite_attrs(e, &ov);
+                        if is_start {
+                            depth += 1;
+                            writer.write_event(Event::Start(new))?;
+                        } else {
+                            writer.write_event(Event::Empty(new))?;
+                        }
+                        buf.clear();
+                        continue;
+                    }
+                    let is_space = name.as_ref() == b"component"
+                        && attr(e, b"class").is_some_and(|c| plan.override_classes.iter().any(|k| k.as_bytes() == c.as_ref()));
+                    if is_space && is_start {
+                        let id = attr(e, b"id").and_then(|v| parse_hex_id(&v)).unwrap_or(0);
+                        writer.write_event(ev.borrow())?;
+                        space_depth.push(depth);
+                        depth += 1;
+                        if !idx.has_overrides.contains(&id) {
+                            st.overrides_added += 1;
+                            writer.write_event(Event::Empty(rewrite_attrs(&BytesStart::new("overrides"), &ov)))?;
+                        }
+                        buf.clear();
+                        continue;
+                    }
+                }
+                if plan.hard && decision.is_none() && is_start && e.name().as_ref() == b"component" {
+                    let gone = |k: &[u8]| attr(e, k).and_then(|v| parse_hex_id(&v)).is_some_and(&comp_dropped);
+                    if gone(b"attacker") || gone(b"attackership") {
+                        *st.pruned_structural.entry("component@attacker (attribute removed)".into()).or_default() += 1;
+                        let new = rewrite_attrs(
+                            e,
+                            &[(b"attacker", None), (b"attackership", None), (b"attackmethod", None), (b"attacktime", None), (b"shipattacktime", None)],
+                        );
+                        depth += 1;
+                        writer.write_event(Event::Start(new))?;
+                        buf.clear();
+                        continue;
+                    }
+                }
+                if (plan.client || plan.masstraffic_off) && decision.is_none() {
                     let name = e.name();
                     let name = name.as_ref();
                     if depth == 2 && section == b"universe" && name == b"jobs" {
-                        let new = rewrite_attrs(e, &[(b"enabled", Some(b"0"))]);
+                        let mut ch: Vec<(&[u8], Option<&[u8]>)> = Vec::new();
+                        if plan.client {
+                            ch.push((b"enabled", Some(b"0")));
+                        }
+                        if plan.masstraffic_off {
+                            ch.push((b"masstraffic", Some(b"0")));
+                        }
+                        let new = rewrite_attrs(e, &ch);
                         if is_start {
                             in_jobs = true;
                             depth += 1;
@@ -388,7 +546,7 @@ pub fn write_trimmed<R: BufRead, W: Write>(
                         buf.clear();
                         continue;
                     }
-                    if in_jobs && depth == 3 && name == b"job" {
+                    if plan.client && in_jobs && depth == 3 && name == b"job" {
                         st.client_jobs_rewritten += 1;
                         let new = rewrite_attrs(e, &[(b"active", Some(b"0")), (b"firsttime", None), (b"time", None)]);
                         if is_start {
@@ -400,7 +558,8 @@ pub fn write_trimmed<R: BufRead, W: Write>(
                         buf.clear();
                         continue;
                     }
-                    if in_jobs && depth == 4 && name == b"requested" {
+                    if !plan.client {
+                    } else if in_jobs && depth == 4 && name == b"requested" {
                         decision = Some(Skip::JobQueue);
                     } else if in_jobs && depth == 4 && name == b"waiting" && is_start {
                         in_waiting = true;
@@ -423,6 +582,7 @@ pub fn write_trimmed<R: BufRead, W: Write>(
                         Skip::Listener => st.pruned_listeners += 1,
                         Skip::Member => st.pruned_members += 1,
                         Skip::JobQueue => st.client_queue_elements += 1,
+                        Skip::Structural => {}
                     }
                     if is_start {
                         let end = e.to_end().into_owned();
@@ -470,6 +630,12 @@ pub fn write_trimmed<R: BufRead, W: Write>(
             }
             Event::End(_) => {
                 depth -= 1;
+                if md_inst.last() == Some(&depth) {
+                    md_inst.pop();
+                }
+                if space_depth.last() == Some(&depth) {
+                    space_depth.pop();
+                }
                 if depth == 2 {
                     in_jobs = false;
                 }
@@ -501,6 +667,130 @@ enum Skip {
     Listener,
     Member,
     JobQueue,
+    Structural,
+}
+
+/// Reads one MD cue instance far enough to see its own `<vars>`. When `var` is a component
+/// variable that points at a dropped component, the whole instance is skipped and `None` is
+/// returned. Otherwise the buffered events are written and `Some((open, last_is_instances))`
+/// tells the caller how many elements are still open.
+fn md_instance<R: BufRead, W: Write>(
+    reader: &mut Reader<R>,
+    tmp: &mut Vec<u8>,
+    start: BytesStart<'static>,
+    var: &[u8],
+    comp_dropped: &dyn Fn(u64) -> bool,
+    writer: &mut Writer<W>,
+) -> Result<Option<(usize, bool)>, Box<dyn std::error::Error>> {
+    let mut evs: Vec<Event<'static>> = vec![Event::Start(start)];
+    let mut rel = 1usize;
+    let mut drop = false;
+    let mut in_vars = false;
+    let mut last_inst = false;
+    loop {
+        tmp.clear();
+        let ev = reader.read_event_into(tmp)?.into_owned();
+        let mut stop = false;
+        match &ev {
+            Event::Start(x) => {
+                rel += 1;
+                if rel == 2 {
+                    if x.name().as_ref() == b"vars" {
+                        in_vars = true;
+                    } else {
+                        // first child that is not <vars>: nothing more to learn
+                        last_inst = x.name().as_ref() == b"instances";
+                        stop = true;
+                    }
+                }
+            }
+            Event::Empty(x) => {
+                let n = x.name();
+                if in_vars && rel == 2 && n.as_ref() == b"value" {
+                    let is_var = attr(x, b"name").is_some_and(|v| v.as_ref() == var);
+                    let is_comp = attr(x, b"type").is_some_and(|v| v.as_ref() == b"component");
+                    if is_var && is_comp {
+                        if let Some(id) = attr(x, b"value").and_then(|v| parse_hex_id(&v)) {
+                            drop = comp_dropped(id);
+                        }
+                    }
+                } else if rel == 1 && n.as_ref() != b"vars" {
+                    stop = true;
+                }
+            }
+            Event::End(x) => {
+                rel -= 1;
+                if rel == 0 || (rel == 1 && x.name().as_ref() == b"vars") {
+                    stop = true;
+                }
+            }
+            Event::Eof => return Err("unexpected EOF inside an MD instance".into()),
+            _ => {}
+        }
+        evs.push(ev);
+        if stop {
+            break;
+        }
+    }    if drop {
+        while rel > 0 {
+            tmp.clear();
+            match reader.read_event_into(tmp)? {
+                Event::Start(_) => rel += 1,
+                Event::End(_) => rel -= 1,
+                Event::Eof => return Err("unexpected EOF inside an MD instance".into()),
+                _ => {}
+            }
+        }
+        return Ok(None);
+    }
+    for e in evs {
+        writer.write_event(e)?;
+    }
+    Ok(Some((rel, last_inst && rel == 2)))
+}
+
+/// Sector-only mode: the `element@attribute` of the first structural (non-script, non-weak)
+/// component or connection reference of `e` whose target lies in a dropped unit.
+fn structural_to_dropped(
+    idx: &SaveIndex,
+    e: &BytesStart,
+    section: &[u8],
+    dropped: &dyn Fn(u32) -> bool,
+) -> Option<String> {
+    let name = e.name();
+    let name = name.as_ref();
+    // A <component> with a class defines a component; a bare <component component=..> (a ship
+    // under construction in a build task) is a reference.
+    let defines = name == b"connection" || (name == b"component" && attr(e, b"class").is_some());
+    if defines || section == b"script" || section == b"aidirector" {
+        return None;
+    }
+    let has_type = attr(e, b"type").is_some();
+    for a in e.attributes().flatten() {
+        let k = a.key.as_ref();
+        if k == b"id" && schema::is_local_def(name) {
+            continue;
+        }
+        if schema::is_script_value(name, k, has_type) || k == b"listener" {
+            continue;
+        }
+        let Some(id) = parse_hex_id(&a.value) else { continue };
+        let unit = if name == b"connected" && k == b"connection" {
+            idx.conns.get(&id).map(|c| c.unit)
+        } else if let Some(ns) = schema::local_ref_ns(name, k) {
+            // a local id (order, build, construction entry) whose every definition is dropped
+            match idx.local_defs.get(&(ns, id)) {
+                Some(v) if !v.is_empty() && v.iter().all(|&u| dropped(u)) => Some(v[0]),
+                _ => None,
+            }
+        } else {
+            idx.comps.get(&id).map(|c| c.unit)
+        };
+        if unit.is_some_and(dropped) {
+            return Some(format!("{}@{}", String::from_utf8_lossy(name), String::from_utf8_lossy(k)));
+        }
+    }
+    None
 }
 
 /// Copies a start tag, setting (`Some`) or removing (`None`) the given attributes.

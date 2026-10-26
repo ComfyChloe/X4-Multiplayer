@@ -1,4 +1,4 @@
-//! Pass 1: stream a save once and build a compact index of components, units and
+﻿//! Pass 1: stream a save once and build a compact index of components, units and
 //! cross-references. Nothing of the DOM is retained; only ids, classes and edges.
 //!
 //! A *unit* is the granularity of keep/drop decisions:
@@ -166,6 +166,9 @@ pub struct SaveIndex {
     /// For every `universe/jobs/job/waiting/ship` element in document order: the unit of
     /// the ship component it wraps, or `None` for a bare `<ship id=..>` mention.
     pub queue_ships: Vec<Option<u32>>,
+    /// Components with a direct `<overrides>` child (per-space god/job/faction logic flags
+    /// written by MD `set_space_*_allowed`).
+    pub has_overrides: HashSet<u64>,
 }
 
 /// Runtime job state found in `universe/jobs` (job definitions live in the game's
@@ -225,6 +228,9 @@ struct Walker {
     s_player: u32,
     s_sector: u32,
     s_cluster: u32,
+    /// Interned classes treated as dynamic in addition to [`schema::DYNAMIC_CLASSES`]
+    /// (`trim --drop-class`, e.g. distant stations for a sector-only client save).
+    extra_dynamic: HashSet<u32>,
 }
 
 impl SaveIndex {
@@ -290,8 +296,14 @@ impl SaveIndex {
 
 /// Builds the index from an uncompressed XML stream.
 pub fn build_index<R: BufRead>(input: R) -> Result<SaveIndex, IndexError> {
+    build_index_with(input, &[])
+}
+
+/// Like [`build_index`], with extra component classes that start dynamic units.
+pub fn build_index_with<R: BufRead>(input: R, extra_dynamic: &[String]) -> Result<SaveIndex, IndexError> {
     let start = Instant::now();
     let mut syms = Interner::new();
+    let extra_dynamic: HashSet<u32> = extra_dynamic.iter().map(|c| syms.intern(c.as_bytes())).collect();
     let s_player = syms.intern(b"player");
     let s_sector = syms.intern(b"sector");
     let s_cluster = syms.intern(b"cluster");
@@ -329,6 +341,7 @@ pub fn build_index<R: BufRead>(input: R) -> Result<SaveIndex, IndexError> {
             stats: ParseStats::default(),
             jobs: JobStats::default(),
             queue_ships: Vec::new(),
+            has_overrides: HashSet::new(),
         },
         frames: Vec::with_capacity(64),
         unit_stack: vec![PERSISTENT],
@@ -347,6 +360,7 @@ pub fn build_index<R: BufRead>(input: R) -> Result<SaveIndex, IndexError> {
         s_player,
         s_sector,
         s_cluster,
+        extra_dynamic,
     };
     let mut reader = Reader::from_reader(CountingReader { inner: input, count: 0 });
     reader.config_mut().trim_text(false);
@@ -487,7 +501,7 @@ impl Walker {
             let class = self.idx.syms.intern(class_b);
             let class_str = std::str::from_utf8(class_b).unwrap_or("");
             let id = get(b"id").and_then(parse_hex_id).unwrap_or(0);
-            if schema::is_dynamic_class(class_str) {
+            if schema::is_dynamic_class(class_str) || self.extra_dynamic.contains(&class) {
                 let unit = Unit {
                     kind: UnitKind::Dynamic,
                     class,
@@ -548,6 +562,13 @@ impl Walker {
             }
             self.comp_stack.push((id, class));
             flags |= F_COMP;
+        } else if name == b"overrides" {
+            // direct child of the enclosing component (frames: component -> overrides)
+            if let (Some(&(id, _)), Some(&f)) = (self.comp_stack.last(), self.frames.last()) {
+                if f & F_COMP != 0 {
+                    self.idx.has_overrides.insert(id);
+                }
+            }
         } else if name == b"connection" {
             if let Some(id) = get(b"id").and_then(parse_hex_id) {
                 let (owner_comp, owner_class) = self.comp_stack.last().copied().unwrap_or((0, 0));

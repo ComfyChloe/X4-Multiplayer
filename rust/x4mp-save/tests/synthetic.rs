@@ -1,4 +1,4 @@
-//! Unit tests on a small synthetic save: reference closure, neighbour expansion,
+﻿//! Unit tests on a small synthetic save: reference closure, neighbour expansion,
 //! weak-reference pruning, local-namespace separation and dangling detection.
 
 use std::collections::BTreeSet;
@@ -203,6 +203,11 @@ fn opts(n: u32, mode: ScriptRefs) -> TrimOptions {
         keep_owner: "player".into(),
         script_refs: mode,
         client: false,
+        hard: false,
+        prune_md: Vec::new(),
+        masstraffic_off: false,
+        space_overrides: Vec::new(),
+        override_classes: Vec::new(),
     }
 }
 
@@ -384,4 +389,38 @@ fn client_mode_neutralises_jobs() {
     // Without --client the job section is copied unchanged.
     let (plain, _) = trim(SAVE, &opts(1, ScriptRefs::Weak));
     assert!(plain.contains(r#"<job active="1" time="5.5" id="j_b">"#));
+}
+
+#[test]
+fn hard_mode_drops_distant_references_and_prunes() {
+    // NPC state machine instances: one for the pilot of dropped 0x300, one for the kept 0x100.
+    let src = SAVE.replace(
+        "</md>",
+        r#"<script name="NPC_State_Machines"><cue name="Base"><instances>
+<cue id="1" state="complete"><vars><value name="$NPC" type="component" value="[0x310]"/></vars><cue id="2" base="9"/></cue>
+<cue id="3" state="complete"><vars><value name="$NPC" type="component" value="[0x110]"/></vars><cue id="4" base="9"/></cue>
+</instances></cue></script>
+</md>"#,
+    );
+    let mut o = opts(1, ScriptRefs::Weak);
+    o.hard = true;
+    o.masstraffic_off = true;
+    o.prune_md = vec![("NPC_State_Machines".into(), "$NPC".into())];
+    let i = idx(&src);
+    let p = plan(&i, &o).unwrap();
+    let kept = kept_ships(&i, &p.keep);
+    // Sector C is out of range: the station trade no longer pins 0x302 (nor its commander
+    // 0x304). The player's ships and the carrier holding one of them stay.
+    assert!(!kept.contains(&0x302) && !kept.contains(&0x304));
+    assert!(kept.contains(&0x301) && kept.contains(&0x306) && kept.contains(&0x307) && kept.contains(&0x100));
+    let (out, st) = trim(&src, &o);
+    assert!(!out.contains("buyer=\"[0x302]\""), "trade with a dropped ship is pruned");
+    assert_eq!(st.pruned_structural.get("trade@buyer"), Some(&1));
+    assert!(out.contains(r#"<jobs enabled="1" masstraffic="0">"#));
+    assert!(!out.contains(r#"value="[0x310]""#) && !out.contains(r#"<cue id="2""#));
+    assert!(out.contains(r#"<cue id="3" state="complete"><vars><value name="$NPC" type="component" value="[0x110]"/></vars><cue id="4" base="9"/></cue>"#));
+    assert_eq!(st.pruned_md.get("NPC_State_Machines"), Some(&1));
+    let base = dangling_targets(&idx(&src));
+    let r = verify(&idx(&out), Some(&base), false);
+    assert!(r.ok(), "{}", r.render());
 }

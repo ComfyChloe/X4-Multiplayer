@@ -1,4 +1,4 @@
-//! Integration test on the prepared shared starting world (`save_010.xml.gz`).
+﻿//! Integration test on the prepared shared starting world (`save_010.xml.gz`).
 //!
 //! The save is not in Git (it is player data). Copy it to `<repo>/.local/saves/` or set
 //! `X4MP_SAVE_010` to its path; otherwise the test is skipped with a message. It is
@@ -40,6 +40,11 @@ fn trim_then_verify_save_010() {
             keep_owner: "player".into(),
             script_refs: mode,
             client,
+            hard: false,
+            prune_md: Vec::new(),
+            masstraffic_off: false,
+        space_overrides: Vec::new(),
+        override_classes: Vec::new(),
         };
         let p = plan(&base, &opts).unwrap();
         let out = dir.join(format!("trim_{mode:?}_{client}.xml.gz"));
