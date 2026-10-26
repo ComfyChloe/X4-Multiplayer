@@ -142,6 +142,7 @@ def session_config(session, slot, host):
                npc_motion_diagnostics=1, motion_diagnostics=1,
                projectile_visuals=True, shot_undo=False,
                frame_profile=True, net_probe=True,  # On by default in internal packages (dev rule); set false only if they break.
+               player_factions=True,  # Own faction per human (pool x4lan_playerN); see PLAYER-FACTIONS.txt.
                slot=slot, mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
     return ('-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
             + ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n')

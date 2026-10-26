@@ -201,6 +201,11 @@ class Relay:
         self.sent_packets = self.sent_bytes = self.send_errors = 0
         from .netprobe import NetProbe
         self.netprobe = NetProbe(time.monotonic())
+        try:  # player factions (internal packages); absent from builds that omit players.py
+            from .players import PlayerRoster
+            self.players = PlayerRoster()
+        except ImportError:
+            self.players = None
 
     def step(self, now: float | None = None) -> None:
         now = time.monotonic() if now is None else now
@@ -221,11 +226,19 @@ class Relay:
                 for response in self.netprobe.handle(packet, address, peers, now):
                     self._send(response, address)
                 continue
+            if self.players and packet.startswith(b'PF'):
+                # Player factions: routed/cached here, never seen by the session classes.
+                for target, response in self.players.handle(packet, address, peers, now):
+                    self._send(response, target)
+                continue
             for response in self.session.receive(packet, address, now):
                 self._send(response, address)
         if now >= self.next_tick:
             for address, packet in self.session.snapshots(now):
                 self._send(packet, address)
+            if self.players:
+                for address, packet in self.players.snapshots(self.session.peers, now):
+                    self._send(packet, address)
             self.next_tick = now + 1 / TICK_HZ
 
     def _send(self, packet: bytes, address: tuple[str, int]) -> None:
