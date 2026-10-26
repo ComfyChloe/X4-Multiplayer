@@ -117,23 +117,29 @@ captured frame (unmeasured natively).
 - Policy: integers exact; floats bit-exact unless a documented tolerance is configured per field path
   (`Policy::exact().with("transform", Tol::Ulps(1))`); `-0.0 != 0.0` under Exact.
 - `Comparator`: per-field statistics (compared, mismatched, within tolerance, max ULP, max abs), first
-  differences with full path, frame, sector, entity and hex values.
+  differences with full path, frame, sector, entity and hex values. Paths are interned (one trie node per
+  index-free path holding its statistics and its resolved tolerance); the full path with indices is rendered
+  only for a recorded difference. Cost about 2.5 ns per compared value (was 36 ns with string-keyed
+  statistics); no allocation per frame unless a difference is recorded. A self-diff of the 60-frame native
+  capture (60.5M values) takes 1.8 s instead of 4.9 s, most of it reading and mirroring the files.
 - `replay` (recorded inputs/outputs), `Shadow` (online, original authoritative), `FeatureSwitch`
   (`FEATURE <name> DISABLED reason=...`, sticky).
 - `capture::replay_frames`: mirror engine frame k, run the systems, compare their columns with frame k+1
   (consecutive pairs, engine dt). Tests: an identical system replays exactly; a variant forming the product
   in f64 is caught at frame 1 and stays within 1 ULP (documented-bound example).
-- `World/Universe::compare_with` with or without entity-set checks; `x4mp-capdump diff` for two captures.
+- `World/Universe::compare_with` with or without entity-set checks (row-aligned fast path when both worlds
+  hold the same uids in the same order); `x4mp-capdump diff` for two captures.
 
 ## 5. Tests (offline)
 
 | suite | result |
 |---|---|
-| `cargo test -p x4mp-sim` | 62 pass, clippy clean |
+| `cargo test -p x4mp-sim` | 68 pass, clippy clean |
 | thread invariance | 24 sectors x 120 ships, 90 frames, 2 systems: state hash per frame, message log, barrier log and counters byte-identical for 1, 2, 16 threads (6145 messages, 309 spawns, 581 despawns, 286 migrations) |
 | structure property test | 12 seeds x 400 random spawn/despawn/migrate/commit ops against a reference model |
 | capture | round trip; every single-byte corruption detected; truncation, version, magic, schema refusal; mirror across frames (handles kept, migrations, despawns); replay determinism |
 | native golden | the C test's capture of a fake tree read by Rust field by field (header, dictionary, 2 frames, mirror, round trip, check logic) |
+| compare | nested index paths, index-free statistics, changing field order, name collisions (`x.y` vs `x`/`y`), reset, max_diffs, row-aligned vs uid-matched world compare give the same differences |
 | `build.py --fixedtick --test` | fixedtick, simprof, mirror pass (simprof's 3 % overhead assertion is load-sensitive) |
 | LuaJIT | fixed_tick_probe 17, mirror_probe 5 pass |
 
