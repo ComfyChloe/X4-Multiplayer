@@ -27,3 +27,10 @@ version = "7.5.0"
 dependencies = [
  "x4mp-core",
 ]
+
+[[package]]
+name = "x4mp-physics"
+version = "7.5.0"
+dependencies = [
+ "x4mp-core",
+]

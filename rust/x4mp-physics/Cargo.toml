@@ -1,0 +1,14 @@
+[package]
+name = "x4mp-physics"
+description = "Physics/flight rewrite: offline oracle over the pinned X4.exe, flight and steering kernels, capture replay"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "x4mp_physics"
+crate-type = ["rlib"]
+
+[dependencies]
+x4mp-core = { path = "../x4mp-core" }
