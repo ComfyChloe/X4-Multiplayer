@@ -116,7 +116,9 @@ pub fn run_sector(s: &mut SectorAi, services: &dyn Services, now: Time, moving: 
                 Ok(Yield::MoveTo) => moving.push(a.ent),
                 Ok(_) => {}
                 Err(Stop::Unsupported { script, line, what }) => {
-                    io.out.stopped.push((a.ent, format!("{script} L{line}: {what}")));
+                    let why = format!("{script} L{line}: {what}");
+                    io.out.stopped.push((a.ent, why.clone()));
+                    a.stopped = Some(why);
                     a.stack.clear();
                     a.waiting.clear();
                 }

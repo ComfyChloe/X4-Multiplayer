@@ -270,6 +270,8 @@ pub struct Agent {
     pub pending_global: Vec<Pending>,
     /// Queued blocking interrupt (flag 4).
     pub pending_block: Option<Pending>,
+    /// Set when the native behaviour stopped (unsupported branch); the original must run the order.
+    pub stopped: Option<String>,
 }
 
 impl Agent {
@@ -283,6 +285,7 @@ impl Agent {
             wake_at: None,
             pending_global: Vec::new(),
             pending_block: None,
+            stopped: None,
         }
     }
 
@@ -298,6 +301,7 @@ impl Agent {
         self.wake_at = None;
         self.pending_global.clear();
         self.pending_block = None;
+        self.stopped = None;
         let mut frame = frame;
         if let Frame::Patrol(p) = &mut frame {
             let mut cx = Cx { ent: self.ent, facts, io, rng: &mut self.rng };

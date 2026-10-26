@@ -10,6 +10,7 @@
 //! - [`world`]: what a behaviour reads ([`world::Facts`]), the engine queries it issues
 //!   ([`world::Query`]), the effects it emits ([`world::Effect`]) and its outlet ([`world::Io`]).
 //! - [`runtime`]: the per-entity context: script stack, wakes, call/return, interrupt precedence.
+//! - [`order`]: the command interface (typed order specs, start, status) for MD, UI and the faction AI.
 //! - [`orders`]: the ported scripts (`order.fight.patrol`, `move.seekenemies`).
 //! - [`replay`]: offline replay of a trace with a bit-exact diff.
 //! - [`native`]: native bracket captures (aicapture.h) and the checks that need no captured values.
@@ -19,6 +20,7 @@
 //! own XML content and from disassembly notes cited at each item.
 
 pub mod native;
+pub mod order;
 pub mod orders;
 pub mod replay;
 pub mod rng;
