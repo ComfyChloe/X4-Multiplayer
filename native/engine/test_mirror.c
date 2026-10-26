@@ -455,6 +455,17 @@ int main(int argc, char **argv) {
     assert(!strcmp(ms.reason, "initial round-robin capture truncated"));
     mirror_nvisitors = 0;
 
+    /* A transient absent world is retried; recovery must clear the earlier failure reason. */
+    DeleteFileW(rr);
+    assert(!mirror_arm_unchecked(rr, 1, 1, 0, 0));
+    unsigned char *saved_universe = *(unsigned char **)(image + MG_UNIVERSE);
+    *(unsigned char **)(image + MG_UNIVERSE) = NULL;
+    mirror_frame(1);
+    assert(ms.armed && ms.frames_written == 0 && ms.galaxy_misses == 1 && ms.reason);
+    *(unsigned char **)(image + MG_UNIVERSE) = saved_universe;
+    mirror_frame(2);
+    assert(!ms.armed && ms.frames_written == 1 && !ms.reason && !ms.galaxy_misses);
+
     printf("test_mirror: all passed (%zu bytes, layout %s)\n", n, MIRROR_LAYOUT_SHA256);
     return 0;
 }

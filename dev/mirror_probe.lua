@@ -85,6 +85,9 @@ SetScript('onUpdate',function()
   done=true
   -- before the done line: lane runs end on it
   if s.visited_by_class and s.visited_by_class~='' then log('MIRROR visitedByClass '..s.visited_by_class) end
+  if s.reason and s.reason~='complete' then
+   log('FEATURE mirror DISABLED reason='..tostring(s.reason))
+  end
   log(string.format('MIRROR done frames=%d dropped=%d partial=%d rows=%d roots=%d factions=%d bytes=%d walkErrors=%d meanMs=%.3f maxMs=%.3f checks=%d regionQueries=%d cacheFull=%d visited=%d walkMs=%.3f serializeMs=%.3f walkMsPrefetch=%.3f walkMsPlain=%.3f framesPrefetch=%d subsetFrames=%d reason=%s',
    s.frames_written,s.frames_dropped,s.partial_frames,s.rows,s.roots,s.factions,s.bytes,s.walk_errors,
    s.mean_ms,s.max_ms,checked,s.region_queries or 0,s.region_cache_full or 0,s.visited or 0,

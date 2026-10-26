@@ -105,6 +105,17 @@ class MirrorProbeTests(unittest.TestCase):
           ui();ui();assert(#calls==1)
         ''')
 
+    def test_runtime_failure_precedes_done_marker(self):
+        lua = self.runtime("X4LAN_MIRROR_PATH='C:/cap/failed.x4cap';X4LAN_MIRROR_DELAY=0")
+        lua.execute('''
+          X4LAN_FIXEDTICK_OWNER=owner;ui();ui()
+          stats.armed=0;stats.reason='initial round-robin capture truncated'
+          ui()
+          assert(logs[#logs-1]=='[X4LAN] FEATURE mirror DISABLED reason=initial round-robin capture truncated',logs[#logs-1])
+          assert(logs[#logs]:find('MIRROR done',1,true),logs[#logs])
+          local n=#logs;ui();assert(#logs==n)
+        ''')
+
     def test_inert_without_path_or_outside_the_test_profile(self):
         lua = self.runtime("X4LAN_MIRROR_PATH=nil")
         lua.execute('assert(ui==nil)')

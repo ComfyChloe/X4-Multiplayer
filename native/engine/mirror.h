@@ -939,6 +939,7 @@ static void mirror_frame(uint64_t frame) {
         return; /* nothing captured this frame */
     }
     ms.galaxy_misses = 0;
+    ms.reason = NULL; /* a previously absent galaxy recovered before the retry limit */
     unsigned root = mirror_new_root(*(const uint64_t *)(galaxy + MO_ID), 2);
     ms.prefetch_now = (ms.flags & MIRROR_AB_PREFETCH) && ((ms.frames_written + ms.frames_dropped) & 1);
     ms.sector_seq = 0;
