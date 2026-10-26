@@ -13,6 +13,7 @@ assert(initialise,message)
 local native=initialise()
 local owner,reason
 local walkRefusedLogged
+local physRefusedLogged
 local sectorHooks={[0]='pending',[1]='original',[2]='chained',[3]='refused'}
 local nextTry=0
 local nextLog=0
@@ -40,6 +41,23 @@ local function logStats(now)
  elseif (s.walk_refused or 0)==1 and not walkRefusedLogged then
   walkRefusedLogged=true
   DebugError('[X4LAN] FEATURE walkprof DISABLED reason=vtable or signature mismatch')
+ end
+ -- Physics/flight-job probe (physics_probe.h): Jolt step on the MoveWorker, pathing pass, pool occupancy.
+ if (s.phys_installed or 0)==1 and (s.phys_frames or 0)>0 then
+  DebugError(string.format('[X4LAN] PHYSPROF frames=%d updates=%.2f joltMs=%.3f jolt0Ms=%.3f jolt1Ms=%.3f joltMaxMs=%.3f jobs=%.1f added=%.1f persisted=%.1f removed=%.1f bodies0=%.1f bodies1=%.1f bodiesMax=%d',
+   s.phys_frames,s.phys_updates or 0,s.phys_jolt_ms or 0,s.phys_jolt0_ms or 0,s.phys_jolt1_ms or 0,s.phys_jolt_max_ms or 0,
+   s.phys_jobs or 0,s.phys_added or 0,s.phys_persisted or 0,s.phys_removed or 0,s.phys_bodies0 or 0,s.phys_bodies1 or 0,s.phys_bodies_max or 0)..
+   string.format(' pairs=%.1f multiPairs=%.2f multiPairsTotal=%d pairOverflow=%d',
+   s.phys_pairs or 0,s.phys_multi_pairs or 0,s.phys_multi_pairs_total or 0,s.phys_pair_overflow or 0)..
+   string.format(' pathBatchesA=%d pathBatchesB=%d pathBudgetMs=%.3f pathDt=%.4f pathInflight=%.3f pathPasses=%d pathPassMs=%.3f pathPassMaxMs=%.3f pathJoins=%d pathTightJoins=%d pathSlackMs=%.3f',
+   s.path_batches_a or -1,s.path_batches_b or -1,s.path_budget_ms or 0,s.path_dt or 0,s.path_inflight or 0,s.path_passes or 0,
+   s.path_pass_ms or 0,s.path_pass_max_ms or 0,s.path_joins or 0,s.path_tight_joins or 0,s.path_slack_ms or 0)..
+   string.format(' jtmWorkers=%d jtmSamples=%d jtmBusy=%.2f jtmBusyMax=%d jtmCat1=%.2f jtmCat2=%.2f jtmOther=%.2f jtmQueue=%.2f jtmQueueMax=%d joltSamples=%d jtmBusyInJolt=%.2f',
+   s.jtm_workers or 0,s.jtm_samples or 0,s.jtm_busy or 0,s.jtm_busy_max or 0,s.jtm_cat1 or 0,s.jtm_cat2 or 0,s.jtm_other or 0,
+   s.jtm_queue or 0,s.jtm_queue_max or 0,s.jtm_jolt_samples or 0,s.jtm_busy_in_jolt or 0))
+ elseif (s.phys_installed or 1)==0 and not physRefusedLogged then
+  physRefusedLogged=true
+  DebugError('[X4LAN] FEATURE physprof DISABLED reason='..tostring(s.phys_reason or 'unknown'))
  end
  nextLog=now+1
 end

@@ -231,6 +231,7 @@ static handler hook_begin = {begin_vtable};
 static handler hook_end = {end_vtable};
 static int64_t sim_begin_qpc;
 #include "walkprof.h"
+#include "physics_probe.h"
 
 static void **table_now(void) {
     return image ? *(void ***)(image + VBI_RVA) : NULL;
@@ -319,6 +320,7 @@ static void disarm_because(const char *reason) {
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
     walk_uninstall();
+    pp_uninstall();
     unregister_sim_hooks();
     if (table_owned())
         InterlockedCompareExchangePointer((void *volatile *)&registered_table[SLOT], NULL, &hook);
@@ -355,6 +357,7 @@ static void sim_end(handler *self) {
     unsigned bucket = (unsigned)(ms * 4.0);
     o->win_hist[bucket < SIM_BUCKETS ? bucket : SIM_BUCKETS - 1]++;
     walk_frame_end();
+    pp_frame_end();
 }
 
 /* p95 of the current window in ms (bucket upper edge), then reset the window. */
@@ -484,6 +487,8 @@ static int stats(lua_State *L) {
     o->win_count = 0; o->win_sum_ms = 0.0; o->win_max_ms = 0.0;
     memset(o->win_hist, 0, sizeof(o->win_hist));
     if (o->reason) { p_lua_pushlstring(L, o->reason, strlen(o->reason)); p_lua_setfield(L, -2, "reason"); }
+    pp_stats(L, number_field);
+    if (pp_reason) { p_lua_pushlstring(L, pp_reason, strlen(pp_reason)); p_lua_setfield(L, -2, "phys_reason"); }
     if (o->profile) {
         const char *why = o->profile_reason ? o->profile_reason : (sp.state == 2 ? sp.reason : NULL);
         number_field(L, "simprof", why ? 2 : (o == current && sp.state == 1));
@@ -650,6 +655,8 @@ static int start(lua_State *L) {
     o->armed = 1;
     /* Component-walk profiling needs the slot 0/15 frame brackets; optional, fail closed. */
     if (o->sim_hooks && !walk_install(1)) o->walk_refused = 1;
+    /* Physics/flight-job probe: data-only vtable wraps + read-only sampler; optional, fail closed. */
+    if (o->sim_hooks) pp_install(1); else pp_reason = "no frame brackets";
     if (profiling) {
         /* A sampler that cannot start leaves the probe running; stats() reports why. */
         o->profile = 1;

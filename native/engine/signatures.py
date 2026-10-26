@@ -49,7 +49,39 @@ WALK_EXTRA_ENTRIES = [
 ]
 WALK_CODE_SITES = {f'walk_{name}_move': (fn, 32, sha) for name, (fn, _entry, sha) in WALK_SITES.items()}
 
-SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES}
+# Physics/flight-job probe (physics agent, physics_probe.h). Wrapped .rdata vtable entries
+# (function RVA, vtable entry RVA): XPhys::XJobSystem (vtable 0x2A2ABA0) slots 2 CreateJob and
+# 5 WaitForJobs, XPhys::XContactListener (vtable 0x2A2AB48) slots 2-4 (added/persisted/removed).
+# Order matters: physics_probe.h indexes PP_CREATE, PP_WAIT, PP_ADDED, PP_PERSISTED, PP_REMOVED.
+PHYSICS_VTABLE_SITES = {
+    'job_create': (0xC5960, 0x2A2ABB0),
+    'job_wait': (0xC5A70, 0x2A2ABC8),
+    'contact_added': (0xB7230, 0x2A2AB58),
+    'contact_persisted': (0xB7250, 0x2A2AB60),
+    'contact_removed': (0xB7270, 0x2A2AB68),
+}
+# Code whose bytes establish what the probe reads (no base relocations in any range).
+PHYSICS_SITES = {
+    'jolt_job_max_concurrency': (0xC5940, 24, 'ea41983c8853e368253719bebeee39612ea260cb5719e633669388722b04aaa6'),
+    'jolt_job_create': (0xC5960, 32, '90b58768bed65170d856bb9eadac6760434f70cde60c08a1ac629c29e0b1706f'),
+    'jolt_job_wait_thunk': (0xC5A70, 8, '126fdbc39df631064fcd8df5d39460f2db0ad228bbf7dbe6bfd1ee8694ac4fb3'),
+    'jolt_job_queue': (0xC5A80, 75, 'e3fa7f7b2c8d552814fff09dff30cc808283bd8fca8720c9ca913c8ced79e291'),
+    'jolt_job_wait': (0xC5DC0, 32, '0b62755d3cdd0a951e1d59030d2c92987b7405d6248f9c2034f542fa7e1e2d15'),
+    'jolt_contact_added': (0xB7230, 29, '7a528abe5d453d86f4755a82afec551e75b7fab3e4791e870cb00ed486610d75'),
+    'jolt_contact_persisted': (0xB7250, 29, '7058941a117d0b6ef7e0cb35bca789d317f1759696a2af94577cd068cb7db720'),
+    'jolt_contact_removed': (0xB7270, 32, '7277e9ef726c6babb41bfbf578c7db1ca4a30f89d057b199badc078f69a7dace'),
+    'scene_step_sync_list': (0xBA6C4, 42, '0a8c6e1d5c6e770a7edae6172ee82e844f3371076166defc0ca9b84f8d0b1e0a'),
+    'scene_step_update': (0xBA8BC, 57, '52de8a3cbc7b41b1d6d2369ad1cff3acc09cd221e8d193b12b05879e1dc63dfe'),
+    'universe_scene_steps': (0x9FE42C, 100, '263d32f7db18493a422c0d1ffec8a2dd3768e285b803ef74346d638ccb79b83e'),
+    'pathing_update_batch': (0xEAED43, 198, 'c047f7b9fc40c34a0d9b1fdbac1c9963907035a93965441b4e2b048e7686f3b0'),
+    'pathing_run_pass_batches': (0xEAE8EF, 182, '5e5821cfe341edc82a3c5d5d4d4d11417b1d2fde28062a80dae3132da33ba8d3'),
+    'jtm_thread_job_begin': (0x14BC20D, 34, '80da2309c490a921bcddd4b550f1afda008908f2b8fbb0cdbfc8b73d62e40176'),
+    'jtm_thread_job_end': (0x14BC27C, 40, '38f5afff39b6887473f0be6e8fd5a923c2b879a876420d9740e17694bc45b1f5'),
+    'jtm_thread_wait': (0x14BC0C0, 64, '2047329aa41dd9a836818c09d3bb0a498a2c8cf3c0041e50ec8d3d2c5f6d9095'),
+    'jtm_thread_count': (0x14BD095, 75, '1cdaade74bb0a78b3e6c4a556565cc531071d26ec2c627ad7c4fc24cf3286599'),
+}
+
+SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **PHYSICS_SITES}
 
 
 def c_header() -> str:
@@ -61,7 +93,8 @@ def c_header() -> str:
         f'#define X4_IMAGE_SIZE 0x{EXECUTABLE["image_size"]:x}u',
         'typedef struct { size_t rva; ULONG length; const char *sha; } x4_signature_check;',
     ]
-    for name, sites in [('common', COMMON_SITES), ('simtick', SIMTICK_SITES), ('fixedtick', FIXEDTICK_SITES)]:
+    for name, sites in [('common', COMMON_SITES), ('simtick', SIMTICK_SITES), ('fixedtick', FIXEDTICK_SITES),
+                        ('physics', PHYSICS_SITES)]:
         lines.append(f'static const x4_signature_check x4_{name}_checks[] = {{')
         for rva, length, sha in sites.values():
             lines.append(f'    {{0x{rva:x}, {length}, "{sha}"}},')
@@ -76,5 +109,10 @@ def c_header() -> str:
     lines.append('static const x4_walk_extra x4_walk_extras[] = {')
     for name, entry in WALK_EXTRA_ENTRIES:
         lines.append(f'    {{{classes.index(name)}, 0x{entry:x}}},')
+    lines.append('};')
+    lines.append('typedef struct { const char *name; size_t fn; size_t entry; } x4_physics_vtable;')
+    lines.append('static const x4_physics_vtable x4_physics_vtables[] = {')
+    for name, (fn, entry) in PHYSICS_VTABLE_SITES.items():
+        lines.append(f'    {{"{name}", 0x{fn:x}, 0x{entry:x}}},')
     lines.append('};')
     return '\n'.join(lines) + '\n'
