@@ -178,6 +178,18 @@ class Installer(unittest.TestCase):
             install.uninstall(self.extensions, self.lanes)
         self.assertEqual((foreign / 'keep.txt').read_text(), 'user data')
 
+    def test_stage_writes_a_complete_extension_folder(self):
+        out = Path(self.tmp.name) / 'stage'
+        folder = install.stage(out, 'smoke')
+        self.assertEqual(folder.name, 'x4mp_combat_scenario')
+        self.assertEqual(E.parse(folder / 'content.xml').getroot().get('id'), 'x4mp_combat_scenario')
+        variant = E.parse(folder / 'md' / 'x4mp_combat_variant.xml')
+        self.assertIn("'smoke'", [s.get('exact') for s in variant.iter('set_value')])
+        install.stage(out, 'battle')  # restaging over our own folder is allowed
+        (folder / 'INSTALL.json').unlink()
+        with self.assertRaises(install.Refused):
+            install.stage(out, 'battle')
+
     def test_cli_exit_code_on_refusal(self):
         error = io.StringIO()
         with contextlib.redirect_stderr(error):

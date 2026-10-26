@@ -3,6 +3,9 @@
     python dev/combat_scenario/install.py install --extensions <lane view>/extensions --variant battle
     python dev/combat_scenario/install.py status --extensions <dir>
     python dev/combat_scenario/install.py uninstall --extensions <dir>
+    python dev/combat_scenario/install.py stage --variant battle --out <dir>
+        writes <dir>/x4mp_combat_scenario (a complete extension folder) for
+        `x4lane.py run --extension <dir>/x4mp_combat_scenario`; touches no game view.
 
 The target must resolve (junctions and symlinks followed) to a directory named "extensions"
 inside the lanes root (default: <X4Mods>/lanes, the agent lanes B1/B2). Anything else, in
@@ -56,11 +59,10 @@ def read_marker(folder: Path):
         return None
 
 
-def install(extensions: Path, variant: str, lanes_root: Path) -> Path:
+def write_extension(folder: Path, variant: str) -> Path:
     choices = variants()
     if variant not in choices:
         raise Refused(f'unknown variant {variant!r}; choose one of {", ".join(choices)}')
-    folder = checked_target(extensions, lanes_root)
     if folder.exists():
         if read_marker(folder) is None:
             raise Refused(f'{folder} exists and was not installed by this tool')
@@ -72,6 +74,18 @@ def install(extensions: Path, variant: str, lanes_root: Path) -> Path:
                   source=str(HERE))
     (folder / MARKER).write_text(json.dumps(marker, indent=2) + '\n', encoding='utf-8')
     return folder
+
+
+def install(extensions: Path, variant: str, lanes_root: Path) -> Path:
+    if variant not in variants():
+        raise Refused(f'unknown variant {variant!r}; choose one of {", ".join(variants())}')
+    return write_extension(checked_target(extensions, lanes_root), variant)
+
+
+def stage(out: Path, variant: str) -> Path:
+    """A complete extension folder under `out` (for x4lane --extension); no game view involved."""
+    out.mkdir(parents=True, exist_ok=True)
+    return write_extension(out.resolve() / EXTENSION_ID, variant)
 
 
 def uninstall(extensions: Path, lanes_root: Path) -> bool:
@@ -96,13 +110,23 @@ def status(extensions: Path, lanes_root: Path) -> str:
 
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument('action', choices=('install', 'uninstall', 'status', 'variants'))
+    parser.add_argument('action', choices=('install', 'uninstall', 'status', 'variants', 'stage'))
     parser.add_argument('--extensions', type=Path, help='the lane game view extensions folder')
     parser.add_argument('--variant', default='battle')
     parser.add_argument('--lanes-root', type=Path, default=default_lanes_root())
+    parser.add_argument('--out', type=Path, help='stage: directory that receives the extension folder')
     args = parser.parse_args(argv)
     if args.action == 'variants':
         print(' '.join(variants()))
+        return 0
+    if args.action == 'stage':
+        if args.out is None:
+            parser.error('stage needs --out')
+        try:
+            print(f'staged {args.variant} at {stage(args.out, args.variant)}')
+        except Refused as refusal:
+            print(f'REFUSED {refusal}', file=sys.stderr)
+            return 3
         return 0
     if args.extensions is None:
         parser.error('--extensions is required')
