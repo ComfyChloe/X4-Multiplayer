@@ -34,8 +34,18 @@ local function report(now,readyAt)
  local client=X4LAN_BUBBLE_API and X4LAN_BUBBLE_API.state and X4LAN_BUBBLE_API.state.client
  if client then log(string.format('DRAIN slot=%s latest=%d max=%d',cfg.slot,client.drained or 0,client.drainedMax or 0)) end
 end
+local wrapped=false
 SetScript('onUpdate',function()
  local ok,err=pcall(function()
+  local A=X4LAN_BUBBLE_API
+  if not wrapped and A and A.players and A.players.receive then
+   -- Trace relation packets as this client receives them (diagnostic only).
+   wrapped=true;local receive=A.players.receive
+   A.players.receive=function(f,now)
+    if f[1]=='PFREL' or f[1]=='PFREQ' then log('RX '..table.concat(f,'|',1,math.min(#f,8))) end
+    return receive(f,now)
+   end
+  end
   local P=X4LAN_PLAYERS
   local st=P and P.state
   if done or not st or not st.ready or st.failed then return end
