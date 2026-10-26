@@ -1,6 +1,7 @@
 PLAYER FACTIONS (config flag player_factions) - INTERNAL
-Native status: engine behaviour verified in ONE real X4 (lane probe, below); a two-client session
-(client 1 + client 2 in one relay session) has NOT run yet.
+Native status: the two-client faction/relations/piloted-owner stage passed in two real Windows
+X4 clients on 26 October2026 (s004, frozen819c070, below). Later PFREQ second-hop ordering
+changes7c23ab2 have synthetic Python/LuaJIT coverage; they were not in that native run.
 
 Two-client evidence must also pass:
   python dev/validate_player_factions_session.py .local/lane/sessions/<label>
@@ -169,8 +170,25 @@ Runs 2026-10-26 pfprobe-001..003 (logs in .local/lane/runs/, not committed):
 - set_owner sector -> x4lan_player2 stays for 8 s (no engine recompute in that window), restorable.
 - Pool factions have NO own account (hasownaccount 0; .money reads garbage): per-player money
   cannot use the pool faction's account; it needs a ledger (open).
-Not covered natively yet: the Lua/MD session path (Setup/Assign/Relation via relay), the co-op
-ship owner switch while a remote human flies, and anything with two clients.
+That single-game probe did not cover the Lua/MD session path or two-client owner switching.
+The later two-client run below covers those narrower paths.
+
+TWO-NATIVE-CLIENT EVIDENCE (26 October2026, loopback relay, new x4lan_internal worlds)
+s002 used the older task-base32-datagram receive cap. Client1 applied allied/neutral/hostile/
+allied, but client2 retained the initial alliance. Preserve that failed run. Relay output to
+client2 was about1200 packets/s; its receive capacity was insufficient under the measured load.
+s004 used frozen819c070 with ONLY the DRAIN256+metrics client fix ported from reviewedb9f03b4.
+Lanes b1/b3, profiles45850/45853, released toole04b02a. Both clients completed16 correlated
+named faction/diplomacy/piloted-owner observations and native BILATERAL relation readbacks
+0.75 ->0 ->-0.5 ->0.75. UI values28 ->0 ->-27 ->28, with final allied readback after160s.
+Client2's neutral intent and client1's hostile/allied intents succeeded. Both fixtures used
+the name Multiplayer Pilot: distinct simultaneous human names are not independently proven.
+Client2 drainMax147 exceeds the old cap32. Both games closed normally and lanes restored.
+Strict validator970f3bd passes; all115 frozen input hashes verified after completion.
+Evidence .local/lane/sessions/s-004-drain256/{result,acceptance}.json and native client logs;
+frozen input manifest .local/lane/inputs/s-004-drain256/SOURCE-CHECKPOINT.json. No raw logs in Git.
+This is a two-co-op-client functional result, not timing, dedicated-server, cargo/magnet/radar,
+save/load, personal ledger or sector-claim acceptance. New protocol-ordering work is separate.
 
 PROPOSAL: MONEY PER PLAYER (goal 4) - DESIGN ONLY, NOT IMPLEMENTED
 Today (7.x co-op) there is ONE shared wallet: md/x4lan_trade.xml Order debits/credits faction.player
