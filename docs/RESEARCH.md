@@ -66,7 +66,7 @@ Linux build, including ship enumeration and `ActivateObject`. Source review also
 found first-object framing loss (reproduced), suppressed empty cargo snapshots,
 and discarded partial TCP sends. Preserve our host-validated MD transaction path
 when learning from its dynamic ship streaming design. The detailed review and
-pinned references are in [the local research record](../../research/neresco-x4mp/REVIEW.txt).
+pinned references are in [the local research record](../../../research/neresco-x4mp/REVIEW.txt).
 No external code has been integrated or deployed.
 
 X4Native notes refer to an X4Online project and object replication. A public
@@ -98,5 +98,5 @@ IsNetworkEngineEnabled returned constant false (31 c0 c3). Names and UI remnants
 are not evidence of a usable built-in LAN mode. No game binary was modified.
 
 Later native cargo/combat/trade evidence and the user's first short two-computer
-ZeroTier connection are recorded in TRADE_TESTS.txt. They do not establish a full
+ZeroTier connection are recorded in docs/testing/TRADE_TESTS.txt. They do not establish a full
 shared universe, stable long session or unique historical first implementation.

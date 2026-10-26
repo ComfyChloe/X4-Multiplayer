@@ -3,7 +3,7 @@
 Status: internal, 26 October 2026. Walking avatars are implemented for N players and
 covered by Rust, Python and LuaJIT tests with synthetic peers. **No native run yet**:
 whether X4 draws, places and animates the avatars as intended is unverified. The
-in-game procedure is [distribution/HUMAN-WALK-TEST.txt](distribution/HUMAN-WALK-TEST.txt).
+in-game procedure is [distribution/HUMAN-WALK-TEST.txt](../distribution/HUMAN-WALK-TEST.txt).
 Multi-crew and EVA are design notes (sections 4 and 5), with the groundwork they
 need already in the protocol.
 

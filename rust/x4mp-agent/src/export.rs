@@ -13,7 +13,7 @@
 //!   on this thread (the universe is mutated by the MoveWorker without locks).
 //! - On any inconsistency return `Err`; the caller disarms the agent (fail closed).
 //! - Keep this separate from the hook-free transport (`x4lan-net`), per
-//!   ENGINE-INSTRUMENTATION.txt rule 2.
+//!   docs/ENGINE-INSTRUMENTATION.txt rule 2.
 
 /// What the frame callback observed this frame.
 #[derive(Debug, Clone, Copy, Default, PartialEq)]

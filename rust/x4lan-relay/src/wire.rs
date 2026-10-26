@@ -122,7 +122,7 @@ pub const MAX_SHIPS: u8 = 8;
 /// Ships 1 and 2 own the fixed WORLD rows, fixture drops/targets, pilot-reported
 /// health, shot claims, cargo, market orders, dock attachment and projectile visuals.
 /// Ships beyond this are motion/fire/authority/body only; their health is
-/// host-authoritative through `XSHIP`. See DEDICATED-SERVER.md "N-player limits".
+/// host-authoritative through `XSHIP`. See docs/DEDICATED-SERVER.md "N-player limits".
 pub const FIXTURE_SHIPS: u8 = 2;
 
 const SLOT_NAMES: [&str; MAX_SLOTS as usize] = ["p1", "p2", "p3", "p4", "p5", "p6", "p7", "p8"];

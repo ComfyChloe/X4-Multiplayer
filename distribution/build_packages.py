@@ -100,8 +100,8 @@ def build(destination: Path, runtime_cache: Path | None = None, dedicated=False,
               + f'    ship_loadout = "{SHIP_LOADOUT}",\n    ship_weapons = {SHIP_WEAPONS},\n' + '}\n')
         for name in ('INSTALL.html', 'README.txt', 'CHANGELOG.txt', 'NEXT-TEST.txt'):
             document(DIST / name, root / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
-        shutil.copy2(SOURCE / 'VERSIONING.txt', root / 'VERSIONING.txt')
-        if dedicated: shutil.copy2(SOURCE / 'DEDICATED-SERVER.md', root / 'DEDICATED-SERVER.md')
+        shutil.copy2(SOURCE / 'docs/VERSIONING.txt', root / 'VERSIONING.txt')
+        if dedicated: shutil.copy2(SOURCE / 'docs/DEDICATED-SERVER.md', root / 'DEDICATED-SERVER.md')
         shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', root / 'WORLD-SYNC-TEST.txt')
         for name in ('HUMAN-DAMAGE-TEST.txt','HUMAN-DOCK-TEST.txt','HUMAN-NPC-MISSION-TEST.txt','HUMAN-TEST-RESULT.txt','HUMAN-WALK-TEST.txt'):
             document(DIST / name, root / name, release)
@@ -168,7 +168,7 @@ def build(destination: Path, runtime_cache: Path | None = None, dedicated=False,
                  'HUMAN-DAMAGE-TEST.txt', 'HUMAN-DOCK-TEST.txt', 'HUMAN-TEST-RESULT.txt', 'HUMAN-WALK-TEST.txt'):
         document(DIST / name, destination / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
     shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', destination / 'WORLD-SYNC-TEST.txt')
-    shutil.copy2(SOURCE / 'VERSIONING.txt', destination / 'VERSIONING.txt')
+    shutil.copy2(SOURCE / 'docs/VERSIONING.txt', destination / 'VERSIONING.txt')
     (destination / 'reports').mkdir()
     shutil.copy2(reports[1], destination / 'reports/RELEASE-CHECKS.txt')
     write(destination / 'VERSION.txt', release + '\n')

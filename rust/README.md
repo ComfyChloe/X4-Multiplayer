@@ -3,7 +3,7 @@
 Status: **experimental relay/native port plus a dedicated-server prototype**.
 The original proof of concept was based on `contrib/astra-7-5-delivery` @ 8a56415
 (7.5.0). The `contrib/kimi-dedicated-server` branch adds a supervised Linux authority
-and two human guest roles; see `DEDICATED-SERVER.md`. Ordinary packages retain the
+and two human guest roles; see `docs/DEDICATED-SERVER.md`. Ordinary packages retain the
 Python relay and existing transport unless the dedicated build is selected.
 
 **No native X4 acceptance is claimed by the Rust code alone.** The original evidence

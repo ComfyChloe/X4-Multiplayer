@@ -265,10 +265,11 @@ class InternalPackageRuntime(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             # Fixture reports and Rust outputs only; this is no release validation.
             source = Path(temp) / 'source'; source.mkdir()
-            for name in ('VERSION.txt', 'VERSIONING.txt', 'DEDICATED-SERVER.md', 'extension', 'x4lan'):
+            for name in ('VERSION.txt', 'docs/VERSIONING.txt', 'docs/DEDICATED-SERVER.md', 'extension', 'x4lan'):
                 if (ROOT / name).is_dir():
                     shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns('__pycache__'))
                 else:
+                    (source / name).parent.mkdir(parents=True, exist_ok=True)
                     shutil.copy2(ROOT / name, source / name)
             release = build_packages.version()
             (source / 'reports').mkdir()

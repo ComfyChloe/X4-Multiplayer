@@ -11,7 +11,7 @@ Anyone may fork and change their own copy. Only the owner and invited
 collaborators can push to this original repository or merge changes here;
 visitors can propose changes through pull requests.
 
-Existing contributors: read the [history migration notes](PUBLICATION-NOTES.txt)
+Existing contributors: read the [history migration notes](docs/PUBLICATION-NOTES.txt)
 before pushing from an older checkout. The project owner is Lith7ium; Ferrite
 leads technical development.
 
@@ -28,9 +28,11 @@ and additional-client experiments are on separate development branches; agree
 the actual task baseline with Ferrite before contributing.
 
 Read [AGENTS.md](AGENTS.md) and the short [current handoff](CONTINUE-HERE.txt).
-Use [development setup](DEVELOPMENT.txt) and [contribution rules](CONTRIBUTING.txt)
+Use [development setup](docs/DEVELOPMENT.txt) and [contribution rules](CONTRIBUTING.txt)
 for your own environment/worktree. [CLAUDE.md](CLAUDE.md) imports the same rules.
 Load only task-relevant evidence rather than the entire historical archive.
+Architecture, requirements, policies and historical test reports are in
+[docs/](docs/README.md).
 
 ## Delivered packages and current source
 
@@ -72,7 +74,7 @@ remaining occupied-pad cases, captured-ship ownership and faction-fleet orders.
 NPC targeting/speed/fire remain intermittent, and highway travel can cause
 position jumps. Guest wreck/debris presentation is incomplete. Complete background economy, progressed-world save/resume and absent-client
 catchup remain unfinished. Restarting currently returns to the pristine starting
-world. See [world requirements](WORLD-SYNC-REQUIREMENTS.txt) and the current handoff
+world. See [world requirements](docs/WORLD-SYNC-REQUIREMENTS.txt) and the current handoff
 for evidence limits and the relevant native reports.
 
 The7.5.0 candidate has636 passing Linux/Python/LuaJIT tests without skips;
@@ -89,4 +91,4 @@ while official playtest packages remain internal unless the owner authorizes a
 public release. The license permits third-party noncommercial builds, but those
 are independent builds and must not be presented as an official project release.
 The current code uses no game-memory offsets or copied assets; engine
-instrumentation is opt-in under `ENGINE-INSTRUMENTATION.txt`.
+instrumentation is opt-in under [`docs/ENGINE-INSTRUMENTATION.txt`](docs/ENGINE-INSTRUMENTATION.txt).

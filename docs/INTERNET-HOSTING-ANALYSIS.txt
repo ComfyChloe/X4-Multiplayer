@@ -43,7 +43,7 @@ Existing native evidence consists of a Linux host and a Linux guest, each tested
 against a synthetic counterpart. Host captures contained 124-131 NPCs; the guest
 replayed 124. This is not a two-human, Windows/Linux, WAN, unattended-server,
 integrated-GPU, or long-running simulation benchmark. No new runtime tests were
-performed for this document. See ARCHITECTURE.md and WORLD-SYNC-REQUIREMENTS.txt.
+performed for this document. See docs/ARCHITECTURE.md and docs/WORLD-SYNC-REQUIREMENTS.txt.
 
 2. ARCHITECTURE OPTIONS
 
@@ -346,7 +346,7 @@ Repository evidence, at the baseline commit above:
   extension/x4_lan_lab/ui/universe_game.lua: enumeration, replicas, sector scope.
   reports/world1-native-checks.json and reports/release-7.0.0-checks.txt: measured
     evidence and limits, including synthetic counterparts.
-  ARCHITECTURE.md; WORLD-SYNC-REQUIREMENTS.txt; DEVELOPMENT.txt.
+  docs/ARCHITECTURE.md; docs/WORLD-SYNC-REQUIREMENTS.txt; docs/DEVELOPMENT.txt.
 
 Local engine-owned reference (not redistributed with this document):
   ../../preparation/game-schemas/libraries/common.xsd, X4 9.00:
