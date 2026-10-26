@@ -206,13 +206,22 @@ static void mirror_region_add(uintptr_t base, uintptr_t end) {
 
 /* [p, p+len) is committed readable memory (possibly across several regions). Readable regions
    seen this frame are cached as sorted intervals, so most checks are a binary search. */
+static mirror_region mirror_last_hit[2];
+
 static int mirror_ok(const void *p, size_t len) {
     uintptr_t a = (uintptr_t)p, b = a + len;
     if (!p || b < a) return 0;
+    /* most checks hit the region of one of the previous two checks */
+    for (unsigned k = 0; k < 2; ++k)
+        if (a >= mirror_last_hit[k].base && b <= mirror_last_hit[k].end) return 1;
     uintptr_t at = a;
     while (at < b) {
         unsigned i = mirror_region_find(at);
         if (i < ms.nregions && mirror_regions[i].base <= at) {
+            if (a >= mirror_regions[i].base && b <= mirror_regions[i].end) {
+                mirror_last_hit[1] = mirror_last_hit[0];
+                mirror_last_hit[0] = mirror_regions[i];
+            }
             at = mirror_regions[i].end;
             continue;
         }
@@ -856,6 +865,7 @@ static void mirror_frame(uint64_t frame) {
     ms.nrows = 0;
     ms.nroots = 0;
     ms.nregions = 0;
+    memset(mirror_last_hit, 0, sizeof(mirror_last_hit)); /* the region cache is per frame */
     mirror_full = 0;
     for (unsigned v = 0; v < mirror_nvisitors; ++v)
         if (mirror_visitors[v]->begin_frame) mirror_visitors[v]->begin_frame(mirror_visitors[v]->user, frame);
