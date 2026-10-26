@@ -32,6 +32,13 @@ TOKEN = 'a' * 32
 P1, P2 = ('192.0.2.1', 1000), ('192.0.2.2', 2000)
 
 
+def gen_locked():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location('gen', ROOT / 'dev/build_player_factions.py')
+    gen = importlib.util.module_from_spec(spec); spec.loader.exec_module(gen)
+    return gen.LOCKED
+
+
 class FactionPoolDiff(unittest.TestCase):
     def setUp(self):
         self.tree = E.parse(FACTIONS)
@@ -61,8 +68,13 @@ class FactionPoolDiff(unittest.TestCase):
             self.assertIsNone(c.get('ref'))
             rel = {r.get('faction'): float(r.get('relation')) for r in f.find('relations')}
             self.assertEqual(rel.pop('player'), .75)
-            self.assertEqual(set(rel), set(ids) - {f.get('id')})  # allied to every other human only
+            # Relation-locked NPC factions cannot be changed at runtime: the player's values, static.
+            self.assertEqual({k: rel.pop(k) for k in dict(gen_locked())}, {k: float(v) for k, v in gen_locked()})
+            self.assertEqual(set(rel), set(ids) - {f.get('id')})  # allied to every other human
             self.assertTrue(all(v == .75 for v in rel.values()))
+        for other, value in gen_locked():
+            add = self.tree.getroot().find(f"add[@sel=\"/factions/faction[@id='{other}']/relations\"]")
+            self.assertEqual([(r.get('faction'), r.get('relation')) for r in add], [(i, value) for i in ids])
         self.assertEqual(len(colours), 16)
         player = self.tree.getroot().find("add[@sel=\"/factions/faction[@id='player']/relations\"]")
         self.assertEqual([r.get('faction') for r in player], ids)

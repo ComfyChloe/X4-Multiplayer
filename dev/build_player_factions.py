@@ -19,6 +19,12 @@ COLOURS = [
 # Same basic licences the vanilla player faction starts with (base-game issuers only).
 ISSUERS = 'alliance antigone argon buccaneers hatikvah holyorder ministry paranid scaleplate teladi trinity'
 ALLIED = '0.75'   # ally range is 0.5..1.0; 1.0 would read as "self" in the UI.
+# Base-game factions with <relations locked="1"> and their vanilla relation to "player". Runtime
+# set_faction_relation has no effect on them (native probe 20261026, xenon stayed 0), so the pool
+# inherits the player's locked relations here, on both sides. Unlocked factions are mirrored at
+# runtime (md/x4lan_player_factions.xml RelationMirror).
+LOCKED = [('buccaneers', '-0.032'), ('criminal', '-0.5'), ('holyorderfanatic', '-1'), ('khaak', '-1'),
+          ('outlaw', '-0.32'), ('scaleplate', '-0.0032'), ('xenon', '-1')]
 TARGET = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/libraries/factions.xml'
 
 
@@ -33,6 +39,10 @@ def build():
     out.append('  <add sel="/factions/faction[@id=\'player\']/relations">')
     out += [f'    <relation faction="{faction_id(i)}" relation="{ALLIED}" />' for i in range(1, POOL + 1)]
     out.append('  </add>')
+    for other, value in LOCKED:
+        out.append(f'  <add sel="/factions/faction[@id=\'{other}\']/relations">')
+        out += [f'    <relation faction="{faction_id(i)}" relation="{value}" />' for i in range(1, POOL + 1)]
+        out.append('  </add>')
     out.append('  <add sel="/factions">')
     for i in range(1, POOL + 1):
         r, g, b = COLOURS[i - 1]
@@ -53,6 +63,7 @@ def build():
             f'        <relation faction="player" relation="{ALLIED}" />',
         ]
         out += [f'        <relation faction="{faction_id(j)}" relation="{ALLIED}" />' for j in range(1, POOL + 1) if j != i]
+        out += [f'        <relation faction="{other}" relation="{value}" />' for other, value in LOCKED]
         out += ['      </relations>', '    </faction>']
     out += ['  </add>', '</diff>', '']
     return '\n'.join(out)
