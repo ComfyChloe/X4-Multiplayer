@@ -255,6 +255,8 @@ local function apply(r,now,sector,hot)
    if q then p=q;speed=M.speed(v) end
   else p=M.render(r.track,now,.1) or p end
  end
+ -- npc_combat_intent (npc_intent_game.lua): a puppet faces its replicated target.
+ if A.npcIntent and r.object then p=A.npcIntent.aim(r,p,now) or p end
  local value=ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
  if not r.object or not C.IsComponentOperational(r.object) then
   count(r.object and 'respawns' or 'creates')

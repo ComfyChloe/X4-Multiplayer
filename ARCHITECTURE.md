@@ -286,3 +286,16 @@ ping) with RTT from the echoed relay time minus client hold, upstream jitter, se
 loss and per-peer rates; the status JSON and dashboard show the latest summary. Samples are
 read once per UI frame and once per relay poll, so RTT includes up to one frame interval
 plus the relay's 5 ms poll sleep. Jitter is p95 of |inter-arrival - source spacing|.
+
+## NPC combat intent (npc_combat_intent)
+
+Internal flag, false in the source config and true in internal session configs; requires
+`world_sync` replica mode. The host replicates the combat intent of NPCs relevant to a shared
+ship instead of shots: `NINTENT|1|lease|hostEpoch|id|gen|seq|sector|kind|ref|mask|hint` with
+kind `0`/`P` (shared ship slot)/`N` (committed NPC id)/`X`, mask 1 guns, 2 missiles, 4 turrets
+and hint 0 idle, 1 engaging, 2 travel. MD reads the pilot's `$attacktarget` (then the order's
+`$primarytarget`/`$target`) and `event_weapon_fired`; Lua publishes on change plus 0.5 s refresh;
+`x4lan/npc_intent.py` validates and forwards fresh records first. Guest replicas keep AI off,
+face a replicated P/N target in the renderer and fire their guns locally at P targets while the
+record is latched (1.5 s). Hits on a player ship stay with the victim-pilot `HEALTH` authority.
+Older peers ignore `NINTENT`. See [the report](reports/NPC-COMBAT-INTENT-20261025.txt).

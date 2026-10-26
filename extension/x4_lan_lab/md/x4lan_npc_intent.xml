@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- INTERNAL npc_combat_intent (ui/npc_intent_game.lua). Host: reads the combat intent of the
+     NPCs that Lua tracks (current attack target, recent weapon fire per weapon kind, manoeuvre)
+     and reports it every 0.1 s. Guest: plays NPC replicas as puppets (shoot/stop_shooting on the
+     replica only) and counts NPC hits on the shared ships for diagnostics. Hits on a player ship
+     stay with the existing victim-pilot HEALTH authority; this script never writes hull/shield.
+     Inactive until Lua sends Setup. -->
+<mdscript name="X4LAN_NpcIntent" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Session" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_NpcIntent'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="Session.$arena" exact="md.X4LAN_Bubble.Arena"/>
+    <set_value name="Session.$rows" exact="table[]"/><set_value name="Session.$byObject" exact="table[]"/>
+    <set_value name="Session.$armed" exact="table[]"/>
+    <set_value name="Session.$stopped" exact="false"/>
+    <!-- A weapon counts as firing for this long after its last shot (longer than stock S/M refire). -->
+    <set_value name="Session.$window" exact="0.6s"/>
+    <create_group groupname="Session.$guns"/><create_group groupname="Session.$victims"/>
+    <add_to_group groupname="Session.$victims" list="Session.$arena.$ships"/>
+    <raise_lua_event name="'X4LAN_NpcIntent.Ready'"/>
+   </actions>
+   <cues>
+    <cue name="Stop" instantiate="true" namespace="this"><conditions><event_ui_triggered screen="'X4LAN_NpcIntent'" control="'Stop'"/></conditions><actions>
+     <set_value name="Session.$stopped" exact="true"/>
+     <do_all exact="Session.$rows.keys.count" counter="$i">
+      <set_value name="$o" exact="Session.$rows.{Session.$rows.keys.{$i}}.$object"/>
+      <do_if value="not Session.$arena.$host and @$o.isoperational and $o.owner != faction.player and Session.$arena.$ships.indexof.{$o} == 0 and $o != player.occupiedship"><stop_shooting object="$o"/><stop_shooting object="$o" turrets="true"/></do_if>
+     </do_all>
+    </actions></cue>
+    <!-- Only NPC objects: never a shared ship, a player-owned ship or the player's own ship. -->
+    <library name="Eligible"><actions>
+     <set_value name="$ok" exact="not Session.$stopped and @$o.isoperational and $o.isclass.ship and $o.owner != faction.player and Session.$arena.$ships.indexof.{$o} == 0 and $o != player.occupiedship and $o != player.container and $o != player.controlled"/>
+    </actions></library>
+    <!-- Lua -> MD: start (or renew) tracking network id $id for native object $object. -->
+    <cue name="Track" instantiate="true" namespace="this"><conditions><event_ui_triggered screen="'X4LAN_NpcIntent'" control="'Track'"/></conditions><actions>
+     <set_value name="$a" exact="event.param3"/><set_value name="$o" exact="$a.$object"/><include_actions ref="Eligible"/>
+     <do_if value="$ok and $a.$id gt 0">
+      <do_if value="Session.$byObject.{$o}? and Session.$byObject.{$o} != $a.$id"><remove_value name="Session.$rows.{Session.$byObject.{$o}}"/></do_if>
+      <set_value name="Session.$rows.{$a.$id}" exact="table[$object=$o,$at1=-1h,$at2=-1h,$at4=-1h]"/>
+      <set_value name="Session.$byObject.{$o}" exact="$a.$id"/>
+      <do_if value="Session.$arena.$host"><add_to_group groupname="Session.$guns" list="$o.weapons.operational.list"/></do_if>
+     </do_if>
+    </actions></cue>
+    <cue name="Untrack" instantiate="true" namespace="this"><conditions><event_ui_triggered screen="'X4LAN_NpcIntent'" control="'Untrack'"/></conditions><actions>
+     <set_value name="$r" exact="@Session.$rows.{event.param3.$id}"/>
+     <do_if value="$r">
+      <do_if value="Session.$byObject.{$r.$object}? and Session.$byObject.{$r.$object} == event.param3.$id"><remove_value name="Session.$byObject.{$r.$object}"/></do_if>
+      <remove_value name="Session.$rows.{event.param3.$id}"/>
+      <do_if value="Session.$arena.$host">
+       <clear_group group="Session.$guns"/>
+       <do_all exact="Session.$rows.keys.count" counter="$i">
+        <set_value name="$o" exact="Session.$rows.{Session.$rows.keys.{$i}}.$object"/>
+        <do_if value="@$o.isoperational"><add_to_group groupname="Session.$guns" list="$o.weapons.operational.list"/></do_if>
+       </do_all>
+      </do_if>
+     </do_if>
+    </actions></cue>
+    <!-- Host: the native weapon-fired event is the firing accessor (high confidence: same event the
+         shared-ship FIRE2 capture uses). 1 = guns, 2 = missile launchers, 4 = turrets. -->
+    <cue name="Fired" instantiate="true" namespace="this"><conditions><event_weapon_fired group="Session.$guns"/></conditions><actions>
+     <set_value name="$s" exact="@event.object.ship"/>
+     <do_if value="$s and Session.$byObject.{$s}?">
+      <set_value name="$r" exact="Session.$rows.{Session.$byObject.{$s}}"/>
+      <do_if value="event.object.isclass.turret or event.object.isclass.missileturret"><set_value name="$r.$at4" exact="player.age"/></do_if>
+      <do_elseif value="event.object.isclass.missilelauncher"><set_value name="$r.$at2" exact="player.age"/></do_elseif>
+      <do_else><set_value name="$r.$at1" exact="player.age"/></do_else>
+     </do_if>
+    </actions></cue>
+    <!-- Host: 'id:kind:ref:mask:hint;' per tracked NPC. Target accessor, in order: the pilot's
+         $attacktarget blackboard (set by vanilla fight.attack.object.fighter/bigtarget and read by
+         vanilla lib.target.selection/order.fight.escort), then the order's $primarytarget, then
+         its $target. kind P = shared ship slot ref, N = tracked NPC id ref, X = other, 0 = none.
+         hint 0 = idle, 1 = engaging (has a target), 2 = travel drive. -->
+    <cue name="Sample" instantiate="true" checkinterval="0.1s"><conditions><check_value value="Session.$arena.$host and not Session.$stopped and Session.$rows.keys.count gt 0 and player.timewarp.factor gt 0s"/></conditions><actions>
+     <set_value name="$out" exact="''"/><set_value name="$drop" exact="[]"/>
+     <do_all exact="Session.$rows.keys.count" counter="$i">
+      <set_value name="$id" exact="Session.$rows.keys.{$i}"/><set_value name="$r" exact="Session.$rows.{$id}"/><set_value name="$o" exact="$r.$object"/>
+      <do_if value="@$o.isoperational">
+       <set_value name="$t" exact="null"/>
+       <do_if value="@$o.pilot.$attacktarget.canbeattacked"><set_value name="$t" exact="$o.pilot.$attacktarget"/></do_if>
+       <do_elseif value="@$o.order.$primarytarget.canbeattacked"><set_value name="$t" exact="$o.order.$primarytarget"/></do_elseif>
+       <do_elseif value="@$o.order.$target.canbeattacked"><set_value name="$t" exact="$o.order.$target"/></do_elseif>
+       <set_value name="$kind" exact="'0'"/><set_value name="$ref" exact="0"/>
+       <do_if value="$t">
+        <do_if value="Session.$arena.$ships.indexof.{$t} gt 0"><set_value name="$kind" exact="'P'"/><set_value name="$ref" exact="Session.$arena.$ships.indexof.{$t}"/></do_if>
+        <do_elseif value="@$t.ship and Session.$arena.$ships.indexof.{$t.ship} gt 0"><set_value name="$kind" exact="'P'"/><set_value name="$ref" exact="Session.$arena.$ships.indexof.{$t.ship}"/></do_elseif>
+        <do_elseif value="Session.$byObject.{$t}?"><set_value name="$kind" exact="'N'"/><set_value name="$ref" exact="Session.$byObject.{$t}"/></do_elseif>
+        <do_else><set_value name="$kind" exact="'X'"/></do_else>
+       </do_if>
+       <set_value name="$mask" exact="0"/>
+       <do_if value="player.age - $r.$at1 le Session.$window"><set_value name="$mask" exact="$mask + 1"/></do_if>
+       <do_if value="player.age - $r.$at2 le Session.$window"><set_value name="$mask" exact="$mask + 2"/></do_if>
+       <do_if value="player.age - $r.$at4 le Session.$window"><set_value name="$mask" exact="$mask + 4"/></do_if>
+       <set_value name="$hint" exact="0"/>
+       <do_if value="@$o.travel.active"><set_value name="$hint" exact="2"/></do_if>
+       <do_elseif value="$t"><set_value name="$hint" exact="1"/></do_elseif>
+       <set_value name="$out" exact="$out + '%s:%s:%s:%s:%s;'.[$id,$kind,$ref,$mask,$hint]"/>
+      </do_if>
+      <do_else><append_to_list name="$drop" exact="$id"/></do_else>
+     </do_all>
+     <do_all exact="$drop.count" counter="$i"><remove_value name="Session.$rows.{$drop.{$i}}"/></do_all>
+     <do_if value="$out != ''"><raise_lua_event name="'X4LAN_NpcIntent.Sample'" param="$out"/></do_if>
+    </actions></cue>
+    <!-- Guest puppet: start/stop local fire of one replica. Never touches a player ship. -->
+    <cue name="Fire" instantiate="true" namespace="this"><conditions><event_ui_triggered screen="'X4LAN_NpcIntent'" control="'Fire'"/></conditions><actions>
+     <set_value name="$a" exact="event.param3"/><set_value name="$o" exact="$a.$object"/><include_actions ref="Eligible"/>
+     <do_if value="$ok and not Session.$arena.$host and $a.$id gt 0">
+      <do_if value="not Session.$byObject.{$o}? or Session.$byObject.{$o} != $a.$id">
+       <set_value name="Session.$byObject.{$o}" exact="$a.$id"/>
+       <set_value name="Session.$rows.{$a.$id}" exact="table[$object=$o,$at1=-1h,$at2=-1h,$at4=-1h]"/>
+      </do_if>
+      <do_if value="$a.$guns or $a.$turrets">
+       <do_if value="not Session.$armed.{$o}?">
+        <set_value name="Session.$armed.{$o}" exact="true"/>
+        <reset_weapongroups object="$o"/><activate_weapongroup object="$o" weapongroup="0" primary="true"/>
+        <debug_text text="'[X4LAN] NPC_INTENT_ARM id=%s weapons=%s attention=%s'.[$a.$id,$o.weapons.operational.count,$o.attention]"/>
+       </do_if>
+       <do_if value="$a.$guns"><shoot object="$o" primary="true" secondary="false"/></do_if><do_else><stop_shooting object="$o"/></do_else>
+       <do_if value="$a.$turrets"><shoot object="$o" turrets="true"/></do_if><do_else><stop_shooting object="$o" turrets="true"/></do_else>
+      </do_if>
+      <do_else><stop_shooting object="$o"/><stop_shooting object="$o" turrets="true"/></do_else>
+     </do_if>
+    </actions></cue>
+    <!-- Diagnostics of NPC hits on the shared ships, both roles. Authority of each hit:
+         victim = this machine owns the victim's health (host's own ship, or the guest's own ship
+         while its HEALTH generation is live); overwritten = the next HEALTH/WORLD value from the
+         victim's authority replaces this local damage; host = host world decides (no live pilot). -->
+    <cue name="Hit" instantiate="true" namespace="this"><conditions><event_object_attacked group="Session.$victims"/></conditions><actions>
+     <set_value name="$e" exact="Session.$arena.$ships.indexof.{event.object}"/><set_value name="$att" exact="@event.param"/>
+     <do_if value="not Session.$stopped and $e gt 0 and $att and @$att.owner != faction.player">
+      <set_value name="$s" exact="if @$att.ship then $att.ship else $att"/>
+      <set_value name="$id" exact="if Session.$byObject.{$s}? then Session.$byObject.{$s} else 0"/>
+      <set_value name="$auth" exact="'overwritten'"/>
+      <do_if value="Session.$arena.$host">
+       <do_if value="$e == Session.$arena.$localSlot"><set_value name="$auth" exact="'victim'"/></do_if>
+       <do_elseif value="not @Session.$arena.$healthLive.{$e}"><set_value name="$auth" exact="'host'"/></do_elseif>
+      </do_if>
+      <do_elseif value="$e == Session.$arena.$localSlot and @Session.$arena.$healthOwn.{$e}"><set_value name="$auth" exact="'victim'"/></do_elseif>
+      <raise_lua_event name="'X4LAN_NpcIntent.Hit'" param="'%s|%s|%s|%s|%s'.[$e,$id,$auth,@event.object.hullpercentage,@event.object.shieldpercentage]"/>
+     </do_if>
+    </actions></cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>

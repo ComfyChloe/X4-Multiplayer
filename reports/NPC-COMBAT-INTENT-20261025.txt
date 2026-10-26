@@ -1,0 +1,115 @@
+NPC COMBAT INTENT — NPCs TARGET AND HIT THE GUEST
+25 October 2026; branch contrib/ferrite-npc-combat-intent (from contrib/ferrite-integration-1
+d2d3872). Source analysis plus synthetic tests only. Nothing was run in X4; not accepted until
+the native steps below pass.
+
+PROBLEM AND CAUSES (target architecture sec. 3/6)
+Guest NPC replicas have AI disabled, so nothing on the guest ever made them shoot; earlier
+"guest saw NPC fire" was not a stable path. This branch replicates the host NPC's combat
+INTENT and lets replicas act as puppets. Cause 2 (low attention around the guest on the host)
+is contrib/ferrite-attention-parity's work and is unchanged here. Cause 3: see HOST ENGAGEMENT.
+
+ACCESSORS (host, MD x4lan_npc_intent.xml)
+- Target: pilot.$attacktarget [high for S/M fighters: set by vanilla fight.attack.object.fighter
+  and .bigtarget, read by vanilla lib.target.selection:68 and order.fight.escort:1094 as the
+  current attack target]; fallback order.$primarytarget [medium: Attack/escort orders], then
+  order.$target [low]. Medium/capital scripts keep their target in script-local $targets and are
+  only covered by the order fallback.
+- Firing: event_weapon_fired on a group of the tracked NPCs' operational weapons [high: same
+  native event as the shared-ship FIRE2/projectile capture]; a weapon kind counts as firing for
+  0.6 s after its last shot. Kinds by weapon class: guns 1, missilelauncher 2, turret/missileturret 4.
+  No FFI "is firing" accessor exists in the 9.00 FFI declarations (data/x4_ffi.h searched).
+- Manoeuvre hint: travel.active -> 2, has target -> 1, else 0 [high, plain properties].
+
+PROTOCOL (version 1 envelope, new message; nothing existing changed)
+NINTENT|1|lease|hostEpoch|id|gen|seq|sector|kind|ref|mask|hint
+ kind 0 none | P shared ship slot (ref 1/2) | N committed NPC id (ref) | X other (ref 0)
+ mask bit 1 guns, 2 missiles, 4 turrets; hint 0..2; gen = host tracking generation of the id.
+Host: tracks up to 24 NPCs of the guest's interest sector within 6 km of a shared ship, or whose
+target is a shared ship, or with a pending guest NCLAIM (being hit by the guest); re-selected
+every 0.25 s (256 visits), kept 2 s after relevance ends. MD samples every 0.1 s; Lua publishes
+on change and refreshes every 0.5 s while engaged/firing (2 s when idle).
+Relay (x4lan/npc_intent.py): host lease = universe epoch, id and N ref must be in a committed
+baseline of that sector, (gen, seq) monotonic. Forwards fresh records first, then repeats active
+ones every 0.5 s for 2 s; budget 32 per tick; only for the guest's interest sector.
+Compatibility: old clients drop NINTENT (client tick parse fails before any effect, tested);
+old relays/hosts never send it: the new guest logs
+FEATURE npc_combat_intent DISABLED reason=no_host_intents ... after 60 s and
+FEATURE_RESUMED npc_combat_intent when records arrive.
+
+GUEST PUPPET (ui/npc_intent_game.lua)
+- AI stays disabled. While a record is latched (younger than 1.5 s) with target P and hint != 2,
+  the replica's guns (mask 1) / turrets (mask 4) fire via MD shoot/stop_shooting on the replica
+  only (weapon groups reset to group 0 once per object, as for the shared ships). Fire is
+  re-asserted every 2 s, stopped on latch timeout, explicit mask 0, replica removal/respawn,
+  sector change, pause or adapter failure. Missiles are not fired locally.
+- Aim: the renderer (universe_game.lua, one hook) replaces yaw/pitch with the direction to the
+  replicated P target (own ship or the host-ship proxy) or N replica, up to 8 km, keeping
+  position and roll. yaw = atan2(dx,dz); pitch sign defaults to nose-up positive [medium] and is
+  calibrated from host UMOVE samples (velocity vs. orientation; PITCH_SIGN log on a flip).
+- N/X targets are aimed (N) but not fired: local replica-vs-replica damage is not authoritative.
+
+HIT AUTHORITY (no new damage path)
+Projectiles of a replica that hit the guest's own ship are native hits on the guest. While the
+guest holds a live HEALTH generation (pilot_health), its MD readback reports that hull/shield at
+10 Hz and the host writes it onto its proxy with the 1% floor; x4lan_life reads the canonical
+value. The host's own simulation of the same NPC firing at its proxy is overwritten by the next
+HEALTH value and never decides death: one authority (the victim) per hit. Without a live
+generation the host is authority and the guest's local damage is overwritten by WORLD. The
+host-ship proxy on the guest keeps its min hull and host values. MD Hit diagnostics classify
+every NPC hit on a shared ship: victim / overwritten / host. This module never writes hull,
+shield or min hull (asserted by a test).
+
+HOST ENGAGEMENT (cause 3): NO CHANGE
+lib.target.selection.xml:276 only lowers the priority of player.occupiedship during the first
+game minute when other targets exist; it never excludes the guest's proxy, and treating the
+proxy like player.occupiedship would only lower its priority. The other player.occupiedship
+checks in order.fight.* / fight.attack.* concern player-owned subordinates, player-commanded
+escorts and mining turrets, not hostile target choice; find_gravidar_contact filters by
+relation, class and docking, which the player-owned proxy passes. No aiscript diff is shipped.
+If NPCDIAG still shows target=none next to the guest at visible attention, the next suspect is
+attention/radar on the host (cause 2) or the engine hook, not a script special case.
+
+FLAG / DIAGNOSTICS
+npc_combat_intent: false in the inert source config, true in internal session configs.
+Requires world_sync replica mode; otherwise FEATURE npc_combat_intent DISABLED
+reason=requires_world_sync_replica; flag_off; adapter_stopped (with NPC_INTENT STOPPED <error>).
+Per second when non-zero (else every 30 s):
+ [X4LAN] NPC_INTENT DIAG role=host tracked=<n> published= pub_firing= samples= target_p1=
+   target_p2= tracked_new= track_full= hits_victim= hits_overwritten= hits_host=
+ [X4LAN] NPC_INTENT DIAG role=guest intents=<n> latched_firing=<n> pitch_sign= cal=up/down
+   yaw_ok=a/b received= fire_on= fire_off= timeouts= aimed= hits_victim= hits_overwritten= hits_tracked=
+ [X4LAN] NPC_INTENT_ARM id= weapons= attention=   (MD, first local fire of a replica)
+ [X4LAN] NPC_INTENT READY slot= hits=victim_pilot|host_world
+
+TESTS
+tests/test_npc_intent.py (17): relay forward-once/refresh/idle/expiry, invalid/foreign/stale/
+reordered/new-generation records, N-ref validation, interest sector; host tracking/publication/
+refresh/untrack/beyond-range engagement; guest fire, latch across a lost refresh, timeout,
+explicit stop, reordering, P-only fire, pause stop, aim yaw/pitch and expiry, pitch calibration,
+hit classification, no health writes in MD, flag off, missing host feature, old client
+drops NINTENT. test_internal_sessions checks the package flag. x4lan_npc_intent.xml validates
+against x4-re/gamescripts/resolved/base/libraries/md.xsd with lxml (run separately: the schema
+parse takes ~85 s and the schema is not part of the checkout).
+
+NATIVE TEST (disposable 45841 world, matched internal packages from this branch, both configs
+with npc_combat_intent = true, npc_target_diag = true, pilot_health = true)
+1 Guest flies its ship near hostile S/M NPCs (e.g. a Xenon/pirate patrol); host may stay away.
+  Host log: NPC_INTENT DIAG role=host tracked>0, target_p2>0 (NPC targets the guest), pub_firing>0.
+  NPCDIAG NPC ... target=this_player for ship=2 agrees.
+2 Guest log: NPC_INTENT DIAG role=guest received>0, latched_firing>0, fire_on>0, aimed>0;
+  NPC_INTENT_ARM id=.. weapons>0. Visually: the replica turns to the guest and shoots.
+  weapons=0 or shots invisible -> replica spawn has no weapons / ActivateObject(false) blocks
+  shoot: report this line; it decides the next step (spawn loadout or activation).
+3 Guest takes damage: guest hits_victim>0 and HEALTH stream lowers the guest's hull; host
+  hits_overwritten>0 for ship 2 and the host proxy follows the guest's values (no second drop).
+4 Guest leaves range / NPC dies: fire_off, no lingering fire beyond ~1.5 s (timeouts only on loss).
+5 pitch_sign / cal: yaw_ok should be mostly ok; a PITCH_SIGN -1 flip is expected only if the
+  default convention is wrong. Aim errors (replica pointing away) with yaw_ok low -> report.
+6 Regressions: radar, ordinary cargo, Cooperative Trial, npc_combat hit/kill counting.
+
+LIMITS
+No native run. Medium/capital NPC targets only via the order fallback. Turret aim follows the
+engine's turret logic; missiles not fired; NPC-vs-NPC fire not played. Replica loadouts may
+differ from the host NPC. Shots are puppet visuals plus real local hits on the guest; their
+cadence, spread and accuracy are local, not host shots.
