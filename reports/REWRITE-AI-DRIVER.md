@@ -16,9 +16,12 @@ contexts once per simulation frame. The Rust per-sector *order behaviours* are t
   Results: `rewrite-coord/results/2026-10-26-ai-driver-census.md`, summary in section 3a. Timing values are
   not trustworthy (shared PC); the structural numbers are.
 - **Stage 1 (our AIDirector::Move, single-threaded, normal / rounds / compare): built and tested offline**
-  (section 5, `native/engine/aidriver_move.h`, `test_aidriver_move.c`). **Not yet run natively**; the first
-  native step is a short `normal` smoke run (the 38 engine-helper calling conventions can only be checked
-  in X4).
+  (section 5, `native/engine/aidriver_move.h`, `test_aidriver_move.c`). **Native smoke passed**
+  (lane b2, 2026-10-26, build 1a6e2c0/4e86886, run `s1-normal-smoke`): our Move ran every AI phase for
+  60 s of a new-game world in `normal` mode, 54-60 driver frames per window, 0 pre-flight refusals, no
+  disarm, no `bad_caller`, no loop diagnostic; the start-up burst (1,856 runs and 1,487 interrupt runs per
+  frame, 13.5 passes) went through it. This checks the 38 helper calling conventions natively; it is not
+  yet an equivalence result (the interleaved census/normal A/B and compare runs are queued, section 7).
 
 Own files: `native/engine/aidriver.h` (census, hooks, Lua), `native/engine/aidriver_move.h` (stage 1),
 `native/engine/test_aidriver.c`, `native/engine/test_aidriver_move.c`, `dev/aiprof_report.py`, this report,
@@ -236,13 +239,16 @@ branch, and the aidriver suites were run directly with the same compiler flags.
 
 ## 7. Native steps (stage 0 done for two loads; stage 1 next)
 
-Stage 0: done on lanes for idle and attnload (section 3a); combat rerun with scenario v2 queued.
-Stage 1, in order (lane runs with `--overlay .local/evidence-068-withheld`, release x4lane):
-1. `X4LAN_AIDRIVER='normal'`, idle, short: the driver takes every frame (`AIDRIVE driverFrames` = frames,
-   `preflightRefusals=0`), no crash, no new engine script errors vs the census-idle log; this is the only
-   check of the helper calling conventions.
-2. `normal`, idle and attnload, ~8 min: census distributions (runs, passes, interrupt runs, attention
-   restarts, wakes) match the census runs of the same load within noise; zero `bad_caller`.
+Stage 0: done on lanes for idle and attnload (section 3a); combat (scenario v3 `battle-400`) queued.
+Stage 1, in order (lane runs with the `probe-s1b` overlay = d922398, release x4lane, `.local/evidence-103-withheld`):
+1. **done** (`s1-normal-smoke`, 1a6e2c0): `X4LAN_AIDRIVER='normal'`, idle, 60 s: the driver took every frame
+   (`driverFrames` = frames, `preflightRefusals=0`), no crash or disarm, and no new engine script errors vs
+   the census-idle log (first 61 s of game time: 715 vs 639 log entries, 0 vs 1 `aicontext` script messages,
+   no new message kinds); this was the only check of the helper calling conventions.
+2. `alternate` (census and normal windows interleaved on one world; `aiprof_compare.py <log> --modes
+   census,normal`), idle then battle-400: structural means and per-run ratios (runs, passes, interrupt runs,
+   attention restarts, removals, caller wakes, global handlers, wakes, events) agree within noise; zero
+   `bad_caller`.
 3. `compare`, idle and attnload: fraction of order-equivalent passes and the four counters; reorder only on
    this branch (no walkpar), deferral in the integrated build (walkpar `WP_REPLAY`, see Q9).
 4. Before ours becomes authoritative outside tests (method step 2): capture the original's per-context
