@@ -55,6 +55,49 @@ static DWORD WINAPI worker(LPVOID p) {
     return 0;
 }
 
+/* call-site test: a function doing `mov rax,[rcx]; call [rax+0x1510]; ret` on a fake object whose
+   vtable slot 674 is cs_callee; the dispatcher reads slot 674 itself and calls it. */
+static const unsigned char CALLER_CODE[] = {
+    0x48, 0x8B, 0x01,                   /* mov rax,[rcx]        */
+    0xFF, 0x90, 0x10, 0x15, 0x00, 0x00, /* call [rax+0x1510]    (offset 3) */
+    0xC3,                               /* ret                  */
+};
+#define CALLER_RVA 0x5000u
+#define VT_RVA     0x6000u    /* 675 slots */
+#define OBJ_RVA    0x8000u
+static volatile LONG g_cs_dispatch, g_cs_callee;
+static void cs_callee(void *obj) { (void)obj; InterlockedIncrement(&g_cs_callee); }
+static void cs_dispatch(void *obj) {
+    InterlockedIncrement(&g_cs_dispatch);
+    void **vt = *(void ***)obj;
+    ((void (*)(void *))vt[674])(obj);
+}
+static void test_callsite(void) {
+    memcpy(image + CALLER_RVA, CALLER_CODE, sizeof(CALLER_CODE));
+    FlushInstructionCache(GetCurrentProcess(), image + CALLER_RVA, sizeof(CALLER_CODE));
+    void **vt = (void **)(image + VT_RVA);
+    vt[674] = (void *)cs_callee;
+    void **obj = (void **)(image + OBJ_RVA);
+    obj[0] = vt;
+    typedef void (*caller_fn)(void *);
+    caller_fn caller = (caller_fn)(image + CALLER_RVA);
+    g_cs_dispatch = g_cs_callee = 0;
+    caller(obj);
+    assert(g_cs_dispatch == 0 && g_cs_callee == 1);            /* baseline: straight to the callee */
+
+    wp_callsite cs = { CALLER_RVA + 3, {0}, NULL, 0 };         /* the `call [rax+0x1510]` */
+    assert(wp_callsite_install(&cs, (void *)cs_dispatch) && cs.installed);
+    assert(*(unsigned char *)(image + CALLER_RVA + 3) == 0xff &&
+           *(unsigned char *)(image + CALLER_RVA + 4) == 0x15);
+    caller(obj);
+    assert(g_cs_dispatch == 1 && g_cs_callee == 2);            /* routed through the dispatcher */
+
+    wp_callsite_uninstall(&cs);
+    assert(!cs.installed && memcmp(image + CALLER_RVA, CALLER_CODE, sizeof(CALLER_CODE)) == 0);
+    caller(obj);
+    assert(g_cs_dispatch == 1 && g_cs_callee == 3);            /* restored: straight to the callee */
+}
+
 int main(void) {
     image = VirtualAlloc(NULL, X4_IMAGE_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_EXECUTE_READWRITE);
     assert(image);
@@ -99,8 +142,13 @@ int main(void) {
     assert(f((void *)1, 10) == 11 && f((void *)0, 10) == 0);
     assert(g_detour_calls == before);
 
+    /* call-site patch: `call [rax+0x1510]` -> `call [rip+cell]` -> dispatcher, which reads slot 674
+       itself and calls it (mirrors the galaxy walk wrapper at 0x9fdf95). */
+    test_callsite();
+
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: wpdetour relocating trampoline (incl jcc), near-image pool, install/call/restore");
     puts("PASS: wpdetour fail-closed on byte mismatch; detour transparent under 4-thread concurrency");
+    puts("PASS: wpdetour call-site patch routes the walk call through the dispatcher and restores");
     return 0;
 }

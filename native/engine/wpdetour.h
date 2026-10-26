@@ -122,8 +122,8 @@ static int wp_suspend_others(const wp_detour *ds, int n) {
             if (te.th32OwnerProcessID != pid || te.th32ThreadID == me) continue;
             if (wp_suspended_n >= WP_MAX_THREADS) { ok = 0; break; }
             HANDLE h = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT, FALSE, te.th32ThreadID);
-            if (!h) continue;                     /* a thread we cannot touch (died, or no rights) */
-            if (SuspendThread(h) == (DWORD)-1) { CloseHandle(h); continue; }
+            if (!h) { ok = 0; break; }             /* fail closed: a thread we cannot freeze */
+            if (SuspendThread(h) == (DWORD)-1) { CloseHandle(h); ok = 0; break; }
             wp_suspended[wp_suspended_n++] = h;
         } while (Thread32Next(snap, &te));
     } else ok = 0;
@@ -176,6 +176,53 @@ static int wp_detour_install(wp_detour *ds, int n) {
     if (!ok) for (int i = 0; i < done; ++i) wp_restore_entry(&ds[i]);
     wp_resume_all();
     return ok;
+}
+
+/* ---- call-site patch: galaxy walk `call [rax+0x1510]` -> `call [rip+cell]` -------------------- */
+/* The galaxy walk call site runs once per frame on the MoveWorker only, so a clash is effectively
+   impossible (the MoveWorker is past it when the probe's slot-5 install runs). The 6-byte site is
+   replaced with an indirect call through an 8-byte cell (in the +-2 GB pool) holding the dispatcher;
+   the dispatcher brackets the walk and runs the deferred replay before 0x1092e80. */
+typedef struct { size_t rva; unsigned char saved[6]; unsigned char *cell; int installed; } wp_callsite;
+
+static int wp_callsite_install(wp_callsite *c, void *fn) {
+    if (c->installed) return 1;
+    unsigned char *at = image + c->rva;
+    if (!readable(at, 6, 0)) return 0;
+    if (!(at[0] == 0xff && at[1] == 0x90 && at[2] == 0x10 && at[3] == 0x15 && at[4] == 0 && at[5] == 0))
+        return 0;                                      /* must still be call [rax+0x1510] */
+    if (!wp_pool_reserve()) return 0;
+    if (!c->cell) { c->cell = wp_pool_alloc(8); if (!c->cell) return 0; }
+    memcpy(c->cell, &fn, 8);
+    int64_t disp = (int64_t)(uintptr_t)c->cell - (int64_t)(uintptr_t)(at + 6);
+    if (disp > 0x7fffffffLL || disp < -0x80000000LL) return 0;
+    memcpy(c->saved, at, 6);
+    wp_detour range = {c->rva, 6, -1, NULL, 0, NULL, {0}, NULL, 0};
+    if (!wp_suspend_others(&range, 1)) return 0;
+    DWORD prot, ign;
+    if (!VirtualProtect(at, 6, PAGE_EXECUTE_READWRITE, &prot)) { wp_resume_all(); return 0; }
+    at[0] = 0xff; at[1] = 0x15;                         /* call qword ptr [rip+disp32] */
+    int32_t d = (int32_t)disp; memcpy(at + 2, &d, 4);
+    VirtualProtect(at, 6, prot, &ign);
+    FlushInstructionCache(GetCurrentProcess(), at, 6);
+    wp_resume_all();
+    c->installed = 1;
+    return 1;
+}
+
+static void wp_callsite_uninstall(wp_callsite *c) {
+    if (!c->installed) return;
+    unsigned char *at = image + c->rva;
+    wp_detour range = {c->rva, 6, -1, NULL, 0, NULL, {0}, NULL, 0};
+    if (!wp_suspend_others(&range, 1)) return;
+    DWORD prot, ign;
+    if (VirtualProtect(at, 6, PAGE_EXECUTE_READWRITE, &prot)) {
+        memcpy(at, c->saved, 6);
+        VirtualProtect(at, 6, prot, &ign);
+        FlushInstructionCache(GetCurrentProcess(), at, 6);
+    }
+    wp_resume_all();
+    c->installed = 0;
 }
 
 static void wp_detour_uninstall(wp_detour *ds, int n) {

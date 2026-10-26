@@ -338,7 +338,9 @@ static void sim_begin(handler *self) {
     simprof_loop(1);
     LARGE_INTEGER now;
     sim_begin_qpc = (sim_frame_ok() && qpc_read(&now)) ? now.QuadPart : 0;
-    if (sim_begin_qpc) { walk_frame_begin(); if (wp_mode != WP_OFF) wp_walk_begin(); }
+    /* census brackets the frame via the slot 0/15 hooks; replay is bracketed by the galaxy-call
+       dispatcher instead (so the deferred replay runs before 0x1092e80, not after MD/AI). */
+    if (sim_begin_qpc) { walk_frame_begin(); if (wp_mode != WP_OFF && !walkpar_dispatcher_on()) wp_walk_begin(); }
 }
 
 static void sim_end(handler *self) {
@@ -358,7 +360,7 @@ static void sim_end(handler *self) {
     unsigned bucket = (unsigned)(ms * 4.0);
     o->win_hist[bucket < SIM_BUCKETS ? bucket : SIM_BUCKETS - 1]++;
     walk_frame_end();
-    if (wp_mode != WP_OFF) wp_walk_end();
+    if (wp_mode != WP_OFF && !walkpar_dispatcher_on()) wp_walk_end();
 }
 
 /* p95 of the current window in ms (bucket upper edge), then reset the window. */
@@ -497,6 +499,7 @@ static int stats(lua_State *L) {
         number_field(L, "walkpar_ideal_speedup", wp_ideal_speedup());
         number_field(L, "walkpar_posts", (double)wp_win.posts / wf);
         number_field(L, "walkpar_posts_imm", (double)wp_win.posts_imm / wf);
+        number_field(L, "walkpar_posts_rootlevel", (double)wp_win.posts_rootlevel / wf);
         number_field(L, "walkpar_cancels", (double)wp_win.cancels / wf);
         number_field(L, "walkpar_deliver_calls", (double)wp_win.deliver_calls / wf);
         number_field(L, "walkpar_deliver_listeners", (double)wp_win.deliver_listeners / wf);
@@ -595,6 +598,7 @@ static int start(lua_State *L) {
         else if (!strcmp(mode, "fixed60catchup")) fixed = 2;
         else if (!strcmp(mode, "profile")) profiling = 1;
         else if (!strcmp(mode, "walkcensus")) census = 1;   /* stage 0 walk census (entry detours) */
+        else if (!strcmp(mode, "walkreplay")) census = 2;   /* stage 1 deferred replay (+ call site) */
         else return failure(L, "unsupported mode");
         if (top > (profiling ? 3 : 1)) return failure(L, "unsupported mode");
         /* profile[, interval_ms (0.5..10, default 1)[, max stack depth (8..64, default 32)]] */
@@ -688,7 +692,8 @@ static int start(lua_State *L) {
        requests the entry detours, installed lazily on the MoveWorker (walkpar_tick in move). */
     walkpar_arm();
     (void)walkpar_api();
-    if (census) wp_want = WP_CENSUS;
+    if (census == 1) wp_want = WP_CENSUS;
+    else if (census == 2) wp_want = WP_REPLAY;
     if (profiling) {
         /* A sampler that cannot start leaves the probe running; stats() reports why. */
         o->profile = 1;

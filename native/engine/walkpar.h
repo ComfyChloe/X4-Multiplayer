@@ -38,6 +38,9 @@ enum { WP_READY_IDLE = 0, WP_READY_OK = 1, WP_READY_REFUSED = 2 };
 #define WP_TYPE_CHANGED_ATTN  0x46
 #define WP_TYPE_TEMP_ZONE_ADD 0x1db
 #define WP_TYPE_WARP          0x21f
+/* CancelPendingEvents 0x99a870 (RE label parallel-walk): minTime <= -1 cancels all events of the
+   type; the engine's own comparisons use the -0.9999 threshold for that sentinel. */
+#define WP_CANCEL_ALL (-0.9999)
 
 #define WP_OP_MAX   16384   /* buffered posts+cancels per frame; overflow fails closed */
 #define WP_CMP_MAX  16384   /* listener-visible records per compare log */
@@ -67,7 +70,7 @@ typedef struct {
     /* time, nanoseconds summed over the window (QPC ticks converted at fold) */
     double sector_ms, sector_max_ms, deliver_ms;
     /* event traffic inside the walk */
-    uint64_t posts, posts_imm, posts_sched, posts_temp_zone_inline;
+    uint64_t posts, posts_imm, posts_sched, posts_temp_zone_inline, posts_rootlevel;
     uint64_t cancels, send_immediate, flush_nonempty;
     uint64_t deliver_calls, deliver_listeners;
     uint64_t xsector_post, xsector_listener, xsector_connect;
@@ -113,7 +116,9 @@ static wp_cmp_rec wp_logA[WP_CMP_MAX], wp_logB[WP_CMP_MAX];
 static size_t wp_logA_n, wp_logB_n;
 static wp_cmp_rec *wp_log_active;      /* points at A or B while recording */
 static size_t *wp_log_active_n;
+static int wp_log_overflow;            /* a log hit WP_CMP_MAX: comparison is not trustworthy */
 static uint64_t wp_task_hash[WP_TASK_MAX]; /* per-task running state hash of the active log */
+#define WP_CMP_NODATA (-2)             /* wp_compare: a log was empty or overflowed */
 
 static wp_window wp_frame;             /* reset each walk */
 static wp_window wp_win;               /* accumulated across the report window */
@@ -180,6 +185,7 @@ static void wp_walk_begin(void) {
     if (wp_mode == WP_REPLAY) { wp_log_active = wp_logB; wp_log_active_n = &wp_logB_n; }
     else { wp_log_active = wp_logA; wp_log_active_n = &wp_logA_n; }
     *wp_log_active_n = 0;
+    wp_log_overflow = 0;
     wp_cue_xor[wp_mode == WP_REPLAY] = 0;
     wp_cue_cnt[wp_mode == WP_REPLAY] = 0;
     for (int i = 0; i < WP_TASK_MAX; ++i) wp_task_hash[i] = 0xcbf29ce484222325ull;
@@ -201,6 +207,7 @@ static void wp_walk_end(void) {
     }
 #define WP_FOLD(f) wp_win.f += wp_frame.f
     WP_FOLD(posts); WP_FOLD(posts_imm); WP_FOLD(posts_sched); WP_FOLD(posts_temp_zone_inline);
+    WP_FOLD(posts_rootlevel);
     WP_FOLD(cancels); WP_FOLD(send_immediate); WP_FOLD(flush_nonempty);
     WP_FOLD(deliver_calls); WP_FOLD(deliver_listeners);
     WP_FOLD(xsector_post); WP_FOLD(xsector_listener); WP_FOLD(xsector_connect);
@@ -247,7 +254,8 @@ static void wp_sector_exit(void *sector) {
 
 static void wp_record(int task, int type, uint32_t seq, uint64_t src_id, uint64_t listener_id,
                       uint64_t listener_rtti, uint64_t payload) {
-    if (!wp_log_active || *wp_log_active_n >= WP_CMP_MAX) return;
+    if (!wp_log_active) return;
+    if (*wp_log_active_n >= WP_CMP_MAX) { wp_log_overflow = 1; return; }
     wp_cmp_rec *r = &wp_log_active[(*wp_log_active_n)++];
     r->task = task; r->type = type; r->seq = seq; r->src_id = src_id;
     r->listener_id = listener_id; r->listener_rtti = listener_rtti; r->payload = payload;
@@ -274,6 +282,8 @@ static int wp_post(void *src, void *event, double time, int imm) {
             uint64_t s = wp_sector_resolver(src);
             if (s && s != wp_cur_sector) ++wp_frame.xsector_post;
         }
+    } else if (wp_phase) {
+        ++wp_frame.posts_rootlevel;                /* cluster/highway-level post (task -1) */
     }
     if (!wp_phase) return 0;                       /* census-only, or outside the walk */
     if (type == WP_TYPE_ADD_TEMP_ZONE) {           /* must stay synchronous (design §1.3) */
@@ -281,7 +291,7 @@ static int wp_post(void *src, void *event, double time, int imm) {
         return 0;
     }
     if (wp_count >= WP_OP_MAX) {                    /* fail closed: deliver inline, flag the frame */
-        if (!wp_frame.degraded_frames) ++wp_frame.degraded_frames;
+        ++wp_frame.degraded_frames;
         return 0;
     }
     wp_op *op = &wp_buf[wp_count++];
@@ -298,22 +308,29 @@ static int wp_cancel(void *src, int type, double minTime) {
     if (wp_cur_sector != 0) ++wp_frame.cancels;
     if (!wp_phase) return 0;
     uint64_t sid = wp_id_of(src);
-    /* a cancel also removes this task's not-yet-replayed posts of (src,type,>=minTime) */
+    /* Kill only this task's buffered SCHEDULED posts (imm==0): an immediate post was already
+       delivered before the cancel in normal mode, so replay must still deliver it (review #2).
+       Free the killed event, as the engine's CancelPendingEvents deletes the queued events. */
     for (size_t i = 0; i < wp_count; ++i) {
         wp_op *o = &wp_buf[i];
-        if (o->kind == WP_OP_POST && !o->dead && o->src_id == sid && o->type == type &&
-            (minTime <= -0.9999 || o->time >= minTime)) {
+        if (o->kind == WP_OP_POST && !o->dead && o->imm == 0 && o->src_id == sid && o->type == type &&
+            (minTime <= WP_CANCEL_ALL || o->time >= minTime)) {
+            if (o->event) {
+                void **vt = *(void ***)o->event;
+                ((void (*)(void *, int))vt[0])(o->event, 1);
+                o->event = NULL;
+            }
             o->dead = 1;
         }
     }
-    if (wp_count < WP_OP_MAX) {
-        wp_op *op = &wp_buf[wp_count++];
-        op->kind = WP_OP_CANCEL; op->type = type; op->task = wp_cur_task; op->imm = 0;
-        op->src_id = sid; op->event = NULL; op->time = minTime;
-        op->seq = wp_seq_next++; op->dead = 0;
-    } else if (!wp_frame.degraded_frames) {
+    if (wp_count >= WP_OP_MAX) {                    /* review #3: pass through so the schedule sees it */
         ++wp_frame.degraded_frames;
+        return 0;
     }
+    wp_op *op = &wp_buf[wp_count++];
+    op->kind = WP_OP_CANCEL; op->type = type; op->task = wp_cur_task; op->imm = 0;
+    op->src_id = sid; op->event = NULL; op->time = minTime;
+    op->seq = wp_seq_next++; op->dead = 0;
     return 1;
 }
 
@@ -497,6 +514,10 @@ static int wp_listener_cmp(uint64_t id, int *detail) {
 }
 
 static int wp_compare(int *detail) {
+    if (wp_logA_n == 0 || wp_logB_n == 0 || wp_log_overflow) {
+        if (detail) *detail = 0;
+        return WP_CMP_NODATA;                 /* no per-listener data (e.g. no native listener hook) */
+    }
     for (size_t i = 0; i < wp_logA_n; ++i) {
         uint64_t id = wp_logA[i].listener_id;
         if (!wp_seen_before(wp_logA, i, id) && wp_listener_cmp(id, detail)) return -1;
@@ -554,9 +575,12 @@ static void walkpar_arm(void) {
 }
 
 /* The native layer flips the engine on only after its detours are installed; fails closed if the
-   signatures did not verify. */
+   signatures did not verify. WP_REPLAY is refused until the galaxy-call dispatcher is installed, so
+   the replay is bracketed by the walk (review #1), never by the whole sim frame. */
+static int walkpar_dispatcher_on(void);
 static void walkpar_set_mode(int mode) {
     if (wp_ready != WP_READY_OK) { wp_mode = WP_OFF; return; }
+    if (mode == WP_REPLAY && !walkpar_dispatcher_on()) { wp_mode = WP_OFF; return; }
     wp_mode = (mode == WP_CENSUS || mode == WP_REPLAY) ? mode : WP_OFF;
 }
 
@@ -648,6 +672,18 @@ static uintptr_t wp_d_sector(void *self) {
     return r;
 }
 
+/* Galaxy walk dispatcher (stage 1): brackets the whole walk so the deferred replay runs right after
+   it, before 0x1092e80. The real walk is the galaxy's own Move slot 674 (0x1510/8), which is
+   walkprof's timing wrapper when that is installed. */
+static wp_callsite wp_cs = {WP_GALAXY_CALL_RVA, {0}, NULL, 0};
+static void wp_dispatch(void *galaxy) {
+    wp_walk_begin();
+    void **vt = *(void ***)galaxy;
+    ((void (*)(void *))vt[674])(galaxy);
+    wp_walk_end();
+}
+static int walkpar_dispatcher_on(void) { return wp_cs.installed; }
+
 /* Install the entry detours and, on success, enable the engine. Fail closed: if the detours do not
    all install, the engine stays OFF. Returns 1 when armed; a transient 0 (a thread was inside a
    patch range) is the caller's retry. */
@@ -660,6 +696,10 @@ static int walkpar_arm_native(int mode) {
     wp_det[WPD_SECTOR].detour = (void *)wp_d_sector;   wp_det[WPD_SECTOR].sha = x4_walk_sites[WK_SECTOR].sha;
     int n = (mode == WP_REPLAY) ? WPD_N : WPD_N - 1;   /* census: post, sector, deliver */
     if (!wp_detour_install(wp_det, n)) return 0;
+    if (mode == WP_REPLAY && !wp_callsite_install(&wp_cs, (void *)wp_dispatch)) {
+        wp_detour_uninstall(wp_det, n);                /* roll back the entry detours too */
+        return 0;
+    }
     wp_det_n = n;
     walkpar_set_mode(mode);
     return 1;
@@ -667,6 +707,7 @@ static int walkpar_arm_native(int mode) {
 
 static void walkpar_disarm_native(void) {
     wp_want = 0;
+    wp_callsite_uninstall(&wp_cs);
     if (!wp_det_n) return;
     wp_detour_uninstall(wp_det, wp_det_n);
     wp_det_n = 0;
@@ -679,6 +720,7 @@ static void walkpar_tick(void) { if (wp_want && !wp_det_n) walkpar_arm_native(wp
 static int walkpar_arm_native(int mode) { (void)mode; return 0; }
 static void walkpar_disarm_native(void) { wp_want = 0; }
 static void walkpar_tick(void) {}
+static int walkpar_dispatcher_on(void) { return 0; }
 #endif /* X4_HAVE_WALKPAR_SITES */
 
 #endif /* X4LAN_WALKPAR_H */

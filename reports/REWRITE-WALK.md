@@ -16,30 +16,36 @@ engine bytes were modified; no X4 was launched.
 Own files:
 - `native/engine/walkpar.h` — the engine: per-frame census counters, the stage-1 post/cancel buffer (with
   the source UniverseID stored per buffered op), tree-order replay, a normal-vs-replay listener comparison,
-  and a shared scope/ordered-replay API for the ai-driver AI phase. Pure data+logic; it never patches the
-  process. Included by `fixedtick.c` after `walkprof.h`.
-- `native/engine/test_walkpar.c` — synthetic tests in the style of `test_fixedtick.c` (fake events/components
-  with vtables); built and run by `build.py --fixedtick --test`.
+  a shared scope/ordered-replay API for the ai-driver AI phase, and the detour bodies + native arming.
+  Included by `fixedtick.c` after `walkprof.h`.
+- `native/engine/wpdetour.h` — the crash-safe in-process layer (§6): build-pinned entry detours and the
+  galaxy call-site patch, with a ±2 GB trampoline pool, suspend-others + Rip-clash abort (fail closed),
+  rollback and restore.
+- `native/engine/test_walkpar.c`, `native/engine/test_wpdetour.c` — synthetic tests in the style of
+  `test_fixedtick.c`; built and run by `build.py --fixedtick --test`.
 - Additive edits to shared files (minimal, per the rules):
   - `signatures.py`: `WALKPAR_SITES` (byte-pinned detour targets + the galaxy call site) and
     `x4_walkpar_checks[]` / `WP_GALAXY_CALL_RVA` emitted into the C header.
-  - `fixedtick.c`: `#include "walkpar.h"`; `walkpar_arm()` (verify only) in `start()`; `walkpar_disarm()` in
-    `disarm_because()`; a WALKPAR/WALKCENSUS block in `stats()`.
-  - `build.py`: add `walkpar` to the `--fixedtick --test` targets.
+  - `fixedtick.c`: include walkpar.h; `walkcensus`/`walkreplay` start modes; `walkpar_arm` (verify) +
+    lazy `walkpar_tick` arming in `move()`; sim-bracket gated by `walkpar_dispatcher_on()`; disarm in
+    `disarm_because()`; a WALKCENSUS/WALKREPLAY block in `stats()`.
+  - `build.py`: add `walkpar`+`wpdetour` to the `--fixedtick --test` targets.
   - `dev/fixed_tick_probe.lua`: `WALKCENSUS` / `WALKREPLAY` log lines and a loud `FEATURE walkpar DISABLED`.
 - RE: `x4-re/labels/rw-walk.tsv` (4 labels for the hot functions below), `x4-re/scripts/rw-walk/rwdis.py`
   (private capstone helper; analysis only).
 
-The engine is driven by entry points an in-process layer calls once the lane exists; `walkpar_arm()` only
-**verifies** the build-pinned bytes and reports readiness. Any verification miss fails closed (pass-through,
-no replay). The native detours are registered in `rewrite-coord/hooks.tsv` and **not armed**.
+`walkpar_arm()` verifies the build-pinned bytes; `walkcensus`/`walkreplay` then arm the detours lazily on
+the MoveWorker (`walkpar_tick`). Any verification miss or freeze failure fails closed (no patch, `wp_mode`
+stays OFF). Census is armable natively now; **replay is gated on the reviewer's go** (set_mode refuses
+WP_REPLAY until the dispatcher is installed). Sites registered in `rewrite-coord/hooks.tsv`.
 
 ## 2. Stage 0 — hazard census (measurement only)
 
-Driven per frame by: the galaxy-walk wrapper (`wp_walk_begin/end`), the Sector::Move bracket
-(`wp_sector_enter/exit`, chained from walkprof's existing sector wrapper — do not add a third replace on
-0x2b1ff58), a PostEvent entry detour (`wp_post`), a DeliverEvent wrapper (`wp_deliver_enter/exit/listener`),
-and counting detours on the creation/global paths (`wp_note_*`). Per frame and per sector it records:
+Driven per frame by: the slot 0/15 sim bracket (`wp_walk_begin/end`, census only), a Sector::Move
+function-entry detour (`wp_sector_enter/exit` on 0x784230 — coexists with the 0x2b1ff58 vtable chain since
+it patches the body not the slot), a PostEvent entry detour (`wp_post`), a DeliverEvent wrapper
+(`wp_deliver_enter/exit/listener`), and counting detours on the creation/global paths (`wp_note_*`). Per
+frame and per sector it records:
 
 - **Time split:** inclusive Sector::Move ms (sum and max across sectors → ideal speedup = sum/max), and
   inclusive DeliverEvent time while inside a sector (outermost only). This is the deferrable-handler vs
@@ -90,15 +96,30 @@ build: AddTempZone 0xa, Attacked 0x1e, ChangedAttention 0x46, TempZoneAdded 0x1d
 
 ### Normal-vs-replay comparison
 
-`wp_deliver_listener` records a per-delivery tuple `(listener id, src id, type, payload)` keyed by the
-**listener's sector**. A normal run (no buffering, deliveries inline during the walk) fills log A; a replay
-run (buffer + replay) fills log B. `wp_compare` checks, **per listener id**, that the ordered subsequence of
-events it sees is identical (same-listener order is the invariant; cross-listener/cross-sector global
-interleaving is allowed to differ, which is the expected stage-1 shift). MD cue activations are compared as
-an order-independent multiset (count + XOR of cue ids), because MD is universe-level. `wp_compare` returns
-the first differing event type. Offline the test runs both A and B over an identical synthetic scene and
-asserts equivalence; natively this is two identical runs (mode A, then mode B) diffed offline (a
-`WALKCENSUS`/record log per run), per the design's A-vs-B procedure.
+`wp_deliver_listener` records a per-delivery tuple `(listener id, src id, type, payload)`. `wp_compare`
+checks, **per listener id**, that the ordered subsequence of events each listener sees is identical
+(same-listener order is the invariant; cross-listener/cross-sector global interleaving may differ, the
+expected stage-1 shift). MD cue activations are compared as an order-independent multiset (count + XOR of
+cue ids), because MD is universe-level. `wp_compare` returns the first differing event type, or
+`WP_CMP_NODATA` (-2) when either log is empty or overflowed (`WP_CMP_MAX`) — so a run with no per-listener
+data (e.g. the native DeliverEvent detour not emitting per-listener records) can never be a false "equivalent".
+
+**The offline A/B test is SYNTHETIC only** (review #4): it runs normal then replay in one process over
+identical scripted input and proves the replay engine preserves each listener's order. It is not evidence
+about live data, where A and B come from different frames. **Native comparison method (chosen): the Linux
+mid-frame fork** (the fork probe already proved mid-frame fork works) — the parent runs the frame normally
+(log A), the forked child runs the same frame's buffered replay (log B), both over a pipe, so A and B are
+the *same* frame. The two-instance alternative (two games from one save, fixed tick, seeded RNG) is rejected
+for now because it needs frame-diet's camera-RNG split first (render slot 10 draws TLS+0x318) or it diverges
+for unrelated reasons. Until the fork harness exists, stage-1 native validation uses the §6.2 soak
+invariants (object/temp-zone/orphan counts, MD cue counts, AI wake counts, and the engine log counts of
+"Too many recursive cue actions" / "abandoned cue" / "Failed to assign an ID") between a normal and a replay
+run, not a per-frame A/B diff.
+
+Cancel semantics (review #2): a buffered cancel kills only this task's **scheduled** (imm==0) posts of the
+type (an immediate post was already delivered before the cancel in normal mode, so replay must still deliver
+it), and frees the killed event (the engine's CancelPendingEvents deletes queued events). On buffer overflow
+the cancel passes through to the original so the global schedule still sees it (review #3).
 
 ## 4. The four reviewer points
 
@@ -114,9 +135,9 @@ asserts equivalence; natively this is two identical runs (mode A, then mode B) d
    `wp_replay` runs at `wp_walk_end`, which the native galaxy-call wrapper at 0x9fdf95 invokes right after the
    walk returns to 0x9fdf9b — before the 0x1092e80 call at 0x9fe07b. (Fallback: wrap the 0x9fe07b call;
    that reorders the 0x470/0x478/0x8e8450 step, noted as unknown-impact in the design.)
-4. **A normal-vs-replay listener comparison exists.** Yes — §3 and `wp_compare`, with the offline A-vs-B test
-   proving per-listener equivalence and the difference path reporting the offending event type. Cue
-   activations compared as a multiset.
+4. **A normal-vs-replay listener comparison exists.** Yes — §3 and `wp_compare`. The offline A-vs-B test is
+   SYNTHETIC (one process, identical input); the native comparison is the Linux mid-frame fork (§3), with
+   `WP_CMP_NODATA` guarding against a false pass. Cue activations compared as a multiset.
 
 ## 5. Hook sites (registered in rewrite-coord/hooks.tsv; byte-pinned in signatures.py)
 
@@ -127,49 +148,61 @@ asserts equivalence; natively this is two identical runs (mode A, then mode B) d
 | 0x99a870 | CancelPendingEvents entry detour | cancel_pending_events (32) |
 | 0x99c470 | DeliverEvent wrapper (census + compare log) | deliver_event (32) |
 | 0x99abe0 | FlushCommandQueue (ESL on workers, stage 2) | flush_command_queue_wp (32) |
-| 0x2b1ff58 | Sector::Move vtable slot — **chain only** (owners: attention-hooks + walkprof); feed `wp_sector_enter/exit` | (walkprof's existing walk_sector wrapper) |
+| 0x784230 | Sector::Move **function-entry** detour (cur-sector + timing); coexists with the 0x2b1ff58 vtable chain (walkprof/attnload) since it patches the body, not the slot — both noted chained in hooks.tsv | walk sector sha (32) |
 
 `dev/check_hook_signatures.py ../x4-re/bin/X4.exe` → 21 signatures PASS (the 5 new ones above included), no
 files modified.
 
-## 6. Precise native-patch spec (for the lead / native lane; NOT armed here)
+## 5a. Prologue cuts and the relocation assertion (review #5)
 
-The engine is complete; the remaining work is the in-process installation, which is a build-pinned code
-patch that must be byte-verified and restored on disarm and fail closed (ENGINE-INSTRUMENTATION.txt). I did
-not arm it because native testing is gated (quiet.lock; lane not READY) and a wrong entry detour crashes the
-process; per the task, I specify it precisely.
+The trampoline copies each function's first `cut` bytes (whole instructions) and relocates only the one
+jcc (PostEvent's `je`). Disassembly of each cut against the pinned build 23660954 (bytes SHA-pinned in
+signatures.py); **every cut has no RIP-relative operand and no `call`** (a suspended thread whose return
+address fell inside a cut would otherwise return into patched bytes, which the Rip check does not catch):
 
-**Galaxy-walk wrapper (0x9fdf95).** Replace the 6-byte `call qword ptr [rax+0x1510]` (bytes `ff 90 10 15 00
-00`) with `call qword ptr [rip+disp]` (`ff 15` + rel32), where the pointer cell holds `&Dispatch`. rcx already
-= galaxy, rax = galaxy vtable at the patch point, so `Dispatch(void* galaxy)` is `__fastcall`. The cell must
-sit within ±2 GB of 0x9fdf95: allocate a code cave in the image (an existing padding/alignment gap after a
-function) or a VirtualAlloc reservation near the image base; store the 8-byte cell there. `Dispatch` =
-`wp_walk_begin(); ((fn)(*(void***)galaxy)[674])(galaxy); wp_walk_end();` — reading galaxy slot 674 composes
-with walkprof's timing wrapper if present. Verify `galaxy_walk_call` before patching; restore the 6 bytes on
-disarm.
+- `0x99a3f0` PostEvent, cut 14: `48 85 d2` test rdx,rdx; `0f84 1d030000` je 0x99a716 (relocated);
+  `48 89 5c 24 08` mov [rsp+8],rbx. (je target 0x99a716 is outside the 14-byte range.)
+- `0x784230` Sector::Move, cut 15: `40 55` push rbp; `57` push rdi; `48 8d 6c 24 e8` lea rbp,[rsp-0x18]
+  (rsp-relative, not RIP); `48 81 ec 18010000` sub rsp,0x118.
+- `0x99c470` DeliverEvent, cut 16: `48 89 5c 24 20` mov [rsp+0x20],rbx; `55 56 57` push rbp/rsi/rdi;
+  `41 54` push r12; `41 55` push r13; `48 83 ec 40` sub rsp,0x40.
+- `0x99a870` CancelPendingEvents, cut 17: `f2 0f11 5c 24 20` movsd [rsp+0x20],xmm3; `55 56` push rbp/rsi;
+  `48 83 ec 68` sub rsp,0x68; `0f29 74 24 50` movaps [rsp+0x50],xmm6.
 
-**Entry detours (PostEvent 0x99a3f0, CancelPendingEvents 0x99a870, DeliverEvent 0x99c470).** A function-entry
-hot-patch to a 14-byte absolute jump to the detour, with a trampoline that re-executes the overwritten
-prologue then jumps back. Prologue notes (build-pinned, verified against the pinned exe):
-- PostEvent first 14 bytes = 3 whole instructions: `48 85 d2` (test rdx,rdx), `0f84 1d030000` (je 0x99a716),
-  `48 89 5c 24 08` (mov [rsp+8],rbx). The `je` is a rip-relative jcc, so its rel32 **must be relocated** in
-  the trampoline (new rel32 = old target − trampoline instruction end). None of the other prologues in this
-  set has a branch in the first 14 bytes (Cancel: movsd/push/push/sub; Deliver: mov/push×…; all
-  position-independent).
-- The detour body calls the engine: PostEvent → `if (wp_post(rcx,rdx,xmm2,r9b)) return; else <trampoline>`;
-  Cancel → `if (wp_cancel(rcx,edx,xmm?)) return; else <trampoline>`; Deliver → `wp_deliver_enter(src,ev);
-  <trampoline>; wp_deliver_exit(src,ev);` (and, for the listener histogram/compare log, read the event's
-  listeners via GetListenersForType and call `wp_deliver_listener` per listener, or add a finer hook).
-  ABI: PostEvent(rcx=src, rdx=event, xmm2=double time, r9b=imm); Cancel(rcx=src, edx=type, xmm2=minTime).
-- Verify `post_event`/`cancel_pending_events`/`deliver_event` before install; restore the saved prologue on
-  disarm; fail closed (any miss → detours not installed, `wp_mode` stays OFF). Watchdog: a per-frame check
-  that the detours still hold their bytes.
+None loads the security cookie (no `lea`/`mov` against a RIP-relative `__security_cookie`) within the cut.
+`test_wpdetour.c` validates the relocation + a jcc whose target is outside the stolen bytes.
 
-After install, call `walkpar_set_mode(WP_CENSUS)` (stage 0) or `WP_REPLAY` (stage 1). The ai-driver binds its
-AI-phase buffer to the same `walkpar_api()` (scope_begin/end, replay_tasks, buffer_op) — see questions Q4/Q7.
+## 6. Native-patch layer — IMPLEMENTED (wpdetour.h); census armable, replay gated on review
 
-If you (lead) prefer, I can write the trampoline installer as its own reviewed patch once the lane is READY
-and I can byte-verify + lifecycle-test it natively; I did not want to ship an unvalidated in-process patcher.
+`native/engine/wpdetour.h` implements the in-process layer, build-pinned, byte-verified, restored on disarm,
+fail-closed. It is validated offline by `test_wpdetour.c` (trampoline + jcc relocation + the call-site
+patch + 4-thread concurrency + fail-closed-on-mismatch). **Census (`walkcensus`) is safe to arm natively**;
+**REPLAY (`walkreplay`) is held until the reviewer clears it** — `walkpar_set_mode` refuses WP_REPLAY unless
+the galaxy-call dispatcher is installed.
+
+**Crash-safe install (both the entry detours and the call-site).** `wp_pool_reserve` reserves a ±2 GB
+executable pool *before* the freeze. `wp_detour_install`: re-verify the pinned prologue bytes, build the
+relocating trampoline, then `wp_suspend_others` suspends every other thread and **fails closed** — it aborts
+(resume all, return 0, caller retries next frame) if any thread cannot be opened/suspended (review #6) or if
+any thread's Rip is inside a patch range. Only then the 14-byte `jmp [rip+0]; <abs>` is written and the
+prologue tail nop-padded. Full rollback if any site fails; the pool is never freed while armed. Arming is
+lazy (`walkpar_tick` each frame on the MoveWorker) so a transient Rip clash just retries.
+
+**Galaxy-walk dispatcher (0x9fdf95, stage 1).** `wp_callsite_install` replaces the 6-byte
+`call [rax+0x1510]` with `call [rip+cell]` (the 8-byte cell in the pool holds `&wp_dispatch`). rcx is the
+galaxy at the patch point, so `wp_dispatch(galaxy)` = `wp_walk_begin(); ((fn)(*(void***)galaxy)[674])(galaxy);
+wp_walk_end();` — slot 674 composes with walkprof's timing wrapper. This call site runs once per frame on the
+MoveWorker only, so a clash is effectively impossible. In replay mode the dispatcher brackets the walk (so
+replay runs before 0x1092e80); the slot 0/15 sim-bracket is used only for census (`walkpar_dispatcher_on()`
+gate in fixedtick.c).
+
+**Detour bodies** (walkpar.h): PostEvent → `if (wp_post(src,event,time,imm)) return; else <tramp>`;
+Cancel → `if (wp_cancel(src,type,minTime)) return; else <tramp>`; DeliverEvent → `wp_deliver_enter;
+<tramp>; wp_deliver_exit`; Sector::Move → `wp_sector_enter; r=<tramp>; wp_sector_exit; return r`. ABI:
+PostEvent(rcx=src, rdx=event, xmm2 time, r9b imm); Cancel(rcx=src, edx=type, xmm2 minTime). The DeliverEvent
+per-listener records (for the compare log) are **not yet emitted natively** — a finer hook or a read of the
+event's listeners at enter is the follow-up; `WP_CMP_NODATA` guards the gap. The ai-driver binds its AI-phase
+buffer to the same `walkpar_api()` (scope_begin/end, replay_tasks, buffer_op) — questions Q4/Q7.
 
 ## 7. Tests (offline only; no native result claimed)
 

@@ -138,10 +138,10 @@ static void engine_setup(int mode) {
     wp_window_clear();
     wp_logA_n = wp_logB_n = 0;
     wp_cue_xor[0] = wp_cue_xor[1] = wp_cue_cnt[0] = wp_cue_cnt[1] = 0;
+    wp_log_overflow = 0;
     wp_ready = WP_READY_OK;
-    wp_mode = WP_OFF;
     wp_thread = 0;
-    walkpar_set_mode(mode);
+    wp_mode = mode;     /* white-box: set directly (no native dispatcher in the offline test) */
 }
 
 int main(void) {
@@ -180,7 +180,7 @@ int main(void) {
     size_t a_records = wp_logA_n;
     assert(a_records == 3);      /* e_same->l0, e_cross->l1, e_tz->l0 */
 
-    wp_mode = WP_OFF; walkpar_set_mode(WP_REPLAY);  /* replay run: buffer + replay -> B */
+    wp_mode = WP_REPLAY;          /* replay run: buffer + replay -> B (white-box; gate bypassed) */
     scene_init();
     run_scene();
     assert(wp_win.buffered >= 3);                    /* same, cross, sched buffered (tz stays inline) */
@@ -192,19 +192,29 @@ int main(void) {
     /* The scheduled post was buffered and replayed as a schedule insert (no listener record). */
     assert(wp_win.replayed >= 3);
 
-    /* Cancel against the buffer: a cancel removes this task's not-yet-replayed matching posts. */
+    /* no-data guard: empty or overflowed logs are not a false pass */
+    wp_logA_n = wp_logB_n = 0; wp_log_overflow = 0;
+    assert(wp_compare(&detail) == WP_CMP_NODATA);
+    wp_logA_n = wp_logB_n = 1; wp_log_overflow = 1;
+    assert(wp_compare(&detail) == WP_CMP_NODATA);
+    wp_log_overflow = 0;
+
+    /* Cancel kills only SCHEDULED (imm==0) buffered posts and frees them; an immediate post stays. */
     engine_setup(WP_REPLAY);
     scene_init();
     wp_walk_begin();
     wp_sector_enter(&S0);
-    engine_post(&o0, &e_same, 10.0, 1);
-    assert(wp_count == 1);
-    engine_cancel(&o0, WP_TYPE_ATTACKED, -1.0);      /* cancels the buffered e_same */
-    assert(wp_buf[0].dead == 1);
+    engine_post(&o0, &e_same, 10.0, 1);              /* immediate ATTACKED -> l0 */
+    engine_post(&o0, &e_sched, 20.0, 0);             /* scheduled WARP */
+    assert(wp_count == 2);
+    engine_cancel(&o0, WP_TYPE_WARP, WP_CANCEL_ALL); /* kills the scheduled WARP post, frees it */
+    assert(wp_buf[1].dead == 1 && e_sched.freed == 1);
+    engine_cancel(&o0, WP_TYPE_ATTACKED, WP_CANCEL_ALL); /* must NOT kill the delivered immediate */
+    assert(wp_buf[0].dead == 0);
     wp_sector_exit(&S0);
     wp_walk_end();
-    assert(wp_logB_n == 0);                           /* the dead post is not replayed */
-    assert(wp_frame.cancels == 1 && wp_frame.cancels_applied == 1);
+    assert(wp_logB_n == 1 && wp_logB[0].listener_id == 300);  /* only the immediate replayed, to l0 */
+    assert(wp_frame.cancels == 2 && wp_frame.cancels_applied == 2);
 
     /* Replay re-resolves by UniverseID; a gone source drops the event (and frees it). */
     engine_setup(WP_REPLAY);
@@ -232,16 +242,17 @@ int main(void) {
     wp_walk_end();
 
     /* Difference detection: an injected divergence is reported with the offending event type. */
-    wp_logA_n = wp_logB_n = 0; wp_task_count = 0;
+    wp_logA_n = wp_logB_n = 0; wp_task_count = 0; wp_log_overflow = 0;
     wp_cue_xor[0] = wp_cue_xor[1] = wp_cue_cnt[0] = wp_cue_cnt[1] = 0;
-    wp_task_index(100);
     wp_logA[wp_logA_n++] = (wp_cmp_rec){ 0, WP_TYPE_ATTACKED, 0, 200, 300, 0, 0xaa };
     wp_logB[wp_logB_n++] = (wp_cmp_rec){ 0, WP_TYPE_WARP, 0, 200, 300, 0, 0xaa };
     detail = 0;
     assert(wp_compare(&detail) == -1 && (detail & 0xffff) == WP_TYPE_ATTACKED);
 
-    /* MD cue activations compare as a multiset; a count/xor mismatch is caught. */
-    wp_logA_n = wp_logB_n = 0; wp_task_count = 0;
+    /* MD cue activations compare as a multiset; a count/xor mismatch is caught (logs non-empty). */
+    wp_logA_n = wp_logB_n = 0; wp_log_overflow = 0;
+    wp_logA[wp_logA_n++] = (wp_cmp_rec){ 0, WP_TYPE_ATTACKED, 0, 200, 300, 0, 0xaa };
+    wp_logB[wp_logB_n++] = (wp_cmp_rec){ 0, WP_TYPE_ATTACKED, 0, 200, 300, 0, 0xaa };
     wp_cue_cnt[0] = 2; wp_cue_xor[0] = 0x11 ^ 0x22;
     wp_cue_cnt[1] = 2; wp_cue_xor[1] = 0x22 ^ 0x11;  /* same multiset, different order */
     assert(wp_compare(&detail) == 0);
@@ -284,10 +295,10 @@ int main(void) {
 
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: stage 0 census counts posts/deliveries/cross-sector flags and sector sum/max time");
-    puts("PASS: stage 1 normal-vs-replay listener comparison is equivalent per listener-sector");
+    puts("PASS: stage 1 replay equivalence per listener (SYNTHETIC only: one process, identical input)");
     puts("PASS: AddTempZoneEvent stays synchronous; source UniverseID stored and re-resolved at replay");
-    puts("PASS: cancel applies to buffered posts; gone source dropped+freed; overflow fails closed");
-    puts("PASS: comparison reports the first differing event type; cue activations compared as a multiset");
-    puts("PASS: foreign-thread entry points pass through and count nothing");
+    puts("PASS: cancel kills only scheduled posts and frees them; gone source dropped+freed; overflow passes through");
+    puts("PASS: comparison reports no-data, the first differing type, and cue activations as a multiset");
+    puts("PASS: ai-driver scope + ordered replay; foreign-thread entry points pass through and count nothing");
     return 0;
 }
