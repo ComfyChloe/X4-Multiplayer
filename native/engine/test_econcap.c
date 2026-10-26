@@ -182,7 +182,8 @@ int main(void) {
     put_f64(st + 0xa30, 160.0);
     st[0xa4c] = 0;
     uint64_t sid = register_id(map, 4, 7, st);
-    /* Order registry with one sell offer of refinedmetals, and one reservation. */
+    /* Order registry with one sell offer of refinedmetals (Trade+0x10 seller = the station, +0x18
+       buyer empty), and one reservation. */
     unsigned char *omap = alloc(0x158), *oblock = alloc((size_t)32 * 64);
     put_ptr(omap + 0x58, oblock);
     put_ptr(image + ECON_ORDERMAP_PTR_RVA, omap);
@@ -201,7 +202,7 @@ int main(void) {
     uint64_t tid = (2 + 1) | (5ull << 18);
     uint64_t q28 = (uint64_t)(uintptr_t)trade ^ (uint64_t)metal, q30 = q28 ^ 17340ull;
     memcpy(trade + 0x08, &tid, 8);
-    put_ptr(trade + 0x18, st);
+    memcpy(trade + 0x10, &sid, 8);
     memcpy(trade + 0x28, &q28, 8);
     memcpy(trade + 0x30, &q30, 8);
     uint32_t low = (uint32_t)q28 & 0x7fffffffu, enc;
@@ -213,14 +214,20 @@ int main(void) {
     memcpy(sells, &tid, 8);
     put_ptr(st + 0x910, sells);
     put_ptr(st + 0x918, sells + 8);
-    unsigned char *res = alloc(0x30);
+    unsigned char *res = alloc(0x60);
     uint32_t rword = 0x9; memcpy(res, &rword, 4);
     uint64_t reserver = 0x777; memcpy(res + 0x08, &reserver, 8);
     put_ptr(res + 0x18, (void *)ore);
     uint32_t ramount = 300; memcpy(res + 0x20, &ramount, 4);
     put_f64(res + 0x28, 3610.0);
+    /* a second entry linked to the trade order: its amount comes from the order */
+    uint32_t rword2 = 0x1; memcpy(res + 0x30, &rword2, 4);
+    uint64_t reserver2 = 0x778; memcpy(res + 0x38, &reserver2, 8);
+    memcpy(res + 0x40, &tid, 8);
+    put_ptr(res + 0x48, (void *)metal);
+    put_f64(res + 0x58, -1.0);
     put_ptr(st + 0x980, res);
-    put_ptr(st + 0x988, res + 0x30);
+    put_ptr(st + 0x988, res + 0x60);
     memcpy(st + 0x08, &sid, 8);
     /* Production storage allocation (+0x940 -> list, +0x931 valid): refinedmetals 500. */
     unsigned char *alloc_list = alloc(0x30);
@@ -264,10 +271,12 @@ int main(void) {
     assert(count_prefix(lines, n, "D 0 ") == 1);
     assert(count_prefix(lines, n, "F 100 0x4029000000000000 0xabcdef") == 1);
     assert(count_prefix(lines, n, "C 0x") == 1 && count_prefix(lines, n, "M 0x123456789 ") == 1);
-    assert(count_prefix(lines, n, "O ") == 1 && count_prefix(lines, n, "V ") == 1);
+    assert(count_prefix(lines, n, "O ") == 1 && count_prefix(lines, n, "V ") == 2);
     for (int i = 0; i < n; ++i) {
-        if (!strncmp(lines[i], "O ", 2)) assert(strstr(lines[i], " 1 0x140003 2 0x0 ") && strstr(lines[i], " 600 0 600 17340 0x40"));
-        if (!strncmp(lines[i], "V ", 2)) assert(strstr(lines[i], " 0x9 0x777 0x0 1 300 0x40ac340000000000"));
+        if (!strncmp(lines[i], "O ", 2)) assert(strstr(lines[i], " 1 0x140003 2 0xe000005 0x0 ") && strstr(lines[i], " 600 0 600 17340 0x40"));
+        if (!strncmp(lines[i], "V ", 2))
+            assert(strstr(lines[i], " 0x9 0x777 0x0 1 300 0x40ac340000000000") ||
+                   strstr(lines[i], " 0x1 0x778 0x140003 2 0 0xbff0000000000000 600 0x40"));
     }
     for (int i = 0; i < n; ++i)
         if (!strncmp(lines[i], "C ", 2)) {
@@ -300,8 +309,9 @@ int main(void) {
     put_inline_list(sto1 + 0x360, 2, rw, c3);
     econcap_frame(160.0, 102, 0x1);
     n = drain(lines, 256);
-    assert(n == 6 && !strncmp(lines[0], "F 102 ", 6) && !strncmp(lines[1], "C ", 2) && !strncmp(lines[2], "A ", 2) &&
-           !strncmp(lines[3], "O ", 2) && !strncmp(lines[4], "V ", 2) && !strncmp(lines[5], "M ", 2));
+    assert(n == 7 && !strncmp(lines[0], "F 102 ", 6) && !strncmp(lines[1], "C ", 2) && !strncmp(lines[2], "A ", 2) &&
+           !strncmp(lines[3], "O ", 2) && !strncmp(lines[4], "V ", 2) && !strncmp(lines[5], "V ", 2) &&
+           !strncmp(lines[6], "M ", 2));
     assert(strstr(lines[1], " 0 720 1 1920") != NULL);
 
     /* Station destroyed (generation changed): dropped once, counted, no partial record. */

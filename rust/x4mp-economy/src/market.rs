@@ -33,7 +33,9 @@ pub struct Offer {
     /// Position in that list.
     pub pos: u32,
     pub ware: WareIx,
-    /// `true`: the owner buys (buy offer: Trade+0x10 set, +0x18 empty); `false`: sells.
+    /// `true`: the owner buys (Trade+0x18 buyer = owner, +0x10 empty); `false`: it sells
+    /// (Trade+0x10 seller = owner). Confirmed on captured offers (stress3: a silicon wafer
+    /// factory buys silicon and sells wafers).
     pub buy: bool,
     /// Offered amount (Trade+0x40). The engine computes it net of the owner's reservations
     /// (the refresh after every reservation change), so it is also the amount a new

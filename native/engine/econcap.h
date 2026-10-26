@@ -39,7 +39,8 @@
  *     bits 25..40 = generation.
  *   Offers: Container+0x8f8 and +0x910, vectors of order ids resolved in the order registry
  *     *(image + 0x6cf1750) (same bucket layout, 8 blocks of 2^15, id bits 0..17 = slot + 1, bits
- *     18.. = generation, required flag 2). Trade: +0x10 buyer, +0x18 seller (raw), +0x28 ware tag
+ *     18.. = generation, required flag 2). Trade: +0x10 seller, +0x18 buyer (component ids; a station's
+ *     sell offer has +0x10 = station, its buy offer +0x18 = station), +0x28 ware tag
  *     (= Trade ^ ware), +0x30 price tag (= tag ^ unit price in cents), +0x40 amount, +0x44 minimum,
  *     +0x50 desired (each XOR low31(tag)), +0x54 flags.
  *   Reservations: Container+0x980..+0x988, 48 bytes {u32 word; u64 reserver @8; u64 order @0x10;
@@ -493,6 +494,17 @@ static int econ_station(econ_watch_entry *w, int force) {
     static unsigned char resv[ECON_MAX_RESERVATIONS][0x30];
     if (nr && !econ_read((const unsigned char *)(uintptr_t)rb, resv, (size_t)nr * 0x30)) return 0;
     h = econ_hash_bytes(h, resv, (size_t)nr * 0x30);
+    for (int i = 0; i < nr; ++i) { /* linked orders' amounts and flags change during a trade */
+        uint64_t order;
+        memcpy(&order, resv[i] + 0x10, 8);
+        const unsigned char *o = order ? econ_order(order) : NULL;
+        uint32_t of[2] = {0, 0};
+        uint64_t oq28 = 0;
+        if (o && econ_read(o + 0x28, &oq28, 8) && econ_read(o + 0x40, &of[0], 4) && econ_read(o + 0x54, &of[1], 4)) {
+            of[0] ^= (uint32_t)oq28 & 0x7fffffffu;
+            h = econ_hash_bytes(h, of, sizeof(of));
+        }
+    }
     if (!force && h == w->last_hash) return 1;
     w->last_hash = h;
     econ.len = 0;
@@ -509,10 +521,10 @@ static int econ_station(econ_watch_entry *w, int force) {
     econ_end_line();
     for (int i = 0; i < no; ++i) {
         const unsigned char *t = offers[i];
-        uint64_t q28, q30, buyer, seller;
+        uint64_t q28, q30, seller, buyer;
         uint32_t d40, d44, d50, flags;
-        memcpy(&buyer, t + 0x10, 8);
-        memcpy(&seller, t + 0x18, 8);
+        memcpy(&seller, t + 0x10, 8);
+        memcpy(&buyer, t + 0x18, 8);
         memcpy(&q28, t + 0x28, 8);
         memcpy(&q30, t + 0x30, 8);
         memcpy(&d40, t + 0x40, 4);
@@ -525,7 +537,7 @@ static int econ_station(econ_watch_entry *w, int force) {
         int wi = ware ? econ_ware_index(ware) : -1;
         econ.len = 0;
         econ_put("O 0x%llx %d 0x%llx %d 0x%llx 0x%llx %d %d %d %lld 0x%x", (unsigned long long)w->uid, offer_list[i],
-                 (unsigned long long)offer_id[i], wi, (unsigned long long)buyer, (unsigned long long)seller,
+                 (unsigned long long)offer_id[i], wi, (unsigned long long)seller, (unsigned long long)buyer,
                  (int32_t)(low ^ d40), (int32_t)(low ^ d44), (int32_t)(low ^ d50), (long long)(q28 ^ q30), flags);
         econ_end_line();
     }
@@ -546,6 +558,17 @@ static int econ_station(econ_watch_entry *w, int force) {
         econ_put("V 0x%llx 0x%x 0x%llx 0x%llx %d %u", (unsigned long long)w->uid, word, (unsigned long long)reserver,
                  (unsigned long long)order, wi, amount);
         econ_put_f64(expiry);
+        /* A linked trade order's own amount (Trade+0x40, decoded) and flags (+0x54): the engine
+           takes a linked reservation's amount from its order (0x3ef840). -1 0 when not found. */
+        if (order) {
+            const unsigned char *o = econ_order(order);
+            uint64_t oq28 = 0;
+            uint32_t od40 = 0, oflags = 0;
+            if (o && econ_read(o + 0x28, &oq28, 8) && econ_read(o + 0x40, &od40, 4) && econ_read(o + 0x54, &oflags, 4))
+                econ_put(" %d 0x%x", (int32_t)(((uint32_t)oq28 & 0x7fffffffu) ^ od40), oflags);
+            else
+                econ_put(" -1 0x0");
+        }
         econ_end_line();
     }
     for (int m = 0; m < np; ++m) {

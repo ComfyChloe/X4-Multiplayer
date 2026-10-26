@@ -13,20 +13,26 @@
 //! C <uid> <last:f64> <a28:f64> <a30:f64> <a4c> <nmodules> <ncargo> {<ware#> <amount>}*ncargo
 //! A <uid> <valid> <n> {<ware#> <amount>}*n    production storage allocation (Container+0x940,
 //!                                              valid = +0x931); newer captures only
+//! O <uid> <list> <trade> <ware#> <seller> <buyer> <amount> <min> <desired> <unit cents> <flags>
+//!                                              trade offer (Container+0x8f8 list 0 / +0x910 list 1;
+//!                                              seller = Trade+0x10, buyer = +0x18)
+//! V <uid> <word> <reserver> <order> <ware#> <amount> <expiry:f64> [<order amount|-1> <order flags>]
+//!                                              reservation (Container+0x980); the bracket for linked
+//!                                              entries in newer captures
 //! M <uid> <addr> <functional> <state> <start:f64> <next:f64> <psince:f64> <ptotal:f64> <item> <cycle>
 //!   <ftime:f64> <fproduct:f64> <fprimary:f64> <fsecondary:f64> <ftertiary:f64>
 //!   <npending> {<ware#> <amount>}* <nitems> {<ware#> <method#|-1> <tf> <pf> <prf> <sf> <tef> <cycles> <repeat>}*
 //! ```
 //!
-//! A `C` record is followed by its `M` records (child order). The sampler writes a station
+//! A `C` record is followed by its `A`, `O`, `V` and `M` records. The sampler writes a station
 //! only when one of its fields changed since its last record.
 //!
 //! **Replay.** For two consecutive records of a station whose `last` changed, the replay runs
 //! [`crate::production::update_production`] from the earlier state at the later `last` and
-//! compares every module field and the cargo with the later record. Engine decisions that the
-//! model cannot know without the storage reverse engineering are taken from the regime the
-//! test scenario guarantees (unlimited storage); random retry draws are taken from the
-//! recording when exactly one draw explains the recorded time ([`OracleRng`]).
+//! compares every module field and the cargo with the later record. Storage decisions use the
+//! captured allocation (`A`); captures without it take them from the recording. Random retry
+//! draws are taken from the recording when exactly one draw explains the recorded time
+//! ([`OracleRng`]).
 
 use crate::ids::WareIx;
 use crate::production::{
@@ -78,8 +84,10 @@ pub struct OfferRecord {
     pub list: u8,
     pub trade: u64,
     pub ware: Option<WareIx>,
-    pub buyer: u64,
+    /// Trade+0x10: the selling component (the station for its sell offers), 0 otherwise.
     pub seller: u64,
+    /// Trade+0x18: the buying component (the station for its buy offers), 0 otherwise.
+    pub buyer: u64,
     pub amount: i32,
     pub min_amount: i32,
     pub desired: i32,
@@ -97,6 +105,9 @@ pub struct ReservationRecord {
     pub ware: Option<WareIx>,
     pub amount: u32,
     pub expiry: f64,
+    /// Linked trade order's amount (Trade+0x40) and flags (+0x54), when the capture has them
+    /// and the order exists.
+    pub linked: Option<(u32, u32)>,
 }
 
 #[derive(Debug)]
@@ -252,8 +263,8 @@ impl Capture {
                     let w = t.next()?;
                     let ware =
                         if w == "-1" { None } else { Some(WareIx(w.parse::<u16>().map_err(|_| t.err("ware index"))?)) };
-                    let buyer = t.u64()?;
                     let seller = t.u64()?;
+                    let buyer = t.u64()?;
                     let amount = t.i32()?;
                     let min_amount = t.i32()?;
                     let desired = t.i32()?;
@@ -263,8 +274,8 @@ impl Capture {
                         list,
                         trade,
                         ware,
-                        buyer,
                         seller,
+                        buyer,
                         amount,
                         min_amount,
                         desired,
@@ -284,7 +295,16 @@ impl Capture {
                         if w == "-1" { None } else { Some(WareIx(w.parse::<u16>().map_err(|_| t.err("ware index"))?)) };
                     let amount = t.u64()? as u32;
                     let expiry = t.f64()?;
-                    st.reservations.push(ReservationRecord { word, reserver, order, ware, amount, expiry });
+                    // Newer captures: the linked order's amount and flags (-1 = order not found).
+                    let linked = match t.it.next() {
+                        Some(a) => {
+                            let a: i64 = a.parse().map_err(|_| t.err("order amount"))?;
+                            let f = t.u64()? as u32;
+                            (a >= 0).then_some((a as u32, f))
+                        }
+                        None => None,
+                    };
+                    st.reservations.push(ReservationRecord { word, reserver, order, ware, amount, expiry, linked });
                 }
                 "M" => {
                     let methods = cap.methods.clone();
