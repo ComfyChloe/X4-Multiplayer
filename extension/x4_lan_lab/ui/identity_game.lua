@@ -66,7 +66,7 @@ function U.receive(f,now)
  if f[1]~='IDENT' then return receive(f,now) end
  if cfg.slot=='p1' or #f~=11 or not U.latest or f[4]~=U.latest.epoch then return true end
  local seq,id=P.integer(f[5]),P.integer(f[7]);local scope=f[6]
- if not seq or not id or id==0 or (scope~='P' and scope~='N' and scope~='F') or (scope=='P' and id>2) or (scope=='F' and id>4) or
+ if not seq or not id or id==0 or (scope~='P' and scope~='N' and scope~='F') or (scope=='P' and id>(A.coop and A.coop.count or 2)) or (scope=='F' and id>4) or
    not f[8]:match('^[A-Z0-9-]+$') or #f[8]>32 or (f[10]~='0' and f[10]~='1') or (f[11]~='0' and f[11]~='1') then return true end
  local name=decode(f[9]);if not name or name:find('[%z\1-\31\127]') then return true end
  local k=scope..id;local old=I.rows[k]

@@ -4,7 +4,7 @@ local cfg=X4LAN_CONFIG;local A=X4LAN_BUBBLE_API;local P=X4LAN_UNIVERSE_PROTOCOL
 if not cfg or not cfg.world_sync or not A or not A.state.active then return end
 local ffi=require('ffi');local C=ffi.C;local s=A.state
 local M=assert(X4LAN_MOTION,'motion buffer missing')
-assert(cfg.test_profile=='45841' and cfg.build:sub(1,7)=='world1-','world adapter requires isolated W01 build')
+assert(type(cfg.test_profile)=='string' and cfg.test_profile:match('^4584[1-8]$') and cfg.build:sub(1,7)=='world1-','world adapter requires isolated W01 build')
 assert(cfg.world_mode=='observe' or cfg.world_mode=='replica','select an explicit world test mode')
 ffi.cdef[[
 uint32_t GetAllFactions(const char**,uint32_t,bool);

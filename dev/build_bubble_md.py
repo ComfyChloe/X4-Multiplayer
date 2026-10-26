@@ -1,5 +1,10 @@
 from pathlib import Path
 import xml.etree.ElementTree as E
+# DO NOT regenerate x4lan_bubble.xml from this script without reconciling first: it
+# already drifted (see commit cd0e8e2), and the N-player changes were applied to the
+# committed MD by hand only: PrepareShips count/ownIndex/$ordered/extras and
+# PreparedExtra.<k>, Arena per-ship lists and ship loop, $weapons3..7 + Shots3..7 with
+# the ExtraShot library, the XShip publication and the ApplyExtra cue.
 # Legacy configs copy the local loadout onto the proxy. With a shared ship spec,
 # PrepareShips has already equipped both ships identically before Arena setup.
 # PrepareShips requires the configured weapon count exactly. A weapon slot may stay

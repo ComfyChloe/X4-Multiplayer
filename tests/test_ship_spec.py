@@ -117,8 +117,8 @@ class ShipSpecContractTests(unittest.TestCase):
         prepare = root.find("./cues/cue[@name='PrepareShips']")
         self.assertIsNotNone(prepare)
         text = ET.tostring(prepare, encoding='unicode')
-        self.assertEqual(text.count('<create_ship'), 2)
-        self.assertEqual(text.count('<loadout loadout="$loadout"'), 2)
+        self.assertEqual(text.count('<create_ship'), 3)              # own, peer, extras (N-player)
+        self.assertEqual(text.count('<loadout loadout="$loadout"'), 3)
         self.assertIn('ware.software_dockmk2', text)
         # Exact configured count; an empty slot is accepted only without missile storage.
         self.assertIn('$candidate.weapons.operational.count != $args.$weapons', text)

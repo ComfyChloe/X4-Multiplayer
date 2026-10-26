@@ -20,7 +20,23 @@ void SetObjectSectorPos(UniverseID,UniverseID,UIPosRot);
 void RemoveComponent(UniverseID);
 ]]
 local function log(s) DebugError('[X4LAN] '..tostring(s)) end
-local s={loaded=false,ready=false,fire=0,worldRevision=0,commands={},dock={0,0},lastLog=-math.huge}
+-- Player roster shared by every co-op adapter (relay rules): slots p1..p<players>,
+-- shared ships 1..<ships>. Two players/ships outside a dedicated session; a dedicated
+-- session gives every client one ship (the server's observer takes none), at least 2.
+-- Default local ships: p1->1, p2->2, p3->1 (legacy), pK->K-1 for K>=4.
+local function makeRoster()
+ local dedicated=cfg.dedicated_session==true
+ local players=tonumber(cfg.max_players) or (dedicated and 3 or 2)
+ assert(players%1==0 and players>=2 and players<=8 and (dedicated or players==2),'max_players must be 2, or 2..8 in a dedicated session')
+ local slot=tonumber(tostring(cfg.slot):match('^p([1-8])$'))
+ assert(slot and slot<=players,'slot outside max_players')
+ local ships=dedicated and math.max(2,players-1) or 2
+ local own=tonumber(cfg.local_ship) or 0
+ if own==0 then own=(slot==1 or slot==3) and 1 or (slot==2 and 2 or slot-1) end
+ assert(own%1==0 and own>=1 and own<=ships and (dedicated or own==slot),'invalid dedicated local ship mapping')
+ return {players=players,ships=ships,slot=slot,own=own,dedicated=dedicated,fixture=2}
+end
+local s={loaded=false,ready=false,fire=0,worldRevision=0,commands={},dock={0,0},lastLog=-math.huge,extra={},extraRevision=0,extraApplied={}}
 local function id(n) return ConvertStringToLuaID((tostring(n):gsub('ULL$',''))) end
 local function nonce()
  local p={};for i=1,8 do p[i]=string.format('%04x',math.random(0,65535)) end;return table.concat(p)
@@ -63,6 +79,18 @@ local function receiveExtension(client,f,now)
    if not cfg.coop or key~=s.appliedWorld or now>=(s.nextWorldApply or 0) then
     AddUITriggeredEvent('X4LAN_Bubble','Apply',{values=v});s.appliedWorld=key;s.nextWorldApply=now+1
    end
+  end
+  return true
+ elseif f[1]=='XSHIP' then
+  -- Server-owned hull/shield/cargo/dock of ships 3.. (client roster beyond the WORLD rows).
+  if #f~=10 or not f[4]:match('^[a-f0-9]+$') or #f[4]~=32 or cfg.slot=='p1' then return true end
+  local ship=tonumber(f[6]);local v={}
+  for i=7,10 do local n=tonumber(f[i]);if not n or n~=n or n<0 or n>1000000 then return true end;v[#v+1]=n end
+  if not ship or ship%1~=0 or ship<=2 or ship>X4LAN_BUBBLE_API.roster.ships or v[1]>100 or v[2]>100 then return true end
+  local key=table.concat(v,'|');local old=s.extraApplied[ship]
+  if s.ready and (not old or old.key~=key or now>=old.next) then
+   s.extraApplied[ship]={key=key,next=now+1}
+   AddUITriggeredEvent('X4LAN_Bubble','ApplyExtra',{ship=ship,hull=v[1],shield=v[2],cargo=v[3],dock=v[4]})
   end
   return true
  elseif f[1]=='FIRE' then
@@ -117,20 +145,23 @@ local function frame()
  local sector=operational and C.GetContextByClass(ship,'sector',false) or s.sector
  if sector==0 then if cfg.coop and s.sector then sector=s.sector else return end end
  if not s.ship then
-  local own=tonumber(cfg.local_ship) or 0
-  if own==0 then own=cfg.slot=='p1' and 1 or 2 end
-  assert((own==1 or own==2) and (cfg.slot~='p3' or cfg.dedicated_session and own==1),'invalid dedicated local ship mapping')
+  local R=X4LAN_BUBBLE_API.roster;local own=R.own
   local x=own==1 and 1000 or -1000
   if cfg.ship_macro then
    -- MD also registers the ships as native sensor sources. SpawnObjectAtPos2
    -- objects report radar range but fail discovery away from the starter ship.
    if not s.shipRequest then
     s.shipRequest={sector=sector,original=ship}
-    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{sector=id(sector),localX=-x,macro=cfg.ship_macro,loadout=cfg.ship_loadout or '',weapons=cfg.ship_weapons or -1,teleport=not cfg.dedicated})
+    AddUITriggeredEvent('X4LAN_Bubble','PrepareShips',{sector=id(sector),localX=-x,macro=cfg.ship_macro,loadout=cfg.ship_loadout or '',weapons=cfg.ship_weapons or -1,teleport=not cfg.dedicated,count=R.ships,ownIndex=own})
     log('shared ship requested: '..cfg.ship_macro..' loadout='..tostring(cfg.ship_loadout))
    end
    if not s.shipsReady then return end
    s.ship,s.sector,s.proxy=s.shipRequest.own,s.shipRequest.sector,s.shipRequest.proxy
+   -- Native objects of every shared ship by index: own at R.own, the remaining indices
+   -- take the proxy and then the extra ships in ascending order.
+   local pool={s.proxy};for k=1,R.ships-2 do pool[#pool+1]=s.shipRequest.extra[k] end
+   s.ships={};local n=0
+   for i=1,R.ships do if i==own then s.ships[i]=s.ship else n=n+1;s.ships[i]=pool[n] end end
   else
    s.ship,s.sector=ship,sector
    s.proxy=C.SpawnObjectAtPos2(cfg.proxy_macro,sector,ffi.new('UIPosRot',{x=x,y=10000,z=0}),'player')
@@ -188,6 +219,12 @@ local function frame()
  if client.lease and cfg.slot=='p1' and s.world and now>=(s.nextWorld or 0) then
   s.transport:send('WORLD|1|'..client.lease..'|'..s.worldRevision..'|'..s.world);s.nextWorld=now+.1
  end
+ if client.lease and cfg.slot=='p1' and next(s.extra) and now>=(s.nextExtra or 0) then
+  s.nextExtra=now+.2;s.extraRevision=s.extraRevision+1
+  for ship=3,X4LAN_BUBBLE_API.roster.ships do
+   if s.extra[ship] then s.transport:send('XSHIP|1|'..client.lease..'|'..s.extraRevision..'|'..ship..'|'..s.extra[ship]) end
+  end
+ end
  if s.firing and (now>(s.fireDeadline or 0) or C.IsGamePaused()) then stopRemoteFire() end
  local remote=client:render(now)
  local other=cfg.slot=='p1' and 2 or 1
@@ -212,7 +249,9 @@ end
 local ok,e=pcall(function()
  local path=ffi.string(C.GetSaveFolderPath()):gsub('\\','/'):gsub('/+$','')
  local profile=cfg.test_profile or '45841'
- assert(profile=='45841' or profile=='45842','unsupported test profile')
+ -- Isolated test profiles 45841..45848: one per client on a shared test PC.
+ assert(type(profile)=='string' and profile:match('^4584[1-8]$'),'unsupported test profile')
+ X4LAN_BUBBLE_API.roster=makeRoster()
  local suffix='/'..profile..'/save'
  assert(path:sub(-#suffix)==suffix,'inactive outside isolated test profile '..profile)
  s.active=true
@@ -224,14 +263,33 @@ local ok,e=pcall(function()
    if s.shipRequest and not s.failed and not s.shipsReady then s.shipRequest[field]=ConvertIDTo64Bit(object) end
   end)
  end
+ -- Ships 3.. of a dedicated N-player session (proxies of further clients).
+ for k=1,X4LAN_BUBBLE_API.roster.ships-2 do
+  RegisterEvent('X4LAN_Bubble.PreparedExtra.'..k,function(_,object)
+   if s.shipRequest and not s.failed and not s.shipsReady then
+    s.shipRequest.extra=s.shipRequest.extra or {};s.shipRequest.extra[k]=ConvertIDTo64Bit(object)
+   end
+  end)
+ end
  RegisterEvent('X4LAN_Bubble.ShipsReady',function()
   local r=s.shipRequest
   if not r or s.failed or s.shipsReady then return end
-  if not r.own or not r.proxy or r.own==r.proxy or r.own==r.original or r.proxy==r.original or
-     r.own==0 or r.proxy==0 or not C.IsComponentOperational(r.own) or not C.IsComponentOperational(r.proxy) then
+  local count=X4LAN_BUBBLE_API.roster.ships;local objects={r.own or false,r.proxy or false}
+  for k=1,count-2 do objects[k+2]=r.extra and r.extra[k] or false end
+  local seen,complete={},true
+  for i=1,count do local object=objects[i]
+   if not object or object==0 or object==r.original or seen[object] or not C.IsComponentOperational(object) then complete=false;break end
+   seen[object]=true
+  end
+  if not complete then
    s.failed=true;log('BUBBLE STOPPED: incomplete native shared ship preparation');return
   end
-  s.shipsReady=true;log('shared ship ready: '..cfg.ship_macro)
+  s.shipsReady=true;log('shared ships ready: '..cfg.ship_macro..' count='..count)
+ end)
+ RegisterEvent('X4LAN_Bubble.XShip',function(_,payload)
+  if cfg.slot~='p1' then return end
+  local ship,rest=tostring(payload):match('^(%d+)|([%d.|]+)$');ship=tonumber(ship)
+  if ship and ship>2 and ship<=X4LAN_BUBBLE_API.roster.ships and select(2,rest:gsub('|',''))==3 then s.extra[ship]=rest end
  end)
  RegisterEvent('X4LAN_Bubble.ShipsRefused',function(_,reason)
   log('BUBBLE STOPPED: shared ship '..tostring(cfg.ship_macro)..' refused ('..tostring(reason)..'); no substitute ship is used')

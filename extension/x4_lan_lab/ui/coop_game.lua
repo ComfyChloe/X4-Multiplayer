@@ -25,9 +25,17 @@ if fire2Mode and not fire2Ready then
  DebugError('[X4LAN] FIRE2_UNAVAILABLE: weapon-group API missing; remote fire disabled (no NAV fallback in fire2 mode)')
 end
 local M=assert(X4LAN_MOTION,'motion buffer missing')
-local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={0,0},shots={0,0},docks={0,0},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0},
- fire2={},fire2Seq={0,0},triggerShots={{0,0},{0,0}},velocity={},velocityGeneration=0}
+-- One shared ship per client (A.roster): 1/2 in a two-player session, 1..N-1 (at
+-- least 2) in a dedicated N-player session. Every remote ship has its own motion
+-- track, FIRE2 queue and velocity fence; dock attachment stays on ships 1/2.
+local R=A.roster or {players=2,ships=2,fixture=2}
+local c={ships={},sectors={},resolving={},owners={},epochs={},pilots={},remote={},seq={},shots={},docks={},revision=-1,crewSeq=0,metricSeq=0,metrics={n=0,sum=0,max=0},
+ fire2={},fire2Seq={},triggerShots={},velocity={},velocityGeneration=0,count=R.ships}
+for i=1,c.count do c.seq[i],c.shots[i],c.docks[i],c.fire2Seq[i],c.triggerShots[i]=0,0,0,0,{0,0} end
 A.coop=c
+local function admittedSlot(slot)
+ local n=tonumber(tostring(slot):match('^p([1-8])$'));return n and n<=R.players
+end
 local function log(v) DebugError('[X4LAN] '..v) end
 local function integer(v,limit)
  local n=tonumber(v);if not n or n~=n or n<0 or n%1~=0 or n>(limit or 2147483647) then return nil end;return n
@@ -45,7 +53,7 @@ local function clearVelocity(i)
  c.velocity[i]=nil
 end
 function c.stopVelocity(discardTracks)
- for i=1,2 do clearVelocity(i) end
+ for i=1,c.count do clearVelocity(i) end
  if discardTracks then c.remote={} end
 end
 local function applyVelocity(i,sector,linear,now)
@@ -65,11 +73,11 @@ local function applyVelocity(i,sector,linear,now)
  -- Changed vectors, especially the packet-loss freeze, never wait for a timer.
  if changed or now>=(v.next or 0) then
   v.next=now+.1;v.sequence=v.sequence+1;v.linear={linear[1],linear[2],linear[3]}
-  local dockStamp,dockAge
-  if cfg.coop_docks and c.attachmentWindow then dockStamp,dockAge=c.attachmentWindow(i,now) end
+  local dockStamp,dockAge;local attached=cfg.coop_docks and i<=2
+  if attached and c.attachmentWindow then dockStamp,dockAge=c.attachmentWindow(i,now) end
   AddUITriggeredEvent('X4LAN_Coop','Velocity',{ship=i,generation=v.generation,session=v.session,epoch=v.epoch,
    sequence=v.sequence,sector=A.id(sector),parent=A.id(parent),x=linear[1],y=linear[2],z=linear[3],expires=GetCurTime()+.3,
-   dockGeneration=cfg.coop_docks and c.attachmentGeneration and c.attachmentGeneration(i) or nil,dockStamp=dockStamp,dockAge=dockAge})
+   dockGeneration=attached and c.attachmentGeneration and c.attachmentGeneration(i) or nil,dockStamp=dockStamp,dockAge=dockAge})
  end
 end
 local function stopFire2(i)
@@ -83,7 +91,7 @@ local function pauseBoundary(now)
  if A.paused() then c.wasPaused=true;return true end
  if c.wasPaused then
   c.wasPaused=false;c.resumeAt=now;c.resumeCutoffs=c.resumeCutoffs or {}
-  for i=1,2 do
+  for i=1,c.count do
    local r=c.remote[i];local old=c.resumeCutoffs[i]
    local floor=old and old.epoch==c.epochs[i] and old.cutoff or nil
    local cutoff=r and r.track and r.track.offset and now-r.track.offset or nil
@@ -115,7 +123,7 @@ function c.stopFire()
  for i in pairs(c.fire2) do stopFire2(i) end
 end
 function c.entity(object)
- for i=1,2 do if c.ships[i] and object==c.ships[i] then return i end end
+ for i=1,c.count do if c.ships[i] and object==c.ships[i] then return i end end
  return 0
 end
 function c.sectorId(name)
@@ -131,10 +139,14 @@ function c.sectorId(name)
 end
 function c.prepare(now)
  if not c.setup then
-  local own=tonumber(cfg.local_ship) or 0
-  if own==0 then own=cfg.slot=='p1' and 1 or 2 end
-  assert((own==1 or own==2) and (cfg.slot~='p3' or cfg.dedicated_session and own==1),'invalid dedicated local ship mapping')
-  c.setup=true;c.ships[own]=s.ship;c.ships[3-own]=s.proxy
+  if s.ships then for i=1,c.count do c.ships[i]=s.ships[i] end
+  else
+   local own=R.own or (cfg.slot=='p1' and 1 or 2)
+   assert(c.count==2 and (own==1 or own==2),'invalid local ship mapping')
+   c.ships[own]=s.ship;c.ships[3-own]=s.proxy
+  end
+  for i=1,c.count do assert(c.ships[i],'shared ship '..i..' missing') end
+  c.setup=true
   AddUITriggeredEvent('X4LAN_Coop','Setup')
  end
  local m=c.metrics
@@ -144,15 +156,14 @@ end
 function c.receive(f,now)
  pauseBoundary(now) -- Client packets arrive before coop.frame, including NAV2.
  if f[1]=='AUTH' then
-  if #f~=10 then return true end
+  if #f~=4+3*c.count then return true end
   local revision=integer(f[4]);if not revision or revision<c.revision then return true end
   local owners,epochs,pilots={},{},{}
-  for i=1,2 do
+  for i=1,c.count do
    local index=2+i*3;owners[i],epochs[i],pilots[i]=f[index],integer(f[index+1]),f[index+2]
-   if (owners[i]~='p1' and owners[i]~='p2' and (owners[i]~='p3' or not cfg.dedicated_session)) or
-      not epochs[i] or epochs[i]<1 or (pilots[i]~='0' and pilots[i]~=owners[i]) then return true end
+   if not admittedSlot(owners[i]) or not epochs[i] or epochs[i]<1 or (pilots[i]~='0' and pilots[i]~=owners[i]) then return true end
   end
-  for i=1,2 do
+  for i=1,c.count do
    if c.epochs[i]~=epochs[i] or c.owners[i]~=owners[i] then
     clearVelocity(i)
     if c.remote[i] and c.remote[i].firing then AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
@@ -166,7 +177,7 @@ function c.receive(f,now)
  elseif f[1]=='NAV' or f[1]=='NAV2' then
   local modern=f[1]=='NAV2'
   if #f~=(modern and 23 or 16) then return true end
-  local entity,epoch,seq=integer(f[5],2),integer(f[6]),integer(f[7]);local name=f[8]
+  local entity,epoch,seq=integer(f[5],c.count),integer(f[6]),integer(f[7]);local name=f[8]
   if not entity or entity<1 or not epoch or not seq or not name:match('^[%w_.-]+_macro$') or #name>96 then return true end
   if c.owners[entity]==cfg.slot or c.epochs[entity]~=epoch then return true end
   local p={};for i=1,6 do p[i]=numeric(f[i+8],i<=3 and 50000000 or 2*math.pi);if not p[i] then return true end end
@@ -191,7 +202,7 @@ function c.receive(f,now)
   return true
  elseif f[1]=='FIRE2' then
   if #f~=12 then return true end
-  local entity,epoch,seq=integer(f[5],2),integer(f[6]),integer(f[7])
+  local entity,epoch,seq=integer(f[5],c.count),integer(f[6]),integer(f[7])
   local time=numeric(f[8],1e12);local groups={integer(f[9],4),integer(f[10],4)};local shots={integer(f[11]),integer(f[12])}
   if not entity or entity<1 or not epoch or not seq or not time or time<0 then return true end
   if not groups[1] or groups[1]<1 or not groups[2] or groups[2]<1 or not shots[1] or not shots[2] then return true end
@@ -218,7 +229,7 @@ function c.receive(f,now)
   local seq=#f==5 and integer(f[4]) or nil
   if seq and seq<=(c.crewSeq or 0) and seq>(c.deniedSeq or -1) then
    c.deniedSeq=seq
-   local entity=integer(f[5],2)
+   local entity=integer(f[5],c.count)
    if entity and entity>0 and c.entity(C.GetPlayerControlledShipID())==entity and c.pilots[entity]~=cfg.slot then
     AddUITriggeredEvent('X4LAN_Coop','LeaveControls',entity)
     log('pilot request denied: the ship is occupied, trading or destroyed')
@@ -319,14 +330,14 @@ function c.frame(now)
  end
  if now>=(c.nextNav or 0) then
   c.nextNav=now+.05
-  for i=1,2 do
+  for i=1,c.count do
    local ship=c.ships[i]
    if c.owners[i]==cfg.slot and C.IsComponentOperational(ship) then
     local sector=C.GetContextByClass(ship,'sector',false)
     if sector~=0 then
      local name=GetComponentData(A.id(sector),'macro');c.sectors[name]=sector
      local p=C.GetObjectPositionInSector(ship);c.seq[i]=c.seq[i]+1
-     if cfg.coop_docks and c.publishDock then c.publishDock(i,c.seq[i],now) end
+     if cfg.coop_docks and i<=2 and c.publishDock then c.publishDock(i,c.seq[i],now) end
      local fields={'NAV2','1',s.client.lease,tostring(i),tostring(c.epochs[i]),tostring(c.seq[i]),name}
      for _,value in ipairs({p.x,p.y,p.z,p.yaw,p.pitch,p.roll}) do fields[#fields+1]=string.format('%.9g',value) end
      fields[#fields+1]=tostring(c.docks[i]);fields[#fields+1]=tostring(c.shots[i])
@@ -345,7 +356,7 @@ function c.frame(now)
    end
   end
  end
- for i=1,2 do
+ for i=1,c.count do
   local r=c.remote[i];local ship=c.ships[i];local p,linear=render(r,now);local velocityApplied=false
   if r and r.firing and (not p or now>(r.fireDeadline or 0)) then r.firing=false;AddUITriggeredEvent('X4LAN_Coop','Fire',{ship=i,on=false}) end
   if p and c.owners[i]~=cfg.slot and C.IsComponentOperational(ship) and C.GetPlayerControlledShipID()~=ship then
@@ -358,20 +369,21 @@ function c.frame(now)
    -- The legacy market index is zero at ordinary stations too. Recheck the
    -- actual native attachment before a synchronous pose write; a stale/free
    -- network sample must not pull a locally docked ship out of its parent.
-   local dockAllowed=not cfg.coop_docks or (c.dockPoseAllowed and c.dockPoseAllowed(i,r,now))
+   -- Dock attachment covers ships 1/2; ships 3.. follow the received pose only.
+   local dockAllowed=not cfg.coop_docks or i>2 or (c.dockPoseAllowed and c.dockPoseAllowed(i,r,now))
    if dockAllowed and sector and r.dock==0 and c.docks[i]==0 and GetComponentData(A.id(ship),'isdocked')~=true then
     local value={x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi}
     if C.GetContextByClass(ship,'sector',false)~=sector then
      if now>=(r.nextWarp or 0) then
       r.nextWarp=now+1;value.ship=i;value.sector=A.id(sector)
-      if cfg.coop_docks then
+      if cfg.coop_docks and i<=2 then
        value.dockGeneration=c.attachmentGeneration and c.attachmentGeneration(i)
        if c.attachmentWindow then value.dockStamp,value.dockAge=c.attachmentWindow(i,now) end
       end
       AddUITriggeredEvent('X4LAN_Coop','SectorMove',value)
      end
     elseif now>=(r.nextApply or 0) then
-     -- There are only two cooperative ships. Correct their native controller
+     -- One shared ship per client (at most seven). Correct their native controller
      -- drift on every render frame, including frame rates above 60 FPS.
      r.nextApply=now
      local changed=not r.applied
@@ -402,14 +414,14 @@ end
 RegisterEvent('X4LAN_Coop.Ready',function() c.ready=true;log('cooperative navigation ready') end)
 RegisterEvent('X4LAN_Coop.Docks',function(_,payload)
  local a,b=payload:match('^(%d)|(%d)$');if a and tonumber(a)<=2 and tonumber(b)<=2 then
-  c.docks={tonumber(a),tonumber(b)}
-  for i=1,2 do if c.docks[i]~=0 then clearVelocity(i) end end
+  c.docks[1],c.docks[2]=tonumber(a),tonumber(b)
+  for i=1,2 do if c.docks[i]~=0 then clearVelocity(i) end end -- market docks: ships 1/2
  end
 end)
 RegisterEvent('X4LAN_Coop.Shot',function(_,payload)
  -- Payload 'n' (legacy) or 'n|p' / 'n|s': the shot came from the active primary or secondary group.
- local entity,trigger=tostring(payload):match('^([12])|?([ps]?)$');local i=tonumber(entity)
- if i and c.owners[i]==cfg.slot then
+ local entity,trigger=tostring(payload):match('^(%d)|?([ps]?)$');local i=tonumber(entity)
+ if i and i>=1 and i<=c.count and c.owners[i]==cfg.slot then
   c.shots[i]=c.shots[i]+1
   local k=trigger=='s' and 2 or 1;c.triggerShots[i][k]=c.triggerShots[i][k]+1
  end
