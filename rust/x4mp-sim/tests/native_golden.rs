@@ -237,7 +237,7 @@ fn check_logic_on_golden_frames() {
         h.sec = [0.0; 3];
         let rep = check_frames(&frames, &[h]);
         assert!(rep.exact(), "{}", rep.line());
-        assert_eq!((rep.local_exact, rep.sector_not_object), (1, 1));
+        assert_eq!((rep.local_exact, rep.custom_local_exact, rep.sector_not_object), (1, 1, 1));
         // without the offset the engine value would not match
         let mut raw = h;
         raw.off = hpose.position();

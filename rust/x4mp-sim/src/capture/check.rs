@@ -114,6 +114,8 @@ pub struct CheckReport {
     pub local_max_ulps: u64,
     /// Classes whose GetLocalTransform the capture does not model (no local or sector check).
     pub unsupported_class: usize,
+    /// Of `local_exact`: rows of a class with a modelled custom GetLocalTransform (U::Highway).
+    pub custom_local_exact: usize,
     pub sector_exact: usize,
     pub sector_mismatch: usize,
     /// Not an Object class: the export answers zeros by design.
@@ -129,7 +131,7 @@ pub struct CheckReport {
 impl CheckReport {
     pub fn line(&self) -> String {
         format!(
-            "MIRRORCHECK RESULT lines={} frame_missing={} uid_missing={} local_exact={} local_cache_exact={} local_mismatch={} local_max_ulps={} unsupported_class={} sector_exact={} sector_mismatch={} sector_not_object={} sector_skipped_ancestor={} sector_skipped_ref={} sector_skipped_pose={} sector_max_ulps={}",
+            "MIRRORCHECK RESULT lines={} frame_missing={} uid_missing={} local_exact={} local_cache_exact={} local_mismatch={} local_max_ulps={} unsupported_class={} custom_local_exact={} sector_exact={} sector_mismatch={} sector_not_object={} sector_skipped_ancestor={} sector_skipped_ref={} sector_skipped_pose={} sector_max_ulps={}",
             self.lines,
             self.frame_missing,
             self.uid_missing,
@@ -138,6 +140,7 @@ impl CheckReport {
             self.local_mismatch,
             self.local_max_ulps,
             self.unsupported_class,
+            self.custom_local_exact,
             self.sector_exact,
             self.sector_mismatch,
             self.sector_not_object,
@@ -263,6 +266,9 @@ pub fn check_frames(frames: &[FrameRecord], lines: &[CheckLine]) -> CheckReport 
         let pose0 = local.position();
         if bits3(pose0) == bits3(l.off) {
             rep.local_exact += 1;
+            if row.class_flags & crate::comp::ClassFlags::CUSTOM_LOCAL != 0 {
+                rep.custom_local_exact += 1;
+            }
         } else if row.cache.is_some_and(|c| bits3(c.position()) == bits3(l.off)) {
             rep.local_cache_exact += 1;
         } else {
