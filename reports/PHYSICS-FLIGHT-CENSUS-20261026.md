@@ -39,14 +39,14 @@ ForcedFlight capture/replay, shadow or switch acceptance is claimed.
 Windows oracle tests now fail if the pinned executable is missing, rather than
 returning early and being counted as passing. Set `X4MP_X4_EXE` if the usual RE
 workspace path is unavailable. A missing-path negative control returned exit101
-as expected; the normal release suite then/also passed all10 tests. Other OSes
+as expected; the normal release suite passed all10 tests. Other OSes
 still compile out the Windows oracle tests and do not provide oracle coverage.
 
 ## Next work
 
 Find a disposable scenario that naturally exercises ForcedFlight before its
-native capture stage. For the dominant linear/steering classes, pin object sizes
-and external inputs before attempting replay. Linear and mass-traffic updates
+native capture stage. For the dominant linear/steering classes, capture external
+inputs before attempting replay. Linear and mass-traffic updates
 visibly mutate model state, so slot equality alone would be incomplete evidence.
 
 The native writer now emits format version 2 (same magic), appending the model
@@ -56,3 +56,18 @@ reports model differences separately from slot differences. A two-worker C
 capture test verifies persistent mutations are captured; the 2,000-record
 original-machine-code replay also covers v2 and an injected model-output error.
 These are offline/synthetic checks; native v2 capture validation is pending.
+
+## Remaining model object sizes verified
+
+The SetFlightControlModel factory allocates linear0x270 bytes at0xe87ed9,
+spline0x4c0 at0xe87fbf and steering0x3a0 at0xe87ff2. The constructors at
+0xeb1a10,0xeb4f40 and0xec40c0 assign the expected vtables0x2c4f610,0x2c4f480
+and0x2c4e9c8 respectively. Capture now supports these complete object images.
+Allocation instructions and constructor identities are pinned by four new SHA256
+checks and registered as read-only verified ranges in the shared hook registry.
+All32 physics signature ranges matched the original image; the rebuilt C probe
+test passes all six model sizes with after-state and buffer-boundary checks.
+
+Captures of these classes remain observations, not complete replay inputs:
+pointer targets, external configuration and (for steering) worker RNG state
+are not yet included. Unsupported replay classes continue to fail explicitly.

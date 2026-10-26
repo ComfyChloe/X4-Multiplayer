@@ -38,9 +38,11 @@ static struct {
 #define PF_CAP_AGENT_FROM 0x340u
 #define PF_CAP_AGENT_BYTES 0x60u
 #define PF_CAP_MAGIC "X4PFCAP1"
-/* Object sizes from the factory's SMem::Allocate (0xe87a08 forced 0x70, 0xe87e3f highway 0xa0, 0xe87f65
-   mass traffic 0xc0); linear/spline/steering are built in their own constructors (size not pinned yet). */
-static const uint32_t pf_cap_model_bytes[PF_MODELS] = {0x70, 0xa0, 0, 0xc0, 0, 0};
+/* Object sizes from SetFlightControlModel's SMem::Allocate. Linear/spline/steering:
+   allocations at e87ed9/e87fbf/e87ff2, constructors eb1a10/eb4f40/ec40c0 assign
+   their exact vtables. Both allocation path and constructor identities are pinned.
+   Raw pointer fields remain process-local observations, not replayable dependencies. */
+static const uint32_t pf_cap_model_bytes[PF_MODELS] = {0x70, 0xa0, 0x270, 0xc0, 0x4c0, 0x3a0};
 typedef struct {
     uint32_t model, flags;        /* flags: 1 cheap, 2 P(owner), 4 called on the owner thread */
     float dt, max_forward;        /* max_forward: agent+0x364 (also inside the agent bytes) */

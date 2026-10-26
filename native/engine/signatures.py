@@ -106,6 +106,10 @@ PHYSICS_SITES = {
     'flight_masstraffic_update': (0xEB3D90, 32, 'c4823d987e55c100c512567f3cd5e3b1270fc1f46e38bbd94bb70b3f2f212a5d'),
     'flight_spline_update': (0xEB7230, 32, 'e2c5918bdc2b26b70ac2ed886652c68c0ab663b79865046b1073fbea42cddb89'),
     'flight_steering_update': (0xEC7200, 32, '20c822202b85f4ecfcc9892f075241b6fddced6cc71ea149c42c224145ff066b'),
+    'flight_factory_allocations': (0xE87ED1, 0x14A, 'ad23f800b7c4915cd2d5ec0c00492be0b7f956cd31db527845ca95aa536b57f7'),
+    'flight_linear_constructor': (0xEB1A10, 0x57, 'b6da89a04d3740b95f5dcf1b60b320c03cedc7c2ecf629e1ff77f8c03a81e2ce'),
+    'flight_spline_constructor': (0xEB4F40, 0x61, '42a2a25ed02454a114afe5c93bc0118959a1f2eeee3abc150ed936c913696883'),
+    'flight_steering_constructor': (0xEC40C0, 0x6A, '3c0edbf76643854b63d299416404cdf58a0d770ae386bb0f2626c2902bfe9152'),
 }
 
 SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **PHYSICS_SITES}

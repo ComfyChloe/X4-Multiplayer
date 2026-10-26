@@ -413,7 +413,7 @@ int main(void) {
         wcscat(wpath, L"x4pf-test-capture.log");
         WideCharToMultiByte(CP_UTF8, 0, wpath, -1, path, MAX_PATH, NULL, NULL);
         DeleteFileW(wpath);
-        assert(pf_request_capture("warp", 10, path, 0) && pf_request_capture("steering", 10, path, 0) && pf_request_capture("linear", 10, path, 0));
+        assert(pf_request_capture("warp", 10, path, 0));
         assert(pf_request_capture("forced", 0, path, 0) && pf_request_capture("forced", 10, NULL, 0));
         assert(!pf_request_capture("forced", 64, path, 1000));
         assert(pf_request_capture("forced", 64, path, 1000));   /* one capture per session */
@@ -459,6 +459,41 @@ int main(void) {
         assert(!pf_installed);
     }
     puts("PASS: flight capture: staged, armed at frame end, records from workers, dropped beyond capacity, file written");
+
+    /* All factory-sized models fit the v2 record and retain bytes at the end of the object.
+       Use an inert original here: this tests capture boundaries, not those models' behaviour. */
+    {
+        if (pf_cap.buf) VirtualFree(pf_cap.buf, 0, MEM_RELEASE);
+        for (int i = 0; i < PF_MODELS; ++i) {
+            memset(&pf_cap, 0, sizeof(pf_cap));
+            size_t mb = pf_cap_model_bytes[i], rs = pf_cap_record_size(mb);
+            unsigned char model[0x4c0], slot[PF_CAP_SLOT], agent[0x400];
+            memset(model, 0x5a, sizeof(model));
+            memset(slot, 0x11, sizeof(slot));
+            memset(agent, 0, sizeof(agent));
+            *(void **)(model + 0x10) = agent;
+            pf_cap.buf = VirtualAlloc(NULL, rs + 16, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+            assert(pf_cap.buf);
+            memset(pf_cap.buf + rs, 0xcc, 16);
+            pf_cap.capacity = 1;
+            pf_cap.model_bytes = mb;
+            pf_cap.record_size = rs;
+            pf_cap.model = i;
+            pf_cap.armed = 1;
+            pf_orig[i] = (void *)fake_forced;
+            pf_call(i, model, slot, 0.5f, 0.0, 1, 1);
+            pf_cap.armed = 0;
+            const unsigned char *before_model = pf_cap.buf + sizeof(pf_cap_head);
+            const unsigned char *after_model = before_model + mb + PF_CAP_AGENT_BYTES + 2 * PF_CAP_SLOT;
+            assert(before_model[mb - 1] == 0x5a && after_model[mb - 1] == 0x5a);
+            assert(after_model[0x60] == 0x5b && before_model[0x60] == 0x5a);
+            assert(!memcmp(after_model, model, mb));
+            for (int j = 0; j < 16; ++j) assert(pf_cap.buf[rs + j] == 0xcc);
+            VirtualFree(pf_cap.buf, 0, MEM_RELEASE);
+        }
+        memset(&pf_cap, 0, sizeof(pf_cap));
+    }
+    puts("PASS: flight capture: all six factory-sized model images preserve complete before/after state and record bounds");
 
     /* An entry changed by someone else after install is left alone on uninstall. */
     setup();

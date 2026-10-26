@@ -255,6 +255,11 @@ Rust candidate (offline, original machine code via the oracle; rust/x4mp-physics
   with 0 mismatches, a flipped bit is caught.
 
 ## 8. Status and next stages
+- 26 Oct Codex continuation: see `PHYSICS-FLIGHT-CENSUS-20261026.md`. Native battle
+  census completed; ForcedFlight had no calls. Capture v2 includes model outputs;
+  all six factory-sized models are capturable, with external dependencies still
+  incomplete for non-forced replay. Empty captures and missing Windows oracle
+  executables are no longer counted as equivalence passes.
 - Stage 1 (static + synthetic): done (6a0a9a8). Stage 2 (native probe runs): done. Stage 3: joltwait done
   (quiet-window timing requested, Q17); parallel pool offline only.
 - Stage 4/5: flight/steering update 0xe8f250 assessment and a capture/replay of it.
