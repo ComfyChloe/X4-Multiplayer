@@ -286,6 +286,37 @@ fn corrupted_record_is_reported() {
 }
 
 #[test]
+fn replay_rejects_previously_unchecked_module_and_container_state() {
+    let mut baseline = Capture::parse(&synthetic_capture()).expect("parse");
+    baseline.frames.truncate(2);
+    let rep = replay(&baseline);
+    assert_eq!(rep.exact, 1, "negative controls require an exact, draw-free transition: {rep:?}");
+
+    type Mutation = (&'static str, fn(&mut StationRecord));
+    let mutations: &[Mutation] = &[
+        ("paused_total", |s| s.modules[0].1.paused_total = 17.0),
+        ("paused_total", |s| s.modules[0].1.paused_total = -0.0),
+        ("functional", |s| s.modules[0].1.functional = false),
+        ("identity", |s| s.modules[0].0 ^= 0x100),
+        ("identity", |s| s.modules.swap(0, 1)),
+        ("items[0]", |s| s.modules[0].1.items[0].cycles += 1),
+        ("items[0]", |s| s.modules[0].1.items[0].repeat = false),
+        ("items[0].time_factor", |s| s.modules[0].1.items[0].time_factor += 0.1),
+        ("items[0].method", |s| s.modules[0].1.items[0].method.as_mut().unwrap().amount += 1),
+        ("a4c", |s| s.times.a4c = !s.times.a4c),
+        ("a28", |s| s.times.a28 = 123.0),
+    ];
+    for &(field, mutate) in mutations {
+        let mut cap = baseline.clone();
+        mutate(&mut cap.frames[1].stations[0]);
+        let rep = replay(&cap);
+        assert_eq!(rep.mismatched, 1, "mutation {field}: {rep:?}");
+        assert_eq!(rep.exact, 0, "mutation {field}: {rep:?}");
+        assert!(rep.first_difference.as_deref().unwrap_or("").contains(field), "mutation {field}: {rep:?}");
+    }
+}
+
+#[test]
 fn nan_times_are_rejected() {
     let text = "X4ECON 1 build=23660954\nF 1 0x7ff8000000000000 0x0\n";
     assert!(Capture::parse(text).is_err());

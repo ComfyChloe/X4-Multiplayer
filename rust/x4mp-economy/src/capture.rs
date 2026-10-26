@@ -697,6 +697,16 @@ enum Attempt {
 
 /// One replay of a transition with the given storage decision.
 fn attempt(prev: &StationRecord, next: &StationRecord, blocked: &[WareIx], wares: &[WareInfo]) -> Attempt {
+    // A recycled address or reordered module must not silently compare against a different
+    // entity. Structural changes between samples need a new baseline, not an exact verdict.
+    if prev.modules.len() != next.modules.len()
+        || prev.modules.iter().zip(&next.modules).any(|(a, b)| a.0 != b.0 || a.1.addr != b.1.addr)
+    {
+        return Attempt::Mismatch(format!(
+            "station {:#x} at {}: module identity/order/count changed between samples",
+            next.uid, next.times.last_update
+        ));
+    }
     let mut rng = OracleRng::default();
     let mut out = run_once(prev, next, &mut rng, blocked, wares);
     let mut used_draws = false;
@@ -737,12 +747,17 @@ fn attempt(prev: &StationRecord, next: &StationRecord, blocked: &[WareIx], wares
     cargo_rec.sort_by_key(|e| e.0);
     let modules_equal = out.modules.len() == next.modules.len()
         && out.modules.iter().zip(next.modules.iter()).all(|(a, b)| module_eq(a, &b.1));
-    let times_equal =
-        out.times.a28.to_bits() == next.times.a28.to_bits() && out.times.a30.to_bits() == next.times.a30.to_bits();
+    let times_difference = container_difference(&out.times, &next.times);
+    let times_equal = times_difference.is_none();
     if modules_equal && times_equal && cargo_model == cargo_rec {
         Attempt::Exact { draws: used_draws }
     } else if modules_equal && times_equal {
         Attempt::External
+    } else if let Some(field) = times_difference {
+        Attempt::Mismatch(format!(
+            "station {:#x} at {}: container {field} differs; model {:?}; engine {:?}",
+            next.uid, next.times.last_update, out.times, next.times
+        ))
     } else {
         Attempt::Mismatch(first_diff(next.uid, next.times.last_update, &out.modules, next))
     }
@@ -796,23 +811,104 @@ fn replay_one(prev: &StationRecord, next: &StationRecord, wares: &[WareInfo], re
 }
 
 fn module_eq(a: &Module, b: &Module) -> bool {
-    a.state == b.state
-        && a.start.to_bits() == b.start.to_bits()
-        && a.next.to_bits() == b.next.to_bits()
-        && a.paused_since.to_bits() == b.paused_since.to_bits()
-        && a.item == b.item
-        && a.cycle == b.cycle
-        && a.pending == b.pending
-        && a.items.len() == b.items.len()
+    module_difference(a, b).is_none()
+}
+
+fn container_difference(a: &ContainerTimes, b: &ContainerTimes) -> Option<&'static str> {
+    if a.last_update.to_bits() != b.last_update.to_bits() {
+        return Some("last_update");
+    }
+    if a.a28.to_bits() != b.a28.to_bits() {
+        return Some("a28");
+    }
+    if a.a30.to_bits() != b.a30.to_bits() {
+        return Some("a30");
+    }
+    if a.a4c != b.a4c {
+        return Some("a4c");
+    }
+    None
+}
+
+/// Compare every captured module field, including queue contents and the floating-point
+/// bit patterns. PartialEq on f64 would silently equate +0 and -0.
+fn module_difference(a: &Module, b: &Module) -> Option<String> {
+    macro_rules! field {
+        ($field:ident) => {
+            if a.$field != b.$field {
+                return Some(stringify!($field).into());
+            }
+        };
+    }
+    macro_rules! float {
+        ($field:ident) => {
+            if a.$field.to_bits() != b.$field.to_bits() {
+                return Some(stringify!($field).into());
+            }
+        };
+    }
+    field!(addr);
+    field!(functional);
+    field!(state);
+    float!(start);
+    float!(next);
+    float!(paused_since);
+    float!(paused_total);
+    field!(item);
+    field!(cycle);
+    field!(pending);
+    for (name, av, bv) in [
+        ("time", a.factors.time, b.factors.time),
+        ("product", a.factors.product, b.factors.product),
+        ("primary", a.factors.primary, b.factors.primary),
+        ("secondary", a.factors.secondary, b.factors.secondary),
+        ("tertiary", a.factors.tertiary, b.factors.tertiary),
+    ] {
+        if av.to_bits() != bv.to_bits() {
+            return Some(format!("factors.{name}"));
+        }
+    }
+    if a.items.len() != b.items.len() {
+        return Some("items.len".into());
+    }
+    for (i, (a, b)) in a.items.iter().zip(&b.items).enumerate() {
+        if a.ware != b.ware || a.cycles != b.cycles || a.repeat != b.repeat {
+            return Some(format!("items[{i}] identity/cycles/repeat"));
+        }
+        for (name, av, bv) in [
+            ("time_factor", a.time_factor, b.time_factor),
+            ("product_factor", a.product_factor, b.product_factor),
+            ("primary_factor", a.primary_factor, b.primary_factor),
+            ("secondary_factor", a.secondary_factor, b.secondary_factor),
+            ("tertiary_factor", a.tertiary_factor, b.tertiary_factor),
+        ] {
+            if av.to_bits() != bv.to_bits() {
+                return Some(format!("items[{i}].{name}"));
+            }
+        }
+        match (&a.method, &b.method) {
+            (Some(a), Some(b))
+                if a.time.to_bits() == b.time.to_bits()
+                    && a.product == b.product
+                    && a.amount == b.amount
+                    && a.primary == b.primary
+                    && a.secondary == b.secondary
+                    && a.tertiary == b.tertiary
+                    && a.special == b.special => {}
+            (None, None) => {}
+            _ => return Some(format!("items[{i}].method")),
+        }
+    }
+    None
 }
 
 fn first_diff(uid: u64, now: f64, model: &[Module], rec: &StationRecord) -> String {
     let mut s = String::new();
     for (i, (a, (muid, b))) in model.iter().zip(rec.modules.iter()).enumerate() {
-        if !module_eq(a, b) {
+        if let Some(field) = module_difference(a, b) {
             let _ = write!(
                 s,
-                "station {uid:#x} module #{i} {muid:#x} at {now}: model state={} start={} next={} item={} cycle={}; engine state={} start={} next={} item={} cycle={}",
+                "station {uid:#x} module #{i} {muid:#x} at {now}: field {field}; model state={} start={} next={} item={} cycle={}; engine state={} start={} next={} item={} cycle={}",
                 a.state.name(), a.start, a.next, a.item, a.cycle, b.state.name(), b.start, b.next, b.item, b.cycle
             );
             return s;

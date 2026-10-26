@@ -381,6 +381,23 @@ key, sector, seq; the AI driver can set the original order key); the offers are 
 
 ## 11. Native steps needed
 
+### Replay validation hardening (26 October, Codex continuation)
+
+The replay previously omitted accumulated pause time, module identity/functional state,
+efficiency factors, queue item contents and the container's `a4c` flag from its equality
+test. These fields are now compared, with bit equality for floating point and named
+first-difference diagnostics. Module identity/order changes between samples are rejected;
+the snapshots do not explain entity replacement. Synthetic negative controls cover eleven
+mutations, including signed zero, module replacement/reordering, queue contents and container
+state. The replay still uses recorded efficiency as an input; comparing the resulting factors
+does not independently validate the native efficiency calculation.
+
+Validation: `cargo test -p x4mp-economy` (19 unit + 9 replay + 1 thread-invariance tests),
+Clippy all targets with `-D warnings`, and rustfmt pass. Reanalysis of the existing native
+captures preserves the previous counts: lab4 1722 transitions / 172 mismatches; stress3
+896 / 1. These remain failed captures, not native acceptance. The replay now identifies
+container time differences directly instead of misleadingly reporting equal module counts.
+
 1. `stress4` (lane, simprof profile mode + econcap of 12 clones, ~12 min; `stress3` was stopped): economy share with working
    station traders; offers and reservations of trading stations for 6.2/6.3.
 2. `lab3` (lane, probe mode + econcap, ~12 min): production capture; the replay must report 0 mismatches.
