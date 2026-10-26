@@ -215,6 +215,7 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
         vel: [f32; 3],
         parent: u64,
         pose_ref: u64,
+        attention: i32,
     }
     let index = |f: &FrameRecord| -> HashMap<u64, Nav> {
         let mut m = HashMap::new();
@@ -229,6 +230,7 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
             ) else {
                 continue;
             };
+            let att = s.column(col::ATTENTION).map(|c| c.i32s()).unwrap_or_else(|| vec![0; uid.len()]);
             for r in 0..uid.len() {
                 if ctrl[r] == 1 {
                     m.insert(
@@ -238,6 +240,7 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
                             vel: [vel[r * 8], vel[r * 8 + 1], vel[r * 8 + 2]],
                             parent: parent[r],
                             pose_ref: refs[r],
+                            attention: att[r],
                         },
                     );
                 }
@@ -247,7 +250,9 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
     };
     let mut pairs = 0u64;
     let (mut n, mut still, mut exact_k, mut exact_k1, mut within1_k, mut within1_k1) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
-    let mut hist = [0u64; 8]; // ulp buckets of the better prediction: 0,1,2-3,4-15,16-255,256-65535,more,non-finite
+    let mut hist = [0u64; 8];
+    // per attention level: (samples, unchanged pose, unchanged with nonzero velocity, exact Euler)
+    let mut by_att: std::collections::BTreeMap<i32, [u64; 4]> = std::collections::BTreeMap::new(); // ulp buckets of the better prediction: 0,1,2-3,4-15,16-255,256-65535,more,non-finite
     for w in frames.windows(2) {
         let (a, b) = (&w[0], &w[1]);
         if b.frame != a.frame + 1 {
@@ -262,8 +267,14 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
                 continue;
             }
             n += 1;
+            let a = by_att.entry(x.attention).or_insert([0; 4]);
+            a[0] += 1;
             if x.pos == y.pos {
                 still += 1;
+                a[1] += 1;
+                if x.vel.iter().any(|v| *v != 0.0) {
+                    a[2] += 1;
+                }
             }
             let err = |v: [f32; 3]| -> u64 {
                 (0..3).map(|k| x4mp_sim::shadow::ulps32(x.pos[k] + v[k] * dt, y.pos[k])).max().unwrap_or(0)
@@ -274,6 +285,9 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
             within1_k += u64::from(ek <= 1);
             within1_k1 += u64::from(ek1 <= 1);
             let e = ek.min(ek1);
+            if e == 0 {
+                a[3] += 1;
+            }
             let bucket = match e {
                 0 => 0,
                 1 => 1,
@@ -289,6 +303,9 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
     }
     out!("KINEMATICS pairs={pairs} samples={n} stationary={still} exact_v(k)={exact_k} exact_v(k+1)={exact_k1} within1ulp_v(k)={within1_k} within1ulp_v(k+1)={within1_k1}");
     out!("  best-of-two ulp histogram: 0:{} 1:{} 2-3:{} 4-15:{} 16-255:{} 256-65535:{} more:{} nonfinite:{}", hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7]);
+    for (att, a) in &by_att {
+        out!("  attention {att}: samples={} unchanged={} unchanged_moving={} euler_exact={}", a[0], a[1], a[2], a[3]);
+    }
     Ok(ExitCode::SUCCESS)
 }
 
