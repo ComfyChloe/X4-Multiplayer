@@ -1692,6 +1692,34 @@ def cmd_restore(args, paths):
     return 0
 
 
+def cmd_publish_release(args, paths):
+    """Lane owner: export a committed, tested version of this branch to X4Mods/lanes/release, which
+    the other agents run (so edits in the development worktree never reach a running agent)."""
+    commit = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', '--verify', args.commit + '^{commit}'],
+                            capture_output=True, text=True, check=True).stdout.strip()
+    target = paths.lanes / 'release'
+    staging = paths.lanes / f'release.new-{os.getpid()}'
+    staging.mkdir(parents=True)
+    archive = subprocess.run(['git', '-C', str(ROOT), 'archive', '--format=tar', commit], capture_output=True,
+                             check=True).stdout
+    import io
+    import tarfile
+    with tarfile.open(fileobj=io.BytesIO(archive)) as tar:
+        tar.extractall(staging, filter='data')
+    (staging / 'RELEASE.txt').write_text(f'x4lane release {commit}\nexported {core.now_iso()} from {ROOT}\n'
+                                         'Read only: run python dev\\x4lane.py from here. Do not edit.\n',
+                                         encoding='utf-8')
+    old = paths.lanes / f'release.old-{os.getpid()}'
+    if target.exists():
+        os.replace(target, old)
+    os.replace(staging, target)
+    if old.exists():
+        core.check_tree_unlinked(old)
+        shutil.rmtree(old)
+    print(f'{target} = {commit}')
+    return 0
+
+
 STOP_FILE = 'stop-request.json'
 
 
@@ -1975,6 +2003,8 @@ def parser():
     q.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S)
     q.add_argument('--allow-workshop', action='store_true')
     q.add_argument('--no-repin', action='store_true', help='keep the 45841 profile gates (default: re-pin per lane)')
+    s = sub.add_parser('publish-release', help='lane owner: export a tested commit to X4Mods/lanes/release')
+    s.add_argument('--commit', default='HEAD')
     s = sub.add_parser('stop', help='gracefully close lane X4 instances (lane exes only)')
     s.add_argument('--all-lanes', action='store_true')
     s.add_argument('--lane', help='comma list of lanes')
@@ -2011,7 +2041,7 @@ def main(argv=None):
         return 1
     handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'session': cmd_session,
                 'stop': cmd_stop, 'queue': cmd_queue, 'restore': cmd_restore, 'unlock': cmd_unlock,
-                'make-overlay': cmd_make_overlay}
+                'make-overlay': cmd_make_overlay, 'publish-release': cmd_publish_release}
     try:
         return handlers[args.command](args, paths)
     except LaneError as error:
