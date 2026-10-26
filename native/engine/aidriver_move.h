@@ -20,7 +20,8 @@
  * bucket runs is deferred and replayed at the end of the pass, before the next flip, so the pass
  * structure (which contexts run in which pass) is the original's. "compare" = rounds plus the
  * order-equivalence counters (cross-bucket ClearWake of a pending context, events delivered to a
- * pending context of another bucket inside a pass); a pass with neither is order-equivalent. */
+ * pending context of another bucket inside a pass). A clean pass has no observed event/wake hazard;
+ * RNG-order hazards are counted separately, and shared-state writes are not proved equivalent. */
 
 /* ---- engine helpers (RVAs pinned in signatures.py AIDRIVER_HELPERS) ---------------------------- */
 

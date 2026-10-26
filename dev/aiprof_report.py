@@ -94,7 +94,7 @@ if drive:
     clean, dirty = dsum('cmpClean'), dsum('cmpDirty')
     if clean + dirty:
         p = clean + dirty
-        print(f'  compare: {p:.0f} passes, no observed order hazard {100*clean/p:.2f}%, dirty {dirty:.0f}; '
+        print(f'  compare: {p:.0f} passes, no observed event/wake hazard {100*clean/p:.2f}%, dirty {dirty:.0f}; '
               f'unchecked (large pass or missing event detail) {dsum("cmpUnchecked"):.0f}')
         print(f'  channels per frame: nullLost {dmean("cmpNullLost"):.3f}, wakeAbsorb {dmean("cmpWakeAbsorb"):.3f}, '
               f'eventPending {dmean("cmpEventPending"):.3f}, eventRan {dmean("cmpEventRan"):.3f}, postCancel {dmean("cmpPostCancel"):.3f}, '

@@ -199,7 +199,8 @@ which define exactly when a pass's outcome can differ from the original order:
 4. `cmp_post_cancel`: a cancel and a post for the same source and type from different buckets whose rounds
    order is the opposite of the original order of the two issuing contexts (immediate posts counted too,
    conservative, until the buffer readout exposes the flag).
-A pass with none of these is order-equivalent (`cmp_passes_clean`); shared-state writes (blackboards,
+A pass with none of these has no observed event/wake hazard (`cmp_passes_clean`); RNG inversions are
+counted separately in `cmp_rng_passes`, and shared-state writes (blackboards,
 `global.$`) are not observed by these counters. A per-frame AI state hash (contexts, masks, wake time, queue
 membership, frame pcs, wake vectors) is logged in compare mode.
 
@@ -258,7 +259,7 @@ Stage 1, in order (lane runs with the `probe-s1b` overlay = d922398, release x4l
    census,normal`), idle then battle-400: structural means and per-run ratios (runs, passes, interrupt runs,
    attention restarts, removals, caller wakes, global handlers, wakes, events) agree within noise; zero
    `bad_caller`.
-3. `compare`, idle and attnload: fraction of passes with no observed order hazard and the counters; reorder only on
+3. `compare`, idle and attnload: fraction of passes with no observed event/wake hazard and the counters; reorder only on
    this branch (no walkpar), deferral in the integrated build (walkpar `WP_REPLAY`, see Q9).
 4. Before ours becomes authoritative outside tests (method step 2): capture the original's per-context
    decision trace natively (more call-site hooks inside the pinned Move body, census-only) and replay it
@@ -283,7 +284,7 @@ the pass barrier can change what a later context in the **same** bucket sees. So
 keys cannot repair that synchronous dependency. `cmpDeferredImmediate` counts such posts conservatively
 and marks the pass dirty. A legacy buffer lacking event-detail readout marks affected passes unchecked
 and dirty. Immediate posts are excluded from post/cancel conflict checks when their flag is available.
-The output says "no observed order hazard", since shared-state writes, duplicate-wake provenance and
+The output says "no observed event/wake hazard", with RNG inversions reported separately, since shared-state writes, duplicate-wake provenance and
 other uninstrumented channels still prevent an equivalence claim.
 
 Q9/Q20 adapter preparation: when `WP_HAS_AI_REPLAY` is present, bind only in `WP_REPLAY`/`WP_AI_REPLAY`,
