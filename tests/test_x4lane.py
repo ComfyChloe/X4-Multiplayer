@@ -645,6 +645,20 @@ class QueueTests(FakeWindows):
         self.assertEqual(core.live_tickets(self.paths.queue), [])
         self.assertGreaterEqual(self.refreshed, 2)
 
+    def test_timing_waiters_never_hold_the_queue(self):
+        core.Ticket.create(self.paths.queue, {'agent': 'frame-diet', 'need': 1, 'pid': 4243, 'machine': 'elsewhere',
+                                              'timing': True})
+        attempts = []
+        x4lane.wait_in_queue(self.runner(0), lambda: attempts.append('now'), lambda: None, 1, 'run')
+        x4lane.time = FakeClock()
+        x4lane.wait_in_queue(self.runner(600), lambda: attempts.append('queued'), lambda: None, 1, 'run')
+        self.assertEqual(attempts, ['now', 'queued'])           # a timing ticket ahead blocks nobody
+        ahead = self.foreign_ticket()                             # a normal run ahead ...
+        x4lane.wait_in_queue(self.runner(600, timing=True), lambda: attempts.append('timing'), lambda: None, 1,
+                             'run')
+        self.assertEqual(attempts[-1], 'timing')                  # ... does not stop a timing attempt
+        ahead.remove()
+
     def test_deadline_gives_back_reservations(self):
         clock = FakeClock()
         x4lane.time = clock

@@ -436,8 +436,10 @@ def wait_in_queue(runner, attempt, give_back, need, purpose):
     paths, a = runner.paths, runner.args
     alive = win().pid_alive
     priority = handoff_for(paths, a)
+    timing = bool(getattr(a, 'timing', False))
     if a.wait <= 0:
-        tickets = core.live_tickets(paths.queue, alive)
+        # --timing waiters never block others: only the lead's quiet window gives them a quiet PC.
+        tickets = [t for t in core.live_tickets(paths.queue, alive) if not t[1].get('timing')]
         if tickets and not priority:
             raise TransientRefusal(f'{len(tickets)} queued run(s) wait for lanes (oldest: agent '
                                    f'{tickets[0][1].get("agent")}, needs {tickets[0][1].get("need")}); '
@@ -447,7 +449,7 @@ def wait_in_queue(runner, attempt, give_back, need, purpose):
     me = os.getpid()
     ticket = core.Ticket.create(paths.queue, {'agent': a.agent, 'purpose': purpose, 'need': need, 'pid': me,
                                               'pid_created': win().process_created(me),
-                                              'machine': socket.gethostname()})
+                                              'machine': socket.gethostname(), 'timing': timing})
     deadline = time.monotonic() + a.wait
     last = None
     try:
@@ -456,9 +458,11 @@ def wait_in_queue(runner, attempt, give_back, need, purpose):
             names = [path.name for path, _info in tickets]
             if ticket.path.name not in names:                     # deleted as stale: queue again
                 ticket = core.Ticket.create(paths.queue, ticket.info)
+                tickets.append((ticket.path, ticket.info))
                 names.append(ticket.path.name)
-            position = names.index(ticket.path.name)
-            if position == 0 or priority or handoff_for(paths, a):
+            order = [path.name for path, info in tickets if not info.get('timing')]
+            position = order.index(ticket.path.name) if not timing else names.index(ticket.path.name)
+            if position == 0 or timing or priority or handoff_for(paths, a):
                 try:
                     attempt()
                     return
