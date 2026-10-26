@@ -78,7 +78,7 @@ def main():
                             ('attention restarts/run', 'attRestarts', 'runs'), ('removals per run', 'removed', 'runs'),
                             ('caller wakes per run', 'callerWakes', 'runs'), ('global handlers/run', 'globalApplied', 'runs'), ('random-drawing runs', 'rngRuns', 'runs')]:
         ra, rb = ratio(a, num, den), ratio(b, num, den)
-        rel = (rb / ra - 1.0) if ra else 0.0
+        rel = (rb / ra - 1.0) if ra else (0.0 if not rb else float('inf'))
         flag = '  <-- differs' if abs(rel) > tol else ''
         flagged += bool(flag)
         print(f'  {label:22s} {ra:9.3f} {rb:9.3f} {rel:+8.1%}{flag}')
