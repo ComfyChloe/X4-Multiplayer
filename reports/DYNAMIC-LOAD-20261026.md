@@ -93,3 +93,38 @@ manager suppression with explicit acknowledgements and equal observation windows
 Do not rerun private `batch3.ps1`: it deletes incomplete result directories and
 its old runner can release another session's instance mutex. Protected profiles
 45843/45844 remain with their original session; use the current lane coordinator.
+
+## Fresh station correlation result, 03:46 EDT
+
+The minimal station-completeness gap above is now covered by a fresh isolated
+functional run, `station-correlation-002`, run ID
+`20261026-034448-b1-dynload-33140`, on released lane b1/profile 45850. The runner
+reported PASS and restored the lane. Its private capture remains under
+`.local/evidence-034-withheld`; generated construction plans and raw logs
+remain local, outside Git. The failed `correlation-001` capture is also retained:
+MD table event payloads did not arrive as Lua tables, and it produced no samples.
+
+The corrected scalar event carries plan, index and hexadecimal station UID.
+Lua decodes the UID with uint64 arithmetic rather than a floating-point number.
+All 15 distinct station UIDs produced early and late samples, covering 343
+modules per phase. For each station, the module macro multiset matched its
+construction plan exactly, every enumerated module was operational, and the
+module UID/macro pairs were unchanged between samples. Independent parsing of
+the 30 captured sample rows confirmed an early-to-late interval of 5.066 seconds
+for every station. One START and one DONE occurred; no DLCOR FAIL occurred.
+
+Review found that the original gate measured the late deadline from station
+creation, potentially allowing back-to-back samples after a UI stall. The
+captured intervals above explicitly exclude that failure in run 002. The
+committed harness now measures five seconds from the actual successful early
+sample; a delayed-update regression test covers this correction. That corrected
+deadline itself has unit coverage, not a separate native capture. All 16 dynamic
+load tests pass; the generated MD passed the game's schema validation.
+
+This establishes short-term construction-plan module completeness and identity
+persistence in this fresh creative world. It does not establish save-equivalent
+positions, inventories, crew, production, docking, economy or longer survival.
+There is no performance claim: the runner explicitly marked timing untrustworthy.
+The remaining minimum experiment is a continuous-baseline minimal-versus-manager
+suppression comparison with explicit acknowledgements and equal observation
+windows. That experiment has not been run here.
