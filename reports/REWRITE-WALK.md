@@ -39,6 +39,19 @@ the MoveWorker (`walkpar_tick`). Any verification miss or freeze failure fails c
 stays OFF). Census is armable natively now; **replay is gated on the reviewer's go** (set_mode refuses
 WP_REPLAY until the dispatcher is installed). Sites registered in `rewrite-coord/hooks.tsv`.
 
+## 1a. Expected gain and what stage 2 is for (Amdahl)
+
+Native census (attnload 8 sectors, functional-only): the component walk is ~31% of the slot loop, with
+an ideal per-sector speedup of ~3.49 (largest sector 29% of the tree). By Amdahl, 3.49x on 31% of the
+frame is at most ~1.28x for the slot loop — matching the earlier ~1.3x estimate. **The parallel walk
+alone is stage-2 motivation only in combination with the AI/MD partitioning (ai-driver / sector scripts)
+and the server frame diet; no one should expect more than ~1.3x from the walk by itself.** The walk's
+14.7 ms is dominated by movement/physics/animation in the Sector::Move bodies (Positional::Move 0x748120,
+the animation timelines 0x1165660/0x1165ee0, child iteration 0x314fa0), not by event handling: in-walk
+DeliverEvent time is ~0.02 ms for ~76 deliveries/frame, so deferring it (stage 1) costs almost nothing
+and the serial replay is not the bottleneck. Stage 2's gain rests on running the Sector::Move bodies on
+worker threads; the replay must prove **no gameplay difference**, not speed.
+
 ## 2. Stage 0 — hazard census (measurement only)
 
 Driven per frame by: the galaxy-call dispatcher at 0x9fdf95 (`wp_walk_begin/end`, both census and replay),
