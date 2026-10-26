@@ -7,6 +7,24 @@ pub const ENV_LOG: &str = "X4MP_AGENT_LOG";
 pub const ENV_CADENCE_MS: &str = "X4MP_AGENT_CADENCE_MS";
 pub const ENV_SETTLE_MS: &str = "X4MP_AGENT_SETTLE_MS";
 pub const ENV_DISARM_FILE: &str = "X4MP_AGENT_DISARM_FILE";
+/// Load profiler (per-thread CPU, I/O, memory during the load). On unless `0`.
+pub const ENV_LOADPROF: &str = "X4MP_LOADPROF";
+pub const ENV_LOADPROF_TAIL_S: &str = "X4MP_LOADPROF_TAIL_S";
+pub const ENV_LOADPROF_MAX_S: &str = "X4MP_LOADPROF_MAX_S";
+pub const ENV_LOADPROF_TOP: &str = "X4MP_LOADPROF_TOP";
+/// Load-stage times from progressbar.xml. On unless `0`.
+pub const ENV_LOADSTAGES: &str = "X4MP_LOADSTAGES";
+pub const ENV_LOADSTAGES_FILE: &str = "X4MP_LOADSTAGES_FILE";
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct LoadProf {
+    /// Keep sampling this long after the engine leaves loading. 0..=600 s, default 10.
+    pub tail_s: u64,
+    /// Hard stop at this process age. 10..=7200 s, default 900.
+    pub max_s: u64,
+    /// Threads listed per `LOADPROF` row. 1..=32, default 6.
+    pub top: u64,
+}
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Config {
@@ -19,6 +37,21 @@ pub struct Config {
     pub settle_ms: u64,
     /// When this file exists the agent disarms permanently. Default `<log>.disarm`.
     pub disarm_file: PathBuf,
+    /// `None` when `X4MP_LOADPROF=0`.
+    pub loadprof: Option<LoadProf>,
+    /// `X4MP_LOADSTAGES` is not `0`.
+    pub loadstages: bool,
+    /// Explicit progressbar.xml; default `$HOME/.config/EgoSoft/X4/<personalfolderid>/progressbar.xml`.
+    pub loadstages_file: Option<PathBuf>,
+}
+
+/// A feature switch: absent or `1` is on, `0` is off, anything else is refused.
+fn switch(value: Option<String>, name: &str) -> Result<bool, String> {
+    match value.as_deref() {
+        None | Some("1") => Ok(true),
+        Some("0") => Ok(false),
+        Some(_) => Err(format!("{name} must be 0 or 1")),
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,6 +107,17 @@ pub fn parse(get: impl Fn(&str) -> Option<String>, pid: u32) -> Parsed {
             cadence_ms: bounded(get(ENV_CADENCE_MS), ENV_CADENCE_MS, 1000, 100, 60_000)?,
             settle_ms: bounded(get(ENV_SETTLE_MS), ENV_SETTLE_MS, 2000, 500, 600_000)?,
             disarm_file,
+            loadprof: if switch(get(ENV_LOADPROF), ENV_LOADPROF)? {
+                Some(LoadProf {
+                    tail_s: bounded(get(ENV_LOADPROF_TAIL_S), ENV_LOADPROF_TAIL_S, 10, 0, 600)?,
+                    max_s: bounded(get(ENV_LOADPROF_MAX_S), ENV_LOADPROF_MAX_S, 900, 10, 7200)?,
+                    top: bounded(get(ENV_LOADPROF_TOP), ENV_LOADPROF_TOP, 6, 1, 32)?,
+                })
+            } else {
+                None
+            },
+            loadstages: switch(get(ENV_LOADSTAGES), ENV_LOADSTAGES)?,
+            loadstages_file: get(ENV_LOADSTAGES_FILE).map(|t| absolute(&t, ENV_LOADSTAGES_FILE)).transpose()?,
         })
     })();
     match result {
@@ -106,6 +150,37 @@ mod tests {
         assert_eq!(c.log, PathBuf::from("/srv/x4/x4mp-agent/agent-42.log"));
         assert_eq!(c.disarm_file, PathBuf::from("/srv/x4/x4mp-agent/agent-42.log.disarm"));
         assert_eq!((c.cadence_ms, c.settle_ms), (1000, 2000));
+        assert_eq!(c.loadprof, Some(LoadProf { tail_s: 10, max_s: 900, top: 6 }));
+        assert!(c.loadstages);
+        assert_eq!(c.loadstages_file, None);
+    }
+
+    #[test]
+    fn load_profiling_switches() {
+        let base = [(ENV_ENABLE, "1"), (ENV_LOG, "/w/a.log")];
+        let with = |extra: &[(&'static str, &'static str)]| {
+            let mut pairs = base.to_vec();
+            pairs.extend_from_slice(extra);
+            parse(env(&pairs), 1)
+        };
+        let Parsed::Enabled(c) = with(&[(ENV_LOADPROF, "0"), (ENV_LOADSTAGES, "0")]) else { panic!() };
+        assert_eq!((c.loadprof, c.loadstages), (None, false));
+        let Parsed::Enabled(c) = with(&[(ENV_LOADPROF_TAIL_S, "0"), (ENV_LOADPROF_MAX_S, "60"), (ENV_LOADPROF_TOP, "12"), (ENV_LOADSTAGES_FILE, "/p/progressbar.xml")]) else {
+            panic!()
+        };
+        assert_eq!(c.loadprof, Some(LoadProf { tail_s: 0, max_s: 60, top: 12 }));
+        assert_eq!(c.loadstages_file, Some(PathBuf::from("/p/progressbar.xml")));
+        for bad in [
+            [(ENV_LOADPROF, "yes")],
+            [(ENV_LOADSTAGES, "2")],
+            [(ENV_LOADPROF_MAX_S, "5")],
+            [(ENV_LOADPROF_TOP, "0")],
+            [(ENV_LOADSTAGES_FILE, "progressbar.xml")],
+        ] {
+            assert!(matches!(with(&bad), Parsed::Invalid(_)), "{bad:?}");
+        }
+        // The feature flags never enable the agent by themselves.
+        assert_eq!(parse(env(&[(ENV_LOADPROF, "1"), (ENV_LOADSTAGES, "1")]), 1), Parsed::Disabled);
     }
 
     #[test]

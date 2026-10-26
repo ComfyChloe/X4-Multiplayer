@@ -9,15 +9,16 @@ use std::cell::Cell;
 use std::fs::{self, File, OpenOptions};
 use std::io::Write;
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
 use crate::config::{self, Config, Parsed};
 use crate::export::{self, FrameSample};
+use crate::loadprof::{LoadProfiler, LoadState, ProcSample, Settings, ThreadSample};
 use crate::logic::{cadence_line, ArmGate, Disarm, Gate, Observation, Snapshot};
 use crate::pinned::{self, Image};
-use crate::sha256;
+use crate::{loadstages, procstat, sha256};
 
 #[used]
 #[link_section = ".init_array"]
@@ -281,6 +282,225 @@ fn snapshot() -> Snapshot {
 }
 
 // ----------------------------------------------------------------------------------
+// Load profiling (layers 1 and 2). Only the worker thread runs this, and it only reads
+// /proc/self, the profile's progressbar.xml and the loading flag already read by
+// observe(): nothing in the engine is written or called.
+
+#[repr(C)]
+struct Timespec {
+    tv_sec: i64,
+    tv_nsec: i64,
+}
+
+extern "C" {
+    fn sysconf(name: i32) -> i64;
+    fn clock_gettime(clock: i32, tp: *mut Timespec) -> i32;
+}
+
+const SC_CLK_TCK: i32 = 2;
+const CLOCK_MONOTONIC: i32 = 1;
+
+/// CLOCK_MONOTONIC in seconds, the clock of `perf record -k CLOCK_MONOTONIC`.
+fn mono_now() -> f64 {
+    let mut ts = Timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: plain libc call with a valid out pointer.
+    if unsafe { clock_gettime(CLOCK_MONOTONIC, &mut ts) } != 0 {
+        return 0.0;
+    }
+    ts.tv_sec as f64 + ts.tv_nsec as f64 / 1e9
+}
+
+fn read_text(path: &str, buf: &mut String) -> bool {
+    buf.clear();
+    File::open(path).and_then(|mut f| std::io::Read::read_to_string(&mut f, buf)).is_ok()
+}
+
+/// Process age = time since `execve`, from `/proc/self/stat` starttime and `/proc/uptime`.
+fn process_age(clk_tck: f64) -> f64 {
+    let start = fs::read_to_string("/proc/self/stat").ok().and_then(|t| procstat::parse_stat(&t)).map(|s| s.starttime);
+    let uptime = fs::read_to_string("/proc/uptime").ok().and_then(|t| procstat::parse_uptime(&t));
+    match (start, uptime) {
+        (Some(start), Some(up)) => (up - start as f64 / clk_tck).max(0.0),
+        _ => 0.0,
+    }
+}
+
+struct Profiling {
+    profiler: LoadProfiler,
+    clk_tck: f64,
+    age0: f64,
+    at0: Instant,
+    buf: String,
+    path: String,
+}
+
+impl Profiling {
+    fn new(c: config::LoadProf) -> Profiling {
+        // SAFETY: sysconf has no preconditions.
+        let tck = unsafe { sysconf(SC_CLK_TCK) };
+        let clk_tck = if tck > 0 { tck as f64 } else { 100.0 };
+        Profiling {
+            profiler: LoadProfiler::new(Settings { clk_tck, tail_s: c.tail_s as f64, max_s: c.max_s as f64, top: c.top as usize }),
+            clk_tck,
+            age0: process_age(clk_tck),
+            at0: Instant::now(),
+            buf: String::with_capacity(1024),
+            path: String::with_capacity(64),
+        }
+    }
+
+    fn read(&mut self, o: &Observation) -> ProcSample {
+        use std::fmt::Write as _;
+        let t = self.age0 + self.at0.elapsed().as_secs_f64();
+        let mono = mono_now();
+        let mut threads = Vec::with_capacity(128);
+        if let Ok(tasks) = fs::read_dir("/proc/self/task") {
+            for task in tasks.flatten() {
+                let Some(tid) = task.file_name().to_str().and_then(|n| n.parse::<u32>().ok()) else { continue };
+                self.path.clear();
+                let _ = write!(self.path, "/proc/self/task/{tid}/stat");
+                if !read_text(&self.path, &mut self.buf) {
+                    continue; // thread exited meanwhile
+                }
+                if let Some(st) = procstat::parse_stat(&self.buf) {
+                    let ticks = st.cpu_ticks();
+                    threads.push(ThreadSample { tid, name: st.comm, ticks });
+                }
+            }
+        }
+        let process =
+            if read_text("/proc/self/stat", &mut self.buf) { procstat::parse_stat(&self.buf) } else { None }.unwrap_or_default();
+        let io = if read_text("/proc/self/io", &mut self.buf) { procstat::parse_io(&self.buf) } else { None }.unwrap_or_default();
+        let mem = if read_text("/proc/self/status", &mut self.buf) { procstat::parse_status_memory(&self.buf) } else { None }
+            .unwrap_or_default();
+        let state = if !o.table_ready {
+            LoadState::NotReady
+        } else if o.loading {
+            LoadState::Loading
+        } else {
+            LoadState::Idle
+        };
+        ProcSample {
+            t,
+            mono,
+            proc_ticks: process.cpu_ticks(),
+            threads,
+            io,
+            mem,
+            minflt: process.minflt,
+            majflt: process.majflt,
+            state,
+            game_time: o.game_time.is_finite().then_some(o.game_time),
+            game_client: o.game_client_ok,
+        }
+    }
+
+    /// One sample and its row; the summary when the end condition is reached.
+    fn tick(&mut self, log: &mut Log, o: &Observation) {
+        if self.profiler.done() {
+            return;
+        }
+        let started = Instant::now();
+        let sample = self.read(o);
+        let cost_us = started.elapsed().as_micros();
+        if let Some(row) = self.profiler.sample(sample) {
+            log.line(&format!("{row} cost_us={cost_us}"));
+        }
+        if self.profiler.done() {
+            let reason = if self.profiler.load_ended() { "complete" } else { "max_s" };
+            self.finish(log, reason);
+        }
+    }
+
+    fn finish(&mut self, log: &mut Log, reason: &str) {
+        for line in self.profiler.summary(reason) {
+            log.line(&line);
+        }
+    }
+}
+
+/// `LOADSTAGES`: progressbar.xml before the load (worker start) and after (once armed).
+struct Stages {
+    path: PathBuf,
+    before: Option<String>,
+    candidate: Option<String>,
+    deadline: Option<Instant>,
+    done: bool,
+}
+
+const LOADSTAGES_WAIT: Duration = Duration::from_secs(120);
+
+impl Stages {
+    fn resolve(config: &Config) -> Result<PathBuf, &'static str> {
+        if let Some(path) = &config.loadstages_file {
+            return Ok(path.clone());
+        }
+        let cmdline = fs::read("/proc/self/cmdline").map_err(|_| "cmdline_unreadable")?;
+        let id = procstat::personal_folder_id(&cmdline).ok_or("no_personalfolderid_set_X4MP_LOADSTAGES_FILE")?;
+        let base = match std::env::var_os("XDG_CONFIG_HOME").filter(|v| Path::new(v).is_absolute()) {
+            Some(dir) => PathBuf::from(dir),
+            None => PathBuf::from(std::env::var_os("HOME").ok_or("no_home")?).join(".config"),
+        };
+        Ok(base.join("EgoSoft/X4").join(id).join("progressbar.xml"))
+    }
+
+    fn start(config: &Config, log: &mut Log) -> Option<Stages> {
+        if !config.loadstages {
+            return None;
+        }
+        match Stages::resolve(config) {
+            Ok(path) => {
+                let before = fs::read_to_string(&path).ok();
+                let types = before.as_deref().map(loadstages::parse).unwrap_or_default();
+                let summary: Vec<String> =
+                    types.iter().map(|t| format!("{}:{}", crate::loadprof::token(&t.name), t.loaded)).collect();
+                log.line(&format!(
+                    "X4MP_AGENT LOADSTAGES before file={} exists={} types={}",
+                    path.display(),
+                    u8::from(before.is_some()),
+                    if summary.is_empty() { "-".into() } else { summary.join(",") }
+                ));
+                Some(Stages { path, before, candidate: None, deadline: None, done: false })
+            }
+            Err(reason) => {
+                log.line(&format!("X4MP_AGENT LOADSTAGES unavailable reason={reason}"));
+                None
+            }
+        }
+    }
+
+    /// Called about once per second after arming. Logs once the file has changed and
+    /// reads the same on two consecutive polls (so it is not caught mid-write).
+    fn poll(&mut self, log: &mut Log, measured: Option<f64>) {
+        if self.done {
+            return;
+        }
+        let deadline = *self.deadline.get_or_insert_with(|| Instant::now() + LOADSTAGES_WAIT);
+        let now = fs::read_to_string(&self.path).ok();
+        if now.is_some() && now != self.before {
+            if now == self.candidate {
+                let before = self.before.as_deref().map(loadstages::parse).unwrap_or_default();
+                let after = loadstages::parse(now.as_deref().unwrap_or_default());
+                let deltas = loadstages::diff(&before, &after);
+                if deltas.is_empty() {
+                    log.line("X4MP_AGENT LOADSTAGES changed_without_stage_delta (layout not recognised; see reports/LOAD-PROFILING.md)");
+                }
+                for d in &deltas {
+                    log.line(&loadstages::line(d, measured));
+                }
+                self.done = true;
+                return;
+            }
+            self.candidate = now;
+        }
+        if Instant::now() >= deadline {
+            log.line(&format!("X4MP_AGENT LOADSTAGES unchanged_after_s={} file={}", LOADSTAGES_WAIT.as_secs(), self.path.display()));
+            self.done = true;
+        }
+    }
+}
+
+// ----------------------------------------------------------------------------------
 // Worker thread
 
 struct Log(Option<File>);
@@ -398,6 +618,26 @@ fn worker(config: Config) {
     if !verify_build(&mut log) {
         return;
     }
+    // Captured right after verification (well under a second after exec), long before
+    // the first load can finish and update the file.
+    let mut stages = Stages::start(&config, &mut log);
+    let mut prof = config.loadprof.map(Profiling::new);
+    if let Some(p) = &prof {
+        log.line(&format!(
+            "X4MP_AGENT LOADPROF start process_age_s={:.3} mono={:.3} interval_ms=250 clk_tck={}",
+            p.age0,
+            mono_now(),
+            p.clk_tck
+        ));
+    }
+    let reason = run(&config, &mut log, &mut prof, &mut stages);
+    if let Some(p) = prof.as_mut().filter(|p| !p.profiler.done()) {
+        p.finish(&mut log, reason);
+    }
+}
+
+/// Wait for the game, arm, then report. Returns why it stopped.
+fn run(config: &Config, log: &mut Log, prof: &mut Option<Profiling>, stages: &mut Option<Stages>) -> &'static str {
     let start = Instant::now();
     let mut gate = ArmGate::new(config.settle_ms);
     let mut last_wait = "";
@@ -420,9 +660,12 @@ fn worker(config: Config) {
         }
         if config.disarm_file.exists() {
             log.line("X4MP_AGENT NOT_ARMED reason=disarm_file_present");
-            return;
+            return "disarm_file";
         }
         let o = observe(start);
+        if let Some(p) = prof.as_mut() {
+            p.tick(log, &o);
+        }
         match gate.observe(&o) {
             Gate::Wait(reason) => {
                 if reason != last_wait {
@@ -432,7 +675,7 @@ fn worker(config: Config) {
             }
             Gate::Refuse(reason) => {
                 log.line(&format!("X4MP_AGENT REFUSED reason={reason}"));
-                return;
+                return "refused";
             }
             Gate::Arm => {
                 // SAFETY: observe() just verified the table is mapped.
@@ -442,7 +685,7 @@ fn worker(config: Config) {
                     break;
                 }
                 log.line("X4MP_AGENT REFUSED reason=agent_slot_taken_during_arm");
-                return;
+                return "refused";
             }
         }
         std::thread::sleep(Duration::from_millis(250));
@@ -456,8 +699,27 @@ fn worker(config: Config) {
     };
     let mut fork_reporter = crate::forkprobe::Reporter::default();
     log.line(&format!("X4MP_AGENT FORKPROBE ready trigger={}", fork_trigger.display()));
+    let cadence = Duration::from_millis(config.cadence_ms);
+    let mut next_cadence = Instant::now() + cadence;
     loop {
-        std::thread::sleep(Duration::from_millis(config.cadence_ms));
+        // While the load profiler still runs (its tail after loading), wake every 250 ms
+        // for its samples; the cadence work below keeps its own period.
+        let profiling = prof.as_ref().is_some_and(|p| !p.profiler.done());
+        let wait = next_cadence.saturating_duration_since(Instant::now());
+        std::thread::sleep(if profiling { wait.min(Duration::from_millis(250)) } else { wait });
+        if profiling {
+            let o = observe(start);
+            if let Some(p) = prof.as_mut() {
+                p.tick(log, &o);
+            }
+        }
+        if Instant::now() < next_cadence {
+            continue;
+        }
+        next_cadence = Instant::now() + cadence;
+        if let Some(s) = stages.as_mut() {
+            s.poll(log, prof.as_ref().and_then(|p| p.profiler.load_seconds()));
+        }
         if let Ok(text) = fs::read_to_string(&fork_trigger) {
             let _ = fs::remove_file(&fork_trigger);
             match crate::forkprobe::parse_count(&text) {
@@ -482,7 +744,7 @@ fn worker(config: Config) {
         let code = DISARM.load(Ordering::SeqCst);
         if code != 0 {
             log.line(&format!("X4MP_AGENT DISARMED reason={}", Disarm::from_code(code).reason()));
-            return;
+            return "disarmed";
         }
     }
 }
@@ -498,6 +760,54 @@ mod tests {
         assert!(!covered(&ranges, 0x1ff8, 0x10)); // spans two mappings: refuse
         assert!(!covered(&ranges, 0x3000, 1));
         assert!(!covered(&ranges, u64::MAX - 2, 8));
+    }
+
+    /// Cost of one load-profiler sample with ~100 threads (X4 runs about that many).
+    /// `cargo test --release -p x4mp-agent -- --ignored --nocapture loadprof_sample_cost`
+    #[test]
+    #[ignore]
+    fn loadprof_sample_cost() {
+        let stop = std::sync::Arc::new(AtomicBool::new(false));
+        let handles: Vec<_> = (0..100)
+            .map(|i| {
+                let stop = stop.clone();
+                std::thread::Builder::new()
+                    .name(format!("JobThread {i}"))
+                    .spawn(move || {
+                        while !stop.load(Ordering::Relaxed) {
+                            std::thread::sleep(Duration::from_millis(5));
+                        }
+                    })
+                    .unwrap()
+            })
+            .collect();
+        let mut p = Profiling::new(config::LoadProf { tail_s: 10, max_s: 900, top: 6 });
+        let o = Observation { table_ready: true, loading: true, game_time: 0.0, ..Default::default() };
+        let rounds = 200;
+        let t0 = Instant::now();
+        let mut threads = 0;
+        for _ in 0..rounds {
+            threads = p.read(&o).threads.len();
+        }
+        let per = t0.elapsed().as_secs_f64() / rounds as f64;
+        let cpu_before = std::time::Instant::now();
+        let mut rows = 0;
+        for _ in 0..rounds {
+            let s = p.read(&o);
+            rows += p.profiler.sample(s).map_or(0, |r| r.len());
+        }
+        let with_rows = cpu_before.elapsed().as_secs_f64() / rounds as f64;
+        stop.store(true, Ordering::Relaxed);
+        for h in handles {
+            h.join().unwrap();
+        }
+        println!(
+            "LOADPROF sample: {threads} threads, read {:.0} us, read+row {:.0} us, at 4 Hz = {:.3}% of one core ({rows} row bytes)",
+            per * 1e6,
+            with_rows * 1e6,
+            with_rows * 4.0 * 100.0
+        );
+        assert!(threads >= 100);
     }
 
     #[test]

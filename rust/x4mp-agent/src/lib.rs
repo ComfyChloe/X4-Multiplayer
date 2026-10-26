@@ -5,8 +5,11 @@
 pub mod config;
 pub mod elf;
 pub mod export;
+pub mod loadprof;
+pub mod loadstages;
 pub mod logic;
 pub mod pinned;
+pub mod procstat;
 pub mod sha256;
 
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
