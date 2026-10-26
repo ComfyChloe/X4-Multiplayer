@@ -11,7 +11,7 @@
     COMBATSCN armed    t=.. variant=.. sector=.. zone=.. center=x,y,z
     COMBATSCN spawned  side=A|B count=.. faction=.. t=..
     COMBATSCN engaged  t=.. hostile=..
-    COMBATSCN tick     t=.. a=.. b=.. ahull=.. bhull=..
+    COMBATSCN tick     t=.. a=.. b=.. ahull=.. bhull=..   (every 10 s while engaged)
     COMBATSCN window   begin|end t=.. a=.. b=.. reason=..
     COMBATSCN done     t=.. a=.. b=..
     COMBATSCN cleaned  t=..
@@ -32,7 +32,6 @@
         <set_value name="$EngageDelayS" exact="2s"/>
         <set_value name="$SettleS" exact="20s"/>
         <set_value name="$WindowS" exact="120s"/>
-        <set_value name="$TickS" exact="10s"/>
         <set_value name="$DecidedFraction" exact="0.25"/>
         <set_value name="$Cleanup" exact="true"/>
         <set_value name="$CleanupDelayS" exact="5s"/>
@@ -130,15 +129,22 @@
       </actions>
     </library>
 
+    <!-- Every step below is a sibling sub-cue of Start that polls its own stage condition: X4
+         enables sub-cues as soon as the parent cue triggers, before its delay or actions, so
+         neither nesting nor <delay> can order the steps. Non-event conditions need a literal
+         checkinterval. -->
     <cue name="Start" namespace="this">
       <conditions>
         <event_cue_signalled cue="md.Setup.Start"/>
       </conditions>
       <actions>
-        <set_value name="$Version" exact="1"/>
+        <set_value name="$Version" exact="2"/>
         <include_actions ref="Defaults"/>
         <include_actions ref="md.X4MP_CombatVariant.Config"/>
         <set_value name="$Allowed" exact="player.module == 'custom_creative'"/>
+        <set_value name="$Stage" exact="if $Allowed then 'loaded' else 'refused'"/>
+        <set_value name="$Running" exact="false"/>
+        <set_value name="$StageAt" exact="player.age"/>
         <debug_text text="'COMBATSCN loaded version=%s variant=%s module=%s t=%s'.[$Version, $Variant, player.module, player.age]"/>
         <do_if value="not $Allowed">
           <debug_text text="'COMBATSCN refused reason=module module=%s'.[player.module]"/>
@@ -147,20 +153,19 @@
       <cues>
         <cue name="ArmTimeout" checkinterval="5s">
           <conditions>
-            <check_value value="$Allowed and player.age ge $ArmTimeoutS"/>
+            <check_value value="$Stage == 'loaded' and player.age ge $ArmTimeoutS"/>
           </conditions>
           <actions>
+            <set_value name="$Stage" exact="'refused'"/>
             <debug_text text="'COMBATSCN refused reason=%s t=%s'.[if not player.ship then 'no_player_ship' else 'player_docked', player.age]"/>
-            <cancel_cue cue="Arm"/>
           </actions>
         </cue>
 
         <cue name="Arm" checkinterval="1s">
           <conditions>
-            <check_value value="$Allowed and player.age ge $WarmupS and player.ship and not player.ship.dock"/>
+            <check_value value="$Stage == 'loaded' and player.age ge $WarmupS and player.ship and not player.ship.dock"/>
           </conditions>
           <actions>
-            <cancel_cue cue="ArmTimeout"/>
             <set_value name="$Sector" exact="player.ship.sector"/>
             <get_safe_pos result="$Center" sector="$Sector" x="0m" y="$ArenaY" z="0m" radius="$ArenaClearRadius"/>
             <do_if value="$ProtectPlayer">
@@ -176,98 +181,104 @@
               <position x="$Center.x" y="$Center.y" z="$Center.z - $ViewDistance"/>
               <rotation yaw="0deg" pitch="0deg" roll="0deg"/>
             </warp>
+            <set_value name="$Stage" exact="'armed'"/>
+            <set_value name="$StageAt" exact="player.age"/>
             <debug_text text="'COMBATSCN armed t=%s variant=%s sector=%s zone=%s center=%s,%s,%s'.[player.age, $Variant, $Sector.macro.id, player.zone.macro.id, $Center.x, $Center.y, $Center.z]"/>
           </actions>
-          <cues>
-            <cue name="Spawn">
-              <delay exact="$SpawnDelayS"/>
-              <actions>
-                <create_group groupname="$GroupA"/>
-                <create_group groupname="$GroupB"/>
-                <set_value name="$Side" exact="'A'"/>
-                <set_value name="$Faction" exact="$A_Faction"/>
-                <set_value name="$PilotTags" exact="$A_PilotTags"/>
-                <set_value name="$Macros" exact="$A_Macros"/>
-                <set_value name="$Counts" exact="$A_Counts"/>
-                <set_value name="$Sign" exact="-1"/>
-                <include_actions ref="SpawnSide"/>
-                <add_to_group groupname="$GroupA" list="$SpawnList"/>
-                <set_value name="$SpawnedA" exact="$GroupA.count"/>
-                <set_value name="$Side" exact="'B'"/>
-                <set_value name="$Faction" exact="$B_Faction"/>
-                <set_value name="$PilotTags" exact="$B_PilotTags"/>
-                <set_value name="$Macros" exact="$B_Macros"/>
-                <set_value name="$Counts" exact="$B_Counts"/>
-                <set_value name="$Sign" exact="1"/>
-                <include_actions ref="SpawnSide"/>
-                <add_to_group groupname="$GroupB" list="$SpawnList"/>
-                <set_value name="$SpawnedB" exact="$GroupB.count"/>
-              </actions>
-              <cues>
-                <cue name="Engage">
-                  <delay exact="$EngageDelayS"/>
-                  <actions>
-                    <set_value name="$Own" exact="$GroupA.list"/>
-                    <set_value name="$Enemies" exact="$GroupB.list"/>
-                    <include_actions ref="OrderSide"/>
-                    <set_value name="$Own" exact="$GroupB.list"/>
-                    <set_value name="$Enemies" exact="$GroupA.list"/>
-                    <include_actions ref="OrderSide"/>
-                    <set_value name="$EngagedAt" exact="player.age"/>
-                    <set_value name="$Running" exact="true"/>
-                    <debug_text text="'COMBATSCN engaged t=%s hostile=%s a=%s b=%s'.[player.age, $Hostile, $GroupA.count, $GroupB.count]"/>
-                  </actions>
-                  <cues>
-                    <cue name="Tick" instantiate="true" checkinterval="$TickS">
-                      <conditions>
-                        <check_value value="$Running"/>
-                      </conditions>
-                      <actions>
-                        <include_actions ref="HullSums"/>
-                        <debug_text text="'COMBATSCN tick t=%s a=%s b=%s ahull=%s bhull=%s'.[player.age, $GroupA.count, $GroupB.count, $AHull, $BHull]"/>
-                      </actions>
-                    </cue>
+        </cue>
 
-                    <cue name="WindowBegin">
-                      <delay exact="$SettleS"/>
-                      <actions>
-                        <set_value name="$WindowAt" exact="player.age"/>
-                        <debug_text text="'COMBATSCN window begin t=%s a=%s b=%s'.[player.age, $GroupA.count, $GroupB.count]"/>
-                      </actions>
-                      <cues>
-                        <cue name="WindowEnd" checkinterval="1s">
-                          <conditions>
-                            <check_any>
-                              <check_value value="player.age ge $WindowAt + $WindowS"/>
-                              <check_value value="$Hostile and ($GroupA.count le $SpawnedA * $DecidedFraction or $GroupB.count le $SpawnedB * $DecidedFraction)"/>
-                            </check_any>
-                          </conditions>
-                          <actions>
-                            <set_value name="$Running" exact="false"/>
-                            <debug_text text="'COMBATSCN window end t=%s a=%s b=%s reason=%s'.[player.age, $GroupA.count, $GroupB.count, if player.age ge $WindowAt + $WindowS then 'timeout' else 'decided']"/>
-                            <debug_text text="'COMBATSCN done t=%s a=%s b=%s'.[player.age, $GroupA.count, $GroupB.count]"/>
-                          </actions>
-                          <cues>
-                            <cue name="Cleanup">
-                              <conditions>
-                                <check_value value="$Cleanup"/>
-                              </conditions>
-                              <delay exact="$CleanupDelayS"/>
-                              <actions>
-                                <destroy_group group="$GroupA" explosion="false"/>
-                                <destroy_group group="$GroupB" explosion="false"/>
-                                <debug_text text="'COMBATSCN cleaned t=%s'.[player.age]"/>
-                              </actions>
-                            </cue>
-                          </cues>
-                        </cue>
-                      </cues>
-                    </cue>
-                  </cues>
-                </cue>
-              </cues>
-            </cue>
-          </cues>
+        <cue name="Spawn" checkinterval="1s">
+          <conditions>
+            <check_value value="$Stage == 'armed' and player.age ge $StageAt + $SpawnDelayS"/>
+          </conditions>
+          <actions>
+            <create_group groupname="$GroupA"/>
+            <create_group groupname="$GroupB"/>
+            <set_value name="$Side" exact="'A'"/>
+            <set_value name="$Faction" exact="$A_Faction"/>
+            <set_value name="$PilotTags" exact="$A_PilotTags"/>
+            <set_value name="$Macros" exact="$A_Macros"/>
+            <set_value name="$Counts" exact="$A_Counts"/>
+            <set_value name="$Sign" exact="-1"/>
+            <include_actions ref="SpawnSide"/>
+            <add_to_group groupname="$GroupA" list="$SpawnList"/>
+            <set_value name="$SpawnedA" exact="$GroupA.count"/>
+            <set_value name="$Side" exact="'B'"/>
+            <set_value name="$Faction" exact="$B_Faction"/>
+            <set_value name="$PilotTags" exact="$B_PilotTags"/>
+            <set_value name="$Macros" exact="$B_Macros"/>
+            <set_value name="$Counts" exact="$B_Counts"/>
+            <set_value name="$Sign" exact="1"/>
+            <include_actions ref="SpawnSide"/>
+            <add_to_group groupname="$GroupB" list="$SpawnList"/>
+            <set_value name="$SpawnedB" exact="$GroupB.count"/>
+            <set_value name="$Stage" exact="'spawned'"/>
+            <set_value name="$StageAt" exact="player.age"/>
+          </actions>
+        </cue>
+
+        <cue name="Engage" checkinterval="1s">
+          <conditions>
+            <check_value value="$Stage == 'spawned' and player.age ge $StageAt + $EngageDelayS"/>
+          </conditions>
+          <actions>
+            <set_value name="$Own" exact="$GroupA.list"/>
+            <set_value name="$Enemies" exact="$GroupB.list"/>
+            <include_actions ref="OrderSide"/>
+            <set_value name="$Own" exact="$GroupB.list"/>
+            <set_value name="$Enemies" exact="$GroupA.list"/>
+            <include_actions ref="OrderSide"/>
+            <set_value name="$Running" exact="true"/>
+            <set_value name="$Stage" exact="'engaged'"/>
+            <set_value name="$StageAt" exact="player.age"/>
+            <debug_text text="'COMBATSCN engaged t=%s hostile=%s a=%s b=%s'.[player.age, $Hostile, $GroupA.count, $GroupB.count]"/>
+          </actions>
+        </cue>
+
+        <cue name="Tick" instantiate="true" checkinterval="10s">
+          <conditions>
+            <check_value value="$Running"/>
+          </conditions>
+          <actions>
+            <include_actions ref="HullSums"/>
+            <debug_text text="'COMBATSCN tick t=%s a=%s b=%s ahull=%s bhull=%s'.[player.age, $GroupA.count, $GroupB.count, $AHull, $BHull]"/>
+          </actions>
+        </cue>
+
+        <cue name="WindowBegin" checkinterval="1s">
+          <conditions>
+            <check_value value="$Stage == 'engaged' and player.age ge $StageAt + $SettleS"/>
+          </conditions>
+          <actions>
+            <set_value name="$Stage" exact="'window'"/>
+            <set_value name="$StageAt" exact="player.age"/>
+            <debug_text text="'COMBATSCN window begin t=%s a=%s b=%s'.[player.age, $GroupA.count, $GroupB.count]"/>
+          </actions>
+        </cue>
+
+        <cue name="WindowEnd" checkinterval="1s">
+          <conditions>
+            <check_value value="$Stage == 'window' and (player.age ge $StageAt + $WindowS or ($Hostile and ($GroupA.count le $SpawnedA * $DecidedFraction or $GroupB.count le $SpawnedB * $DecidedFraction)))"/>
+          </conditions>
+          <actions>
+            <set_value name="$Running" exact="false"/>
+            <debug_text text="'COMBATSCN window end t=%s a=%s b=%s reason=%s'.[player.age, $GroupA.count, $GroupB.count, if player.age ge $StageAt + $WindowS then 'timeout' else 'decided']"/>
+            <set_value name="$Stage" exact="'done'"/>
+            <set_value name="$StageAt" exact="player.age"/>
+            <debug_text text="'COMBATSCN done t=%s a=%s b=%s'.[player.age, $GroupA.count, $GroupB.count]"/>
+          </actions>
+        </cue>
+
+        <cue name="Cleanup" checkinterval="1s">
+          <conditions>
+            <check_value value="$Stage == 'done' and $Cleanup and player.age ge $StageAt + $CleanupDelayS"/>
+          </conditions>
+          <actions>
+            <destroy_group group="$GroupA" explosion="false"/>
+            <destroy_group group="$GroupB" explosion="false"/>
+            <set_value name="$Stage" exact="'cleaned'"/>
+            <debug_text text="'COMBATSCN cleaned t=%s'.[player.age]"/>
+          </actions>
         </cue>
       </cues>
     </cue>

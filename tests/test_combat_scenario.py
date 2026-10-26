@@ -73,8 +73,37 @@ class ScenarioStructure(unittest.TestCase):
         self.assertEqual(signalled.get('cue'), 'md.Setup.Start')
         allowed = [s.get('exact') for s in start.iter('set_value') if s.get('name') == '$Allowed']
         self.assertEqual(allowed, ["player.module == 'custom_creative'"])
+        stage = [s.get('exact') for s in start.find('actions').iter('set_value') if s.get('name') == '$Stage']
+        self.assertEqual(stage, ["if $Allowed then 'loaded' else 'refused'"])
         arm = next(e for e in self.tree.iter('cue') if e.get('name') == 'Arm')
-        self.assertIn('$Allowed', arm.find('conditions/check_value').get('value'))
+        self.assertIn("$Stage == 'loaded'", arm.find('conditions/check_value').get('value'))
+
+    def test_polled_cues_have_literal_check_intervals(self):
+        # Native finding (lane smoke-002): non-event conditions need checkinterval/checktime,
+        # and checkinterval must be a literal time.
+        non_event = {'check_value', 'check_any', 'check_all', 'check_age'}
+        for cue in self.tree.iter('cue'):
+            conditions = cue.find('conditions')
+            if conditions is None or not any(child.tag in non_event for child in conditions):
+                continue
+            with self.subTest(cue=cue.get('name')):
+                interval = cue.get('checkinterval')
+                self.assertTrue(interval or cue.get('checktime'), 'non-event condition without checkinterval')
+                if interval:
+                    self.assertRegex(interval, r'^\d+(\.\d+)?(ms|s|min|h)$')
+
+    def test_steps_are_ordered_by_stage_not_by_nesting_or_delay(self):
+        # Native finding (lane smoke-002): sub-cues are enabled when the parent triggers,
+        # before its delay or actions, so a step may not rely on nesting or <delay>.
+        self.assertEqual(list(self.tree.iter('delay')), [])
+        start = next(e for e in self.tree.iter('cue') if e.get('name') == 'Start')
+        steps = start.find('cues')
+        self.assertEqual([c.find('cues') for c in steps], [None] * len(steps))
+        for cue in steps:
+            if cue.get('name') == 'Tick':
+                continue
+            with self.subTest(cue=cue.get('name')):
+                self.assertIn('$Stage ==', cue.find('conditions/check_value').get('value'))
 
     def test_every_marker_is_known_to_the_parser(self):
         texts = [n.get('text') for n in self.tree.iter('debug_text')]
