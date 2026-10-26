@@ -14,7 +14,7 @@ FAIL = re.compile(r"FEATURE player_factions DISABLED|PLAYER_FACTIONS STOPPED|"
 
 
 def resolved(value):
-    return (value.strip().lower() not in {"", "false", "nil", "none", "null", "?"}
+    return (value.strip().lower() not in {"", "false", "nil", "none", "null", "?", "??", "unknown faction"}
             and not value.startswith("LAN Player"))
 
 
@@ -43,6 +43,19 @@ def analyze_client(text, slot):
                 relations.append(value)
     if relations != [0.75, 0.0, -0.5, 0.75]:
         errors.append("relation sequence must be allied -> neutral -> hostile -> allied")
+    fa, fb = ("player", faction) if slot == "p1" else (faction, "player")
+    directional_pattern = re.compile(
+        r"PLAYER_FACTIONS RELATION_APPLIED " + re.escape(fa + "->" + fb) + r"=([-+0-9.eE]+) "
+        + re.escape(fb + "->" + fa) + r"=([-+0-9.eE]+)\s*$")
+    directions = []
+    for line in lines:
+        match = directional_pattern.search(line)
+        if match:
+            pair = (float(match[1]), float(match[2]))
+            if not directions or pair != directions[-1]:
+                directions.append(pair)
+    if directions != [(v, v) for v in (0.75, 0.0, -0.5, 0.75)]:
+        errors.append("both native directions must complete the relation round trip")
 
     expected_actions = (("hostile", "applied"), ("allied", "applied")) if slot == "p1" else (("neutral", "requested"),)
     for value, result in expected_actions:
@@ -89,7 +102,8 @@ def analyze_client(text, slot):
     if not any(re.search(r"PFSESSION DONE slot=" + slot + r"\s*$", line) for line in lines):
         errors.append("missing matching completion")
     return {"slot": slot, "success": not errors, "errors": errors,
-            "relation_sequence": relations, "valid_samples": len(samples)}
+            "relation_sequence": relations, "directional_sequence": directions,
+            "valid_samples": len(samples)}
 
 
 def analyze(folder):

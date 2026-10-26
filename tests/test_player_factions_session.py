@@ -17,6 +17,8 @@ def fixture(slot):
             'relay=connected remote=receiving']
     for value in (.75, 0, -.5, .75):
         rows.append(f'PLAYER_FACTIONS RELATION_APPLIED 1|2|{value}')
+        fa, fb = ('player', faction) if slot == 'p1' else (faction, 'player')
+        rows.append(f'PLAYER_FACTIONS RELATION_APPLIED {fa}->{fb}={value} {fb}->{fa}={value}')
     for value, how in ((('hostile', 'applied'), ('allied', 'applied')) if slot == 'p1' else (('neutral', 'requested'),)):
         rows.append(f'PFSESSION slot={slot} ACTION setRelation({other},{value}) -> true {how}')
     rows.append(f'PFSESSION slot={slot} t=160 other={other} faction={faction} name={name} short={name} diplomacy_list=yes:{name} uirelation=28 ships={ships}')
@@ -45,6 +47,7 @@ class SessionAcceptance(unittest.TestCase):
             'wrong_done': source.replace('DONE slot=p1', 'DONE slot=p2'),
             'unresolved_ui': source.replace('uirelation=28', 'uirelation=false'),
             'hostile_final_ui': source.replace('uirelation=28', 'uirelation=-25'),
+            'reverse_direction_stale': source.replace('x4lan_player2->player=-0.5', 'x4lan_player2->player=0.75'),
         }
         for name, text in mutations.items():
             with self.subTest(name=name):
