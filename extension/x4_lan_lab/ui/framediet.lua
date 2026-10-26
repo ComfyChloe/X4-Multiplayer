@@ -1,4 +1,4 @@
--- Server frame diet and render RNG split (Windows). Engine instrumentation under ENGINE-INSTRUMENTATION.txt;
+-- Server frame diet and render RNG split (Windows). Engine instrumentation under docs/ENGINE-INSTRUMENTATION.txt;
 -- evidence, sites and safety: reports/REWRITE-FRAME-DIET.md.
 --   X4LAN_CONFIG.frame_diet  true: on a Windows dedicated server (dedicated=true, slot p1) skip presentation work
 --                            the simulation does not read: the Anark scene layer walk and the main-thread draw
