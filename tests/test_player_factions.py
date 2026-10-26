@@ -73,8 +73,15 @@ class FactionPoolDiff(unittest.TestCase):
             self.assertNotIn('FactionLogic', text if path != MD else '')
         self.assertNotIn('economic', MD.read_text(encoding='utf-8'))
 
-    @unittest.skipUnless(etree and (VANILLA / '08__libraries_factions.xml').is_file() and (LIB / 'factions.xsd').is_file(),
-                         'x4-re vanilla factions extraction not available')
+
+# Game-schema checks need lxml and the private read-only x4-re extraction (X4_RE or ../x4-re).
+# They are collected only where both exist, so dev/check.py (stdlib + lupa) does not count them
+# as skipped coverage; run them on the RE machine: python -m unittest tests.test_player_factions
+SCHEMAS = bool(etree and (LIB / 'md.xsd').is_file() and (LIB / 'factions.xsd').is_file())
+VANILLA_FACTIONS = SCHEMAS and (VANILLA / '08__libraries_factions.xml').is_file()
+
+
+class _VanillaDiffChecks:
     def test_diff_applies_to_vanilla_and_validates(self):
         base = etree.parse(str(VANILLA / '08__libraries_factions.xml'))
         vanilla_ids = {f.get('id') for f in base.getroot().iter('faction')}
@@ -94,11 +101,15 @@ class FactionPoolDiff(unittest.TestCase):
             self.assertTrue(diff.validate(etree.parse(str(FACTIONS))), diff.error_log)
 
 
-@unittest.skipUnless(etree and (LIB / 'md.xsd').is_file(), 'x4-re md.xsd not available')
-class PlayerFactionsMdSchema(unittest.TestCase):
-    def test_md_validates_against_game_schema(self):
-        schema = etree.XMLSchema(etree.parse(str(LIB / 'md.xsd')))
-        self.assertTrue(schema.validate(etree.parse(str(MD))), schema.error_log)
+if VANILLA_FACTIONS:
+    class VanillaFactionsDiff(_VanillaDiffChecks, unittest.TestCase):
+        pass
+
+if SCHEMAS:
+    class PlayerFactionsMdSchema(unittest.TestCase):
+        def test_md_validates_against_game_schema(self):
+            schema = etree.XMLSchema(etree.parse(str(LIB / 'md.xsd')))
+            self.assertTrue(schema.validate(etree.parse(str(MD))), schema.error_log)
 
 
 def joined():
