@@ -1,6 +1,7 @@
 """Offline tests of the native test lane tool (dev/x4lane.py, dev/lane/). No X4 is started."""
 from pathlib import Path
 import os
+import socket
 import subprocess
 import sys
 import tempfile
@@ -572,6 +573,131 @@ class SessionPreflightTests(FakeWindows):
         self.quiet('somebody-else')
         with self.assertRaises(x4lane.TransientRefusal):
             self.session().preflight()
+
+
+class FakeClock:
+    def __init__(self, on_sleep=None):
+        self.now, self.on_sleep, self.sleeps = 1000.0, on_sleep, 0
+
+    def monotonic(self):
+        return self.now
+
+    def sleep(self, seconds):
+        self.now += seconds
+        self.sleeps += 1
+        if self.on_sleep:
+            self.on_sleep(self)
+
+    def time(self):
+        return time.time()
+
+
+class QueueTests(FakeWindows):
+    def setUp(self):
+        super().setUp()
+        self.saved_time = x4lane.time
+
+    def tearDown(self):
+        x4lane.time = self.saved_time
+        super().tearDown()
+
+    def runner(self, wait, agent='walk', timing=False):
+        import types
+        self.refreshed = 0
+
+        def refresh():
+            self.refreshed += 1
+        return types.SimpleNamespace(paths=self.paths, args=types.SimpleNamespace(wait=wait, agent=agent,
+                                                                                    timing=timing),
+                                     refresh_reserved=refresh)
+
+    def foreign_ticket(self):
+        ticket = core.Ticket.create(self.paths.queue, {'agent': 'economy', 'need': 2, 'pid': 4242,
+                                                       'machine': 'elsewhere'})
+        return ticket
+
+    def test_immediate_run_is_refused_while_others_queue(self):
+        self.foreign_ticket()
+        attempts = []
+        with self.assertRaises(x4lane.TransientRefusal) as refused:
+            x4lane.wait_in_queue(self.runner(0), lambda: attempts.append(1), lambda: None, 1, 'run')
+        self.assertIn('queued run(s)', str(refused.exception))
+        self.assertEqual(attempts, [])
+        self.quiet('walk')                                        # a quiet-window handoff bypasses the queue
+        x4lane.wait_in_queue(self.runner(0, timing=True), lambda: attempts.append(1), lambda: None, 1, 'run')
+        self.assertEqual(attempts, [1])
+
+    def test_only_the_head_attempts_and_the_ticket_is_removed(self):
+        ahead = self.foreign_ticket()
+        attempts = []
+        clock = FakeClock(on_sleep=lambda c: ahead.remove() if c.sleeps == 2 else None)
+        x4lane.time = clock
+        x4lane.wait_in_queue(self.runner(600), lambda: attempts.append(clock.now), lambda: None, 1, 'run')
+        self.assertEqual(len(attempts), 1)                         # never attempted while second in line
+        self.assertEqual(clock.sleeps, 2)
+        self.assertEqual(core.live_tickets(self.paths.queue), [])
+        self.assertGreaterEqual(self.refreshed, 2)
+
+    def test_deadline_gives_back_reservations(self):
+        clock = FakeClock()
+        x4lane.time = clock
+        given_back = []
+
+        def attempt():
+            raise x4lane.TransientRefusal('no free lane')
+        with self.assertRaises(x4lane.TransientRefusal) as refused:
+            x4lane.wait_in_queue(self.runner(60), attempt, lambda: given_back.append(1), 2, 'session')
+        self.assertIn('--wait 60 s elapsed (no free lane)', str(refused.exception))
+        self.assertTrue(given_back)
+        self.assertEqual(list(self.paths.queue.glob('q-*.json')), [])
+
+    def test_dead_and_stale_tickets_are_dropped(self):
+        dead = core.Ticket.create(self.paths.queue, {'agent': 'x', 'pid': 99, 'machine': socket.gethostname()})
+        old = core.Ticket.create(self.paths.queue, {'agent': 'y', 'pid': 98, 'machine': 'elsewhere'})
+        past = time.time() - core.TICKET_STALE_S - 10
+        os.utime(old.path, (past, past))
+        live = core.Ticket.create(self.paths.queue, {'agent': 'z', 'pid': 97, 'machine': 'elsewhere'})
+        tickets = core.live_tickets(self.paths.queue, pid_alive=lambda pid, created=None: pid != 99)
+        self.assertEqual([info['agent'] for _path, info in tickets], ['z'])
+        self.assertFalse(dead.path.exists())
+        self.assertFalse(old.path.exists())
+        live.remove()
+
+
+class StopAndReserveTests(FakeWindows):
+    def test_stop_marker_is_matched_to_our_x4_only(self):
+        import types
+        run = self.run_for('walk', False)
+        run.lane = self.paths.lane('b1')
+        run.lane.dir.mkdir(parents=True)
+        run.proc = types.SimpleNamespace(pid=321)
+        self.assertIsNone(run.stop_request())
+        core.write_json(run.lane.dir / x4lane.STOP_FILE, {'pid': 999, 'by': 'lead'})
+        self.assertIsNone(run.stop_request())
+        core.write_json(run.lane.dir / x4lane.STOP_FILE, {'pid': 321, 'by': 'lead', 'reason': 'user test'})
+        self.assertEqual(run.stop_request()['reason'], 'user test')
+
+    def test_queued_session_keeps_lanes_it_already_has(self):
+        argv = ['session', '--agent', 'player-factions', '--collect', str(self.tmp / 'sess'), '--timeout', '60']
+        run = x4lane.SessionRun(x4lane.parser().parse_args(argv), self.paths)
+        run.outdir, run.lanes, run.session_id = self.tmp / 'sess', None, 's'
+        empty = {1: [], 2: []}
+        for index in (1, 2):
+            client = x4lane.Run(run.client_args(index, {'overlay': empty, 'extension': empty, 'lua': empty,
+                                                        'config': empty}), self.paths)
+            run.clients.append(client)
+        blockers = [core.DirLock.acquire(self.paths.lane(n).lock, {'agent': 'x', 'run': n}) for n in ('b2', 'b3', 'b4')]
+        with self.assertRaises(x4lane.TransientRefusal) as refused:
+            run.preflight(keep=True)
+        self.assertIn("reserved so far: ['b1']", str(refused.exception))
+        self.assertTrue(self.paths.lane('b1').lock.exists())      # kept while queued
+        blockers[2].release()                                    # b4 frees up
+        run.preflight(keep=True)
+        self.assertEqual([c.lane.name for c in run.clients], ['b1', 'b4'])
+        run.give_back_all()
+        for blocker in blockers[:2]:
+            blocker.release()
+        self.assertFalse(any(self.paths.lane(n).lock.exists() for n in core.LANE_PROFILES))
 
 
 class LogWatcherTests(Temp):

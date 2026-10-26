@@ -109,6 +109,10 @@ class Paths:
         return self.coord / 'lane-launch.lock'
 
     @property
+    def queue(self) -> Path:
+        return self.coord / 'lane-queue'
+
+    @property
     def base(self) -> Path:
         return self.lanes / 'base'
 
@@ -781,6 +785,74 @@ def _remove_lock_dir(path, why):
     for item in graveyard.iterdir():
         item.unlink()
     graveyard.rmdir()
+
+
+# ---------------------------------------------------------------------------------------
+# lane queue (rewrite-coord/lane-queue): first come, first served for runs that --wait
+
+TICKET_STALE_S = 5 * 60            # a waiting runner refreshes its ticket at least every 60 s
+
+
+class Ticket:
+    """One waiting run. Tickets sort by creation time; only the oldest live ticket (the head) may
+    take lanes, and it keeps the lanes it got while it waits for the rest (no starvation)."""
+
+    def __init__(self, path, info):
+        self.path = Path(path)
+        self.info = dict(info)
+
+    @classmethod
+    def create(cls, queue_dir, info):
+        queue_dir = Path(queue_dir)
+        queue_dir.mkdir(parents=True, exist_ok=True)
+        stamp = time.time_ns()
+        for serial in range(1000):
+            name = f'q-{stamp:020d}-{os.getpid()}-{serial:03d}.json'
+            ticket = cls(queue_dir / name, dict(info, created=now_iso(), ticket=name))
+            try:
+                with open(ticket.path, 'x', encoding='utf-8') as handle:      # exclusive create
+                    handle.write(json.dumps(ticket.info))
+                return ticket
+            except FileExistsError:
+                continue
+        raise LaneError(f'could not create a queue ticket in {queue_dir}')
+
+    def refresh(self, **extra):
+        self.info.update(extra, updated=now_iso())
+        if self.path.exists():
+            write_json(self.path, self.info)
+
+    def remove(self):
+        try:
+            self.path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def live_tickets(queue_dir, pid_alive=None, now=None) -> list:
+    """Live tickets, oldest first, as (path, info). Tickets of exited runners or not refreshed for
+    TICKET_STALE_S are deleted (they belong to no one)."""
+    queue_dir = Path(queue_dir)
+    now = time.time() if now is None else now
+    out = []
+    if not queue_dir.is_dir():
+        return out
+    for item in sorted(queue_dir.glob('q-*.json')):
+        try:
+            info = json.loads(item.read_text(encoding='utf-8'))
+            age = now - item.stat().st_mtime
+        except (OSError, ValueError):
+            continue
+        dead = pid_alive is not None and info.get('machine') == socket.gethostname() \
+            and str(info.get('pid', '')).isdigit() and not pid_alive(int(info['pid']), info.get('pid_created'))
+        if dead or age > TICKET_STALE_S:
+            try:
+                item.unlink()
+            except OSError:
+                pass
+            continue
+        out.append((item, info))
+    return out
 
 
 # ---------------------------------------------------------------------------------------

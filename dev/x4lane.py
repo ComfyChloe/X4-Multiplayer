@@ -366,6 +366,70 @@ def cmd_setup(args, paths):
     return 0
 
 
+HEAD_POLL_S = 10
+QUEUE_POLL_S = 30
+
+
+def handoff_for(paths, args) -> bool:
+    """quiet.lock hands the quiet window to this agent's --timing run (it bypasses the queue)."""
+    if not getattr(args, 'timing', False) or not paths.quiet_lock.exists():
+        return False
+    return core.read_owner(paths.quiet_lock).get('handoff') == args.agent
+
+
+def wait_in_queue(runner, attempt, give_back, need, purpose):
+    """Run attempt() (raises TransientRefusal) under the lane queue. Without --wait: refuse while
+    other runs are queued. With --wait: take a ticket; only the oldest live ticket attempts (every
+    10 s, others check every 30 s); give_back() releases partial reservations when the wait ends."""
+    paths, a = runner.paths, runner.args
+    alive = win().pid_alive
+    priority = handoff_for(paths, a)
+    if a.wait <= 0:
+        tickets = core.live_tickets(paths.queue, alive)
+        if tickets and not priority:
+            raise TransientRefusal(f'{len(tickets)} queued run(s) wait for lanes (oldest: agent '
+                                   f'{tickets[0][1].get("agent")}, needs {tickets[0][1].get("need")}); '
+                                   'use --wait S to queue behind them')
+        attempt()
+        return
+    me = os.getpid()
+    ticket = core.Ticket.create(paths.queue, {'agent': a.agent, 'purpose': purpose, 'need': need, 'pid': me,
+                                              'pid_created': win().process_created(me),
+                                              'machine': socket.gethostname()})
+    deadline = time.monotonic() + a.wait
+    last = None
+    try:
+        while True:
+            tickets = core.live_tickets(paths.queue, alive)
+            names = [path.name for path, _info in tickets]
+            if ticket.path.name not in names:                     # deleted as stale: queue again
+                ticket = core.Ticket.create(paths.queue, ticket.info)
+                names.append(ticket.path.name)
+            position = names.index(ticket.path.name)
+            if position == 0 or priority or handoff_for(paths, a):
+                try:
+                    attempt()
+                    return
+                except TransientRefusal as error:
+                    note, pause = str(error), HEAD_POLL_S
+            else:
+                note, pause = f'queued at position {position + 1} of {len(names)}', QUEUE_POLL_S
+            if time.monotonic() + pause > deadline:
+                give_back()
+                raise TransientRefusal(f'--wait {a.wait:g} s elapsed ({note})')
+            if note != last:
+                print(f'x4lane: waiting ({note})', flush=True)
+                last = note
+            ticket.refresh(note=note[:300])
+            runner.refresh_reserved()
+            time.sleep(pause)
+    except BaseException:
+        give_back()
+        raise
+    finally:
+        ticket.remove()
+
+
 def acquire_launch_lock(paths, agent, purpose, run):
     deadline = time.monotonic() + LAUNCH_LOCK_WAIT_S
     while True:
@@ -410,6 +474,7 @@ def cmd_status(args, paths):
         info['lanes'][name] = entry
     if paths.launch_lock.exists():
         info['launch_lock'] = core.read_owner(paths.launch_lock)
+    info['queue'] = [ticket for _path, ticket in core.live_tickets(paths.queue, win().pid_alive)]
     if paths.coord.is_dir():
         for item in sorted(paths.coord.glob('*.lock')):
             if item.name not in ('quiet.lock', 'lane-launch.lock') and not item.name.startswith('lane-b'):
@@ -437,6 +502,9 @@ def cmd_status(args, paths):
               + (f"; last run phase {entry['state']}" if entry['state'] not in (None, 'idle') else ''))
     if 'launch_lock' in info:
         print('lane-launch.lock: held ' + core.owner_summary(info['launch_lock']))
+    if info['queue']:
+        print(f"lane queue: {len(info['queue'])} waiting (first: agent {info['queue'][0].get('agent')}, "
+              f"needs {info['queue'][0].get('need')}); see x4lane.py queue")
     for item in info['other_locks']:
         print('other lock: ' + ', '.join(f'{k} ({v})' for k, v in item.items()))
     print(f"X4 processes: {len(info['x4'])}")
@@ -658,16 +726,11 @@ class Run:
         self.result['quiet_lock']['present_at_start'] = quiet_owner is not None
 
     def acquire(self):
-        deadline = time.monotonic() + max(0, self.args.wait)
-        while True:
-            try:
-                self.preflight()
-                return
-            except TransientRefusal as error:
-                if time.monotonic() + TRANSIENT_WAIT_S > deadline:
-                    raise
-                print(f'x4lane: waiting ({error})', flush=True)
-                time.sleep(TRANSIENT_WAIT_S)
+        wait_in_queue(self, self.preflight, self.give_back_lane, 1, f'run {self.args.label}'.strip())
+
+    def refresh_reserved(self):
+        if self.lock is not None:
+            self.lock.refresh()
 
     def kill_orphans(self):
         for proc in x4_processes():
@@ -690,6 +753,7 @@ class Run:
             self.warn(f"lane was left in phase {previous.get('phase')} by run {previous.get('run')}; restored")
         self.state('prepare')
         self.kill_orphans()
+        core.safe_unlink(lane.dir / STOP_FILE, lane.dir)
         tokens = {'@X4LANE_LANE@': lane.name, '@X4LANE_PROFILE@': lane.profile,
                   '@X4LANE_RUN@': self.run_id, '@X4LANE_AGENT@': a.agent, **self.extra_tokens}
         reset_extensions(self.paths, lane, self.base_lab)
@@ -910,10 +974,24 @@ class Run:
             return 'fail_pattern', f'--fail-on matched: {self.watch.failed_line}'
         if self.proc.poll() is not None:
             self.watch.flush()
+            stop = self.stop_request()
+            if stop is not None:
+                return 'stopped', (f"stopped by x4lane stop (by {stop.get('by')}: "
+                                   f"{stop.get('reason') or 'no reason given'})")
             quit_marker = 'autostart_quit' in self.watch.markers
             return 'x4_exited', (f'X4 exited with code {self.proc.returncode}'
                                  + (' after the autostart quit_after safety net' if quit_marker else ''))
         return None
+
+    def stop_request(self):
+        """The `x4lane.py stop` marker for our X4, if one was written."""
+        if self.lane is None or self.proc is None:
+            return None
+        try:
+            data = json.loads((self.lane.dir / STOP_FILE).read_text(encoding='utf-8'))
+        except (OSError, ValueError):
+            return None
+        return data if data.get('pid') == self.proc.pid else None
 
     def monitor(self):
         a = self.args
@@ -1034,6 +1112,7 @@ class Run:
                 raise LaneError('X4 still running; lane not restored')
             reset_extensions(self.paths, self.lane, self.paths.base_lab)
             restore_profile(self.lane)
+            core.safe_unlink(self.lane.dir / STOP_FILE, self.lane.dir)
             self.state('idle', restored=core.now_iso())
             self.result['lane_restored'] = True
             self.dirty = False
@@ -1063,7 +1142,7 @@ class Run:
                 reason, message = 'expect_failed', f'expectations not met: {missing}'
         code = {'until_matched': 0, 'duration_elapsed': 0, 'usage': 1, 'refused': 2, 'timeout': 3,
                 'x4_exited': 4, 'fail_pattern': 5, 'expect_failed': 6, 'launch_failed': 7,
-                'already_running': 7, 'lock_release_failed': 7, 'error': 8, 'interrupted': 9}[reason]
+                'already_running': 7, 'lock_release_failed': 7, 'error': 8, 'interrupted': 9, 'stopped': 9}[reason]
         others = list(self.other_seen.values())
         r['other_x4']['any'] = bool(others)
         r['timing_trustworthy'] = bool(self.result['quiet_lock']['held_by_this_run'] and not others
@@ -1342,7 +1421,17 @@ class SessionRun:
             self.clients.append(client)
         self.result['paths'] = {'outdir': str(self.outdir)}
 
-    def preflight(self):
+    def give_back_all(self):
+        for client in self.clients:
+            client.give_back_lane()
+
+    def refresh_reserved(self):
+        for client in self.clients:
+            client.refresh_reserved()
+
+    def preflight(self, keep=False):
+        """Take a lane per client. keep=True (queued with --wait): lanes taken so far stay reserved
+        when another one is still busy, so the session cannot be starved by single runs."""
         a, first = self.args, self.clients[0]
         quiet_owner, handoff = first.general_checks(instances=a.clients)
         for client in self.clients[1:]:
@@ -1350,13 +1439,19 @@ class SessionRun:
         usable = first.usable_lanes(self.lanes or list(core.LANE_PROFILES))
         if self.lanes and usable != self.lanes:
             raise Refused(f'lanes {sorted(set(self.lanes) - set(usable))} are not usable')
-        taken = []
         try:
             for index, client in enumerate(self.clients):
-                held = {c.lane.name for c in taken}
+                if client.lock is not None:
+                    continue                                      # reserved in an earlier attempt
+                held = {c.lane.name for c in self.clients if c.lock is not None}
                 choice = [self.lanes[index]] if self.lanes else [n for n in usable if n not in held]
-                client.take_lane(choice)
-                taken.append(client)
+                try:
+                    client.take_lane(choice)
+                except TransientRefusal as error:
+                    reserved = [c.lane.name for c in self.clients if c.lock is not None]
+                    if keep and reserved:
+                        raise TransientRefusal(f'{error} (reserved so far: {reserved})')
+                    raise
             if a.timing:
                 others = [describe_x4(p) for p in x4_processes()]
                 if others:
@@ -1373,23 +1468,18 @@ class SessionRun:
                 self.result['quiet_lock']['held_by_this_run'] = True
                 for client in self.clients:
                     client.owns_quiet = True
+        except TransientRefusal:
+            if not keep:
+                self.give_back_all()
+            raise
         except Exception:
-            for client in taken:
-                client.give_back_lane()
+            self.give_back_all()
             raise
         self.result['quiet_lock']['present_at_start'] = quiet_owner is not None
 
     def acquire(self):
-        deadline = time.monotonic() + max(0, self.args.wait)
-        while True:
-            try:
-                self.preflight()
-                return
-            except TransientRefusal as error:
-                if time.monotonic() + TRANSIENT_WAIT_S > deadline:
-                    raise
-                print(f'x4lane: waiting ({error})', flush=True)
-                time.sleep(TRANSIENT_WAIT_S)
+        wait_in_queue(self, lambda: self.preflight(keep=self.args.wait > 0), self.give_back_all,
+                      self.args.clients, f'session {self.args.label}'.strip())
 
     def prepare(self):
         a = self.args
@@ -1508,7 +1598,7 @@ class SessionRun:
         code = {'until_matched': 0, 'duration_elapsed': 0, 'usage': 1, 'refused': 2, 'timeout': 3,
                 'x4_exited': 4, 'fail_pattern': 5, 'network_violation': 5, 'expect_failed': 6,
                 'launch_failed': 7, 'already_running': 7, 'lock_release_failed': 7, 'server_failed': 7,
-                'error': 8, 'interrupted': 9}[reason]
+                'error': 8, 'interrupted': 9, 'stopped': 9}[reason]
         members = {c.proc.pid for c in self.clients if c.proc is not None}
         seen = {}
         for client in self.clients:
@@ -1599,6 +1689,66 @@ def cmd_restore(args, paths):
         print(f'lane {lane.name} restored')
     finally:
         lock.release()
+    return 0
+
+
+STOP_FILE = 'stop-request.json'
+
+
+def cmd_stop(args, paths):
+    """Gracefully close lane X4 instances (exe path must be a lane view's X4.exe; no other X4 is
+    touched). Their runners notice, report exit_reason 'stopped', collect and restore the lanes."""
+    require_windows()
+    if args.all_lanes:
+        names = list(core.LANE_PROFILES)
+    else:
+        names = [n.strip() for n in (args.lane or '').split(',') if n.strip()]
+        if not names or any(n not in core.LANE_PROFILES for n in names):
+            raise UsageError(f'--lane takes lanes of {list(core.LANE_PROFILES)} (comma list) or use --all-lanes')
+    targets = []
+    for proc in x4_processes():
+        for name in names:
+            lane = paths.lane(name)
+            if proc.exe and Path(proc.exe) == lane.exe:
+                targets.append((lane, proc))
+    if not targets:
+        print(f'no lane X4 running in {names}')
+        return 0
+    for lane, proc in targets:
+        core.write_json(lane.dir / STOP_FILE, {'pid': proc.pid, 'by': args.by, 'reason': args.reason,
+                                               'time': core.now_iso()})
+        sent = win().post_close(proc.pid)
+        print(f'lane {lane.name}: WM_CLOSE to X4 pid {proc.pid} ({sent} window(s))')
+    deadline = time.monotonic() + args.grace
+    pending = list(targets)
+    while pending and time.monotonic() < deadline:
+        time.sleep(1)
+        pending = [(lane, proc) for lane, proc in pending if win().pid_alive(proc.pid, proc.created)]
+    for lane, proc in pending:
+        if args.force:
+            killed = win().terminate(proc.pid, lane.exe)
+            print(f'lane {lane.name}: X4 pid {proc.pid} still running after {args.grace:g} s; '
+                  + ('terminated' if killed else 'could NOT be terminated'))
+        else:
+            print(f'lane {lane.name}: X4 pid {proc.pid} still running after {args.grace:g} s (use --force)')
+    stopped = len(targets) - (0 if args.force else len(pending))
+    print(f'stopped {stopped} of {len(targets)} lane X4 instance(s); their runners collect and restore the lanes')
+    return 0 if stopped == len(targets) else 3
+
+
+def cmd_queue(args, paths):
+    require_windows()
+    tickets = core.live_tickets(paths.queue, win().pid_alive)
+    if args.json:
+        print(json.dumps([dict(info, file=path.name) for path, info in tickets], indent=1, default=str))
+        return 0
+    if not tickets:
+        print('lane queue: empty (runs take a free lane directly)')
+        return 0
+    print(f'lane queue: {len(tickets)} waiting, oldest first (only the first may take lanes)')
+    for number, (_path, info) in enumerate(tickets, 1):
+        print(f"  {number}. agent={info.get('agent')} need={info.get('need')} purpose={info.get('purpose')} "
+              f"since={info.get('created')} pid={info.get('pid')} note={info.get('note', '')}")
     return 0
 
 
@@ -1825,6 +1975,15 @@ def parser():
     q.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S)
     q.add_argument('--allow-workshop', action='store_true')
     q.add_argument('--no-repin', action='store_true', help='keep the 45841 profile gates (default: re-pin per lane)')
+    s = sub.add_parser('stop', help='gracefully close lane X4 instances (lane exes only)')
+    s.add_argument('--all-lanes', action='store_true')
+    s.add_argument('--lane', help='comma list of lanes')
+    s.add_argument('--by', default='lead', help='who stops (recorded for the runners)')
+    s.add_argument('--reason', default='', help='why (recorded in the runners result.json)')
+    s.add_argument('--grace', type=float, default=30.0, help='seconds to wait after WM_CLOSE')
+    s.add_argument('--force', action='store_true', help='terminate lane X4s still running after --grace')
+    s = sub.add_parser('queue', help='runs waiting for lanes (first come, first served)')
+    s.add_argument('--json', action='store_true')
     s = sub.add_parser('restore', help='reset a lane to base after a crashed runner')
     s.add_argument('--lane', required=True, choices=tuple(core.LANE_PROFILES))
     s = sub.add_parser('unlock', help='remove a stale lane lock')
@@ -1851,7 +2010,8 @@ def main(argv=None):
         print('make-overlay attnload needs --attnload WORKTREE', file=sys.stderr)
         return 1
     handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'session': cmd_session,
-                'restore': cmd_restore, 'unlock': cmd_unlock, 'make-overlay': cmd_make_overlay}
+                'stop': cmd_stop, 'queue': cmd_queue, 'restore': cmd_restore, 'unlock': cmd_unlock,
+                'make-overlay': cmd_make_overlay}
     try:
         return handlers[args.command](args, paths)
     except LaneError as error:
