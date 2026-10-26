@@ -211,6 +211,11 @@ def session_config(session, slot, host, dedicated=False, control_path=None, prof
             if control_path is None: raise ValueError('Dedicated authority needs a local control path.')
             cfg['dedicated_control_path'] = str(control_path)
             cfg['dedicated_heartbeat_interval'] = 5
+    # Engine instrumentation, on by default in internal packages (dev rule, like frame_profile above), each with
+    # its own flag. Windows only (x4lan_framediet_64.dll): the render RNG split on every role for RNG parity, the
+    # server frame diet only on a dedicated server (p1), never on a playing host or a client.
+    windows = sys.platform == 'win32'
+    cfg.update(rng_split=windows, frame_diet=windows and dedicated and slot == 'p1')
     return ('-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
             + ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n')
 

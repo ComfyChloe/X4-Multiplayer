@@ -22,6 +22,8 @@ X4LAN_CONFIG = {
     net_probe = false, -- Diagnostic only: RTTPING/RTTPONG round trips to the relay, NETRTT every 5 s.
     npc_target_diag = false, -- Diagnostic only: logs NPC orders, targets, attention and radar near the shared ships.
     npc_motion_diagnostics = false, -- Diagnostic only: per-interval NPC_DIAG replica/motion counts (seconds, or true = 1 s).
+    frame_diet = false, -- Windows dedicated server (dedicated p1) only: skip presentation the simulation does not read.
+    rng_split = false, -- Windows: render-list RNG draws on a private stream (server and clients, for RNG parity).
     interaction_test = false, -- Destructive fixtures ONLY in the disposable test world.
     motion_diagnostics = false, -- Diagnostic only: rate-limited MOTION_DIAG rows (seconds, or true = 0.5 s) for remote co-op ships.
     test_profile = "45841",
