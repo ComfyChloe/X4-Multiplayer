@@ -33,7 +33,7 @@ STUBS = '''
     write=function(self,path) writes[#writes+1]=path;return stats.recorded end,
     stop=function(self) stops=stops+1;return true end}
   cstats={frames=3,weapon_calls=30,bullet_calls=12,shots=4,missile_shots=1,bullet_checks=5,bullet_hits=2,
-    rng_weapon=4,rng_bullet=3,rng_frame=50,rng_frame_over_cap=0,rng_unmatched=0,foreign=0,uninitialised_tls=0,
+    bullet_fresh=6,fresh_same_frame=5,rng_weapon=4,rng_bullet=3,rng_frame=50,rng_frame_over_cap=0,rng_unmatched=0,foreign=0,uninitialised_tls=0,
     dropped_frames=0,ticks_per_second=3e9}
   censuses={}
   chandle={stats=function(self) return cstats end,summary=function(self) return {'shots mean=1.3','frame_ms mean=20'} end,
@@ -114,7 +114,7 @@ class CaptureScript(unittest.TestCase):
           assert(#censuses==1 and censuses[1]==500 and #starts==0)
           assert(find('FEATURE combatcensus ENABLED frames=500'))
           now=11;ui()
-          assert(find('COMBATCENSUS stats frames=3 weaponCalls=30 bulletCalls=12 shots=4 missileShots=1 checks=5 hits=2 rngWeapon=4 rngBullet=3 rngFrame=50'))
+          assert(find('COMBATCENSUS stats frames=3 weaponCalls=30 bulletCalls=12 shots=4 missileShots=1 checks=5 hits=2 fresh=6 sameFrame=5 rngWeapon=4 rngBullet=3 rngFrame=50'))
           events['X4MP.CombatScn'](nil,'end')
           assert(find('COMBATCENSUS final frames=3'))
           assert(find('COMBATCENSUS summary shots mean=1.3') and find('COMBATCENSUS summary frame_ms mean=20'))

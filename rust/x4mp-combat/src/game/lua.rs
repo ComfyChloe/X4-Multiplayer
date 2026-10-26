@@ -10,7 +10,8 @@
 //!
 //! local c, why = m.census(frames)  -- combat census (data-only vtable hooks), main Lua thread
 //! c:stats()       -- table: frames, dropped_frames, weapon_calls, bullet_calls, shots, missile_shots,
-//!                 --   bullet_checks, bullet_hits, rng_weapon, rng_bullet, rng_frame, rng_frame_over_cap,
+//!                 --   bullet_checks, bullet_hits, bullet_fresh, fresh_same_frame, rng_weapon, rng_bullet,
+//!                 --   rng_frame, rng_frame_over_cap,
 //!                 --   rng_unmatched, foreign, uninitialised_tls, ticks_per_second, failed
 //! c:summary()     -- array of lines "name mean= p50= p95= max=" (per frame)
 //! c:write(path)   -- frames written (text table X4MP-COMBATCENSUS 1), or nil, reason
@@ -328,6 +329,8 @@ unsafe extern "C-unwind" fn census_stats(l: *mut lua_State) -> c_int {
         number_field(l, c"missile_shots", s.missile_shots as f64);
         number_field(l, c"bullet_checks", s.bullet_checks as f64);
         number_field(l, c"bullet_hits", s.bullet_hits as f64);
+        number_field(l, c"bullet_fresh", s.bullet_fresh as f64);
+        number_field(l, c"fresh_same_frame", s.fresh_same_frame as f64);
         number_field(l, c"rng_weapon", s.rng_weapon as f64);
         number_field(l, c"rng_bullet", s.rng_bullet as f64);
         number_field(l, c"rng_frame", s.rng_frame as f64);

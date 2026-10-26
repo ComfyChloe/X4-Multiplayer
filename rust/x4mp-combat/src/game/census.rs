@@ -85,6 +85,11 @@ pub struct Frame {
     pub bullet_checks: u32,
     pub bullet_hits: u32,
     pub hit_resets: u32,
+    /// First Move of a bullet (last check +0x268 still equals its creation time +0x278), and of
+    /// those the bullets created during this frame (creation time after the previous frame's
+    /// game time): moved in the frame that fired them.
+    pub bullet_fresh: u32,
+    pub fresh_same_frame: u32,
     /// Thread-RNG steps inside outermost weapon / bullet Move calls, the largest in one call,
     /// calls whose steps were not found within the cap.
     pub rng_weapon: u32,
@@ -101,12 +106,12 @@ pub struct Frame {
 }
 
 impl Frame {
-    pub const COLUMNS: &'static str = "now\tweapon_calls\tweapon_nested\tweapon\tturret\tmissile_launcher\tmissile_turret\twith_target\taiming\tfiring\tfired\tshots\tmissile_shots\tbullet_calls\tbullet_checks\tbullet_hits\thit_resets\trng_weapon\trng_bullet\trng_max_call\trng_unmatched\trng_frame\tweapon_ticks\tbullet_ticks\tframe_ticks";
+    pub const COLUMNS: &'static str = "now\tweapon_calls\tweapon_nested\tweapon\tturret\tmissile_launcher\tmissile_turret\twith_target\taiming\tfiring\tfired\tshots\tmissile_shots\tbullet_calls\tbullet_checks\tbullet_hits\thit_resets\tbullet_fresh\tfresh_same_frame\trng_weapon\trng_bullet\trng_max_call\trng_unmatched\trng_frame\tweapon_ticks\tbullet_ticks\tframe_ticks";
 
     pub fn line(&self) -> String {
         let c = &self.by_class;
         format!(
-            "{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+            "{:.6}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
             self.now,
             self.weapon_calls,
             self.weapon_nested,
@@ -124,6 +129,8 @@ impl Frame {
             self.bullet_checks,
             self.bullet_hits,
             self.hit_resets,
+            self.bullet_fresh,
+            self.fresh_same_frame,
             self.rng_weapon,
             self.rng_bullet,
             self.rng_max_call,
@@ -144,6 +151,8 @@ pub struct Census {
     pub uninitialised_tls: u64,
     current: Frame,
     open: bool,
+    /// Game time of the previous frame (NaN before the second frame).
+    prev_now: f64,
     rng_start: u64,
     tick_start: u64,
     shot_base: [u64; 4],
@@ -257,12 +266,15 @@ unsafe fn weapon_fields(weapon: *const u8) -> WeaponFields {
 #[derive(Clone, Copy)]
 struct BulletFields {
     last_check: u64,
+    /// Creation (shot) time; the bullet setup 0xd50f30 also stores it as last and next check.
+    created: u64,
     hits: i32,
 }
 
 unsafe fn bullet_fields(bullet: *const u8) -> BulletFields {
     BulletFields {
         last_check: (bullet.add(0x268) as *const u64).read(),
+        created: (bullet.add(0x278) as *const u64).read(),
         hits: (bullet.add(0x280) as *const i32).read(),
     }
 }
@@ -275,6 +287,7 @@ impl Census {
             uninitialised_tls: 0,
             current: Frame::default(),
             open: false,
+            prev_now: f64::NAN,
             rng_start: 0,
             tick_start: 0,
             shot_base: [0; 4],
@@ -301,6 +314,7 @@ impl Census {
             } else {
                 self.dropped_frames += 1;
             }
+            self.prev_now = self.current.now;
         }
         self.current = Frame { now, ..Frame::default() };
         self.open = true;
@@ -344,9 +358,16 @@ impl Census {
     }
 
     fn bullet(&mut self, now: u64, outer: bool, pre: BulletFields, post: BulletFields, rng: (u64, u64), ticks: u64) {
+        let prev_now = self.prev_now;
         let f = &mut self.current;
         f.bullet_calls += 1;
-        f.bullet_checks += (post.last_check == now && pre.last_check != now) as u32;
+        let fresh = pre.last_check == pre.created;
+        f.bullet_checks += (post.last_check == now && (pre.last_check != now || fresh)) as u32;
+        if fresh {
+            f.bullet_fresh += 1;
+            // NaN before the second frame: never counted as same-frame
+            f.fresh_same_frame += (f64::from_bits(pre.created) > prev_now) as u32;
+        }
         if post.hits >= pre.hits {
             f.bullet_hits = f.bullet_hits.wrapping_add(post.hits.wrapping_sub(pre.hits) as u32);
         } else {
@@ -555,6 +576,8 @@ pub struct CensusStats {
     pub missile_shots: u64,
     pub bullet_checks: u64,
     pub bullet_hits: u64,
+    pub bullet_fresh: u64,
+    pub fresh_same_frame: u64,
     pub rng_weapon: u64,
     pub rng_bullet: u64,
     pub rng_frame: u64,
@@ -665,6 +688,8 @@ impl CensusSession {
             missile_shots: sum(|f| f.missile_shots),
             bullet_checks: sum(|f| f.bullet_checks),
             bullet_hits: sum(|f| f.bullet_hits),
+            bullet_fresh: sum(|f| f.bullet_fresh),
+            fresh_same_frame: sum(|f| f.fresh_same_frame),
             rng_weapon: sum(|f| f.rng_weapon),
             rng_bullet: sum(|f| f.rng_bullet),
             rng_frame: c.frames.iter().filter(|f| f.rng_frame != u32::MAX).map(|f| f.rng_frame as u64).sum(),
@@ -687,7 +712,7 @@ impl CensusSession {
         let tps = self.stats().ticks_per_second.max(1.0);
         let ms = move |t: u64| t as f64 * 1000.0 / tps;
         type Row = (&'static str, Box<dyn Fn(&Frame) -> f64>);
-        let rows: [Row; 15] = [
+        let rows: [Row; 17] = [
             ("weapon_calls", Box::new(|f| f.weapon_calls as f64)),
             ("with_target", Box::new(|f| f.with_target as f64)),
             ("aiming", Box::new(|f| f.aiming as f64)),
@@ -697,6 +722,8 @@ impl CensusSession {
             ("bullet_calls", Box::new(|f| f.bullet_calls as f64)),
             ("bullet_checks", Box::new(|f| f.bullet_checks as f64)),
             ("bullet_hits", Box::new(|f| f.bullet_hits as f64)),
+            ("bullet_fresh", Box::new(|f| f.bullet_fresh as f64)),
+            ("fresh_same_frame", Box::new(|f| f.fresh_same_frame as f64)),
             ("rng_weapon", Box::new(|f| f.rng_weapon as f64)),
             ("rng_bullet", Box::new(|f| f.rng_bullet as f64)),
             ("rng_frame", Box::new(|f| if f.rng_frame == u32::MAX { f64::NAN } else { f.rng_frame as f64 })),
@@ -919,6 +946,11 @@ mod tests {
         bullet_a.put(HITS, &[2]);
         let mut bullet_b = Obj::new(0x9000);
         bullet_b.put(0x270, &1e9f64.to_le_bytes());
+        // fired after frame 0 (creation time 10.02 stored as last and next check too)
+        let mut bullet_c = Obj::new(0x9000);
+        for at in [0x268, 0x270, 0x278] {
+            bullet_c.put(at, &10.02f64.to_le_bytes());
+        }
 
         let mut tls = vec![0u8; 0x1000 + 64];
         let block = ((tls.as_mut_ptr() as usize + 63) & !63) as *mut u8;
@@ -929,7 +961,7 @@ mod tests {
         }
         let entry = |i: usize| -> MoveFn { unsafe { std::mem::transmute(sites[i].entry.read()) } };
         let (weapon_call, turret_call, bullet_call) = (entry(0), entry(1), entry(4));
-        let objects = [turret.ptr(), idle.ptr(), bullet_a.ptr(), bullet_b.ptr()];
+        let objects = [turret.ptr(), idle.ptr(), bullet_a.ptr(), bullet_b.ptr(), bullet_c.ptr()];
         let mut results = [0usize; 8];
         unsafe {
             crate::oracle::with_tls_slots(slots.as_ptr(), || {
@@ -944,6 +976,9 @@ mod tests {
                     results[frame * 3 + 1] = weapon_call(objects[1], 0, 0, 0);
                     results[frame * 3 + 2] = bullet_call(objects[2], 0, 0, 0);
                     bullet_call(objects[3], 0, 0, 0);
+                    if frame == 1 {
+                        bullet_call(objects[4], 0, 0, 0);
+                    }
                 }
             });
         }
@@ -958,15 +993,18 @@ mod tests {
         assert_eq!((f.weapon_calls, f.weapon_nested, f.by_class), (3, 1, [2, 1, 0, 0]));
         assert_eq!((f.with_target, f.aiming, f.fired, f.shots, f.missile_shots), (1, 1, 1, 3, 0));
         assert_eq!((f.bullet_calls, f.bullet_checks, f.bullet_hits, f.hit_resets), (2, 1, 2, 0));
+        // both bullets were never checked before (fresh), but frame 0 has no previous frame
+        assert_eq!((f.bullet_fresh, f.fresh_same_frame), (2, 0));
         assert_eq!((f.rng_weapon, f.rng_bullet, f.rng_max_call, f.rng_unmatched), (3, 1, 3, 0));
         assert_eq!(f.rng_frame, 4 + 5, "combat draws plus the 5 between frames");
         let g = frames[1];
-        assert_eq!((g.weapon_calls, g.fired, g.shots, g.bullet_checks, g.bullet_hits), (3, 1, 3, 0, 0));
+        assert_eq!((g.weapon_calls, g.fired, g.shots, g.bullet_checks, g.bullet_hits), (3, 1, 3, 1, 0));
+        assert_eq!((g.bullet_calls, g.bullet_fresh, g.fresh_same_frame), (3, 2, 1), "bullet_c is new this frame");
         assert_eq!(g.rng_bullet, 1);
         let s = census.stats();
         assert_eq!((s.frames, s.shots, s.bullet_hits, s.rng_weapon, s.rng_unmatched), (2, 6, 2, 6, 0));
         assert_eq!(s.failed, None);
-        assert_eq!(census.summary().len(), 15);
+        assert_eq!(census.summary().len(), 17);
         assert!(census.summary()[4].starts_with("shots mean=3.000 p50=3.000"), "{:?}", census.summary());
 
         // another thread passes straight through and is counted

@@ -35,8 +35,8 @@ local capacity=cfg.capacity or (census and 20000 or 200000)
 local handle,state,nextLog,wanted=nil,'waiting',0,false
 local function statsLine(s)
  if census then
-  return string.format('frames=%d weaponCalls=%d bulletCalls=%d shots=%d missileShots=%d checks=%d hits=%d rngWeapon=%d rngBullet=%d rngFrame=%d overCap=%d unmatched=%d foreign=%d uninitTls=%d dropped=%d%s',
-   s.frames,s.weapon_calls,s.bullet_calls,s.shots,s.missile_shots,s.bullet_checks,s.bullet_hits,s.rng_weapon,
+  return string.format('frames=%d weaponCalls=%d bulletCalls=%d shots=%d missileShots=%d checks=%d hits=%d fresh=%d sameFrame=%d rngWeapon=%d rngBullet=%d rngFrame=%d overCap=%d unmatched=%d foreign=%d uninitTls=%d dropped=%d%s',
+   s.frames,s.weapon_calls,s.bullet_calls,s.shots,s.missile_shots,s.bullet_checks,s.bullet_hits,s.bullet_fresh or 0,s.fresh_same_frame or 0,s.rng_weapon,
    s.rng_bullet,s.rng_frame,s.rng_frame_over_cap,s.rng_unmatched,s.foreign,s.uninitialised_tls,s.dropped_frames,
    s.failed and (' failed='..s.failed) or '')
  end
