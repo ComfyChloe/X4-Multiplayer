@@ -59,6 +59,8 @@ for _,v in ipairs(logs) do assert(not v:find('FRAMECOST') and not v:find('MEASUR
         text = (UI / 'config.lua').read_text()
         self.assertIn('frame_profile = false', text)
         self.assertIn('net_probe = false', text)
+        launcher = (ROOT / 'distribution/session_launcher.py').read_text()
+        self.assertIn('frame_profile=True, net_probe=True', launcher)  # on by default in internal packages
         ui = (ROOT / 'extension/x4_lan_lab/ui.xml').read_text()
         order = [ui.index('ui/' + n) for n in ('client.lua', 'measure_clock.lua', 'net_rtt.lua',
                                                   'frame_profile.lua', 'game.lua', 'bubble_game.lua',

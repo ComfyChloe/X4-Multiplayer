@@ -140,7 +140,7 @@ def session_config(session, slot, host):
                pilot_health=True, shot_claims=True, shot_visual=True, shot_capture=True,
                npc_combat=True, faction_missions=True,
                projectile_visuals=True, shot_undo=False,
-               frame_profile=False, net_probe=False,  # Measurement opt-ins; edit to true on BOTH players.
+               frame_profile=True, net_probe=True,  # On by default in internal packages (dev rule); set false only if they break.
                slot=slot, mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
     return ('-- Internal Test. Private session configuration; do not publish.\nX4LAN_CONFIG = {\n'
             + ''.join('    ' + k + ' = ' + json.dumps(v) + ',\n' for k, v in cfg.items()) + '}\n')
