@@ -7,6 +7,7 @@
 #include <bcrypt.h>
 #include <stdint.h>
 #include <string.h>
+#include "fixedtick_signatures.h"
 
 typedef struct lua_State lua_State;
 typedef int (*lua_CFunction)(lua_State *);
@@ -104,7 +105,7 @@ static int verify_file(void) {
     unsigned char buffer[65536], digest[32];
     DWORD got;
     int ok = 0;
-    if (!GetFileSizeEx(file, &size) || size.QuadPart != 55412768) goto done;
+    if (!GetFileSizeEx(file, &size) || size.QuadPart != X4_FILE_SIZE) goto done;
     if (BCryptOpenAlgorithmProvider(&alg, BCRYPT_SHA256_ALGORITHM, NULL, 0) < 0) goto done;
     if (BCryptCreateHash(alg, &hash, NULL, 0, NULL, 0, 0) < 0) goto done;
     for (;;) {
@@ -113,13 +114,19 @@ static int verify_file(void) {
         if (BCryptHashData(hash, buffer, got, 0) < 0) goto done;
     }
     if (BCryptFinishHash(hash, digest, sizeof(digest), 0) < 0) goto done;
-    ok = digest_matches(digest,
-        "19750a6563889a970f434b5566eb396c6b2dc29ff814bd3e336f838176ad6891");
+    ok = digest_matches(digest, X4_FILE_SHA256);
 done:
     if (hash) BCryptDestroyHash(hash);
     if (alg) BCryptCloseAlgorithmProvider(alg, 0);
     CloseHandle(file);
     return ok;
+}
+
+static int verify_checks(const x4_signature_check *checks, size_t count) {
+    for (unsigned i = 0; i < count; ++i)
+        if (!readable(image + checks[i].rva, checks[i].length, 0) ||
+            !hash_memory(image + checks[i].rva, checks[i].length, checks[i].sha)) return 0;
+    return 1;
 }
 
 static int verify_image(void) {
@@ -131,20 +138,11 @@ static int verify_image(void) {
     IMAGE_NT_HEADERS64 *nt = (IMAGE_NT_HEADERS64 *)(image + dos->e_lfanew);
     if (!readable(nt, sizeof(*nt), 0) || nt->Signature != IMAGE_NT_SIGNATURE ||
         nt->FileHeader.Machine != IMAGE_FILE_MACHINE_AMD64 ||
-        nt->FileHeader.TimeDateStamp != 0x6a1eaeed ||
+        nt->FileHeader.TimeDateStamp != X4_PE_TIMESTAMP ||
         nt->OptionalHeader.Magic != IMAGE_NT_OPTIONAL_HDR64_MAGIC ||
         nt->OptionalHeader.SizeOfImage != IMAGE_SIZE || !verify_file()) return 0;
-    static const struct { size_t rva; ULONG length; const char *sha; } checks[] = {
-        {0xef4400, 25, "4449b89ae08c1ebc42ad4bb0ad61acd1c63d68de52c6ae63c74e639390f85e91"},
-        {0xef4681, 64, "161234434ac6f861075f55a3b7b5e4643a45c7b72045b225e4c6a3cdbc78cd6d"},
-        {0x122b360, 24, "8e123f79687ad689c48d2eaf879253c42d1359f129ddebd2c2d51ea6658a46d0"},
-        {0xeac170, 24, "718b690e9f3d2779d2f91c812253fb26bfa1f4ce4cd73accae7229675e261f12"},
-        {0xb3bad0, 28, "893307c89a256e16553b164d9d16ec4f0c3187060ebd86513b8f55694f1378e4"},
-        {0x14ca580, 42, "896bc70922e9954e08c838c449f51dbcdc428842a4c25dd6a80bdea2c4cc6a26"},
-    };
-    for (unsigned i = 0; i < sizeof(checks)/sizeof(checks[0]); ++i)
-        if (!readable(image + checks[i].rva, checks[i].length, 0) ||
-            !hash_memory(image + checks[i].rva, checks[i].length, checks[i].sha)) return 0;
+    if (!verify_checks(x4_common_checks, sizeof(x4_common_checks)/sizeof(x4_common_checks[0])) ||
+        !verify_checks(x4_simtick_checks, sizeof(x4_simtick_checks)/sizeof(x4_simtick_checks[0]))) return 0;
     return readable(image + VBI_RVA, sizeof(void *), 0) &&
            readable(image + ANARK_RVA, sizeof(void *), 0);
 }

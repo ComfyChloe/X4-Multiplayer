@@ -52,6 +52,36 @@ disposable world; return to menu; reload UI; collect/stop the handle; provoke a 
 error; try a second owner; verify no callback after teardown. Also measure focused,
 unfocused and minimized behavior. No normal saves or live playtest installations.
 
+## Fixed-tick stage 0 probe
+
+Task owner: Kimi, `contrib/kimi-fixed-sim-scheduler`; see
+`reports/FIXED-SIM-SCHEDULER.txt`. `fixedtick.c` is a separate, unpackaged and
+opt-in module. It registers a native, non-Lua callback in unused VBI slot 5, leaving
+slot 7 available for networking. It only reads TimerBase and records cadence; it
+does not change time, release semaphores, patch code or dispatch Lua from the callback.
+`handle:stats()` returns frame/loading/pause counters, latest and maximum wall delta,
+game/real-time deltas and current clocks/speed. `handle:active()` and `handle:stop()`
+control its lifetime.
+
+Build and test it independently (output remains under ignored `.local/`):
+
+```
+python native/engine/build.py --zig /path/to/zig --fixedtick --test
+python dev/check_hook_signatures.py /path/to/copied/X4.exe
+```
+
+`dev/fixed_tick_probe.lua` is the explicit isolated-profile loader and emits one
+`FRAMEPROBE` record per second. `X4LAN_FIXEDTICK_PATH` selects the development DLL.
+The module is not included by the packager and tracked configuration does not load it.
+Both modules use the signatures generated from `native/engine/signatures.py`.
+The executable's verified PE timestamp is `0x6a1eaded`; an earlier `0x6a1eaeed`
+transcription was incorrect. Offline hashes cover nine sites, including future
+FrameTick/main-loop work. Stage 1: `X4LAN_FIXEDTICK_MODE='fixed60'` makes the loader call
+`start('fixed60')`, which NOPs FrameTick's movie-capture branch (0xfa3302) and sets
+the capture frame time to 1/60; it requires and re-checks a 60 Hz frame-rate limit
+every frame and restores the original bytes on any disarm. Below 60 fps game time
+runs slow; catch-up scheduling (Stage 2) is not implemented.
+
 ## Remaining patch tasks
 
 1. **H3:** zone attention alone does not establish high-attention NPC simulation.

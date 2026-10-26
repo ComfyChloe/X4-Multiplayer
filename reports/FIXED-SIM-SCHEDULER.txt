@@ -1,0 +1,132 @@
+X4 MULTIPLAYER - FIXED 60 HZ SIMULATION / INDEPENDENT RENDERING
+26 October 2026 | INTERNAL DEVELOPMENT
+
+TASK AND OWNER
+Kimi, branch contrib/kimi-fixed-sim-scheduler, isolated worktree
+X4-Multiplayer-fixed-tick. Starting commit: 6e0e38f (origin/main be94436 plus
+the two Codex simulation-callback commits). This task does not edit other agents'
+worktrees or claim their attention, proxy-motion, combat, or protocol scopes.
+
+INTENDED BEHAVIOR
+Develop a build-pinned, opt-in Windows scheduler that runs full simulation ticks
+at 60 Hz while rendering the latest completed state at any available rate. Keep
+the existing variable-step path as a fallback. Fixed timing is not evidence of
+multiplayer determinism; RNG, attention, worker ordering and platform FP behavior
+remain separate problems.
+
+FILES / SUBSYSTEMS IN SCOPE
+native/engine fixed-tick instrumentation and synthetic tests; its offline
+signature checker and task evidence. No x4lan_net transport changes. No protocol,
+package, source config, normal installation or save changes. A future Lua/config
+integration must remain false by default and be reviewed separately.
+
+ACCEPTANCE EVIDENCE
+Stage 0: offline signatures pass on the copied X4 9.00 executable; synthetic
+Windows tests pass; a later coordinated native run records simulation cadence,
+game/real time, speed, pause/loading behavior and two launches without writes to
+engine code. No native result is claimed before that run.
+Stage 1: fixed 60 Hz at a 60 Hz presentation cap.
+Stage 2: zero/multi-step scheduler with bounded catch-up at 30/60/144/uncapped FPS.
+Stage 3: rendering continues during delayed simulation without semaphore misuse.
+Stage 4: explicit input/UI/Lua cadence and pause/loading/SETA/save/load rules.
+Stage 5: render-only interpolation with no feedback into authoritative state.
+Each stage requires measured evidence and retains a fail-closed legacy fallback.
+
+VALIDATION — 26 OCTOBER 2026
+- Windows Zig 0.15.2, -Wall -Wextra -Werror: both DLLs and both synthetic native
+  test executables built and passed. Fixedtick covers cadence, pause/loading,
+  game-time regression, foreign-thread/table replacement and idempotent teardown.
+- Actual lua51_64.dll standalone ABI checks passed for both modules, including
+  argument rejection, coroutine rejection and non-X4 executable refusal. These
+  are separate test processes, not injected X4 tests.
+- `python dev/check_hook_signatures.py ../x4-re/bin/X4.exe`: executable hash,
+  corrected PE timestamp 0x6a1eaded and all nine site hashes PASS. The earlier
+  0x6a1eaeed was a transcription error in the RE summary and old simtick gate.
+- Real LuaJIT: 10 focused fixedtick/simtick tests PASS, no skips.
+- Ubuntu 24.04 WSL standard `dev/check.py`: 647 tests, 646 PASS, no skips. The
+  sole failure is the already documented baseline launcher test
+  `test_failed_native_capture_is_reported_and_retry_retains_evidence`: expected
+  "content mismatch", got "World preparation timed out". The engine-patches
+  README records the same failure on unchanged be94436; it is not scheduler
+  evidence or a newly fixed launcher result.
+- Native Windows execution of the whole suite is not a valid substitute for its
+  documented Linux workflow: it also produced platform-specific symlink/Linux
+  errors. WSL was used for the meaningful full-suite result.
+- No debugger, game installation, package or normal save modification occurred.
+
+NATIVE ATTEMPT — 25 OCTOBER 2026, NOT ACCEPTANCE EVIDENCE
+- Sandboxie Plus DisableMessages=true now suppresses duplicate GUI message
+  windows; Start.exe uses /silent. The system-wide LogFile registry setting was
+  denied, so launcher diagnostics were captured in task-owned .local logs and
+  the Sandboxie Plus UI instead. Git Bash //c escaping is required for cmd.exe.
+- GameAgent/GameAgent2 harmless command checks passed. The obsolete X4Host name
+  and unsupported enum_processes switch were abandoned. X4Guest was not used.
+- Task-owned linked game views preserve original game bytes and have separate
+  extension folders; both X4.exe copies pass all nine signatures. The original
+  installed extension and test saves remained present on the host.
+- GameAgent3 started a new custom_creative world and reached universe generation.
+  It exited with code 50 at 19:06:25. Another agent's external X4.exe, launched
+  from the original installation at 19:04:35, was running at the same time. No
+  FRAMEPROBE records were obtained. GameAgent2 was not launched after the conflict.
+- The display watcher was stopped after the external process was reported. No
+  Start.exe or watcher remains running. This is a failed native attempt, not a
+  native lifecycle or timing pass. Retry only after the external X4 has closed.
+
+STAGE 0 NATIVE RUN — 25 OCTOBER 2026 (two sandboxes, concurrent)
+- Host in Sandboxie GameAgent3, guest in GameAgent2, both Application
+  Compartment boxes sharing one unsandboxed Steam client; new custom_creative
+  worlds in profile 45841. Earlier exit 50 was X4's single-instance lock; it was
+  resolved by opening only Steam IPC objects, not all IPC.
+- Both probes armed in the menu and again after the UI reload at game start
+  (two arms per log; the old owner is collected first). No refusals/disarms.
+- Host 240 s: median 58.7 callbacks/s (p5 42, p95 61); guest 133 s: median
+  50.5 (p5 41, p95 58). Game/real time 1.000 at speed 1, no regressions. Same
+  game time, different step count and size per instance: the variable-dt
+  divergence source Stage 1 targets. Pause/SETA/map checks were not performed.
+- Evidence: .local/evidence-240-withheld
+
+STAGE 1 — FIXED 60 HZ AT A 60 HZ PRESENTATION CAP — 25 OCTOBER 2026
+Implementation (opt-in, X4LAN_FIXEDTICK_MODE='fixed60' -> native.start('fixed60')):
+- FrameTick already has a fixed-dt path: when movie capture is active it loads
+  dt from g_movieCaptureFrameTime (0x6adfc60). The two-byte `je` at 0xfa3302
+  (74 08, inside the verified frame_tick_dt signature) becomes `66 90` with an
+  aligned 16-bit compare-exchange, and 0x6adfc60 is set to exactly 1/60. The
+  capture flag itself is never set, so no screenshots are written. gameTime,
+  realTime and unpausedRealTime all advance by the fixed dt.
+- Admission additionally requires: capture inactive, frame-rate limiter enabled
+  at 60 (0 treated as the engine's 60 default), branch bytes still original.
+- Every simulation frame (slot 5) re-checks capture inactive, frame time still
+  1/60, limiter still 60 and the patched bytes. Any failure, ownership loss,
+  stop() or __gc restores the original branch and capture frame time (unless
+  the engine changed it) and records a reason; the probe logs it and stops.
+- Stats add fixed, fixed_frames, wall_elapsed, game_elapsed and reason.
+Validation:
+- Synthetic Windows tests (Zig 0.15.2, -Werror): patch bytes, per-frame guards
+  (capture, limiter rate/enable, frame time, foreign bytes, thread), restore on
+  every disarm, idempotent stop. Simtick synthetic tests unchanged and PASS.
+- Real LuaJIT probe tests 7/7 PASS; actual lua51_64.dll ABI check PASS;
+  9 signatures PASS on both the copied and the installed X4.exe.
+Native run (same two sandboxes, new worlds, both instances in fixed60):
+- Both armed and patched in the menu and again at game start; no refusal or
+  disarm. Host 117 s game: 7005/7006 frames at exactly dt=1/60 (first frame
+  after arming has no previous sample); guest 5785/5786.
+- Wall-clock rate is below the 60 Hz cap with two games on one PC: steady
+  median 53.3 fps host (42-61), 55.3 fps guest (46-61). Game time therefore
+  runs at 0.89 / 0.92 of wall time (minimum interval 0.71 / 0.77); cumulative
+  lag 17.6 s / 10.5 s including load hitches. Lua GetCurRealTime is fixed-step
+  too and lags the same way.
+- Evidence: .local/evidence-241-withheld
+Limits: Stage 1 makes every step identical in size, not wall-synchronous; any
+frame below 60 fps slows game time. Not multiplayer determinism (RNG, attention,
+worker ordering, thread races remain). Not packaged; tracked config never loads it.
+
+CURRENT STATE / NEXT ACTION
+Stage 0 probe plus opt-in Stage 1 fixed60 implemented; Stage 1 native run
+passed at the 60 Hz cap (above). The x4lan_fixedtick module is not packaged or loaded
+by tracked Lua. Its data-only VBI slot-5 probe coexists with the slot-7 network
+callback. Probe mode measures cadence without changing frame time; fixed60 mode
+changes only the FrameTick dt branch and never releases semaphores.
+Offline implementation checks are complete except the pre-existing full-suite
+launcher failure above. The two-sandbox baseline and Stage 1 runs are recorded above.
+Next: Stage 2, zero/multi-step scheduling with bounded catch-up so
+game time tracks wall time at 30/60/144/uncapped presentation rates.

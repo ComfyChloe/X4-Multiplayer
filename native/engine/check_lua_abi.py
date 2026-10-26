@@ -8,6 +8,8 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--lua-runtime', required=True, type=Path)
     parser.add_argument('--module', required=True, type=Path)
+    parser.add_argument('--symbol', default='luaopen_x4lan_simtick',
+                        choices=['luaopen_x4lan_simtick', 'luaopen_x4lan_fixedtick'])
     args = parser.parse_args()
     lua = ctypes.WinDLL(str(args.lua_runtime.resolve()))
     lua.luaL_newstate.restype = ctypes.c_void_p
@@ -24,14 +26,16 @@ def main():
         lua.luaL_openlibs(state)
         # Decimal byte escapes avoid treating paths as executable Lua text.
         path = ''.join('\\%03d' % b for b in str(args.module.resolve()).encode('utf-8'))
+        argument = '' if args.symbol == 'luaopen_x4lan_fixedtick' else 'function() end'
         source = f'''
-          local module=assert(package.loadlib("{path}","luaopen_x4lan_simtick"))()
+          local module=assert(package.loadlib("{path}","{args.symbol}"))()
           assert(type(module.start)=='function')
-          assert(not pcall(module.start, 123))
-          local handle,reason=module.start(function() end)
+          local ok,result=pcall(module.start,123)
+          assert(not ok or result==nil)
+          local handle,reason=module.start({argument})
           assert(handle==nil and reason=='unsupported executable or modified engine signatures',reason)
           local thread=coroutine.create(function()
-            local h,why=module.start(function() end)
+            local h,why=module.start({argument})
             assert(h==nil and why=='main Lua thread required',why)
           end)
           assert(coroutine.resume(thread))
