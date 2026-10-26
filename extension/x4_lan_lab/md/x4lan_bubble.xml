@@ -105,19 +105,22 @@
   </actions>
  </cue>
  <cue name="TradeFinished" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'TradeFinished'" /></conditions><actions><set_value name="$busy" exact="false" /><set_value name="$docking.{event.param3}" exact="false" /></actions></cue>
+ <!-- Hull/shield are written only when they differ by more than 0.5 points: every
+      set_object_shield counts as a change and re-shows the HUD shield bar, so writing the
+      unchanged value on each world packet made the bar flash. -->
  <cue name="Apply" instantiate="true" namespace="this">
   <conditions><event_ui_triggered screen="'X4LAN_Bubble'" control="'Apply'" /><check_value value="not Arena.$host" /></conditions>
   <actions>
    <set_value name="$v" exact="event.param3.$values" />
    <do_all exact="2" counter="$i">
     <set_value name="$ship" exact="Arena.$ships.{$i}" />
-    <do_if value="$v.{($i - 1) * 3 + 1} le (if @Arena.$healthOwn.{$i} then 0 else 1.01)"><set_value name="Arena.$dead.{$i}" exact="true" /></do_if><do_if value="$ship.isoperational and not Arena.$dead.{$i}"><do_if value="not @Arena.$healthOwn.{$i}"><set_object_hull object="$ship" exact="$v.{($i - 1) * 3 + 1}" /><set_object_shield object="$ship" exact="$v.{($i - 1) * 3 + 2}" /></do_if>
+    <do_if value="$v.{($i - 1) * 3 + 1} le (if @Arena.$healthOwn.{$i} then 0 else 1.01)"><set_value name="Arena.$dead.{$i}" exact="true" /></do_if><do_if value="$ship.isoperational and not Arena.$dead.{$i}"><do_if value="not @Arena.$healthOwn.{$i}"><do_if value="($ship.hullpercentage - $v.{($i - 1) * 3 + 1}) * ($ship.hullpercentage - $v.{($i - 1) * 3 + 1}) gt 0.25"><set_object_hull object="$ship" exact="$v.{($i - 1) * 3 + 1}" /></do_if><do_if value="($ship.shieldpercentage - $v.{($i - 1) * 3 + 2}) * ($ship.shieldpercentage - $v.{($i - 1) * 3 + 2}) gt 0.25"><set_object_shield object="$ship" exact="$v.{($i - 1) * 3 + 2}" /></do_if></do_if>
     <do_if value="not Arena.$economy"><set_value name="$delta" exact="$v.{$i * 3} - $ship.cargo.{ware.energycells}.count" />
     <do_if value="$delta gt 0"><add_cargo object="$ship" ware="ware.energycells" exact="$delta" /></do_if>
     <do_elseif value="$delta lt 0"><remove_cargo object="$ship" ware="ware.energycells" exact="-$delta" /></do_elseif>
     </do_if></do_if><do_if value="Arena.$targets.{$i}.exists">
-     <do_if value="Arena.$coop and $v.{5 + $i * 2} le 0"><set_object_min_hull object="Arena.$targets.{$i}" exact="0" /><destroy_object object="Arena.$targets.{$i}" explosion="true" /></do_if><do_else><set_object_hull object="Arena.$targets.{$i}" exact="$v.{5 + $i * 2}" />
-     <set_object_shield object="Arena.$targets.{$i}" exact="$v.{6 + $i * 2}" />
+     <do_if value="Arena.$coop and $v.{5 + $i * 2} le 0"><set_object_min_hull object="Arena.$targets.{$i}" exact="0" /><destroy_object object="Arena.$targets.{$i}" explosion="true" /></do_if><do_else><do_if value="(Arena.$targets.{$i}.hullpercentage - $v.{5 + $i * 2}) * (Arena.$targets.{$i}.hullpercentage - $v.{5 + $i * 2}) gt 0.25"><set_object_hull object="Arena.$targets.{$i}" exact="$v.{5 + $i * 2}" /></do_if>
+     <do_if value="(Arena.$targets.{$i}.shieldpercentage - $v.{6 + $i * 2}) * (Arena.$targets.{$i}.shieldpercentage - $v.{6 + $i * 2}) gt 0.25"><set_object_shield object="Arena.$targets.{$i}" exact="$v.{6 + $i * 2}" /></do_if>
     </do_else></do_if>
     <do_if value="$v.{11 + $i} == 0 and Arena.$drops.{$i}.exists"><destroy_object object="Arena.$drops.{$i}" explosion="false" /></do_if>
     <do_if value="not Arena.$economy"><do_if value="$ship.isoperational and not Arena.$dead.{$i} and $v.{13 + $i} == 1 and not $ship.dock">
