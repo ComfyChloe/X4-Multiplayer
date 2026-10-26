@@ -45,6 +45,30 @@ pub fn apply_local(m: &Mat4f, t: &Mat4f) -> Mat4f {
     Mat4f(out)
 }
 
+/// Primary vtable RVA of U::Highway (layout table of build 23660954).
+pub const HIGHWAY_VTABLE: u32 = 0x2b091e0;
+
+/// Applies one component's local transform to `m` the way its class's GetLocalTransform does in
+/// apply mode (the step GetTransformRelativeTo performs per ancestor). `pose` is the captured
+/// controller matrix, `offset` the captured `local_offset`. `None` when the class overrides
+/// GetLocalTransform in a way the capture does not model (Explosive/Missile/Bomb,
+/// HighwayScene, HighwayBooster).
+/// - standard classes (Positional::GetLocalTransform 0x7461c0): `apply_local(m, pose)`;
+/// - U::Highway (0x5f79f0): row 0 of `m` += offset (per lane), then `apply_local`.
+pub fn local_step(m: &Mat4f, pose: &Mat4f, class_flags: u16, vtable: u32, offset: [f32; 4]) -> Option<Mat4f> {
+    if class_flags & crate::comp::ClassFlags::CUSTOM_LOCAL == 0 {
+        return Some(apply_local(m, pose));
+    }
+    if vtable != HIGHWAY_VTABLE {
+        return None;
+    }
+    let mut shifted = *m;
+    for (k, o) in offset.iter().enumerate() {
+        shifted.0[0][k] += *o;
+    }
+    Some(apply_local(&shifted, pose))
+}
+
 /// One parsed `MIRRORCHECK` log line.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct CheckLine {
@@ -88,6 +112,8 @@ pub struct CheckReport {
     pub local_cache_exact: usize,
     pub local_mismatch: usize,
     pub local_max_ulps: u64,
+    /// Classes whose GetLocalTransform the capture does not model (no local or sector check).
+    pub unsupported_class: usize,
     pub sector_exact: usize,
     pub sector_mismatch: usize,
     /// Not an Object class: the export answers zeros by design.
@@ -103,7 +129,7 @@ pub struct CheckReport {
 impl CheckReport {
     pub fn line(&self) -> String {
         format!(
-            "MIRRORCHECK RESULT lines={} frame_missing={} uid_missing={} local_exact={} local_cache_exact={} local_mismatch={} local_max_ulps={} sector_exact={} sector_mismatch={} sector_not_object={} sector_skipped_ancestor={} sector_skipped_ref={} sector_skipped_pose={} sector_max_ulps={}",
+            "MIRRORCHECK RESULT lines={} frame_missing={} uid_missing={} local_exact={} local_cache_exact={} local_mismatch={} local_max_ulps={} unsupported_class={} sector_exact={} sector_mismatch={} sector_not_object={} sector_skipped_ancestor={} sector_skipped_ref={} sector_skipped_pose={} sector_max_ulps={}",
             self.lines,
             self.frame_missing,
             self.uid_missing,
@@ -111,6 +137,7 @@ impl CheckReport {
             self.local_cache_exact,
             self.local_mismatch,
             self.local_max_ulps,
+            self.unsupported_class,
             self.sector_exact,
             self.sector_mismatch,
             self.sector_not_object,
@@ -140,6 +167,15 @@ struct Row {
     pose: Mat4f,
     cache: Option<Mat4f>,
     pose_ref: u64,
+    class_flags: u16,
+    vtable: u32,
+    offset: [f32; 4],
+}
+
+impl Row {
+    fn step(&self, m: &Mat4f) -> Option<Mat4f> {
+        local_step(m, &self.pose, self.class_flags, self.vtable, self.offset)
+    }
 }
 
 /// Class ids of the recorded non-Object (Space) classes, for captures without class_flags.
@@ -160,6 +196,8 @@ fn index_frame(f: &FrameRecord) -> HashMap<u64, Row> {
         let cache = s.column(col::NAV_CACHE).map(|c| c.f32s());
         let refs = s.column(col::POSE_REF).map(|c| c.u64s());
         let class_flags = s.column(col::CLASS_FLAGS).map(|c| c.u16s());
+        let vtables = s.column(col::VTABLE).map(|c| c.u32s());
+        let offsets = s.column(col::LOCAL_OFFSET).map(|c| c.f32s());
         for r in 0..uid.len() {
             let m = Mat4f::from_flat(pose[r * 16..r * 16 + 16].try_into().expect("16"));
             let c = cache
@@ -179,6 +217,9 @@ fn index_frame(f: &FrameRecord) -> HashMap<u64, Row> {
                     pose: m,
                     cache: c,
                     pose_ref: refs.as_ref().map_or(0, |v| v[r]),
+                    class_flags: class_flags.as_ref().map_or(0, |v| v[r]),
+                    vtable: vtables.as_ref().map_or(0, |v| v[r]),
+                    offset: offsets.as_ref().map_or([0.0; 4], |v| [v[r * 4], v[r * 4 + 1], v[r * 4 + 2], v[r * 4 + 3]]),
                 },
             );
         }
@@ -214,8 +255,12 @@ pub fn check_frames(frames: &[FrameRecord], lines: &[CheckLine]) -> CheckReport 
             rep.uid_missing += 1;
             continue;
         };
-        // 1. local transform
-        let pose0 = row.pose.position();
+        // 1. local transform (identity input, as GetPositionalOffset(id, 0) calls it)
+        let Some(local) = row.step(&Mat4f::IDENTITY) else {
+            rep.unsupported_class += 1;
+            continue;
+        };
+        let pose0 = local.position();
         if bits3(pose0) == bits3(l.off) {
             rep.local_exact += 1;
         } else if row.cache.is_some_and(|c| bits3(c.position()) == bits3(l.off)) {
@@ -256,7 +301,11 @@ pub fn check_frames(frames: &[FrameRecord], lines: &[CheckLine]) -> CheckReport 
                 skipped = Some(&mut rep.sector_skipped_pose);
                 break;
             }
-            m = apply_local(&m, &r.pose);
+            let Some(next) = r.step(&m) else {
+                skipped = Some(&mut rep.sector_skipped_pose);
+                break;
+            };
+            m = next;
             at = r.parent;
             steps += 1;
         }

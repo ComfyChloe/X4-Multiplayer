@@ -17,7 +17,7 @@ use x4mp_sim::comp::{
 use x4mp_sim::{SectorIx, Universe, UniverseId, WorldKind};
 
 const GOLDEN: &[u8] = include_bytes!("data/mirror_golden.x4cap");
-const LAYOUT: &str = "7665ec4132ec28ad95b8c638627c1ba7eb59cc493ee5e7b5a9709e248262c46a";
+const LAYOUT: &str = "54ed06109909e4c8933e6e2fa517acd5b3ed2432cd682bae0f528a2491448233";
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
@@ -109,6 +109,13 @@ fn golden_frame_one_fields() {
     let c = &f.sectors[1];
     assert_eq!(get_u8(c, col::CLASS), vec![0x0f, 0x33]);
     assert_eq!(c.column(col::PARENT).unwrap().u64s(), vec![1, 2]);
+    // the highway: static controller, custom GetLocalTransform, offset +0x570
+    assert_eq!(get_u8(c, col::CTRL), vec![0, 2]);
+    assert_eq!(c.column(col::CLASS_FLAGS).unwrap().u16s(), vec![0x81, 0x81 | 0x200]);
+    assert_eq!(c.column(col::LOCAL_OFFSET).unwrap().f32s(), vec![0.0, 0.0, 0.0, 0.0, 1.5, -2.5, 4.0, 0.0]);
+    assert_eq!(pose(c, 16), mat(1000.0));
+    // ship classes carry their C++ bases: positional|destructible|object|controllable|defensible|ship|container
+    assert_eq!(s1.column(col::CLASS_FLAGS).unwrap().u16s()[2], 1 | 2 | 4 | 8 | 16 | 32 | 256);
 }
 
 #[test]
@@ -217,6 +224,25 @@ fn check_logic_on_golden_frames() {
     let rep = check_frames(&frames, &[z]);
     assert!(rep.exact(), "{}", rep.line());
     assert_eq!((rep.local_exact, rep.sector_not_object), (1, 1));
+    // the highway: local = row 0 shifted by the offset, then the static pose (engine order)
+    {
+        let c = &frames[0].sectors[1];
+        let hpose = Mat4f::from_flat(pose(c, 16).try_into().unwrap());
+        let expect = x4mp_sim::capture::check::local_step(&Mat4f::IDENTITY, &hpose, 0x81 | 0x200, 0x2b091e0, [1.5, -2.5, 4.0, 0.0]).unwrap();
+        // lane x: ((o.y*t2 + o.x*t1) + o.z*t3) + t0 = ((-2.5*1002 + 1.5*1001) + 4*1003) + 1000
+        assert_eq!(expect.position(), [4008.5, 4009.5, 4010.5]);
+        let mut h = lines[0];
+        h.uid = 16;
+        h.off = expect.position();
+        h.sec = [0.0; 3];
+        let rep = check_frames(&frames, &[h]);
+        assert!(rep.exact(), "{}", rep.line());
+        assert_eq!((rep.local_exact, rep.sector_not_object), (1, 1));
+        // without the offset the engine value would not match
+        let mut raw = h;
+        raw.off = hpose.position();
+        assert_eq!(check_frames(&frames, &[raw]).local_mismatch, 1);
+    }
     // one ulp off is a mismatch
     let mut bad = lines[1];
     bad.sec[1] = f32::from_bits(bad.sec[1].to_bits() + 1);

@@ -205,7 +205,11 @@ static void build_scene(void) {
     *(unsigned char **)(g_ship3 + MO_OWNER_TRUE) = teladi;
     add(g_zone2, 0, 0, g_ship3);
 
-    add(cluster, 1, 0, comp_new(VT_HIGHWAY, 16, 0, 3));      /* cluster-level highway */
+    unsigned char *highway = comp_new(VT_HIGHWAY, 16, 0, 3); /* cluster-level highway */
+    *(unsigned char **)(highway + MO_CONTROLLER) = static_ctrl(1000.0f);
+    float hoff[4] = {1.5f, -2.5f, 4.0f, 0.0f};                /* Highway::GetLocalTransform adds it to row 0 */
+    memcpy(highway + MO_HIGHWAY_OFFSET, hoff, sizeof(hoff));
+    add(cluster, 1, 0, highway);
     add(g_galaxy, 1, 0, comp_new(VT_SATELLITE, 17, 0, 3));   /* galaxy-level object */
 }
 
@@ -288,7 +292,7 @@ int main(int argc, char **argv) {
     mirror_frame(1);
     assert(ms.frames_written == 1 && ms.last_rows == 14 && ms.last_roots == 4);
     assert(ms.walk_errors == 1);                  /* the unknown vtable */
-    assert(ms.nsample == 4);                      /* ship1, station, ship3 posed + zone1 static */
+    assert(ms.nsample == 5);                      /* ship1, station, ship3, zone1 and the highway */
     /* Frame 2: ship1 moves (slot index flips to 0), ship2 undocks out of the world, ship3 moves to
        zone1 (sector 1) in front of the gate container order: appended to zone1's first block. */
     *(uint32_t *)(image + MG_PATHING_INDEX) = 0;

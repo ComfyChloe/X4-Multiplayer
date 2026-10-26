@@ -11,7 +11,7 @@ use std::collections::HashSet;
 
 use super::{col, CapError, ColumnData, FrameRecord, SectorRecord};
 use crate::comp::{
-    Attention, ClassFlags, ClassId, Controller, CtrlKind, EngineFlags, FactionIx, Hull, Mat4f, NavCache, OrderState, Owner,
+    Attention, ClassFlags, ClassId, Controller, LocalOffset, CtrlKind, EngineFlags, FactionIx, Hull, Mat4f, NavCache, OrderState, Owner,
     PoseRef, Transform, Tree, Vel, Velocity, VtableRva,
 };
 use crate::id::{EntityId, IdHashMap, OrderKey, SectorIx, UniverseId};
@@ -164,6 +164,10 @@ fn fill(w: &mut World, rec: &SectorRecord, unmapped: &mut Vec<u16>) {
             col::CLASS => set(w, c.u8s(), ClassId),
             col::ATTENTION => set(w, c.i32s(), Attention),
             col::CLASS_FLAGS => set(w, c.u16s(), ClassFlags),
+            col::LOCAL_OFFSET => {
+                let f = c.f32s();
+                set_rows(w, rows, |r| LocalOffset([f[r * 4], f[r * 4 + 1], f[r * 4 + 2], f[r * 4 + 3]]))
+            }
             col::FLAGS => set(w, c.u8s(), EngineFlags),
             col::VTABLE => set(w, c.u32s(), VtableRva),
             col::POSE => {
@@ -264,6 +268,9 @@ pub fn capture_universe(u: &Universe, frame: u64, game_time: f64) -> FrameRecord
         }
         if let Some(c) = w.try_col::<ClassFlags>() {
             cols.push(ColumnData::from_u16s(col::CLASS_FLAGS, &c.iter().map(|x| x.0).collect::<Vec<_>>()));
+        }
+        if let Some(c) = w.try_col::<LocalOffset>() {
+            cols.push(ColumnData::from_f32s(col::LOCAL_OFFSET, &c.iter().flat_map(|x| x.0).collect::<Vec<_>>()));
         }
         if let Some(c) = w.try_col::<Tree>() {
             cols.push(ColumnData::from_u64s(col::PARENT, &c.iter().map(|x| x.parent.0).collect::<Vec<_>>()));

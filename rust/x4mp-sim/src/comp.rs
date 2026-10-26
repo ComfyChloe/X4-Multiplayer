@@ -442,11 +442,21 @@ impl ClassFlags {
     pub const STATION: u16 = 64;
     pub const SPACE: u16 = 128;
     pub const CONTAINER: u16 = 256;
+    /// The class overrides GetLocalTransform (slot 648): Explosive, Missile, Bomb, Highway,
+    /// HighwayScene, HighwayBooster. Its `Transform` is the controller's matrix, not the local
+    /// transform; see `capture::check::local_step`.
+    pub const CUSTOM_LOCAL: u16 = 512;
 
     pub fn has(self, bit: u16) -> bool {
         self.0 & bit != 0
     }
 }
+
+/// Offset a class-specific GetLocalTransform adds to row 0 (capture column `local_offset`;
+/// U::Highway +0x570, zero for every other class).
+#[derive(Clone, Copy, PartialEq, Default, Debug)]
+pub struct LocalOffset(pub [f32; 4]);
+impl_fields!(newtype LocalOffset);
 
 /// Primary vtable RVA of the engine object (identifies its C++ class; optional component,
 /// filled by the mirror when registered).
@@ -482,6 +492,7 @@ component_names!(
     OrderState => "orders",
     RngState => "rng",
     ClassFlags => "class_flags",
+    LocalOffset => "local_offset",
     VtableRva => "vtable",
     NavCache => "nav_cache",
 );

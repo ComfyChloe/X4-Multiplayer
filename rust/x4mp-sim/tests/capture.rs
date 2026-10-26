@@ -152,7 +152,7 @@ fn writer_refuses_schema_violations() {
     let mut unknown = frames()[0].clone();
     unknown.sectors[0].columns.push(ColumnData::from_u8s(0x777, &[0, 0, 0]));
     assert!(w.frame(&unknown).is_err());
-    assert_eq!(core_schema().len(), 18);
+    assert_eq!(core_schema().len(), 19);
 }
 
 #[test]

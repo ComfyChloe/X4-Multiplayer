@@ -5,6 +5,7 @@
 //! x4mp-capdump frame <capture> <frame> [--root UID] [--rows N]   rows of one frame
 //! x4mp-capdump diff  <expected> <actual> [--tol COLUMN=ULPS]...  frame-by-frame field compare
 //! x4mp-capdump check <capture> <x4-debug-log> [--layout SHA256]  MIRRORCHECK validation
+//! x4mp-capdump kinematics <capture>                  Euler-step analysis of navigation poses
 //! ```
 //! Exit status: 0 ok / equal / exact, 1 differences or failed check, 2 usage or read error.
 
@@ -203,6 +204,94 @@ fn diff(a: &str, b: &str, tols: &[(String, u64)]) -> Result<ExitCode, String> {
     Ok(if c.is_clean() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
 
+/// Per consecutive frame pair: does the next pathing-slot position of every navigation-driven
+/// object equal an Euler step `p + v * dt` (f32) from the captured pose and velocity (of frame k or
+/// k+1)? Reports exact matches and the ULP distribution; an analysis aid for the motion agents.
+fn kinematics(cap: &str) -> Result<ExitCode, String> {
+    use std::collections::HashMap;
+    let (_, frames) = open(cap)?;
+    struct Nav {
+        pos: [f32; 3],
+        vel: [f32; 3],
+        parent: u64,
+        pose_ref: u64,
+    }
+    let index = |f: &FrameRecord| -> HashMap<u64, Nav> {
+        let mut m = HashMap::new();
+        for s in &f.sectors {
+            let (Some(uid), Some(ctrl), Some(pose), Some(vel), Some(parent), Some(refs)) = (
+                s.column(col::UID).map(|c| c.u64s()),
+                s.column(col::CTRL).map(|c| c.u8s()),
+                s.column(col::POSE).map(|c| c.f32s()),
+                s.column(col::VEL).map(|c| c.f32s()),
+                s.column(col::PARENT).map(|c| c.u64s()),
+                s.column(col::POSE_REF).map(|c| c.u64s()),
+            ) else {
+                continue;
+            };
+            for r in 0..uid.len() {
+                if ctrl[r] == 1 {
+                    m.insert(
+                        uid[r],
+                        Nav {
+                            pos: [pose[r * 16], pose[r * 16 + 1], pose[r * 16 + 2]],
+                            vel: [vel[r * 8], vel[r * 8 + 1], vel[r * 8 + 2]],
+                            parent: parent[r],
+                            pose_ref: refs[r],
+                        },
+                    );
+                }
+            }
+        }
+        m
+    };
+    let mut pairs = 0u64;
+    let (mut n, mut still, mut exact_k, mut exact_k1, mut within1_k, mut within1_k1) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
+    let mut hist = [0u64; 8]; // ulp buckets of the better prediction: 0,1,2-3,4-15,16-255,256-65535,more,non-finite
+    for w in frames.windows(2) {
+        let (a, b) = (&w[0], &w[1]);
+        if b.frame != a.frame + 1 {
+            continue;
+        }
+        pairs += 1;
+        let dt = (b.game_time - a.game_time) as f32;
+        let (ia, ib) = (index(a), index(b));
+        for (uid, x) in &ia {
+            let Some(y) = ib.get(uid) else { continue };
+            if x.parent != y.parent || x.pose_ref != 0 || y.pose_ref != 0 {
+                continue;
+            }
+            n += 1;
+            if x.pos == y.pos {
+                still += 1;
+            }
+            let err = |v: [f32; 3]| -> u64 {
+                (0..3).map(|k| x4mp_sim::shadow::ulps32(x.pos[k] + v[k] * dt, y.pos[k])).max().unwrap_or(0)
+            };
+            let (ek, ek1) = (err(x.vel), err(y.vel));
+            exact_k += u64::from(ek == 0);
+            exact_k1 += u64::from(ek1 == 0);
+            within1_k += u64::from(ek <= 1);
+            within1_k1 += u64::from(ek1 <= 1);
+            let e = ek.min(ek1);
+            let bucket = match e {
+                0 => 0,
+                1 => 1,
+                2..=3 => 2,
+                4..=15 => 3,
+                16..=255 => 4,
+                256..=65535 => 5,
+                u64::MAX => 7,
+                _ => 6,
+            };
+            hist[bucket] += 1;
+        }
+    }
+    out!("KINEMATICS pairs={pairs} samples={n} stationary={still} exact_v(k)={exact_k} exact_v(k+1)={exact_k1} within1ulp_v(k)={within1_k} within1ulp_v(k+1)={within1_k1}");
+    out!("  best-of-two ulp histogram: 0:{} 1:{} 2-3:{} 4-15:{} 16-255:{} 256-65535:{} more:{} nonfinite:{}", hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7]);
+    Ok(ExitCode::SUCCESS)
+}
+
 fn check(cap: &str, log: &str, layout: Option<&str>) -> Result<ExitCode, String> {
     let (r, frames) = open(cap)?;
     if let Some(l) = layout {
@@ -252,6 +341,7 @@ fn main() -> ExitCode {
             diff(&args[1], &args[2], &tols)
         }
         Some("check") if args.len() >= 3 => check(&args[1], &args[2], flag("--layout").as_deref()),
+        Some("kinematics") if args.len() >= 2 => kinematics(&args[1]),
         _ => return usage(),
     };
     match result {

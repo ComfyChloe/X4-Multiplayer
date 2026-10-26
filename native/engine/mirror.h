@@ -49,6 +49,7 @@
 #define MIRROR_CLASS_CLUSTER 0x0fu
 #define MIRROR_CLASS_GALAXY 0x2fu
 #define MIRROR_UNKNOWN_CLASS 0xffu
+#define MIRROR_HIGHWAY_VTABLE 0x2b091e0u /* U::Highway: GetLocalTransform adds +0x570 to row 0 */
 
 /* Capture element types (x4mp_sim::capture::Elem). */
 enum { ME_U8 = 1, ME_U16 = 2, ME_U32 = 3, ME_U64 = 4, ME_I32 = 7, ME_F32 = 9, ME_F64 = 10 };
@@ -65,7 +66,7 @@ enum { MK_NONE = 0, MK_NAVIGATION = 1, MK_STATIC = 2, MK_PLAYER = 3, MK_OTHER = 
 
 typedef struct {
     uint64_t uid, parent, pose_ref;
-    float pose[16], vel[8], nav_cache[16];
+    float pose[16], vel[8], nav_cache[16], local_offset[4];
     double hull;
     uint32_t vtable, ctrl_vtable, orders[2], root;
     int32_t attention;
@@ -262,6 +263,17 @@ static const char *mirror_verify(void) {
     for (unsigned i = 0; i < 3; ++i) {
         void **slot = (void **)(image + ctrl[i][0] + 8u * MIRROR_TRANSFORM_SLOT);
         if (!readable(slot, sizeof(void *), 0) || *slot != (void *)(image + ctrl[i][1])) return "mirror controller vtable mismatch";
+    }
+    /* GetLocalTransform (slot 648) of every positional class: the standard one or a known override */
+    for (unsigned i = 0; i < MIRROR_CLASS_COUNT; ++i) {
+        const mirror_class *k = &mirror_classes[i];
+        if (!(k->flags & MF_POSITIONAL)) continue;
+        uint32_t want = MIRROR_STANDARD_LOCAL;
+        for (unsigned j = 0; j < MIRROR_LOCAL_OVERRIDES; ++j)
+            if (mirror_local_overrides[j].vtable == k->vtable) want = mirror_local_overrides[j].local_fn;
+        if ((want != MIRROR_STANDARD_LOCAL) != ((k->flags & MF_CUSTOM_LOCAL) != 0)) return "mirror local-transform table mismatch";
+        void **slot = (void **)(image + k->vtable + 8u * MIRROR_LOCAL_SLOT);
+        if (!readable(slot, sizeof(void *), 0) || *slot != (void *)(image + want)) return "mirror local-transform vtable mismatch";
     }
     if (!readable(image + MG_UNIVERSE, 8, 0) || !readable(image + MG_PATHING_INDEX, 4, 0) ||
         !readable(image + MG_SESSION_SEED, 8, 0))
@@ -472,6 +484,8 @@ static void mirror_fill(mirror_row *r, const unsigned char *comp, const mirror_c
             ++ms.walk_errors;
         }
     }
+    if (vt == MIRROR_HIGHWAY_VTABLE && mirror_ok(comp, MO_HIGHWAY_OFFSET + 16))
+        memcpy(r->local_offset, comp + MO_HIGHWAY_OFFSET, 16);
     if ((cls->flags & MF_DESTRUCTIBLE) && mirror_ok(comp, MO_HULL + 8)) r->hull = *(const double *)(comp + MO_HULL);
     if ((cls->flags & MF_OBJECT) && mirror_ok(comp, MO_OWNER_COVER + 8)) {
         r->owner = mirror_faction(*(const unsigned char *const *)(comp + MO_OWNER_TRUE));
@@ -561,7 +575,7 @@ static const mirror_core_col mirror_core_cols[] = {
     {0x05, ME_I32, 1, "attention"}, {0x06, ME_U8, 1, "flags"}, {0x07, ME_U32, 1, "vtable"}, {0x08, ME_U8, 1, "ctrl"},
     {0x09, ME_U32, 1, "ctrl_vtable"}, {0x0a, ME_F32, 16, "pose"}, {0x0b, ME_F32, 8, "vel"}, {0x0c, ME_U64, 1, "pose_ref"},
     {0x0d, ME_F32, 16, "nav_cache"}, {0x0e, ME_F64, 1, "hull"}, {0x0f, ME_U16, 1, "owner"}, {0x10, ME_U16, 1, "cover"},
-    {0x11, ME_U32, 2, "orders"}, {0x12, ME_U16, 1, "class_flags"},
+    {0x11, ME_U32, 2, "orders"}, {0x12, ME_U16, 1, "class_flags"}, {0x13, ME_F32, 4, "local_offset"},
 };
 #define MIRROR_CORE_COLS (sizeof(mirror_core_cols) / sizeof(mirror_core_cols[0]))
 
@@ -584,6 +598,7 @@ static const void *mirror_core_value(const mirror_row *r, uint16_t id) {
     case 0x0f: return &r->owner;
     case 0x10: return &r->cover;
     case 0x12: return &r->class_flags;
+    case 0x13: return r->local_offset;
     default: return r->orders;
     }
 }

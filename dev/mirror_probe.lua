@@ -70,8 +70,8 @@ SetScript('onUpdate',function()
  end
  if s.armed==0 then
   done=true
-  log(string.format('MIRROR done frames=%d dropped=%d partial=%d rows=%d roots=%d factions=%d bytes=%d walkErrors=%d meanMs=%.3f maxMs=%.3f checks=%d reason=%s',
+  log(string.format('MIRROR done frames=%d dropped=%d partial=%d rows=%d roots=%d factions=%d bytes=%d walkErrors=%d meanMs=%.3f maxMs=%.3f checks=%d regionQueries=%d reason=%s',
    s.frames_written,s.frames_dropped,s.partial_frames,s.rows,s.roots,s.factions,s.bytes,s.walk_errors,
-   s.mean_ms,s.max_ms,checked,tostring(s.reason or 'complete')))
+   s.mean_ms,s.max_ms,checked,s.region_queries or 0,tostring(s.reason or 'complete')))
  end
 end)

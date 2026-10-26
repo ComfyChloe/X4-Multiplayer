@@ -55,6 +55,7 @@ OFFSETS = {
     'faction_id_capacity': 0x28,
     'tls_initialized': 0x10,    # u8 in the exe's TLS block (index 0)
     'tls_game_time': 0x300,     # f64 thread game time (GetCurrentGameTime)
+    'highway_offset': 0x570,    # f32x4 added to row 0 by Highway::GetLocalTransform
 }
 
 GLOBALS = {
@@ -65,6 +66,8 @@ GLOBALS = {
 }
 
 GETCLASSID_SLOT = 571           # primary vtable slot of GetClassID
+LOCAL_SLOT = 648                # primary vtable slot of GetLocalTransform
+STANDARD_LOCAL = 0x7461c0       # Positional::GetLocalTransform (all positional classes but LOCAL_OVERRIDES)
 TRANSFORM_SLOT = 6              # movement controller vtable slot GetTransform
 
 # (controller kind, primary vtable RVA, slot-6 GetTransform RVA)
@@ -94,6 +97,7 @@ CHECKS = [
     ('death_dead', 0x3e5468, 0x10, '4c2ed6ecb0b2aac4ad7171be8e045eb10afc063da5b16335219bda4ce3d74b1d'),  # KillRecursive: death state +0xd3 = 2
     ('game_time_tls', 0xafcdc0, 0x32, 'd2f37b9506540dc4aa77168e58bbf4e4bfefd5c6692059a8343027af81c328cd'),  # GetCurrentGameTime: TLS block (index 0) +0x10 init flag, +0x300 game time
     ('session_seed', 0x34faf0, 0x8, '9ed91addd695e5db89aff28713b8319294ecbb5d66788d6d148b4eb83f1a4077'),  # session seed getter: u64 g_SessionSeed 0x3d19860
+    ('highway_local', 0x5f79f0, 0x5f, 'db7bca3dab3c0739645f989ac3f7ae65d740034cfce2d17b7c213e979fef5d60'),  # Highway::GetLocalTransform (slot 648): offset vector at +0x570 added to row 0, then Positional::GetLocalTransform
 ]
 
 # Every U::Component subclass (RTTI): primary vtable RVA, class id when Component+0x68 == 0,
@@ -125,7 +129,7 @@ CLASSES = [
     (0x2acadc0, 0x26, 0x16, 0x4be990, '', 'U::DismantleProcessor'),
     (0x2acca90, 0x51, 0x49, 0x4be840, 'positional,destructible,object', 'U::Recyclable'),
     (0x2acec88, 0x4e, 0x24, 0x4bd180, 'positional,destructible', 'U::ProcessingModule'),
-    (0x2ad0ff8, 0x71, 0x49, 0x4bc870, 'positional,destructible,object', 'U::Explosive'),
+    (0x2ad0ff8, 0x71, 0x49, 0x4bc870, 'positional,destructible,object,custom_local', 'U::Explosive'),
     (0x2ad3458, 0x2c, 0x2c, 0x4b75b0, 'positional', 'U::Entity'),
     (0x2ad58f8, 0x2b, 0x24, 0x4bab40, 'positional,destructible', 'U::Engine'),
     (0x2ad7a88, 0x29, 0x49, 0x4be680, 'positional,destructible,object', 'U::Drop'),
@@ -143,13 +147,13 @@ CLASSES = [
     (0x2afe0b8, 0x02, 0x49, 0x5ea2d0, 'positional,destructible,object', 'U::AdSignObject'),
     (0x2b00620, 0x44, 0x24, 0x60a830, 'positional,destructible', 'U::MissileTurret'),
     (0x2b02988, 0x43, 0x24, 0x6091b0, 'positional,destructible', 'U::MissileLauncher'),
-    (0x2b04ba8, 0x42, 0x49, 0x5ea170, 'positional,destructible,object', 'U::Missile'),
+    (0x2b04ba8, 0x42, 0x49, 0x5ea170, 'positional,destructible,object,custom_local', 'U::Missile'),
     (0x2b06fb0, 0x3c, 0x49, 0x605590, 'positional,destructible,object', 'U::LandmarkObject'),
-    (0x2b091e0, 0x33, 0x33, 0x4b69c0, 'positional,space', 'U::Highway'),
-    (0x2b0b398, 0x38, 0x4d, 0x5bfc70, 'positional', 'U::HighwayScene'),
+    (0x2b091e0, 0x33, 0x33, 0x4b69c0, 'positional,space,custom_local', 'U::Highway'),
+    (0x2b0b398, 0x38, 0x4d, 0x5bfc70, 'positional,custom_local', 'U::HighwayScene'),
     (0x2b0d238, 0x39, 0x24, 0x5bfa50, 'positional,destructible', 'U::HighwayTrigger'),
     (0x2b0f198, 0x34, 0x24, 0x5bfaf0, 'positional,destructible', 'U::HighwayBlocker'),
-    (0x2b11168, 0x35, 0x24, 0x5bfb80, 'positional,destructible', 'U::HighwayBooster'),
+    (0x2b11168, 0x35, 0x24, 0x5bfb80, 'positional,destructible,custom_local', 'U::HighwayBooster'),
     (0x2b13b50, 0x30, 0x49, 0x5bea50, 'positional,destructible,object', 'U::Gate'),
     (0x2b15e38, 0x2f, 0x2f, 0x5be570, 'positional,space', 'U::Galaxy'),
     (0x2b19760, 0x65, 0x24, 0x792a40, 'positional,destructible', 'U::Switchable'),
@@ -183,7 +187,7 @@ CLASSES = [
     (0x2b5dab8, 0x3f, 0x49, 0x7eb670, 'positional,destructible,object', 'U::Lockbox'),
     (0x2b5fce8, 0x07, 0x24, 0x812370, 'positional,destructible', 'U::BombLauncher'),
     (0x2b61f30, 0x1b, 0x4d, 0x81fdf0, 'positional', 'U::Crate'),
-    (0x2b63c18, 0x06, 0x49, 0x812280, 'positional,destructible,object', 'U::Bomb'),
+    (0x2b63c18, 0x06, 0x49, 0x812280, 'positional,destructible,object,custom_local', 'U::Bomb'),
     (0x2b66080, 0x6d, 0x6d, 0x7c7cd0, 'positional,space', 'U::Zone'),
     (0x2b68278, 0x6b, 0x24, 0x7c71c0, 'positional,destructible', 'U::Weapon'),
     (0x2b6a740, 0x78, 0x24, 0x7c7620, 'positional,destructible', 'U::WalkableModule'),
@@ -222,8 +226,18 @@ CLASSES = [
 ]
 CLASSID_CODE_SHA256 = '605b94b4829797da30e72ccc516851291b0d4dccf89da3ec3f1c713f5d539ad0'
 
+# Classes whose GetLocalTransform (slot 648) is not Positional::GetLocalTransform.
+LOCAL_OVERRIDES = [
+    (0x2ad0ff8, 0x567aa0),  # U::Explosive
+    (0x2b04ba8, 0x567aa0),  # U::Missile
+    (0x2b091e0, 0x5f79f0),  # U::Highway
+    (0x2b0b398, 0x5eea90),  # U::HighwayScene
+    (0x2b11168, 0x5ebdc0),  # U::HighwayBooster
+    (0x2b63c18, 0x567aa0),  # U::Bomb
+]
+
 FLAG_BITS = {'positional': 1, 'destructible': 2, 'object': 4, 'controllable': 8, 'defensible': 16,
-             'ship': 32, 'station': 64, 'space': 128, 'container': 256}
+             'ship': 32, 'station': 64, 'space': 128, 'container': 256, 'custom_local': 512}
 CLASSID_CODE_LENGTH = 16
 
 
@@ -241,6 +255,7 @@ def layout_text() -> str:
     lines += [f"check {n} {r:#x} {l:#x} {s}" for n, r, l, s in CHECKS]
     lines += [f"class {vt:#x} {a:#x} {b:#x} {fn:#x} {flag_value(f)}" for vt, a, b, fn, f, _ in CLASSES]
     lines += [f"classcode {CLASSID_CODE_LENGTH} {CLASSID_CODE_SHA256}"]
+    lines += [f"local {LOCAL_SLOT} {STANDARD_LOCAL:#x}"] + [f"override {vt:#x} {fn:#x}" for vt, fn in LOCAL_OVERRIDES]
     return '\n'.join(lines) + '\n'
 
 
@@ -278,6 +293,14 @@ def c_header() -> str:
     out.append(f'#define MIRROR_CLASS_COUNT {len(CLASSES)}u')
     out.append(f'#define MIRROR_CLASSID_CODE_LENGTH {CLASSID_CODE_LENGTH}u')
     out.append(f'#define MIRROR_CLASSID_CODE_SHA256 "{CLASSID_CODE_SHA256}"')
+    out.append(f'#define MIRROR_LOCAL_SLOT {LOCAL_SLOT}u')
+    out.append(f'#define MIRROR_STANDARD_LOCAL 0x{STANDARD_LOCAL:x}u')
+    out.append('typedef struct { uint32_t vtable; uint32_t local_fn; } mirror_local_override;')
+    out.append('static const mirror_local_override mirror_local_overrides[] = {')
+    for vt, fn in LOCAL_OVERRIDES:
+        out.append(f'    {{0x{vt:x}, 0x{fn:x}}},')
+    out.append('};')
+    out.append(f'#define MIRROR_LOCAL_OVERRIDES {len(LOCAL_OVERRIDES)}u')
     return '\n'.join(out) + '\n'
 
 
@@ -352,6 +375,14 @@ def verify(exe: Path) -> list:
         slot = struct.unpack('<Q', pe.read(vt + TRANSFORM_SLOT * 8, 8))[0] - pe.image_base
         if slot != fn:
             problems.append(f'controller {kind}: slot {TRANSFORM_SLOT} is {slot:#x}, expected {fn:#x}')
+    overrides = dict(LOCAL_OVERRIDES)
+    for vt, _a, _b, _fn, flags, name in CLASSES:
+        if 'positional' not in flags.split(','):
+            continue
+        local = struct.unpack('<Q', pe.read(vt + LOCAL_SLOT * 8, 8))[0] - pe.image_base
+        want = overrides.get(vt, STANDARD_LOCAL)
+        if local != want or (('custom_local' in flags.split(',')) != (vt in overrides)):
+            problems.append(f'{name}: slot {LOCAL_SLOT} is {local:#x}, expected {want:#x}')
     return problems
 
 
