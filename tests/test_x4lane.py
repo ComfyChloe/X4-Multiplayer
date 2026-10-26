@@ -805,6 +805,118 @@ class StallTests(FakeWindows):
         self.assertIsNone(run.poll(500.0))
 
 
+class ProtectedTests(FakeWindows):
+    INSTALL = r'C:\Program Files (x86)\Steam\steamapps\common\X4 Foundations\X4.exe'
+    GUEST = (r'C:\Users\developer\Documents\X4Mods\X4-Multiplayer-fixed-tick\.local\sandbox-baseline\guest\game-view'
+             r'\steamapps\common\X4 Foundations\X4.exe')
+
+    def proc(self, pid, exe, profile):
+        import types
+        return types.SimpleNamespace(pid=pid, exe=exe, cmdline=f'"{exe}" -personalfolderid {profile} -skipintro',
+                                     created=1)
+
+    def setUp(self):
+        super().setUp()
+        self.calls = []
+        self.mutex = True
+        self.saved_x4lock = x4lane.x4lock
+        fake = x4lane.win()
+        fake.named_object_exists = lambda name: self.mutex
+
+        def x4lock(paths, *args, timeout=60):
+            self.calls.append(tuple(str(a) for a in args))
+            if args[0] == 'query':
+                return (0 if int(args[2]) in self.holders else 3), []
+            if args[0] == 'release':
+                self.mutex = False
+                return 0, ['released']
+            return 0, []
+        x4lane.x4lock = x4lock
+        self.holders = set()
+
+    def tearDown(self):
+        x4lane.x4lock = self.saved_x4lock
+        super().tearDown()
+
+    def run_ready(self):
+        run = self.run_for('walk', False)
+        run.lane = self.paths.lane('b1')
+        run.started = []
+        run.start_x4 = lambda: run.started.append(True)
+        run.wait_for_mutex = lambda: None
+        return run
+
+    def test_protected_rules(self):
+        lane_exe = str(self.paths.lane('b1').exe)
+        self.assertTrue(x4lane.is_protected(self.proc(1, self.INSTALL, '70000002')))   # the user's own game
+        self.assertTrue(x4lane.is_protected(self.proc(2, self.GUEST, '45842')))
+        self.assertTrue(x4lane.is_protected(self.proc(3, lane_exe, '45841')))            # profile rule
+        self.assertTrue(x4lane.is_protected(self.proc(4, None, '45850')))               # unreadable: fail closed
+        self.assertFalse(x4lane.is_protected(self.proc(5, lane_exe, '45850')))
+
+    def test_protected_holder_is_never_queried_or_released_and_the_run_waits(self):
+        client = self.proc(41, self.INSTALL, '45841')
+        self.others = [client, self.proc(50, str(self.paths.lane('b2').exe), '45851')]
+        run = self.run_ready()
+        with self.assertRaises(x4lane.ProtectedHolder) as waiting:
+            run.start_sequence()
+        self.assertIn('protected X4 41/45841', str(waiting.exception))
+        self.assertNotIn('41', [c[2] for c in self.calls if len(c) > 2])               # never x4lock-ed
+        self.assertEqual(run.started, [])
+
+    def test_lane_holder_is_released_next_to_protected_clients(self):
+        self.others = [self.proc(41, self.INSTALL, '45841'), self.proc(42, self.GUEST, '45842'),
+                       self.proc(50, str(self.paths.lane('b2').exe), '45851')]
+        self.holders = {50}
+        run = self.run_ready()
+        run.start_sequence()
+        self.assertEqual(run.started, [True])
+        self.assertIn(('release', '--pid', '50', '--expect-path', str(self.paths.lane('b2').exe), '--wait-ms', '30000'),
+                      self.calls)
+        self.assertFalse(any(c[0] in ('query', 'release') and c[2] in ('41', '42') for c in self.calls))
+
+    def test_preflight_waits_while_only_protected_clients_run(self):
+        self.others = [self.proc(41, self.INSTALL, '45841'), self.proc(42, self.GUEST, '45842')]
+        with self.assertRaises(x4lane.ProtectedHolder):
+            self.run_for('walk', False).preflight()
+        self.assertFalse(self.paths.lane('b1').lock.exists())
+        self.mutex = False                                       # x4mods-61 freed it
+        run = self.run_for('walk', False)
+        run.preflight()
+        self.assertTrue(self.paths.lane('b1').lock.exists())
+        run.give_back_lane()
+
+    def test_launch_waits_within_the_wait_budget(self):
+        self.others = [self.proc(41, self.INSTALL, '45841')]
+        run = self.run_ready()
+        run.lock = core.DirLock.acquire(self.paths.lane('b1').lock, {'agent': 'walk', 'run': 'r'})
+        clock = FakeClock(on_sleep=lambda c: setattr(self, 'mutex', c.sleeps < 3))
+        saved, x4lane.time = x4lane.time, clock
+        try:
+            run.wait_deadline = clock.now + 100
+            run.launch_x4()                                       # freed after 3 polls: starts
+            self.assertEqual(run.started, [True])
+            self.mutex, run.started = True, []
+            clock.on_sleep = None
+            run.wait_deadline = clock.now + 25
+            with self.assertRaises(x4lane.ProtectedHolder):
+                run.launch_x4()
+            self.assertEqual(run.started, [])
+        finally:
+            x4lane.time = saved
+            run.give_back_lane()
+        self.assertFalse(self.paths.launch_lock.exists())
+
+    def test_cleanup_never_touches_protected_processes(self):
+        killed = []
+        fake = x4lane.win()
+        fake.terminate = lambda pid, exe: killed.append(pid) or True
+        lane_exe = str(self.paths.lane('b1').exe)
+        self.others = [self.proc(41, lane_exe, '45841'), self.proc(43, self.INSTALL, '45841')]
+        x4lane.doctor(self.paths, fix=True)
+        self.assertEqual(killed, [])
+
+
 class LogWatcherTests(Temp):
     def test_until_markers_expect_and_partial_lines(self):
         log = self.tmp / 'x4lan-debug.txt'

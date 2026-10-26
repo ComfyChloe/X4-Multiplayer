@@ -78,6 +78,38 @@ def pinned_sha256() -> str:
     return EXECUTABLE['sha256'].lower()
 
 
+# Protected X4 instances (user decision, 26 Oct 2026): the x4mods-61 session's two clients and the
+# user's own game. Never closed, terminated or x4lock-ed by the lanes; a run waits while one of them
+# holds the single-instance mutex (x4mods-61 frees it after starting its clients).
+PROTECTED_PROFILES = ('45841', '45842')
+PROTECTED_EXE_DIRS = (
+    r'C:\Program Files (x86)\Steam\steamapps\common\X4 Foundations',
+    r'C:\Users\developer\Documents\X4Mods\X4-Multiplayer-fixed-tick\.local\sandbox-baseline\guest\game-view',
+)
+INSTANCE_MUTEX = 'EGOSOFT_X4_INSTANCE'
+
+
+def is_protected(proc) -> bool:
+    """Protected: profile 45841/45842 on the command line, an exe in a protected folder (the real
+    install, the x4mods-61 guest view), or an X4 whose image path cannot be read (fail closed)."""
+    from pathlib import PureWindowsPath
+    if core.profile_from_cmdline(getattr(proc, 'cmdline', None)) in PROTECTED_PROFILES:
+        return True
+    exe = getattr(proc, 'exe', None)
+    if not exe:
+        return True
+    exe = PureWindowsPath(exe)
+    for folder in PROTECTED_EXE_DIRS:
+        folder = PureWindowsPath(folder)
+        if exe == folder / 'X4.exe' or exe.is_relative_to(folder):
+            return True
+    return False
+
+
+def describe_protected(procs) -> str:
+    return ', '.join(f'{p.pid}/{core.profile_from_cmdline(p.cmdline) or "?"}' for p in procs) or 'unknown'
+
+
 class LaunchFailed(LaneError):
     def __init__(self, message, reason='launch_failed'):
         super().__init__(message)
@@ -86,6 +118,10 @@ class LaunchFailed(LaneError):
 
 class TransientRefusal(Refused):
     """A refusal that --wait may outlast (quiet.lock, busy lanes, low RAM)."""
+
+
+class ProtectedHolder(TransientRefusal):
+    """The single-instance mutex is held by a protected X4 (or a process we may not query)."""
 
 
 # ---------------------------------------------------------------------------------------
@@ -383,6 +419,7 @@ def cmd_setup(args, paths):
 HEAD_POLL_S = 10
 QUEUE_POLL_S = 30
 RESERVE_MAX_S = 600
+PROTECTED_POLL_S = 10
 
 
 def handoff_for(paths, args) -> bool:
@@ -496,10 +533,12 @@ def cmd_status(args, paths):
                 info['other_locks'].append({item.name: core.owner_summary(core.read_owner(item))})
     for proc in x4_processes():
         entry = describe_x4(proc)
+        entry['protected'] = is_protected(proc)
         for name in core.LANE_PROFILES:
             if proc.exe and Path(proc.exe) == paths.lane(name).exe:
                 entry['lane'] = name
         info['x4'].append(entry)
+    info['instance_mutex_present'] = win().named_object_exists(INSTANCE_MUTEX)
     total, avail = free_ram_gb()
     info['ram_gb'] = {'total': total, 'free': avail}
     info['steam'] = win().steam_status()
@@ -525,7 +564,13 @@ def cmd_status(args, paths):
     print(f"X4 processes: {len(info['x4'])}")
     for entry in info['x4']:
         lane = f" lane={entry['lane']}" if 'lane' in entry else ''
-        print(f"  pid={entry['pid']} profile={entry['profile']}{lane} exe={entry['exe']}")
+        mark = ' PROTECTED' if entry['protected'] else ''
+        print(f"  pid={entry['pid']} profile={entry['profile']}{lane}{mark} exe={entry['exe']}")
+    protected = [e for e in info['x4'] if e['protected']]
+    holder = ('held; only protected X4 run, so a protected one holds it -> lane launches wait'
+              if info['instance_mutex_present'] and protected and len(protected) == len(info['x4'])
+              else 'present' if info['instance_mutex_present'] else 'free')
+    print(f'instance mutex {INSTANCE_MUTEX}: {holder}')
     print(f"RAM: {avail} GB free of {total} GB (a run needs >= {core.MIN_FREE_RAM_GB:g} GB)")
     steam = info['steam']
     print('Steam: ' + (f"running pid={steam['pid']}" if steam['running'] else 'NOT running (runs are refused)'))
@@ -561,6 +606,7 @@ class Run:
         self.message = None
         self.other_seen = {}
         self.closing = None                 # (time, windows sent) after request_close()
+        self.wait_deadline = 0.0            # set by acquire(): --wait also covers a protected mutex holder
         self.owns_quiet = False             # a session holds quiet.lock for all of its clients
         self.extra_tokens = {}              # session tokens (@X4LANE_PORT@, @X4LANE_SLOT@, ...)
         self.network = 'offline'            # 'loopback' only inside a session
@@ -668,6 +714,10 @@ class Run:
             raise Refused(f'{len(items)} X4 Workshop item(s) are installed; they would load into lane worlds '
                           'and the lanes do not write Workshop selections (see the Workshop incident). '
                           'Use --allow-workshop only if that is acceptable for this run.')
+        procs = x4_processes()
+        protected = [p for p in procs if is_protected(p)]
+        if protected and len(protected) == len(procs) and win().named_object_exists(INSTANCE_MUTEX):
+            raise ProtectedHolder(f'instance mutex held by protected X4 {describe_protected(protected)}; waiting')
         _total, avail = free_ram_gb()
         need = a.min_free_gb * instances
         if avail < need:
@@ -753,6 +803,7 @@ class Run:
             self.result['selfcheck'] = [{'level': 'warn', 'what': 'selfcheck failed', 'detail': repr(error)}]
 
     def acquire(self):
+        self.wait_deadline = time.monotonic() + max(0.0, self.args.wait)
         wait_in_queue(self, self.preflight, self.give_back_lane, 1, f'run {self.args.label}'.strip())
 
     def refresh_reserved(self):
@@ -761,7 +812,7 @@ class Run:
 
     def kill_orphans(self):
         for proc in x4_processes():
-            if proc.exe and Path(proc.exe) == self.lane.exe:
+            if proc.exe and Path(proc.exe) == self.lane.exe and not is_protected(proc):
                 killed = win().terminate(proc.pid, self.lane.exe)
                 self.warn(f'orphan X4 pid {proc.pid} of lane {self.lane.name} (a previous runner died): '
                           + ('terminated' if killed else 'could not be terminated'))
@@ -850,11 +901,12 @@ class Run:
         args += ['-skipintro', '-debug', 'scripts', '-logfile', LOG_NAME, '-nocputhrottle', '-noworkshopsync']
         return args
 
-    def holders(self):
-        """X4 processes that hold EGOSOFT_X4_INSTANCE (x4lock query exit 0)."""
+    def holders(self, procs=None):
+        """Non-protected X4 processes that hold EGOSOFT_X4_INSTANCE (x4lock query exit 0). Protected
+        X4 instances are never queried."""
         out = []
-        for proc in x4_processes():
-            if not proc.exe:
+        for proc in (x4_processes() if procs is None else procs):
+            if is_protected(proc):
                 continue
             code, _lines = x4lock(self.paths, 'query', '--pid', proc.pid)
             if code == 0:
@@ -865,13 +917,22 @@ class Run:
         return self.quiet is not None or self.owns_quiet
 
     def launch_x4(self):
-        self.launch_lock = acquire_launch_lock(self.paths, self.args.agent, f'launching lane {self.lane.name}',
-                                               self.run_id)
-        try:
-            self.start_sequence()
-        finally:
-            self.launch_lock.release()
-            self.launch_lock = None
+        while True:
+            self.launch_lock = acquire_launch_lock(self.paths, self.args.agent, f'launching lane {self.lane.name}',
+                                                   self.run_id)
+            try:
+                self.start_sequence()
+                return
+            except ProtectedHolder as error:
+                waiting = error
+            finally:
+                self.launch_lock.release()
+                self.launch_lock = None
+            if time.monotonic() + PROTECTED_POLL_S > self.wait_deadline:
+                raise waiting
+            print(f'x4lane: waiting ({waiting})', flush=True)
+            self.refresh_reserved()
+            time.sleep(PROTECTED_POLL_S)
 
     def start_sequence(self):
         """Release the instance lock of the X4 that holds it, start our X4, wait until it holds the
@@ -879,11 +940,13 @@ class Run:
         paths = self.paths
         if paths.quiet_lock.exists() and not self.quiet_is_ours():
             raise Refused('quiet.lock appeared before launch; not starting X4')
-        others = [describe_x4(p) for p in x4_processes()]
+        procs = x4_processes()
+        others = [describe_x4(p) for p in procs]
         self.result['other_x4']['at_start'] = others
         for entry in others:
             self.other_seen[entry['pid']] = entry
-        holders = [] if self.args.test_skip_release else self.holders()
+        protected = [p for p in procs if is_protected(p)]
+        holders = [] if self.args.test_skip_release else self.holders(procs)
         if self.args.test_skip_release:
             self.warn('--test-skip-release: the instance lock was deliberately not released')
         if len(holders) > 1:
@@ -898,11 +961,13 @@ class Run:
                 raise LaunchFailed(f'x4lock release of pid {holder.pid} failed (exit {code}); '
                                    'X4 not started (it would show "Game is already running!")',
                                    'lock_release_failed')
-        code, lines = x4lock(paths, 'list')
-        name_present = any(line.strip() == 'lock_name_present_in_my_session=true' for line in lines)
-        if name_present and not self.args.test_skip_release:
-            raise LaunchFailed('EGOSOFT_X4_INSTANCE exists but no X4 holds it (another process does); '
-                               'X4 not started', 'lock_release_failed')
+        # Presence by listing the object directory: the mutex itself is never opened.
+        if win().named_object_exists(INSTANCE_MUTEX) and not self.args.test_skip_release:
+            if protected:
+                raise ProtectedHolder(f'instance mutex held by protected X4 {describe_protected(protected)}; '
+                                      'waiting (it is never released by the lanes)')
+            raise LaunchFailed(f'{INSTANCE_MUTEX} exists but no X4 the lanes may query holds it; X4 not started',
+                               'lock_release_failed')
         self.mark('lock_released_s')
         self.start_x4()
         self.wait_for_mutex()
@@ -1387,6 +1452,7 @@ class SessionRun:
         self.session_id = None
         self.port = None
         self.reserved_since = None
+        self.wait_deadline = 0.0
         self.result = {
             'tool': 'dev/x4lane.py', 'tool_version': TOOL_VERSION, 'tool_commit': tool_version(),
             'kind': 'session', 'session_id': None,
@@ -1532,6 +1598,7 @@ class SessionRun:
         self.result['quiet_lock']['present_at_start'] = quiet_owner is not None
 
     def acquire(self):
+        self.wait_deadline = time.monotonic() + max(0.0, self.args.wait)
         wait_in_queue(self, lambda: self.preflight(keep=self.args.wait > 0), self.give_back_all,
                       self.args.clients, f'session {self.args.label}'.strip())
 
@@ -1567,15 +1634,24 @@ class SessionRun:
         self.mark('server_ready_s')
 
     def launch(self):
-        first = self.clients[0]
-        self.launch_lock = acquire_launch_lock(self.paths, self.args.agent, f'launching session {self.session_id}',
-                                               self.session_id)
-        try:
-            for client in self.clients:
-                client.start_sequence()
-        finally:
-            self.launch_lock.release()
-            self.launch_lock = None
+        for client in self.clients:
+            while True:
+                self.launch_lock = acquire_launch_lock(self.paths, self.args.agent,
+                                                       f'launching session {self.session_id}', self.session_id)
+                try:
+                    client.start_sequence()
+                    break
+                except ProtectedHolder as error:
+                    waiting = error
+                finally:
+                    self.launch_lock.release()
+                    self.launch_lock = None
+                if time.monotonic() + PROTECTED_POLL_S > self.wait_deadline:
+                    raise waiting
+                print(f'x4lane: waiting ({waiting})', flush=True)
+                for other in self.clients:
+                    other.refresh_reserved()
+                time.sleep(PROTECTED_POLL_S)
         self.mark('launched_s')
 
     def passed(self):
@@ -1791,7 +1867,7 @@ def doctor(paths, fix=False, check_hash=True):
             else:
                 note('problem', f'lane {name}: stale lock', stale)
         held = owner is not None and not stale
-        orphans = [p for p in procs if p.exe and Path(p.exe) == lane.exe]
+        orphans = [p for p in procs if p.exe and Path(p.exe) == lane.exe and not is_protected(p)]
         if orphans and not held:
             for proc in orphans:
                 if fix and win().terminate(proc.pid, lane.exe):
@@ -1939,7 +2015,7 @@ def cmd_stop(args, paths):
     for proc in x4_processes():
         for name in names:
             lane = paths.lane(name)
-            if proc.exe and Path(proc.exe) == lane.exe:
+            if proc.exe and Path(proc.exe) == lane.exe and not is_protected(proc):
                 targets.append((lane, proc))
     if not targets:
         print(f'no lane X4 running in {names}')

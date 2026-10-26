@@ -548,3 +548,69 @@ user32.IsHungAppWindow.argtypes = [wt.HWND]
 def window_hung(pid: int) -> bool:
     """True if a visible top-level window of the process does not respond (IsHungAppWindow)."""
     return any(user32.IsHungAppWindow(w['hwnd']) for w in main_windows(pid))
+
+
+# ---------------------------------------------------------------------------------------
+# named object presence without opening it (protected X4 clients must never be disturbed)
+
+class OBJECT_ATTRIBUTES(ctypes.Structure):
+    _fields_ = [('Length', wt.ULONG), ('RootDirectory', HANDLE), ('ObjectName', ctypes.POINTER(UNICODE_STRING)),
+                ('Attributes', wt.ULONG), ('SecurityDescriptor', ctypes.c_void_p),
+                ('SecurityQualityOfService', ctypes.c_void_p)]
+
+
+class OBJECT_DIRECTORY_INFORMATION(ctypes.Structure):
+    _fields_ = [('Name', UNICODE_STRING), ('TypeName', UNICODE_STRING)]
+
+
+DIRECTORY_QUERY = 0x0001
+STATUS_MORE_ENTRIES = 0x00000105
+STATUS_NO_MORE_ENTRIES = 0x8000001A
+ntdll.NtOpenDirectoryObject.restype = ctypes.c_long
+ntdll.NtOpenDirectoryObject.argtypes = [ctypes.POINTER(HANDLE), wt.DWORD, ctypes.POINTER(OBJECT_ATTRIBUTES)]
+ntdll.NtQueryDirectoryObject.restype = ctypes.c_long
+ntdll.NtQueryDirectoryObject.argtypes = [HANDLE, ctypes.c_void_p, wt.ULONG, wt.BOOLEAN, wt.BOOLEAN,
+                                         ctypes.POINTER(wt.ULONG), ctypes.POINTER(wt.ULONG)]
+ntdll.NtClose.argtypes = [HANDLE]
+kernel32.ProcessIdToSessionId.argtypes = [wt.DWORD, ctypes.POINTER(wt.DWORD)]
+kernel32.GetCurrentProcessId.restype = wt.DWORD
+
+
+def named_object_exists(name: str, session=None) -> bool:
+    r"""True if \Sessions\<session>\BaseNamedObjects\<name> exists. Lists the object directory only;
+    the object itself is never opened, so no handle of ours can keep it alive or race a release."""
+    if session is None:
+        value = wt.DWORD(0)
+        kernel32.ProcessIdToSessionId(kernel32.GetCurrentProcessId(), ctypes.byref(value))
+        session = value.value
+    path = rf'\Sessions\{session}\BaseNamedObjects' if session else r'\BaseNamedObjects'
+    text = ctypes.create_unicode_buffer(path)
+    us = UNICODE_STRING(len(path) * 2, len(path) * 2 + 2, ctypes.cast(text, ctypes.c_void_p).value)
+    attributes = OBJECT_ATTRIBUTES(ctypes.sizeof(OBJECT_ATTRIBUTES), None, ctypes.pointer(us), 0x40, None, None)
+    directory = HANDLE()
+    status = ntdll.NtOpenDirectoryObject(ctypes.byref(directory), DIRECTORY_QUERY, ctypes.byref(attributes))
+    if status != 0:
+        raise OSError(status & 0xFFFFFFFF, f'NtOpenDirectoryObject({path}) failed')
+    try:
+        context, returned = wt.ULONG(0), wt.ULONG(0)
+        buffer = ctypes.create_string_buffer(64 * 1024)
+        restart = True
+        while True:
+            status = ntdll.NtQueryDirectoryObject(directory, buffer, len(buffer), False, restart,
+                                                  ctypes.byref(context), ctypes.byref(returned)) & 0xFFFFFFFF
+            restart = False
+            if status == STATUS_NO_MORE_ENTRIES:
+                return False
+            if status not in (0, STATUS_MORE_ENTRIES):
+                raise OSError(status, 'NtQueryDirectoryObject failed')
+            size = ctypes.sizeof(OBJECT_DIRECTORY_INFORMATION)
+            for index in range(len(buffer) // size):
+                entry = OBJECT_DIRECTORY_INFORMATION.from_buffer(buffer, index * size)
+                if not entry.Name.Length:
+                    break
+                if ctypes.wstring_at(entry.Name.Buffer, entry.Name.Length // 2) == name:
+                    return True
+            if status == 0:
+                return False
+    finally:
+        ntdll.NtClose(directory)
