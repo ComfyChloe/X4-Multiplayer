@@ -158,6 +158,18 @@ kept in static storage (the Lua handle only holds a generation number, so a wrap
 never touches memory the Lua GC freed); digest reads through ReadProcessMemory (a component freed meanwhile
 yields a failed copy, never a fault). Registered in rewrite-coord/hooks.tsv.
 
+Threads (code review 26 Oct, fixed in 3e4ab7a): on loading screens the UI, and so Lua (`stop`, `__gc`, `set`),
+runs on the main thread while the MoveWorker keeps calling the slot 2 guard. Arm, disarm, set and the guard
+therefore run under one SRW lock (the guard only tries it and skips that frame), and the guard returns on
+loading frames before its entry checks. Without the lock, a stress test that stops the owner on one thread
+while another runs the guard fails 5 of 5 runs (access violation or a vtable page left writable); with it,
+3,000 rounds pass. Arming is refused on the main thread (`loading (UI on the main thread)`, retried by the
+loader), so the owner thread is the MoveWorker and the rel32 is written by the thread that executes that call.
+`start()` checks the PE header and the loading flag before the file hash, which is computed once per process.
+The engine copies RenderFlags with plain stores (options apply 0x121ef1f, ProcessGraphicsStateChanges
+0xfa3811) and never sets `disable_rendering` itself, so a bit of ours that a racing copy brings back is
+cleared again by the guard for 120 frames after a release, and the next owner adopts a stale bit of ours.
+
 Loader `native/engine/framediet_probe.lua` (inert unless `X4LAN_FRAMEDIET_MODE` is set and the config gate
 `test_profile == "45841"` holds): retries while loading, loud `FEATURE framediet DISABLED reason=...` on any
 refusal or disarm, `FRAMEDIET` stats every `X4LAN_FRAMEDIET_REPORT_S`, `FRAMEDIET_AUDIT` rows and
@@ -181,9 +193,11 @@ simulation reads. Audit mode tests that per call on the running game (diet off, 
 
 Synthetic (Windows, `build.py --framediet --test`): install/refusal/fail-closed lifecycle, skip only in context,
 other threads and loading pass through, draw bit ownership, period, pass mode, audit counters (RNG steps, IDs,
-events, word histogram, control), rng_split on/off, the ui_elements call-site patch (skip/pass/audit, argument
-forwarding, restore, foreign retarget, refusal), CPU accounting: 10 groups. Real Lua ABI: `framediet_lua_abi.py`.
-Loader: 14 LuaJIT tests; analyzer: 6 unit tests.
+events, word histogram, control), rng_split on/off (with simulation draws between the guard and slot 10), the
+ui_elements call-site patch (skip/pass/audit, argument forwarding, restore, foreign retarget, refusal), set/stop/
+active cores, the lock (skipped guard frames, 300 concurrent stop rounds), main-thread refusal, draw re-clear and
+adoption, X4-like page protections (vtable pages read-only, code execute/read), CPU accounting: 13 groups. Real Lua
+ABI: `framediet_lua_abi.py`. Loader: 16 LuaJIT tests; analyzer: 6 unit tests.
 
 Native (functional, lane b1, other X4 running; `results/2026-10-26-frame-diet-audit.md`), audit-001, 9,952 frames:
 
