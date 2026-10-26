@@ -51,6 +51,25 @@ static void *fake_find(uint64_t id) {
     return NULL;
 }
 
+/* Native resolver seam: exercise the real RVA adapter through tiny local jump
+   stubs in the synthetic image, never against a running game. */
+static int g_native_map;
+static unsigned g_native_ref[4];
+static int g_native_cast_missing, g_native_ref_missing;
+static void *fake_native_find(void *map, uint64_t id, unsigned flags) {
+    assert(map == &g_native_map && flags == 0);
+    return fake_find(id);
+}
+static void *fake_native_cast(void *base, int delta, void *from, void *to, int is_ref) {
+    assert(delta == 0 && is_ref == 0);
+    assert(from == image + WP_UID_TYPE_RVA && to == image + WP_SOURCE_TYPE_RVA);
+    return g_native_cast_missing ? NULL : base;
+}
+static void *fake_native_ref(void *src) {
+    assert(src != NULL);
+    return g_native_ref_missing ? NULL : g_native_ref;
+}
+
 static int g_cancel_calls;
 static void fake_cancel_original(void *src, int type, double minTime) {
     (void)src; (void)type; (void)minTime; ++g_cancel_calls;
@@ -169,6 +188,33 @@ int main(void) {
     wp_bind_replay_callbacks();
     assert(!wp_replay_ready());             /* a stale trampoline after census rearm is not enough */
     wp_det[WPD_POST].tramp = wp_det[WPD_CANCEL].tramp = NULL;
+
+    /* Production adapter uses the generic EventSource route, handles stale IDs,
+       failed casts, absent ref objects and released sources exactly as intended. */
+    {
+        DWORD old_protect;
+        assert(VirtualProtect(image + WP_FIND_RVA, 32, PAGE_EXECUTE_READWRITE, &old_protect));
+        wp_write_absjmp(image + WP_FIND_RVA, (uint64_t)(uintptr_t)fake_native_find);
+        assert(VirtualProtect(image + WP_DYNAMIC_CAST_RVA, 32, PAGE_EXECUTE_READWRITE, &old_protect));
+        wp_write_absjmp(image + WP_DYNAMIC_CAST_RVA, (uint64_t)(uintptr_t)fake_native_cast);
+        FlushInstructionCache(GetCurrentProcess(), image + WP_FIND_RVA, 32);
+        FlushInstructionCache(GetCurrentProcess(), image + WP_DYNAMIC_CAST_RVA, 32);
+        scene_init();
+        void *source_vt[566] = {0};
+        source_vt[565] = (void *)fake_native_ref;
+        o0.vt = source_vt;
+        *(void **)(image + WP_UIDMAP_RVA) = &g_native_map;
+        assert(wp_native_find(200) == &o0);
+        assert(wp_native_find(0) == NULL && wp_native_find(999) == NULL);
+        g_native_cast_missing = 1; assert(wp_native_find(200) == NULL);
+        g_native_cast_missing = 0;
+        g_native_ref[3] = 3; assert(wp_native_find(200) == NULL);
+        g_native_ref[3] = 2; assert(wp_native_find(200) == &o0);
+        g_native_ref_missing = 1; assert(wp_native_find(200) == &o0);
+        g_native_ref_missing = 0;
+        *(void **)(image + WP_UIDMAP_RVA) = NULL;
+        assert(wp_native_find(200) == NULL);
+    }
 
     /* Missing wiring must pass through before taking ownership of an event. */
     for (int missing = 0; missing < 3; ++missing) {
