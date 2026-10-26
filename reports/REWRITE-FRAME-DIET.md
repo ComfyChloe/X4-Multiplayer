@@ -132,8 +132,10 @@ every installed vtable entry; any change disarms everything (entries restored by
 value is never overwritten, the draw bit released). Wrappers pass straight through on other threads (loading
 mode runs the UI on the main thread), while loading, and when not armed. `period=N` presents every N-th frame
 fully (an operator heartbeat). Linux counterparts of every site and of the RNG/ID side effects are in
-rewrite-coord/questions.md Q10 (Linux vtable slot = Windows slot + 1; thread RNG at `fs:[-0x2720]`; AutoIDMap
-fields +8).
+rewrite-coord/questions.md Q10 and its correction (Linux vtable slot = Windows slot + 1 except where MSVC and GCC
+order overloaded virtuals differently: the Linux layer walk is AnarkScene slot 14 -> thunk 0xa7e250 -> 0xa5d840;
+Linux presentation update 0x2338f80 calls the element update at 0x2339015 and the Lua dispatch at 0x2339098;
+thread RNG at `fs:[-0x2720]`; AutoIDMap fields +8).
 
 ## 4. Module
 
