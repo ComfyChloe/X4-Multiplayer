@@ -271,7 +271,7 @@ Expected cost: the copy reads the whole reachable superset (the capture walker t
 walk itself on engine memory (exact visits, sector tasks in parallel, refreshes in walk order on
 the MoveWorker), see section 3 option 1.
 
-## 7. Direct-memory walk (ABI 3; offline verified, native test pending)
+## 7. Direct-memory walk (ABI 3; offline and native functional verification)
 
 `ffi/src/fast.rs` plans the exact walk directly over engine memory, avoiding the copied superset
 of section 6. Sector tasks receive private specification/truncation stacks. The persistent
@@ -312,11 +312,27 @@ five tests reject missing/duplicate records, errors, fallbacks and insufficient 
 The disabled Lua owner prints final shadow/switch statistics and the first differing field
 before stopping once; a synthetic UI-owner check in the real Lua runtime covers that path.
 
-Native direct-memory run `xform-005` is queued through the released lane tool (4 threads,
-6 captures, 1,000 shadow frames, 2,500 switched frames, A/B). No speedup is accepted yet.
+Native direct-memory run `xform-005` **passed** on lane b2 at 03:36 EDT (4 threads, A/B):
+5,026 frames, 2,509 switched frames, zero fallbacks/foreign-thread calls. All 1,005 shadow
+checks passed, including 502 switched frames and 503 original frames. Six original-frame
+captures replayed identically, three with exact visit/refresh traces. Concurrent reference
+counts remain separately observed: 117 reference-only shadow differences, and one capture
+with one reference difference; no transform/discrete-cache-state mismatch. The lane's semantic
+counter validator and replay wrapper exited zero, and the released tool restored the lane.
+Evidence: `.local/evidence-101-withheld,x4lan-debug.txt,engine-output.log}`,
+`xform-005-replay.txt`, and `xform-005-captures/`.
+
+No speedup is accepted. This was contended (`timing_trustworthy: false`, up to six X4 processes).
+Whole-run mean plain-frame build times were 2,848 us for the direct-memory switch versus
+2,511 us for the original, with 153 sector tasks; planning averaged 1,796 us and execution
+963 us. Early/late workloads differ substantially as the world settles, so neither these
+aggregate times nor comparisons with the earlier copied-model run establish an optimization.
+Next: a lead-granted quiet window, matched small/multi-sector workloads at 1/N threads, then
+tune task/plan overhead against measured costs. No additional native run was queued.
 `xform-004` was cancelled while still queued to add the duplicate-visit guard; no game launched.
-The earlier copied-model native run was slower than the original under contention; its timings
-are diagnostic, not an isolated performance result. A lead-granted quiet window is still needed.
+The tested overlay includes the reviewed Rust duplicate guards and C fail-closed behavior.
+The two final disabled-diagnostic Lua logging lines were added after its immutable overlay was
+made; those lines were covered by the synthetic real-Lua test, not this native run.
 `xform_lane.py --timing` forwards the released tool's quiet-window guard without creating a
 window; the lead must grant `transforms` the window before this option can admit a run.
 
