@@ -218,19 +218,24 @@ buffer to the same `walkpar_api()` (scope_begin/end, replay_tasks, buffer_op) �
 - `python native/engine/check_lua_abi.py …` — PASS (module loads; argument/coroutine/non-X4 rejection).
 - `… -m unittest tests.test_fixed_tick_probe` — 19 PASS (2 new: WALKCENSUS line, WALKREPLAY + loud refusal).
 
-## 8. Native steps needed (schedule when native-lane.md is READY and quiet.lock is gone)
+## 8. Native steps (lanes b1-b4 via dev/x4lane.py; census APPROVED, replay approved for a first short run)
 
-In lane B1/B2 (profiles 45850/45851), new disposable world, through `dev/x4lane.py`:
-1. Install the entry detours + galaxy-call wrapper per §6 (build-verified, fail closed), then
-   `walkpar_set_mode(census)`.
-2. **Stage 0 census** under the three loads (design §6.1): single client on a highway; four clients in four
-   sectors; a 100-ship battle + mining fleet. 10 min each. Capture the WALKCENSUS/WALKREPLAY lines. Apply the
-   decision rule (drop stage 2 if Σsector − deliver − CL-candidate < 25% of frame, or the largest sector > 60%,
-   or cross-sector non-event writes > 0 outside the listed paths).
-3. **Stage 1 A-vs-B**: same save, fixed dt (use the fixed-tick probe's fixed60), 600 frames then a 10-min
-   soak. Run normal (mode A) and replay (mode B); diff the per-listener logs offline; report any difference
-   with its event type; check the soak invariants (object/temp-zone/orphan counts, MD cue counts, AI wake
-   counts, "Too many recursive cue actions" / "abandoned cue" / "Failed to assign an ID" log counts).
+1. **Stage 0 census** (`X4LAN_FIXEDTICK_MODE='walkcensus'`): a probe-only shakeout (baseline world), then the
+   attnload 0,8 harness (`make-overlay attnload --steps 0,8 --durations 60,180 --warmup 20`). Capture the
+   WALKCENSUS line and post posts/frame, imm share, xsector_post/listener, posts_rootlevel, deliver_ms vs
+   sector_ms. Apply the design §6.1 decision rule for stage 2. (Timing is functional-only next to other X4;
+   the sector-ms ceiling also comes from walkprof's earlier dedicated run, ideal speedup 3.96 at 8 sectors.)
+2. **Stage 1 replay** (`walkreplay`): a few minutes, short. Auto-disarm on a degraded frame (built: wp_walk_end
+   → wp_replay_abort → walkpar_tick disarms; lane `--fail-on "degraded=[1-9]"`). Watch replay_dropped and
+   gameplay (no stuck orders, no duplicate temp zones). Record the §6.2 soak invariants.
+3. **Stage 1 verification — Linux mid-frame fork compare (next build item, condition 4).** A/B equivalence
+   stays UNPROVEN until this exists; do not call stage 1 "verified" before it. Plan: on the Linux build, at
+   `wp_walk_begin` the probe `fork()`s (the fork-probe worktree proved mid-frame fork is safe); the parent
+   runs the frame normally and emits the per-listener log A, the child runs the same frame's buffered replay
+   and emits log B, both over a pipe; `wp_compare` (or an offline differ) checks per-listener equivalence on
+   the *same* frame. Linux anchors: walk vcall L 0x1193339, PostEvent L 0x16c5fe0, Sector::Move slot 683 at
+   L 0x3d1eda8, 0x1092e80 ≈ L 0x1097d70 (design §7). Needs the Linux build / VPS, which belongs to x4mods-61
+   — coordinate access through the lead (not requested yet; after the replay run).
 
 ## 9. Open questions
 
