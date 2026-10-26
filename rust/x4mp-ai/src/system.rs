@@ -279,6 +279,8 @@ impl Services for SyntheticWorld {
                     .unwrap_or_default();
                 Answer::Pos(Pos::new(c.x + value.x, c.y + value.y, c.z + value.z))
             }
+            // The synthetic world has no hostiles.
+            Query::GravidarContacts { .. } => Answer::Path(Vec::new()),
             Query::SafePos { value, .. } => Answer::Pos(*value),
             Query::SafePosReserve { value, space, component, .. } => {
                 Answer::Reserved { pos: *value, index: Val::Int((component.0 & 0xff) as i64), zone: *space }

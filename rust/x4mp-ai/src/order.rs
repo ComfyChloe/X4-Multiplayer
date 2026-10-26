@@ -127,6 +127,7 @@ impl Agent {
                 let order = match bottom {
                     Frame::Patrol(_) => "Patrol",
                     Frame::Seek(_) => "move.seekenemies",
+                    Frame::TargetSel(_) => "lib.target.selection",
                     Frame::Opaque { .. } => "opaque",
                 };
                 OrderStatus::Running { order, top: top.name().to_string(), waiting: *w }

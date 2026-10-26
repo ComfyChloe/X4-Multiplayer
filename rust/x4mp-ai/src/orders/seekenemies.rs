@@ -533,6 +533,11 @@ impl SeekEnemies {
         }
     }
 
+    /// The controlled ship.
+    pub fn ship(&self) -> Uid {
+        self.ship
+    }
+
     /// Blocked in an action that has an `<interrupt>` (the move_to at L187 or the highway wait at L146).
     pub fn blocked_with_interrupt(&self) -> bool {
         matches!(self.pc, Pc::AfterMoveTo | Pc::AfterHighwayWait)

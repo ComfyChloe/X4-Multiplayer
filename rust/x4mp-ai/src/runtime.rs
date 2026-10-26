@@ -25,6 +25,7 @@
 
 use crate::orders::patrol::Patrol;
 use crate::orders::seekenemies::SeekEnemies;
+use crate::orders::targetselection::{TargetSelection, TsParams};
 use crate::rng::Stream;
 use crate::val::{Time, Uid, Val};
 use crate::world::{Cx, Facts, Io, Stop, R};
@@ -147,6 +148,7 @@ pub struct Pending {
 pub enum Frame {
     Patrol(Box<Patrol>),
     Seek(Box<SeekEnemies>),
+    TargetSel(Box<TargetSelection>),
     /// A script that is not ported; replay takes its runs from the capture.
     Opaque {
         script: String,
@@ -158,6 +160,7 @@ impl Frame {
         match self {
             Frame::Patrol(_) => Patrol::NAME,
             Frame::Seek(_) => SeekEnemies::NAME,
+            Frame::TargetSel(_) => TargetSelection::NAME,
             Frame::Opaque { script } => script,
         }
     }
@@ -166,6 +169,7 @@ impl Frame {
         match self {
             Frame::Patrol(p) => p.resume(cx, wake),
             Frame::Seek(s) => s.resume(cx, wake),
+            Frame::TargetSel(t) => t.resume(cx, wake),
             Frame::Opaque { script } => Err(Stop::Mismatch(format!("opaque frame {script} cannot run natively"))),
         }
     }
@@ -174,7 +178,7 @@ impl Frame {
         match self {
             Frame::Patrol(_) => Patrol::HANDLERS,
             Frame::Seek(_) => SeekEnemies::HANDLERS,
-            Frame::Opaque { .. } => &[],
+            Frame::TargetSel(_) | Frame::Opaque { .. } => &[],
         }
     }
 
@@ -184,7 +188,7 @@ impl Frame {
         match self {
             Frame::Patrol(p) => p.matches(facts, i, ev),
             Frame::Seek(s) => s.matches(facts, ent, i, ev),
-            Frame::Opaque { .. } => None,
+            Frame::TargetSel(_) | Frame::Opaque { .. } => None,
         }
     }
 
@@ -192,6 +196,7 @@ impl Frame {
         match self {
             Frame::Patrol(p) => p.handler_actions(cx, i, ev),
             Frame::Seek(s) => s.handler_actions(cx, i, ev),
+            Frame::TargetSel(_) => Err(Stop::Mismatch("lib.target.selection has no handlers".into())),
             Frame::Opaque { script } => Err(Stop::Mismatch(format!("handler actions of opaque frame {script}"))),
         }
     }
@@ -199,8 +204,9 @@ impl Frame {
     fn block_interrupt(&mut self, cx: &mut Cx<'_>, ev: &Event, detected: Option<&[Uid]>) -> R<Outcome> {
         match self {
             Frame::Seek(s) => s.block_interrupt(cx, ev, detected),
-            Frame::Patrol(_) => Err(Stop::Mismatch(format!(
-                "order.fight.patrol has no blocking action with an interrupt (event {})",
+            Frame::Patrol(_) | Frame::TargetSel(_) => Err(Stop::Mismatch(format!(
+                "{} has no blocking action with an interrupt (event {})",
+                self.name(),
                 ev.name
             ))),
             Frame::Opaque { script } => Err(Stop::Mismatch(format!("blocking interrupt of opaque frame {script}"))),
@@ -226,7 +232,7 @@ impl Frame {
         match self {
             Frame::Patrol(p) => p.restart_at(label),
             Frame::Seek(s) => s.restart_at(label),
-            Frame::Opaque { .. } => Ok(()),
+            Frame::TargetSel(_) | Frame::Opaque { .. } => Ok(()),
         }
     }
 
@@ -272,6 +278,9 @@ pub struct Agent {
     pub pending_block: Option<Pending>,
     /// Set when the native behaviour stopped (unsupported branch); the original must run the order.
     pub stopped: Option<String>,
+    /// Called scripts to keep opaque even when a native port exists (replay of traces that model them
+    /// as engine runs, or a staged rollout).
+    pub opaque: Vec<String>,
 }
 
 impl Agent {
@@ -286,6 +295,7 @@ impl Agent {
             pending_global: Vec::new(),
             pending_block: None,
             stopped: None,
+            opaque: Vec::new(),
         }
     }
 
@@ -359,9 +369,23 @@ impl Agent {
                 self.wake_at = *until;
             }
             Yield::MoveTo => self.waiting[top] = Waiting::Block,
-            Yield::Call { script, .. } => {
+            Yield::Call { script, params } => {
                 self.waiting[top] = Waiting::Return;
-                let callee = self.stack[top].take_callee().unwrap_or(Frame::Opaque { script: script.to_string() });
+                let forced = self.opaque.iter().any(|s| s == script);
+                let native = self.stack[top].take_callee();
+                let callee = if forced {
+                    Frame::Opaque { script: script.to_string() }
+                } else if let Some(f) = native {
+                    f
+                } else if *script == TargetSelection::NAME {
+                    let ps: Vec<(String, Val)> = params.iter().map(|(k, v)| (k.to_string(), v.clone())).collect();
+                    match TsParams::from_params(&ps) {
+                        Ok(p) => Frame::TargetSel(Box::new(TargetSelection::new(p, self.ship_of_top(top)))),
+                        Err(_) => Frame::Opaque { script: script.to_string() },
+                    }
+                } else {
+                    Frame::Opaque { script: script.to_string() }
+                };
                 self.stack.push(callee);
                 self.waiting.push(Waiting::Start);
             }
@@ -373,6 +397,16 @@ impl Agent {
                     self.returned = Some(vals.clone());
                 }
             }
+        }
+    }
+
+    /// The ship of the frame at `depth` (callees act for the same ship).
+    fn ship_of_top(&self, depth: usize) -> Uid {
+        match &self.stack[depth] {
+            Frame::Patrol(p) => p.ship(),
+            Frame::Seek(s) => s.ship(),
+            Frame::TargetSel(t) => t.ship(),
+            Frame::Opaque { .. } => Uid::NULL,
         }
     }
 

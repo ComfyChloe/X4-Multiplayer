@@ -117,6 +117,8 @@ struct TraceIo<'a> {
     deferred: Vec<usize>,
     /// `false` while an opaque bracket's records are consumed without comparison.
     compare: bool,
+    /// Header `opaque=`: called scripts the trace models as engine runs.
+    opaque: Option<&'a str>,
 }
 
 fn mismatch(r: Option<&Record>, msg: String) -> Stop {
@@ -347,6 +349,9 @@ fn step(
                 other => Frame::Opaque { script: other.to_string() },
             };
             let mut a = Agent::new(ent, 0);
+            if let Some(list) = io.opaque {
+                a.opaque = list.split(',').filter(|s| !s.is_empty()).map(|s| s.to_string()).collect();
+            }
             a.start_order(frame, view, io)?;
             agents.insert(ent, a);
         }
@@ -599,7 +604,16 @@ pub fn replay(trace: &Trace) -> Report {
             continue;
         }
         let ent = r.ent;
-        let mut io = TraceIo { recs, pos: i + 1, ent, store: &store, checks, deferred: Vec::new(), compare: true };
+        let mut io = TraceIo {
+            recs,
+            pos: i + 1,
+            ent,
+            store: &store,
+            checks,
+            deferred: Vec::new(),
+            compare: true,
+            opaque: trace.header_value("opaque"),
+        };
         let rep = report.entities.entry(ent.0).or_default();
         let res = step(r, &mut io, &mut agents, &view, rep);
         rep.effects += (i + 1..io.pos).filter(|&k| recs[k].ent == ent && recs[k].tag == "fx").count() as u64;

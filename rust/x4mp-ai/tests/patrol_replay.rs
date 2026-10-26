@@ -64,7 +64,10 @@ fn k(x: &str) -> Val {
 
 impl B {
     fn new() -> B {
-        B { t: Trace::new("handbuilt"), rng: 0, now: 0.0 }
+        let mut t = Trace::new("handbuilt");
+        // These scenarios model lib.target.selection as an engine run (its internals are opaque).
+        t.header.push(("opaque".into(), "lib.target.selection".into()));
+        B { t, rng: 0, now: 0.0 }
     }
     fn rec(&mut self, r: Record) {
         self.t.push(r);
@@ -765,4 +768,132 @@ fn write_example_trace() {
     );
     text.push_str(&scenario_zone().to_string());
     std::fs::write(concat!(env!("CARGO_MANIFEST_DIR"), "/tests/data/patrol_zone.x4aitrace"), text).expect("write");
+}
+
+/// Scenario C: like the first leg of scenario A, but lib.target.selection runs natively. Gravidar
+/// reports three contacts: 0x910 docked (skipped, L103), 0x911 hostile ship_m at 6 km (no distance
+/// bonus), 0x912 hostile ship_s at 1 km (distance bonus 9). Priorities (f32, XML order):
+/// 0x911: 0 - (-0.6)*5 + 10*120/(4000+1000) = 3 + 0.24 = 3.24;
+/// 0x912: (10 - (1000-500)/500) - (-0.2)*5 + 10*80/(1500+500) = 9 + 1 + 0.4 = 10.4 -> selected.
+fn scenario_native_target_selection() -> Trace {
+    let mut b = B::new();
+    b.t.header.retain(|(k, _)| k != "opaque");
+    world(&mut b);
+    b.fact(P, "trueowner", k("faction.argon"));
+    b.fact(S, "iscapitalship", Val::Bool(false));
+    let hostiles = [Uid(0x910), Uid(0x911), Uid(0x912)];
+    b.fact(P, "mayattack", Val::List(hostiles.iter().map(|u| c(*u)).collect()));
+    for (u, cls, dist, rel, dps, hull, shield, docked) in [
+        (Uid(0x910), "ship_m", 2000.0f32, -0.5f32, 50.0f32, 3000.0f64, 1000.0f64, true),
+        (Uid(0x911), "ship_m", 6000.0, -0.6, 120.0, 4000.0, 1000.0, false),
+        (Uid(0x912), "ship_s", 1000.0, -0.2, 80.0, 1500.0, 500.0, false),
+    ] {
+        b.fact(u, "class", k(cls));
+        b.fact(u, "sector", c(X));
+        b.fact(u, "zone", c(Z));
+        b.fact(u, "canbeattacked", Val::Bool(true));
+        b.fact(u, "trueowner", k("faction.xenon"));
+        b.fact(u, "dock", Val::Bool(docked));
+        b.fact(u, "distanceto", Val::List(vec![c(S), Val::F32(dist)]));
+        b.fact(u, "relationto", Val::List(vec![c(S), Val::F32(rel)]));
+        b.fact(u, "dps.all", Val::F32(dps));
+        b.fact(u, "hull", Val::F64(hull));
+        b.fact(u, "shield", Val::F64(shield));
+    }
+    b.rec(
+        Record::new("start", P, "order.fight.patrol").arg("param.space", c(Z)).arg("param.debugchance", Val::F32(0.0)),
+    );
+    b.fx("set_command", vec![("command", k("command.patrol"))]);
+    b.fx("set_command_action", vec![("commandaction", k("commandaction.calculating"))]);
+    // $space given: no recovery, no edits; L311; L317
+    b.run("order.fight.patrol", 10.0, "start", 0x00c0_ffee_0000_0001);
+    b.fx("set_order_syncpoint_reached", vec![("order", Val::Order(O))]);
+    let w = b.rnd_time(317, 0.001, 1.0);
+    b.yield_("order.fight.patrol", "wait", vec![("until", Val::F64(10.0 + w))]);
+    b.run("order.fight.patrol", 11.0, "timer", 0x00c0_ffee_0000_0002);
+    b.roll(398, 0.0);
+    b.roll(430, 0.0);
+    let pos = leg_find_position(&mut b, Z, Pos::new(0.0, 0.0, 0.0), 3);
+    let _ = seek_first_run(&mut b, 11.0, "start", 0x00c0_ffee_0000_0003, Z, pos, None, 5);
+    b.run("move.seekenemies", 40.0, "block", 0x00c0_ffee_0000_0004);
+    b.fx("run_script", targetsel_params());
+    b.yield_("move.seekenemies", "call", vec![("script", s("lib.target.selection"))]);
+    // native lib.target.selection
+    b.run("lib.target.selection", 40.0, "start", 0x00c0_ffee_0000_0005);
+    b.roll(67, 0.0);
+    b.roll(80, 0.0);
+    b.q(
+        "find_gravidar_contact",
+        vec![
+            ("object", c(S)),
+            ("class", targetclasses_default()),
+            ("maybeattackedby", c(S)),
+            ("excluded", Val::List(vec![])),
+        ],
+        vec![("contacts", Val::List(hostiles.iter().map(|u| c(*u)).collect()))],
+        0,
+    );
+    b.roll(103, 0.0); // 0x910 docked
+    b.roll(184, 0.0); // 0x911: in sector, chance="0"; 6 km: no L233
+    b.roll(251, 0.0);
+    b.roll(286, 0.0); // first valid: new highest
+    b.roll(184, 0.0); // 0x912
+    b.roll(233, 0.0);
+    b.roll(251, 0.0);
+    b.roll(286, 0.0); // 10.4 > 3.24
+    b.roll(298, 0.0); // changed target
+    b.yield_("lib.target.selection", "return", vec![("target", c(Uid(0x912)))]);
+    // seek attacks 0x912
+    b.run("move.seekenemies", 40.0, "return", 0x00c0_ffee_0000_0006);
+    b.roll(572, 0.0);
+    b.roll(587, 0.0);
+    b.roll(615, 0.0);
+    b.fx(
+        "create_order",
+        vec![
+            ("id", s("Attack")),
+            ("object", c(S)),
+            ("immediate", Val::Bool(true)),
+            ("param.primarytarget", c(Uid(0x912))),
+            ("param.escort", Val::Null),
+            ("param.pursuedistance", Val::F32(10000.0)),
+            ("param.pursuetargets", Val::Bool(false)),
+            ("param.allowothertargets", Val::Bool(true)),
+            ("param.targetclasses", targetclasses_default()),
+            ("param.disable", Val::Bool(false)),
+            ("param.radius", Val::Null),
+            ("param.radiusanchorpos", Val::Null),
+            ("param.radiusanchorspace", Val::Null),
+            ("param.internalorder", Val::Bool(true)),
+            ("param.checkrelation", Val::Bool(true)),
+            ("param.enforceradius", Val::Bool(false)),
+            ("param.debugchance", Val::F32(0.0)),
+        ],
+    );
+    b.fx("cancel_space_reservation", vec![("component", c(S)), ("index", Val::Int(5)), ("zone", c(Z))]);
+    b.yield_("move.seekenemies", "return", vec![("target", Val::Null), ("list_targets", Val::List(vec![]))]);
+    b.t
+}
+
+#[test]
+fn native_target_selection_scores_and_draws_like_the_script() {
+    // The expected selection, by hand in f32 as written in the XML (independent of the crate).
+    let p911: f32 = 0.0 - (-0.6f32) * 5.0 + 10.0 * 120.0 / ((4000.0f64 + 1000.0) as f32);
+    let p912: f32 = (10.0 - (1000.0f32 - 500.0) / 500.0) - (-0.2f32) * 5.0 + 10.0 * 80.0 / ((1500.0f64 + 500.0) as f32);
+    assert!(p912 > p911);
+    let t = scenario_native_target_selection();
+    let rep = replay(&t);
+    assert!(rep.ok(), "{}", rep.summary());
+    assert_eq!(rep.entities[&P.0].opaque_runs, 0);
+}
+
+#[test]
+fn native_target_selection_refuses_a_capital_target_for_a_fighter() {
+    let mut t = scenario_native_target_selection();
+    // make the winner a capital ship: the big-target reselection is not ported
+    let i = t.records.iter().position(|r| r.tag == "start").unwrap();
+    t.records.insert(i, Record::new("fact", Uid(0x912), "iscapitalship").arg("v", Val::Bool(true)));
+    let rep = replay(&t);
+    let u = rep.entities[&P.0].unsupported.clone().expect("unsupported");
+    assert!(u.contains("lib.target.selection L306"), "{u}");
 }

@@ -29,6 +29,10 @@ pub enum Class {
     ShipL,
     ShipXL,
     Station,
+    BuildStorage,
+    Spacesuit,
+    /// Abstract `class.defensible` (ships, stations, build storages).
+    Defensible,
     Other,
 }
 
@@ -47,6 +51,9 @@ impl Class {
             "ship_l" => Class::ShipL,
             "ship_xl" => Class::ShipXL,
             "station" => Class::Station,
+            "buildstorage" => Class::BuildStorage,
+            "spacesuit" => Class::Spacesuit,
+            "defensible" => Class::Defensible,
             _ => Class::Other,
         }
     }
@@ -64,13 +71,22 @@ impl Class {
             Class::ShipL => "ship_l",
             Class::ShipXL => "ship_xl",
             Class::Station => "station",
+            Class::BuildStorage => "buildstorage",
+            Class::Spacesuit => "spacesuit",
+            Class::Defensible => "defensible",
             Class::Other => "other",
         }
     }
     /// `isclass.{base}` for a component whose real class is `self`.
     pub fn is_a(self, base: Class) -> bool {
         use Class::*;
-        self == base || matches!((self, base), (Highway, Zone) | (ShipXS | ShipS | ShipM | ShipL | ShipXL, Ship))
+        self == base
+            || matches!(
+                (self, base),
+                (Highway, Zone)
+                    | (ShipXS | ShipS | ShipM | ShipL | ShipXL | Spacesuit, Ship)
+                    | (ShipXS | ShipS | ShipM | ShipL | ShipXL | Ship | Spacesuit | Station | BuildStorage, Defensible)
+            )
     }
 }
 
@@ -96,6 +112,27 @@ pub enum Prop {
     CanSee,
     /// List of components `subject.mayattack.{x}` holds for.
     MayAttack,
+    /// `subject.relationto.{x}` as an alternating list `[c:x; F:value; ...]`.
+    RelationTo,
+    /// `subject.distanceto.{x}` as an alternating list `[c:x; F:metres; ...]`.
+    DistanceTo,
+    /// `@subject.dock` is set (docked).
+    Docked,
+    Container,
+    IsModular,
+    CanHaveAttackableModules,
+    IsLaserTower,
+    IsIndestructible,
+    /// `subject.boardingoperations.count`.
+    BoardingOperations,
+    /// `subject.dps.all` (f32).
+    DpsAll,
+    /// `subject.hull` (f64 hit points).
+    Hull,
+    /// `subject.shield` (f64 hit points).
+    Shield,
+    /// `@this.assignedcontrolled.commander.pilot.$attacktarget` (a foreign blackboard read).
+    CommanderAttackTarget,
     // the context's entity (the pilot): its controlled ship
     Ship,
     // the controlled ship (this.ship == this.assignedcontrolled == this.controlled for a pilot)
@@ -122,6 +159,8 @@ pub enum Prop {
     SpaceReservationMaxDuration,
     SpaceReservationSpam,
     PlayerOccupiedShip,
+    /// `player.ismadscoreenabled`.
+    MadScoreEnabled,
 }
 
 impl Prop {
@@ -144,6 +183,19 @@ impl Prop {
             Pilot => "pilot",
             CanSee => "cansee",
             MayAttack => "mayattack",
+            RelationTo => "relationto",
+            DistanceTo => "distanceto",
+            Docked => "dock",
+            Container => "container",
+            IsModular => "ismodular",
+            CanHaveAttackableModules => "canhaveattackablemodules",
+            IsLaserTower => "islasertower",
+            IsIndestructible => "isindestructible",
+            BoardingOperations => "boardingoperations.count",
+            DpsAll => "dps.all",
+            Hull => "hull",
+            Shield => "shield",
+            CommanderAttackTarget => "commander.pilot.$attacktarget",
             Ship => "ship",
             JobMainZone => "jobmainzone",
             IsCommandeered => "iscommandeered",
@@ -165,11 +217,12 @@ impl Prop {
             SpaceReservationMaxDuration => "param.spacereservation.maxduration",
             SpaceReservationSpam => "global.$spacereservationspam",
             PlayerOccupiedShip => "player.occupiedship",
+            MadScoreEnabled => "player.ismadscoreenabled",
         }
     }
     pub fn parse(s: &str) -> Option<Prop> {
         use Prop::*;
-        const ALL: [Prop; 37] = [
+        const ALL: [Prop; 51] = [
             Exists,
             Class,
             Sector,
@@ -186,6 +239,19 @@ impl Prop {
             Pilot,
             CanSee,
             MayAttack,
+            RelationTo,
+            DistanceTo,
+            Docked,
+            Container,
+            IsModular,
+            CanHaveAttackableModules,
+            IsLaserTower,
+            IsIndestructible,
+            BoardingOperations,
+            DpsAll,
+            Hull,
+            Shield,
+            CommanderAttackTarget,
             Ship,
             JobMainZone,
             IsCommandeered,
@@ -207,6 +273,7 @@ impl Prop {
             SpaceReservationMaxDuration,
             SpaceReservationSpam,
             PlayerOccupiedShip,
+            MadScoreEnabled,
         ];
         ALL.iter().copied().find(|p| p.name() == s)
     }
@@ -238,6 +305,25 @@ pub trait Facts {
     /// `viewer.cansee.{target}` (default: the [`Prop::CanSee`] list).
     fn can_see(&self, viewer: Uid, target: Uid) -> bool {
         self.get(viewer, Prop::CanSee).as_uid_list().is_some_and(|l| l.contains(&target))
+    }
+    /// A pair fact stored as an alternating list `[c:b; value; ...]` on `a`.
+    fn pair(&self, a: Uid, p: Prop, b: Uid) -> Val {
+        if let Val::List(l) = self.get(a, p) {
+            for kv in l.chunks(2) {
+                if kv.len() == 2 && kv[0].as_uid() == Some(b) {
+                    return kv[1].clone();
+                }
+            }
+        }
+        Val::Null
+    }
+    /// `a.relationto.{b}` (f32).
+    fn relation_to(&self, a: Uid, b: Uid) -> f32 {
+        self.pair(a, Prop::RelationTo, b).as_f32().unwrap_or(0.0)
+    }
+    /// `a.distanceto.{b}` (length, f32).
+    fn distance_to(&self, a: Uid, b: Uid) -> f32 {
+        self.pair(a, Prop::DistanceTo, b).as_f32().unwrap_or(0.0)
     }
     /// `a.mayattack.{b}` (default: the [`Prop::MayAttack`] list).
     fn may_attack(&self, a: Uid, b: Uid) -> bool {
@@ -304,6 +390,11 @@ pub enum Query {
     CreatePositionIn { space: Uid, value: Pos, object: Uid },
     /// `<get_safe_pos result= radius= ignored= value= zone= allowyaxis= ignoredangerousregions=>`.
     SafePos { value: Pos, zone: Uid, radius: f32, ignored: Uid, allowyaxis: bool, ignoredangerousregions: bool },
+    /// `<find_gravidar_contact multiple="true" docked="false" object= class= masstraffic="false"
+    /// checkoperational="false" maybeattackedby= excluded= append="true">` with `<match class=
+    /// "class.buildstorage" negate="true"/>` and `<match state="componentstate.wreck" negate="true"/>`
+    /// (lib.target.selection L81/L89).
+    GravidarContacts { object: Uid, classes: Vec<Val>, maybeattackedby: Uid, excluded: Vec<Val> },
     /// `<get_safe_pos result= value= sector=|zone= ignoredangerousregions="true" radius=>` with
     /// `<spacereservation component= duration= index= safezone=><orientation look_away refobject=/>`.
     SafePosReserve { value: Pos, space: Uid, in_sector: bool, radius: f32, component: Uid, duration: f64 },
@@ -327,6 +418,7 @@ impl Query {
             Query::CreatePositionIn { .. } => "create_position_in",
             Query::SafePos { .. } => "get_safe_pos",
             Query::SafePosReserve { .. } => "get_safe_pos_reserve",
+            Query::GravidarContacts { .. } => "find_gravidar_contact",
         }
     }
 
@@ -359,6 +451,11 @@ impl Query {
                 .arg("ignored", Val::uid(*ignored))
                 .arg("allowyaxis", Val::Bool(*allowyaxis))
                 .arg("ignoredangerousregions", Val::Bool(*ignoredangerousregions)),
+            Query::GravidarContacts { object, classes, maybeattackedby, excluded } => r
+                .arg("object", Val::uid(*object))
+                .arg("class", Val::List(classes.clone()))
+                .arg("maybeattackedby", Val::uid(*maybeattackedby))
+                .arg("excluded", Val::List(excluded.clone())),
             Query::SafePosReserve { value, space, in_sector, radius, component, duration } => r
                 .arg("value", Val::Pos(*value))
                 .arg(if *in_sector { "sector" } else { "zone" }, Val::uid(*space))
@@ -375,6 +472,11 @@ impl Query {
             Query::FindZone { .. } => {
                 Ok(Answer::Zone(need("zone")?.as_uid().ok_or_else(|| format!("line {}: zone must be c:", r.line))?))
             }
+            Query::GravidarContacts { .. } => Ok(Answer::Path(
+                need("contacts")?
+                    .as_uid_list()
+                    .ok_or_else(|| format!("line {}: contacts must be a list of c:", r.line))?,
+            )),
             Query::GlobalPath { .. } => Ok(Answer::Path(
                 need("path")?.as_uid_list().ok_or_else(|| format!("line {}: path must be a list of c:", r.line))?,
             )),

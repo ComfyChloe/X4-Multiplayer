@@ -2,7 +2,7 @@
 # not a native capture). order.fight.patrol, range=class.zone job ship, two legs, nested opaque
 # ResupplyHandler delivery + its interrupt run, gravidar move_to interrupt, Attack order, opaque
 # AttackHandler, orders.base abort.
-X4AITRACE	1	build=23660954	source=handbuilt
+X4AITRACE	1	build=23660954	source=handbuilt	opaque=lib.target.selection
 fact	c:0x100	ship	v=c:0x200
 fact	c:0x100	zone	v=c:0x300
 fact	c:0x100	sector	v=c:0x400

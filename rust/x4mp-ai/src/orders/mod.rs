@@ -4,6 +4,7 @@
 
 pub mod patrol;
 pub mod seekenemies;
+pub mod targetselection;
 
 use crate::trace::Record;
 use crate::val::Val;

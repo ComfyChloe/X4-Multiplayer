@@ -731,6 +731,11 @@ impl Patrol {
         }
     }
 
+    /// The controlled ship.
+    pub fn ship(&self) -> Uid {
+        self.ship
+    }
+
     /// The `$space` the order currently patrols (for tests and diagnostics).
     pub fn space(&self) -> Uid {
         self.p.space
