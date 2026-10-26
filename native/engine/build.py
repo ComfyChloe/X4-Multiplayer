@@ -9,6 +9,7 @@ import sys
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(ROOT))
 from native.engine.signatures import c_header
+from native.engine.mirror_layout import c_header as mirror_c_header
 
 
 def compiler_path(zig: Path | None) -> str:
@@ -25,6 +26,7 @@ def output_directory(root: Path) -> Path:
     out = root.resolve() / '.local' / 'engine'
     out.mkdir(parents=True, exist_ok=True)
     (out / 'fixedtick_signatures.h').write_text(c_header())
+    (out / 'mirror_layout.h').write_text(mirror_c_header())
     return out
 
 
@@ -68,7 +70,7 @@ def main():
         if os.name != 'nt':
             parser.error('--test executes a Windows binary and requires Windows')
         # The sampler test (simprof) unwinds against the test executable's own .pdata.
-        names = ['fixedtick', 'simprof'] if args.fixedtick else ['simtick']
+        names = ['fixedtick', 'simprof', 'mirror'] if args.fixedtick else ['simtick']
         for name in names:
             test = out / f'test_{name}.exe'
             subprocess.run([

@@ -1,0 +1,23 @@
+[package]
+name = "x4mp-sim"
+description = "Per-sector ECS core for the X4 engine rewrite: worlds, scheduler, ordered message bus, shadow compare, capture format"
+version.workspace = true
+edition.workspace = true
+publish.workspace = true
+rust-version.workspace = true
+
+[lib]
+name = "x4mp_sim"
+crate-type = ["rlib"]
+
+[[bin]]
+name = "x4mp-capdump"
+path = "src/bin/x4mp-capdump.rs"
+
+[[bin]]
+name = "x4mp-sim-bench"
+path = "src/bin/x4mp-sim-bench.rs"
+
+[dependencies]
+# Single source of truth for the pinned build (pins::windows) and SHA-256.
+x4mp-core = { path = "../x4mp-core" }
