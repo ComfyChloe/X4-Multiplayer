@@ -5,8 +5,8 @@ Build: X4 9.00, Steam build 23660954 (Windows RVAs; Linux VAs in bin-linux/X4 wh
 Status 26 Oct 2026: module, audit mode and tests done; native functional audits done on a lane (audit-001:
 presentation regions; audit-003: rng_split A/B and ui_elements). Native stability/bisect later proved
 `ui_elements` skipping stops UI Lua; diet now refuses it, and watchdog recovery is a failure (section 11).
-The timing measurement waits for a quiet window
-(rewrite-coord Q9). Terminology: the dedicated X4 is the **server**,
+Baseline timing completed in a lead-controlled quiet window (section 14); the eight-sector measurement
+remains pending (rewrite-coord Q9). Terminology: the dedicated X4 is the **server**,
 players connect as **clients**.
 
 ## Summary
@@ -266,7 +266,8 @@ Proposal of the multiplayer determinism owner (rng-streams 23c841f), implemented
 
 ## 6. Measurements
 
-Pending: the quiet-window timing run (Q9), started only when the lead opens the window: attnload steps 0/8,
+Baseline quiet-window measurement is complete (section 14). The larger load series remains pending (Q9),
+started only when the lead opens the window: attnload steps 0/8,
 phases `pass` / `server` / `all` every 30 s (never `ui_elements` diet), MoveWorker slot-loop ms and fps from the fixed-
 tick probe per phase (`framediet_analyze.py phases`), CPU shares of the main thread and the MoveWorker per phase
 (`audit --phases`).
@@ -456,3 +457,42 @@ The run shared the PC with up to 6 X4 processes; available memory reached 4.9 GB
 high. timing_trustworthy=false: no performance saving is inferred. The log's other error-like lines
 are the missing optional signature, a resource-area message and vanilla trade failures; no Lua error
 or frame-diet disabled marker appears. Quiet-window timing remains pending the lead's scheduling.
+
+
+## 14. Bounded quiet-window baseline A/B (26 Oct 2026, 03:58?04:03)
+
+The lead granted quiet.lock to frame-diet, then transforms. `codex-safe-timing-001` ran once on b1,
+profile 45850, using the identical validated frozen overlays/DLL of section 13 and the same disposable
+creative-world scene. The tool confirms timing_trustworthy=true, max_x4_total=1, no other X4 observed,
+minimum available memory 37.0 GB and lane_restored=true. After graceful exit it handed quiet.lock to
+transforms automatically. No additional native test was queued.
+
+The loader waited 30 seconds before arming, then ran three adjacent pass/diet pairs of 30 seconds each.
+The RNG split was active continuously in both modes; diet selected only `server` (ui_scenes + draw).
+Every first FRAMEPROBE sample after a switch was excluded. The remaining 28?29 samples per phase were
+weighted by simFrames, giving these MoveWorker slot-loop mean times:
+
+- Pair 1: pass 17.380 ms ? diet 13.246 ms; difference 4.135 ms (23.8%).
+- Pair 2: pass 14.380 ms ? diet 12.488 ms; difference 1.893 ms (13.2%).
+- Pair 3: pass 15.197 ms ? diet 12.674 ms; difference 2.523 ms (16.6%).
+
+Median paired difference: 2.523 ms / 16.6%. Main-thread CPU time divided by wall time was 12.4?12.9%
+of one logical core in pass and 5.4?5.7% in diet. This separate reduction is consistent with disabling
+the main-thread draw; it is not additional MoveWorker time to add to the slot-loop saving.
+
+Strict liveness also passed: 25 UI reports cover t30.048?210.202 (180.154 seconds), 10,845 frames,
+maximum report gap 10.016 seconds, zero watchdog stalls, mode drift or FEATURE DISABLED. This confirms
+the measured interval retained UI callbacks; it does not prove every gameplay channel equivalent.
+
+Limits: only three sequential pairs in one fresh baseline world, not eight-sector attention load.
+The first pass is slower than later passes, showing startup/world drift; report all pairs rather than
+using its larger saving alone. No confidence interval or general production speedup is claimed. The
+same fixed-tick probe, frame-diet wrappers, RNG split, 10-second reports and snapshot accounting remain
+in both modes; their absolute overhead was not independently subtracted. Quiet admission verifies
+other X4 instances, not the absence of every unrelated OS/background workload. No simulation/RNG
+state was reset between phases, so this is paired timing evidence, not a deterministic replay.
+
+Evidence: `.local/evidence-082-withheld,x4lan-debug.txt,paired-summary.json}`.
+The local analysis helper `.local/evidence-042-withheld` closes each phase at the next phase
+marker, excludes the first FRAMEPROBE sample and never includes the final incomplete pass phase.
+Recheck liveness with `framediet_analyze.py stability <log> --check --min-duration 180 --max-gap 15`.
