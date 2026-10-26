@@ -321,9 +321,10 @@ compare-exchange and swapped back at the end; the originals always run with thei
 
 Per frame (the frame's game time TLS+0x300 delimits frames): weapon calls by class and nesting, controller
 target set, aiming and firing flags, salvos (last shot time +0x310 changed), shots and missile shots, bullet
-calls, flight checks (last check +0x268 became now), hits (+0x280 grew) and ricochet resets, first moves of
-new bullets (last check still equals the creation time +0x278) and how many of those were fired in the same
-frame, thread-RNG steps inside outermost weapon and bullet updates and on the whole thread between frames
+calls, flight checks (last check +0x268 became now), hits (+0x280 grew) and ricochet resets, Move calls whose
+last-check time still equals the shot time +0x278 (`bullet_fresh`) and the subset with shot time after the
+previous observed frame (`fresh_same_frame`), thread-RNG steps inside outermost weapon and bullet updates
+and on the whole thread between frames
 (steps between two TLS+0x318 states with the engine generator `rotr64(s * 6364136223846793005 +
 1442695040888963407, 30)`), rdtsc time in weapon and bullet updates. Static findings it rests on: FireShot
 returns the shot time in xmm0 (index x inter-shot delay + salvo time + a thread-RNG jitter) and `Fire` uses
@@ -343,6 +344,15 @@ unavailable if any call is unmatched. A bookkeeping or switch failure first obse
 end emits the same `FEATURE ... DISABLED` failure marker as a periodic check, while retaining
 the evidence and attempting hook restoration. These paths have LuaJIT/Python regression tests;
 they are not additional native acceptance evidence.
+
+The fresh counters are timestamp proxies, not unique first-move or same-creation-frame counts.
+Shot time includes barrel delay and RNG jitter; until the first actual flight check, repeated
+Move calls can retain last-check == shot-time. In particular, a shot scheduled in the future
+passes `shot_time > previous_frame_time`. Do not use these counters alone to prove that deferring
+bullet creation to a frame barrier preserves native traversal order. That needs a creation-to-Move
+identity trace. Static evidence: FireShot 0x8185b0, Bullet::Move 0xd4f090 and UpdateFlight 0xd4f240.
+The analyzer rejects truncated tables, inconsistent row counts/columns, invalid clock calibration
+and non-finite or invalid count values rather than silently summarizing incomplete evidence.
 
 ## 10. Shadow and switch design for the joint step
 

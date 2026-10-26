@@ -4,21 +4,28 @@
 
 Per-frame distributions of the counts, plus the derived figures the parallel-walk design needs:
 the share of the thread's RNG steps made inside weapon and bullet updates, RNG steps per shot and per
-flight check, bullets created per frame (shots), hits per frame (hit-path locks or buffers), and how
-many first bullet moves happen in the frame that fired the bullet. Never launches X4.
+flight check, FireShot calls per frame, hits per frame (hit-path locks or buffers), and the
+fresh-bullet timestamp proxy. That proxy is not a unique-bullet or same-creation-frame count:
+last-check equality can persist and shot time includes salvo delay/jitter. Never launches X4.
 """
 import argparse
 import json
+import math
 from pathlib import Path
 import sys
 
 MAGIC = 'X4MP-COMBATCENSUS 1'
+REQUIRED_COLUMNS = set(('now weapon_calls with_target aiming fired shots missile_shots bullet_calls '
+                        'bullet_checks bullet_hits bullet_fresh fresh_same_frame rng_weapon rng_bullet '
+                        'rng_unmatched rng_frame weapon_ticks bullet_ticks frame_ticks').split())
 
 
 def read(path: Path):
     lines = path.read_text(encoding='utf-8').splitlines()
-    if not lines or not lines[0].startswith(MAGIC):
+    if not lines or lines[0].split()[:2] != MAGIC.split():
         raise ValueError(f'{path}: not a combat census table')
+    if len(lines) < 3 or not lines[1].startswith('# '):
+        raise ValueError(f'{path}: missing census metadata')
     meta = {}
     for item in lines[1].lstrip('# ').split():
         key, _, value = item.partition('=')
@@ -26,9 +33,31 @@ def read(path: Path):
             meta[key] = float(value)
         except ValueError:
             meta[key] = value
-    header = next(i for i, l in enumerate(lines) if l.startswith('now\t'))
+    header = next((i for i, l in enumerate(lines) if l.startswith('now\t')), None)
+    if header is None:
+        raise ValueError(f'{path}: missing census columns')
     columns = lines[header].split('\t')
-    rows = [dict(zip(columns, (float(v) for v in l.split('\t')))) for l in lines[header + 1:] if l.strip()]
+    if len(set(columns)) != len(columns) or not REQUIRED_COLUMNS <= set(columns):
+        raise ValueError(f'{path}: missing or duplicate census columns')
+    rows = []
+    for line_number, line in enumerate(lines[header + 1:], header + 2):
+        if not line.strip():
+            continue
+        values = line.split('\t')
+        if len(values) != len(columns):
+            raise ValueError(f'{path}:{line_number}: incomplete census row')
+        row = dict(zip(columns, map(float, values)))
+        if not all(math.isfinite(v) for v in row.values()):
+            raise ValueError(f'{path}:{line_number}: non-finite census value')
+        for name, value in row.items():
+            if name != 'now' and (value != int(value) or (value < 0 and not (name == 'rng_frame' and value == -1))):
+                raise ValueError(f'{path}:{line_number}: invalid count {name}={value}')
+        rows.append(row)
+    if meta.get('frames') != len(rows):
+        raise ValueError(f'{path}: frame count disagrees with metadata (truncated capture?)')
+    tps = meta.get('ticks_per_second')
+    if not isinstance(tps, (int, float)) or not math.isfinite(tps) or tps <= 0:
+        raise ValueError(f'{path}: invalid ticks_per_second')
     return meta, rows
 
 
@@ -85,6 +114,7 @@ def text(s: dict) -> str:
                 'idle_weapon_share'):
         value = s[key]
         out.append(f"{key:24} {'n/a' if value is None else f'{value:.4f}'}")
+    out.append('fresh counters classify Move calls by shot/check timestamps; they do not prove unique first moves or creation-frame order.')
     return '\n'.join(out) + '\n'
 
 

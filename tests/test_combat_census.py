@@ -80,6 +80,30 @@ class CensusReport(unittest.TestCase):
         s = report.summarise(meta, parsed[1:])
         self.assertIsNone(s['rng_combat_share'])
 
+    def test_refuses_truncated_or_ambiguous_capture_evidence(self):
+        good = table([dict(now=1, weapon_calls=10), dict(now=2, weapon_calls=20)])
+        lines = good.splitlines()
+        cases = {
+            'truncated row': '\n'.join(lines[:-1] + [lines[-1].rsplit('\t', 1)[0]]),
+            'missing final row': '\n'.join(lines[:-1]),
+            'wrong version': good.replace('X4MP-COMBATCENSUS 1 ', 'X4MP-COMBATCENSUS 10 '),
+            'missing metadata': lines[0] + '\n',
+            'missing column': good.replace('now\tweapon_calls', 'now\tunknown'),
+            'duplicate column': good.replace('now\tweapon_calls', 'now\tnow'),
+            'missing clock calibration': good.replace('ticks_per_second=1000000', ''),
+            'invalid clock calibration': good.replace('ticks_per_second=1000000', 'ticks_per_second=nan'),
+            'negative count': table([dict(now=1, weapon_calls=-1)]),
+            'fractional count': table([dict(now=1, weapon_calls=0.5)]),
+            'nonfinite': table([dict(now=float('nan'))]),
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'census.txt'
+            for label, contents in cases.items():
+                with self.subTest(label=label):
+                    path.write_text(contents, encoding='utf-8')
+                    with self.assertRaises(ValueError):
+                        report.read(path)
+
 
 if __name__ == '__main__':
     unittest.main()

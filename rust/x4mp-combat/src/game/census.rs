@@ -85,9 +85,10 @@ pub struct Frame {
     pub bullet_checks: u32,
     pub bullet_hits: u32,
     pub hit_resets: u32,
-    /// First Move of a bullet (last check +0x268 still equals its creation time +0x278), and of
-    /// those the bullets created during this frame (creation time after the previous frame's
-    /// game time): moved in the frame that fired them.
+    /// Move calls with last check +0x268 still equal to shot time +0x278. This is not a
+    /// unique-bullet count: the equality can persist until the first actual flight check.
+    /// `fresh_same_frame` is the subset with shot time after the previous observed frame's
+    /// game time, not proof of creation in this frame (shot time includes salvo delay/jitter).
     pub bullet_fresh: u32,
     pub fresh_same_frame: u32,
     /// Thread-RNG steps inside outermost weapon / bullet Move calls, the largest in one call,
