@@ -8,9 +8,14 @@ for i, a in enumerate(sys.argv):
 path = args[0]; label = args[1] if len(args) > 1 else path
 kv = re.compile(r'(\w+)=(-?\d+\.?\d*)')
 sv = re.compile(r'(\S+?)=(\d+\.\d+)ms/(\d+\.?\d*)')
-rows, scripts, sectors, script_rows = [], [], [], []
+rows, scripts, sectors, script_rows, drive = [], [], [], [], []
 for line in open(path, encoding='utf-8', errors='replace'):
-    if 'AIPROF mode=' in line and ' frames=' in line:
+    if 'AIDRIVE mode=' in line:
+        d = {k: float(v) for k, v in kv.findall(line.split('AIDRIVE', 1)[1])}
+        d['_mode'] = line.split('AIDRIVE mode=', 1)[1].split()[0]
+        d['_idx'] = len(rows)   # the AIPROF window this AIDRIVE line follows
+        drive.append(d)
+    elif 'AIPROF mode=' in line and ' frames=' in line:
         rows.append({k: float(v) for k, v in kv.findall(line.split('AIPROF',1)[1])})
     elif 'AIPROF scripts ' in line:
         text = line.split('AIPROF scripts ',1)[1].strip()
@@ -75,3 +80,24 @@ if agg:
     print('script ranking over the run (ms summed over frames, share of listed, runs, windows in top 8):')
     for name, (ms, runs, wins) in sorted(agg.items(), key=lambda kv: -kv[1][0])[:15]:
         print(f'  {name:40s} {ms:9.1f} ms {100*ms/total:5.1f}%  runs {runs:9.0f}  windows {wins}')
+# stage-1 driver windows (AIDRIVE): per-window counts (driverFrames, refusals, pass counts) are summed,
+# per-frame means (cmp channels, branch counters) are averaged over the windows
+drive = [d for d in drive if d['_idx'] > skip]
+if drive:
+    modes = sorted({d['_mode'] for d in drive})
+    def dsum(k): return sum(d.get(k, 0.0) for d in drive)
+    def dmean(k): v = [d[k] for d in drive if k in d]; return st.mean(v) if v else 0.0
+    print(f'stage-1 driver ({", ".join(modes)}): {len(drive)} windows, {dsum("driverFrames"):.0f} driver frames, '
+          f'preflight refusals {dsum("preflightRefusals"):.0f}, loop logs {dsum("loopLogs"):.0f}, bad caller {dsum("badCaller"):.0f}')
+    print(f'  per frame: globalApplied {dmean("globalApplied"):.2f}, attentionRestarts {dmean("attentionRestarts"):.2f}, '
+          f'removed {dmean("removed"):.2f}, buckets {dmean("buckets"):.2f}, deferred {dmean("deferred"):.2f}')
+    clean, dirty = dsum('cmpClean'), dsum('cmpDirty')
+    if clean + dirty:
+        p = clean + dirty
+        print(f'  compare: {p:.0f} passes, order-equivalent {100*clean/p:.2f}%, dirty {dirty:.0f}; '
+              f'unchecked (>1024 entries) {dsum("cmpUnchecked"):.0f}')
+        print(f'  channels per frame: nullLost {dmean("cmpNullLost"):.3f}, wakeAbsorb {dmean("cmpWakeAbsorb"):.3f}, '
+              f'eventPending {dmean("cmpEventPending"):.3f}, eventRan {dmean("cmpEventRan"):.3f}, postCancel {dmean("cmpPostCancel"):.3f}')
+        print(f'  random order: {dsum("cmpRngPasses"):.0f} passes ({100*dsum("cmpRngPasses")/p:.2f}%) ran drawing contexts '
+              f'in another relative order; wakes put back in original order in {dsum("wakeReordered"):.0f} passes '
+              f'({100*dsum("wakeReordered")/p:.2f}%), skipped {dsum("wakeOrderSkipped"):.0f}')
