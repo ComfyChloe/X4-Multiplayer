@@ -39,8 +39,14 @@ ForcedFlight capture/replay, shadow or switch acceptance is claimed.
 ## Next work
 
 Find a disposable scenario that naturally exercises ForcedFlight before its
-native capture stage. For the dominant linear/steering classes, pin object
-sizes and capture their mutable model outputs and external inputs before
-attempting replay. The current capture only records the model before the call;
-linear and mass-traffic updates visibly mutate model state, so slot equality
-alone would be an incomplete equivalence claim for those classes.
+native capture stage. For the dominant linear/steering classes, pin object sizes
+and external inputs before attempting replay. Linear and mass-traffic updates
+visibly mutate model state, so slot equality alone would be incomplete evidence.
+
+The native writer now emits format version 2 (same magic), appending the model
+image after Update to each record. The reader accepts versions 1 and 2. Forced
+replay verifies the model remains unchanged when that output is present, and
+reports model differences separately from slot differences. A two-worker C
+capture test verifies persistent mutations are captured; the 2,000-record
+original-machine-code replay also covers v2 and an injected model-output error.
+These are offline/synthetic checks; native v2 capture validation is pending.

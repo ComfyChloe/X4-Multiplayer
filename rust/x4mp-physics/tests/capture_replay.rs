@@ -45,6 +45,27 @@ fn oracle_capture_replays_exactly_and_a_flipped_bit_is_caught() {
     let report = replay(&cap, &X4Math).unwrap();
     println!("{}", report.line("flight-forced"));
     assert_eq!((report.records, report.mismatched), (2000, 0));
+    // Version 2 appends the model output. ForcedFlight is pure, so its model image is unchanged.
+    // Preserve all oracle-produced slot outputs and exercise the full new record layout.
+    let mut v2 = file[..56].to_vec();
+    v2[8..12].copy_from_slice(&2u32.to_le_bytes());
+    let v2_size = (cap.header.record_size + cap.header.model_bytes + 15) & !15;
+    v2[16..20].copy_from_slice(&v2_size.to_le_bytes());
+    for i in 0..cap.header.records as usize {
+        let at = 56 + i * cap.header.record_size as usize;
+        v2.extend_from_slice(&file[at..at + cap.header.record_size as usize]);
+        v2.extend_from_slice(cap.record(i).model_bytes);
+        v2.resize(56 + (i + 1) * v2_size as usize, 0);
+    }
+    let cap2 = FlightCapture::parse(v2.clone()).unwrap();
+    let report2 = replay(&cap2, &X4Math).unwrap();
+    assert_eq!((report2.records, report2.mismatched), (2000, 0));
+    assert!(cap2.record(0).model_after.is_some());
+    // A persistent model-state mismatch must fail even when the complete slot matches.
+    v2[56 + 1234 * v2_size as usize + cap.header.record_size as usize + 0x20] ^= 1;
+    let bad_model = replay(&FlightCapture::parse(v2).unwrap(), &X4Math).unwrap();
+    assert_eq!((bad_model.mismatched, bad_model.first, bad_model.first_model),
+               (1, None, Some((1234, 0x20))));
     // Negative control: one bit of one record's "after" slot (velocity x of record 1234).
     let mut bad = file;
     let at = 56 + 1234 * cap.header.record_size as usize + 32 + 0x60 + 0x60 + 0x1a0 + 0x40;

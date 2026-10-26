@@ -1,12 +1,12 @@
 //! Flight-model captures written by the native probe (native/engine/physics_flight.h, `FLIGHTCAP`) and
 //! their offline replay against the reimplemented kernels.
 //!
-//! File: magic `X4PFCAP1`; twelve u32: version 1, model class (0 forced .. 5 steering), record size,
+//! File: magic `X4PFCAP1`; twelve u32: version 1 or 2, model class (0 forced .. 5 steering), record size,
 //! model bytes, agent offset (0x340), agent bytes (0x60), slot bytes (0x1a0), records, dropped,
 //! PE timestamp, SizeOfImage, record header size (32); then the records. A record: header
 //! {u32 model, u32 flags (1 cheap, 2 P(owner), 4 owner thread), f32 dt, f32 max forward (agent+0x364),
 //! f64 t, u64 frame}, the model object's first `model bytes`, the agent bytes, the slot before and after
-//! the original Update, padded to 16 bytes.
+//! the original Update, then (v2 only) the model bytes after Update, padded to 16 bytes.
 
 use std::path::Path;
 
@@ -42,6 +42,7 @@ pub struct Record<'a> {
     pub t: f64,
     pub frame: u64,
     pub model_bytes: &'a [u8],
+    pub model_after: Option<&'a [u8]>,
     pub agent: &'a [u8],
     pub before: &'a [u8],
     pub after: &'a [u8],
@@ -81,7 +82,7 @@ impl FlightCapture {
             size_of_image: h[10],
             head_bytes: h[11],
         };
-        if header.version != 1 || header.head_bytes != 32 || header.slot_bytes != 0x1a0 || header.model > 5 {
+        if !matches!(header.version, 1 | 2) || header.head_bytes != 32 || header.slot_bytes != 0x1a0 || header.model > 5 {
             return Err(format!("unsupported capture layout {header:?}"));
         }
         if header.pe_timestamp != pinned::PE_TIMESTAMP || header.size_of_image != pinned::SIZE_OF_IMAGE {
@@ -95,7 +96,8 @@ impl FlightCapture {
         if header.model_bytes < 0x60 {
             return Err("model image is too short".into());
         }
-        let need = u64::from(header.head_bytes) + u64::from(header.model_bytes)
+        let copies = if header.version == 2 { 2 } else { 1 };
+        let need = u64::from(header.head_bytes) + copies * u64::from(header.model_bytes)
             + u64::from(header.agent_bytes) + 2 * u64::from(header.slot_bytes);
         if u64::from(header.record_size) < need || header.record_size % 16 != 0 {
             return Err("record size does not fit the layout".into());
@@ -130,6 +132,7 @@ impl FlightCapture {
         let agent = take(h.agent_bytes);
         let before = take(h.slot_bytes);
         let after = take(h.slot_bytes);
+        let model_after = if h.version == 2 { Some(take(h.model_bytes)) } else { None };
         Record {
             model: u32_at(r, 0),
             flags: u32_at(r, 4),
@@ -138,6 +141,7 @@ impl FlightCapture {
             t: f64::from_le_bytes(r[16..24].try_into().unwrap()),
             frame: u64::from_le_bytes(r[24..32].try_into().unwrap()),
             model_bytes,
+            model_after,
             agent,
             before,
             after,
@@ -183,12 +187,14 @@ pub struct ReplayReport {
     pub records: usize,
     pub mismatched: usize,
     pub first: Option<(usize, usize)>,
+    pub first_model: Option<(usize, usize)>,
 }
 
 impl ReplayReport {
     pub fn line(&self, name: &str) -> String {
         let first = self.first.map(|(r, o)| format!("record{r}@slot+{o:#x}")).unwrap_or_default();
-        format!("REPLAYCAP {name} records={} mismatched={} first=[{first}]", self.records, self.mismatched)
+        let model = self.first_model.map(|(r, o)| format!("record{r}@model+{o:#x}")).unwrap_or_default();
+        format!("REPLAYCAP {name} records={} mismatched={} first=[{first}] first_model=[{model}]", self.records, self.mismatched)
     }
 }
 
@@ -211,10 +217,14 @@ pub fn replay_forced(cap: &FlightCapture, math: &impl CrtMath) -> ReplayReport {
         forced_update(&model, &mut slot, r.dt, r.max_forward, math);
         let mut ours = r.before.to_vec();
         slot.write_bytes(&mut ours);
-        if ours != r.after {
+        let model_diff = r.model_after.and_then(|after| r.model_bytes.iter().zip(after).position(|(a, b)| a != b));
+        if ours != r.after || model_diff.is_some() {
             report.mismatched += 1;
-            if report.first.is_none() {
+            if report.first.is_none() && ours != r.after {
                 report.first = Some((index, (0..ours.len()).find(|&i| ours[i] != r.after[i]).unwrap()));
+            }
+            if report.first_model.is_none() {
+                report.first_model = model_diff.map(|offset| (index, offset));
             }
         }
     }

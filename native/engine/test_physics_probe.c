@@ -17,7 +17,8 @@ static void fake_update(void *self, void *slot, float dt, double t, uint8_t chea
     InterlockedIncrement(&flight_seen);
 }
 static void fake_forced(void *self, void *slot, float dt, double t, uint8_t cheap, uint8_t p) {
-    (void)self; (void)dt; (void)t; (void)cheap; (void)p;
+    (void)dt; (void)t; (void)cheap; (void)p;
+    ((unsigned char *)self)[0x60] += 1;     /* exercise a stateful model, unlike real ForcedFlight */
     ((unsigned char *)slot)[0x40] = 0x99;   /* the original's write */
 }
 static DWORD WINAPI capture_worker(LPVOID arg) {
@@ -434,7 +435,7 @@ int main(void) {
         CloseHandle(f);
         DeleteFileW(wpath);
         const uint32_t *hdr = (const uint32_t *)(file + 8);
-        assert(!memcmp(file, PF_CAP_MAGIC, 8) && hdr[0] == 1 && hdr[1] == 0 && hdr[3] == 0x70 && hdr[7] == 64);
+        assert(!memcmp(file, PF_CAP_MAGIC, 8) && hdr[0] == 2 && hdr[1] == 0 && hdr[3] == 0x70 && hdr[7] == 64);
         assert(hdr[8] == 16 && hdr[9] == X4_PE_TIMESTAMP && hdr[10] == X4_IMAGE_SIZE && hdr[11] == sizeof(pf_cap_head));
         size_t rs = hdr[2];
         assert(rs == pf_cap_record_size(0x70) && got_bytes == 8 + 48 + 64 * rs);
@@ -449,6 +450,9 @@ int main(void) {
             assert(agent[0] == 0x40 + worker);                          /* agent +0x340 */
             const unsigned char *before = agent + PF_CAP_AGENT_BYTES, *after = before + PF_CAP_SLOT;
             assert(before[0x40] == 0x11 && after[0x40] == 0x99 && after[0x41] == before[0x41]);
+            const unsigned char *model_after = after + PF_CAP_SLOT;
+            assert(model_after[0x60] == (unsigned char)(model[0x60] + 1));
+            assert(!memcmp(model, model_after, 0x60));
         }
         restore_origs();
         disarm_because("test");

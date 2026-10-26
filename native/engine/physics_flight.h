@@ -31,7 +31,9 @@ static struct {
 /* Capture (stage 5): one model class's Update inputs and outputs for offline replay
    (rust/x4mp-physics capture::flight). A record: pf_cap_head, the model object's first `model_bytes`,
    the owning agent's bytes [PF_CAP_AGENT_FROM, +PF_CAP_AGENT_BYTES) (agent pointer at model+0x10), the
-   0x1a0-byte slot before and after the call. Only classes with a known object size are capturable. */
+   0x1a0-byte slot before and after the call, then the model bytes after the call (format v2).
+   Model outputs matter: several models update persistent state as well as the slot.
+   Only classes with a known object size are capturable. */
 #define PF_CAP_SLOT 0x1a0u
 #define PF_CAP_AGENT_FROM 0x340u
 #define PF_CAP_AGENT_BYTES 0x60u
@@ -63,7 +65,7 @@ static uint64_t pf_cap_req_frames;
 static wchar_t pf_cap_req_path[520];
 
 static size_t pf_cap_record_size(size_t model_bytes) {
-    return (sizeof(pf_cap_head) + model_bytes + PF_CAP_AGENT_BYTES + 2 * PF_CAP_SLOT + 15) & ~(size_t)15;
+    return (sizeof(pf_cap_head) + 2 * model_bytes + PF_CAP_AGENT_BYTES + 2 * PF_CAP_SLOT + 15) & ~(size_t)15;
 }
 
 /* Worker or owner thread: run the original, recording it when this class is being captured. */
@@ -92,6 +94,7 @@ static void pf_call(int i, void *self, void *slot, float dt, double t, uint8_t c
         memcpy(at, slot, PF_CAP_SLOT);
         ((pf_update_fn)pf_orig[i])(self, slot, dt, t, cheap, p);
         memcpy(at + PF_CAP_SLOT, slot, PF_CAP_SLOT);
+        memcpy(at + 2 * PF_CAP_SLOT, self, pf_cap.model_bytes);
         return;
     }
     ((pf_update_fn)pf_orig[i])(self, slot, dt, t, cheap, p);
@@ -165,7 +168,7 @@ static void pf_cap_write(void) {
     HANDLE f = CreateFileW(pf_cap.path, GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     pf_cap.written = -1;
     if (f == INVALID_HANDLE_VALUE) return;
-    uint32_t header[12] = {1u, (uint32_t)pf_cap.model, (uint32_t)pf_cap.record_size, (uint32_t)pf_cap.model_bytes,
+    uint32_t header[12] = {2u, (uint32_t)pf_cap.model, (uint32_t)pf_cap.record_size, (uint32_t)pf_cap.model_bytes,
                            PF_CAP_AGENT_FROM, PF_CAP_AGENT_BYTES, PF_CAP_SLOT, (uint32_t)records,
                            (uint32_t)pf_cap.dropped, X4_PE_TIMESTAMP, X4_IMAGE_SIZE, (uint32_t)sizeof(pf_cap_head)};
     DWORD done = 0;
