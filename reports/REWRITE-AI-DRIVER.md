@@ -168,7 +168,12 @@ counted (`bad_caller`).
 keyless = serial bucket), buckets in order of first appearance in the pass's read vector, stable inside a
 bucket; with the walk agent's buffer bound (integrated build, `#ifdef X4LAN_WALKPAR_H`, Q4/Q7/Q9) every post
 made while a bucket runs is deferred in a scope keyed by the sector UniverseID and replayed **at the end of
-the pass, before the next flip**, in bucket order = rounds execution order. Because cross-sector wakes go into
+the pass, before the next flip**. Barrier order (ecs-core's answer to Q5): the original sequential order
+(pass, wake index of the emitting context, emission order), the key of x4mp-sim's `Outbox::set_order`. With
+the optional `set_order`/`replay_ordered` pair (proposed to walk, Q20; bound under `WP_HAS_ORDER`) each op
+carries its context's key, a cancel kills only buffered posts with a smaller key, and the replay runs by
+(key, emission), so the engine sees posts and cancels in the original order (tests 10f/10h); with today's
+walkpar the replay is per task in bucket order (= rounds execution order). Because cross-sector wakes go into
 the write vector, they run in the next pass in both orders: rounds keeps the original **pass structure**. Without
 the buffer (this branch alone) rounds only reorders. `compare`: rounds plus these order-equivalence counters,
 which define exactly when a pass's outcome can differ from the original order:
@@ -250,8 +255,11 @@ Stage 1, in order (lane runs with `--overlay .local/evidence-068-withheld`, rele
   `#ifdef X4LAN_WALKPAR_H`. **Q9 → walk** (open): an AI-only replay mode (WP_REPLAY also defers the walk) and
   `get_mode()`; the immediate flag in `buffer_op`; confirm `wp_cancel` kills scheduled posts of any task (the
   code) rather than only its own (the comment).
-- **Q5 → ecs-core** (open): barrier bucket order — first appearance in the pass's read vector (deterministic,
-  thread-count invariant) vs SectorIx order.
+- **Q5 → ecs-core**: answered — barrier order = original sequential order (pass, wake index, emission), not
+  bucket order; implemented behind the optional walkpar pair (Q20 → walk: `set_order(key)`, key-aware cancel,
+  `replay_ordered()`, plus the imm flag / event pointer in the readout), bucket order until walk has it.
+- **Original-order stamp (Q14)**: `ad.run_pass` / `ad.run_pos` valid from run_begin to run_end (census: read from
+  Move's frame, rbp-0xa8 / rbp-0x80 / rbp-0x88 inside the pinned body; driver: set by our loop).
 - **Q1 (ai-orders)**: answered — `ad.observer` callbacks (run_begin/run_end/event_begin/event_end) on my sites;
   census script ranking published for their order choice.
 - Fleet-root keying (commander chain) is not resolved; the census reports fleets == sectors.

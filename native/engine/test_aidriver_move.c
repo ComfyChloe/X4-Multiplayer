@@ -179,6 +179,8 @@ static int cur_task;                    /* 0 = no scope */
 static struct { uint64_t src; int type; } Q[256];   /* engine queue of scheduled events */
 static int nq, delivered_imm;
 static int evbuf_on;
+static int fbo_on;                      /* ordered variant (Q20): keys per op, key-aware cancel */
+static uint64_t cur_key, B_key[256];
 static void q_add(uint64_t src, int type) { Q[nq].src = src; Q[nq].type = type; ++nq; }
 static void q_cancel(uint64_t src, int type) {
     int k = 0;
@@ -186,13 +188,15 @@ static void q_cancel(uint64_t src, int type) {
     nq = k;
 }
 static void ev_post(uint64_t src, int type, int imm) {
-    if (evbuf_on && cur_task) { B[nb_ops++] = (fop){AD_OP_POST, imm, 0, src, type, cur_task}; return; }
+    if (evbuf_on && cur_task) { B_key[nb_ops] = cur_key; B[nb_ops++] = (fop){AD_OP_POST, imm, 0, src, type, cur_task}; return; }
     if (imm) ++delivered_imm; else q_add(src, type);
 }
 static void ev_cancel(uint64_t src, int type) {
     if (evbuf_on && cur_task) {   /* walkpar: kill buffered SCHEDULED posts of (src,type) of any task */
-        for (size_t i = 0; i < nb_ops; ++i)
-            if (B[i].kind == AD_OP_POST && !B[i].dead && !B[i].imm && B[i].src == src && B[i].type == type) B[i].dead = 1;
+        for (size_t i = 0; i < nb_ops; ++i)   /* ordered: only posts emitted earlier in the original order */
+            if (B[i].kind == AD_OP_POST && !B[i].dead && !B[i].imm && B[i].src == src && B[i].type == type &&
+                (!fbo_on || B_key[i] <= cur_key)) B[i].dead = 1;
+        B_key[nb_ops] = cur_key;
         B[nb_ops++] = (fop){AD_OP_CANCEL, 0, 0, src, type, cur_task};
         return;
     }
@@ -221,7 +225,19 @@ static int fb_op(size_t i, uint64_t *src, int *task, int *type) {
     *src = B[i].src; *task = B[i].task; *type = B[i].type;
     return B[i].kind;
 }
-static const ad_event_buffer FB = {fb_scope_begin, fb_scope_end, fb_replay_tasks, fb_count, fb_op};
+static const ad_event_buffer FB = {fb_scope_begin, fb_scope_end, fb_replay_tasks, fb_count, fb_op, NULL, NULL};
+static void fbo_set_order(uint64_t k) { cur_key = k; }
+static void fbo_replay_ordered(void) {   /* by (key, emission): smallest key first, ties in buffer order */
+    for (;;) {
+        size_t best = SIZE_MAX;
+        for (size_t i = 0; i < nb_ops; ++i) if (!B[i].dead && (best == SIZE_MAX || B_key[i] < B_key[best])) best = i;
+        if (best == SIZE_MAX) break;
+        fb_replay_one(&B[best]);
+    }
+    nb_ops = 0;
+}
+static const ad_event_buffer FBO = {fb_scope_begin, fb_scope_end, fb_replay_tasks, fb_count, fb_op,
+                                    fbo_set_order, fbo_replay_ordered};
 
 /* ---- fake engine helpers ------------------------------------------------------------------------ */
 static void f_request_wake(void *dir, void *ctx) {
@@ -747,6 +763,38 @@ int main(void) {
             frame(AD_ROUNDS);
             assert(delivered_imm == 1 && nq == 0);
         }
+        /* (f) original-order barrier (ecs-core Q5, walk Q20): keys per op, key-aware cancel, replay by
+               (key, emission). Case (c) now matches the original and is not flagged; case (g) -
+               x0(s0) b0(s1, cancel) a1(s0, post): original keeps the post - is lost with the bucket
+               order (flagged) and kept with the ordered barrier. */
+        for (int ord = 0; ord < 2; ++ord) {
+            ad_evbuf = ord ? &FBO : &FB; fbo_on = ord;
+            world_reset(); nq = 0; nb_ops = 0;
+            void *a0 = mk(0, 0), *b0 = mk(1, 1), *a1 = mk(2, 0);
+            steps(0, 1, y); steps(1, 1, post); steps(2, 1, cancel);
+            queue(a0, 1); queue(b0, 1); queue(a1, 1);
+            frame(AD_COMPARE);
+            assert(nq == (ord ? 0 : 1) && ad.win.cmp_post_cancel == (ord ? 0u : 1u));
+            world_reset(); nq = 0; nb_ops = 0;
+            void *x0 = mk(0, 0), *c0 = mk(1, 1), *p1 = mk(2, 0);
+            steps(0, 1, y); steps(1, 1, cancel); steps(2, 1, post);
+            queue(x0, 1); queue(c0, 1); queue(p1, 1);
+            frame(AD_COMPARE);
+            assert(nq == (ord ? 1 : 0) && ad.win.cmp_post_cancel == (ord ? 0u : 1u));
+        }
+        /* (h) interleaved buckets A1(s0) B1(s1) A2(s0) posting sources 1, 2, 3: the ordered barrier
+               queues them 1, 2, 3 (original); the bucket order 1, 3, 2 */
+        for (int ord = 0; ord < 2; ++ord) {
+            static const int p1s[] = {STEP(S_POST, 1, 9)}, p2s[] = {STEP(S_POST, 2, 9)}, p3s[] = {STEP(S_POST, 3, 9)};
+            ad_evbuf = ord ? &FBO : &FB; fbo_on = ord;
+            world_reset(); nq = 0; nb_ops = 0;
+            void *x = mk(0, 0), *yb = mk(1, 1), *z = mk(2, 0);
+            steps(0, 1, p1s); steps(1, 1, p2s); steps(2, 1, p3s);
+            queue(x, 1); queue(yb, 1); queue(z, 1);
+            frame(AD_ROUNDS);
+            assert(nq == 3 && Q[0].src == 0x7001 && Q[1].src == (ord ? 0x7002u : 0x7003u) && Q[2].src == (ord ? 0x7003u : 0x7002u));
+        }
+        fbo_on = 0;
         ad_evbuf = NULL; evbuf_on = 0;
     }
 
@@ -799,6 +847,7 @@ int main(void) {
     puts("PASS: aidriver stage 1 compare mode flags a cross-bucket ClearWake that changes which contexts run");
     puts("PASS: aidriver stage 1 compare mode flags a cross-bucket wake absorbed in one order but not the other");
     puts("PASS: aidriver stage 1 event buffer: post/cancel across buckets in both orders, inversion flagged, reverse-replay control");
+    puts("PASS: aidriver stage 1 original-order barrier (pass, wake index, emission): post/cancel and interleaved buckets match the original");
     puts("PASS: aidriver stage 1 compare mode flags passes whose random draws run in another relative order");
     puts("PASS: aidriver stage 1 original-order stamp (pass, read-vector index) in normal and rounds order");
     return 0;

@@ -516,13 +516,21 @@ static void ad_process_context(void *dir, void *ctx, unsigned r, int timed, unsi
 /* ---- rounds: bucket order, event-buffer scopes, barrier, order-equivalence counters ------------ */
 
 /* Event buffer reused from the walk agent (walkpar.h, Q4/Q7): one buffer, scoped by task id. NULL in
-   a build without walkpar: rounds then only reorders (events stay synchronous). */
+   a build without walkpar: rounds then only reorders (events stay synchronous).
+   Barrier order (ecs-core, Q5): the original sequential order = (pass, wake index of the emitting
+   context, emission order), the key x4mp-sim's Outbox::set_order uses. With the optional pair
+   set_order/replay_ordered (proposed to walk, Q20) every op carries the key of the context that
+   emitted it, a cancel kills only buffered posts with a smaller key (or the same key, emitted before
+   it), and the replay runs by (key, emission): the engine sees posts and cancels in the original
+   order. Without the pair, replay is per task in bucket order (rounds execution order). */
 typedef struct {
     void (*scope_begin)(uint64_t task);
     void (*scope_end)(void);
     void (*replay_tasks)(const uint64_t *order, int n);
     size_t (*buffer_count)(void);
     int (*buffer_op)(size_t i, uint64_t *src_id, int *task, int *type);   /* AD_OP_*; 0 = none */
+    void (*set_order)(uint64_t key);    /* optional: key of the ops emitted from now on (0 = walk) */
+    void (*replay_ordered)(void);       /* optional: replay all buffered ops by (key, emission) */
 } ad_event_buffer;
 static const ad_event_buffer *ad_evbuf;
 enum { AD_OP_POST = 1, AD_OP_CANCEL = 2 };   /* walkpar WP_OP_POST / WP_OP_CANCEL */
@@ -539,6 +547,9 @@ static const ad_event_buffer *ad_walkpar_buffer(void) {
     const wp_api *w = walkpar_api();
     b.scope_begin = w->scope_begin; b.scope_end = w->scope_end; b.replay_tasks = w->replay_tasks;
     b.buffer_count = w->buffer_count; b.buffer_op = w->buffer_op;
+#ifdef WP_HAS_ORDER
+    b.set_order = w->set_order; b.replay_ordered = w->replay_ordered;
+#endif
     return &b;
 }
 #endif
@@ -714,6 +725,7 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
        draw get different numbers when rounds runs them in another relative order than the original */
     size_t last_draw = 0;
     int have_draw = 0, rng_inverted = 0;
+    int ordered = ad_evbuf && ad_evbuf->set_order && ad_evbuf->replay_ordered;
     size_t k = 0;
     for (uint32_t b = 0; b < nb; ++b) {
         ad_rd.cur_bucket = b;
@@ -727,6 +739,7 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
             void **wvec = ad_vec(dir, 1u - r);
             size_t w0 = ((uintptr_t)wvec[1] - (uintptr_t)wvec[0]) / sizeof(void *);
             ad.ctx_drew = 0;
+            if (ordered) ad_evbuf->set_order(((uint64_t)pass << 32) | (uint64_t)i);
             if (ctx) ad_process_context(dir, ctx, r, timed, pass, i);
             if (ad.ctx_drew) {
                 if (have_draw && i < last_draw) rng_inverted = 1;
@@ -740,13 +753,18 @@ static void ad_rounds_pass(void *dir, void **vec, size_t n, unsigned r, int time
         if (ad_evbuf) ad_evbuf->scope_end();
     }
     ad_rd.active = 0;
-    if (ad_evbuf) {   /* barrier: deliver this pass's deferred events in bucket order, before the flip */
+    if (ordered) {    /* barrier: this pass's deferred ops in the original order, before the flip */
+        ad_evbuf->set_order(0);
+        size_t before = ad_evbuf->buffer_count();
+        ad_evbuf->replay_ordered();
+        ad.win.deferred += before;
+    } else if (ad_evbuf) {   /* barrier, bucket order (= rounds execution order), before the flip */
         size_t before = ad_evbuf->buffer_count();
         if (compare) {
             unsigned c = ad_post_cancel_conflicts(before);
             if (c) { ad.win.cmp_post_cancel += c; ad_rd.pass_dirty = 1; }
         }
-        ad_evbuf->replay_tasks(ad_rd.tasks, (int)nb);   /* bucket order = rounds execution order */
+        ad_evbuf->replay_tasks(ad_rd.tasks, (int)nb);
         ad.win.deferred += before;
     }
     if (compare) {
