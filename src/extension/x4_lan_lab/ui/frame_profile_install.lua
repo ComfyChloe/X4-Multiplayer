@@ -14,6 +14,10 @@ local plan={
  {'projectile','projectiles','contextsFrame'},{'projectile','projectiles','captureFrame'},
  {'projectile','projectiles','renderFrame'},{'projectile.rx','projectiles','receive'},
  {'universe','universe','frame'},{'universe.rx','universe','receive'},
+ -- NPC replicas: visit scheduling, per-replica prediction and engine pose writes (self time
+ -- of universe.write includes SetObjectSectorPos), and the server's motion publication.
+ {'universe.render','universe','renderReplicas'},{'universe.write','universe','writeReplica'},
+ {'universe.publish','universe','publishMotion'},
  {'npc_combat','npcCombat','frame'},{'npc_combat.rx','npcCombat','receive'},
  {'life','life','frame'},{'life.rx','life','receive'},
  {'walk','walk','frame'},{'walk.rx','walk','receive'},

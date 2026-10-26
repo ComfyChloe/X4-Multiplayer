@@ -152,12 +152,35 @@ logs={};DebugError=function(v) logs[#logs+1]=v end
 GetCurRealTime=function() return 5 end
 local realRequire=require
 require=function(name) if name=='ffi' then error('no ffi') end return realRequire(name) end
+os.clock=function() return 1 end  -- frozen as well
 X4LAN_CONFIG={enabled=true,frame_profile=true}
 ''')
         self.load(lua, ('measure_clock.lua',))
         self.assertEqual(lua.eval('X4LAN_MEASURE.source'), 'GetCurRealTime')
         self.assertFalse(lua.eval('X4LAN_MEASURE.timed'))
         self.assertIn('resolution_us=none', lua.eval('logs[1]'))
+
+    def test_failed_ffi_clock_falls_back_to_os_clock_and_logs_why(self):
+        # Live Windows clients logged source=GetCurRealTime resolution_us=none, so every
+        # FRAMECOST section read 0 ms. A QPC failure is now logged and os.clock is used.
+        lua = LuaRuntime(unpack_returned_tuples=True)
+        lua.execute('''
+logs={};DebugError=function(v) logs[#logs+1]=v end
+GetCurRealTime=function() return 5 end
+local realRequire=require
+local fake={os='Windows',cdef=function() end,new=function() return {[0]=0} end,
+ C=setmetatable({},{__index=function(_,name) error('cannot resolve symbol '..name) end}),
+ load=function(name) error('cannot load module '..name) end}
+require=function(name) if name=='ffi' then return fake end return realRequire(name) end
+X4LAN_CONFIG={enabled=true,frame_profile=true}
+''')
+        self.load(lua, ('measure_clock.lua',))
+        self.assertEqual(lua.eval('X4LAN_MEASURE.source'), 'os.clock')
+        self.assertTrue(lua.eval('X4LAN_MEASURE.timed'))
+        row = lua.eval('logs[1]')
+        self.assertIn('source=os.clock', row)
+        self.assertIn('failures=qpc:', row)
+        self.assertIn('kernel32:', row)
 
     def test_percentile_is_nearest_rank(self):
         lua = self.runtime('X4LAN_CONFIG.frame_profile=true;' + CLOCK)

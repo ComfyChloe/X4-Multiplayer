@@ -49,6 +49,21 @@ class UniverseAdapterTests(unittest.TestCase):
           end
           api.SetObjectSectorPos=function(id,sector,p) positions[id]=p;writes[#writes+1]={id=id,sector=sector,pose=p} end
           api.ActivateObject=function(id,on) activated[#activated+1]={id=id,on=on} end
+          -- MD double of the Sweep cue (find_ship in a sector): every existing object there.
+          mdSweep=true
+          local recordEvent=AddUITriggeredEvent
+          AddUITriggeredEvent=function(screen,control,value)
+           recordEvent(screen,control,value)
+           if mdSweep and screen=='X4LAN_Universe' and control=='Sweep' then
+            local found={}
+            for id in pairs(positions) do
+             if tostring(api.GetContextByClass(id,'sector'))==tostring(value.sector) then found[#found+1]=id end
+            end
+            table.sort(found)
+            for _,id in ipairs(found) do events['X4LAN_Universe.Swept'](nil,id) end
+            events['X4LAN_Universe.SweepDone'](nil,value.token)
+           end
+          end
         ''')
         l.execute(setup)
         for name in ('bubble_game.lua','motion.lua','coop_game.lua','universe_protocol.lua','universe_game.lua'):
@@ -193,6 +208,7 @@ class NpcFlickerTests(unittest.TestCase):
            now=now+1/60
            -- 0.6 s per sample: one mover among ~380 sharing 640 UMOVE/s.
            while nextS+.05<=now do seq=seq+1;U.receive(umove(1,seq,nextS,1500+(nextS-t0)*3000,3000),now);nextS=nextS+.6 end
+           positions[11].x=1500+(now-t0)*3000-500  -- the player flies alongside: near
            local before=#writes+1;frames.onUpdate()
            if f>120 then
             if writesFor(object,before)~=1 then missed=missed+1 end
@@ -208,13 +224,17 @@ class NpcFlickerTests(unittest.TestCase):
           assert(U.replicas[1].track.resets==nil and #spawns==2 and not U.failed)
         ''')
 
-    def test_dense_highway_scene_writes_every_fast_replica_every_frame(self):
+    def test_dense_highway_scene_bounds_engine_writes_per_frame(self):
+        # 200 replicas at 3 km/s: the old scheduler wrote every fast replica every frame (live:
+        # about 1,700 writes/s and 13-16 fps). Writes are now bounded per frame, near replicas
+        # first, the rest by distance class and round robin; no replica moves backwards.
         l=self.guest();l.execute('''
           tick(1);local rows={};for id=1,200 do rows[#rows+1]=npcRow(id,id*100) end
           baseline(1,rows,true);tick(3)
           local t0=now;local nextS={};local seq=1
           for id=1,200 do nextS[id]=now+(id%20)*.015 end
-          local missed,back=0,0;local prev={}
+          local back,mostPerFrame=0,0;local prev={};local lastWrite={};longestGap=0
+          local budget=U.replicaWrite.budgetPerFrame
           for f=1,240 do
            now=now+1/60
            for id=1,200 do
@@ -223,17 +243,23 @@ class NpcFlickerTests(unittest.TestCase):
             end
            end
            local before=#writes+1;frames.onUpdate()
+           mostPerFrame=math.max(mostPerFrame,#writes-before+1)
            for id=1,200 do
             local object=U.replicas[id].object
-            if f>90 then
-             if writesFor(object,before)~=1 then missed=missed+1 end
-             if positions[object].x<prev[id]-1 then back=back+1 end
+            if object then
+             if writesFor(object,before)>0 then
+              if f>90 and lastWrite[id] then longestGap=math.max(longestGap,now-lastWrite[id]) end
+              lastWrite[id]=now
+             end
+             if f>90 and prev[id] and positions[object].x<prev[id]-1 then back=back+1 end
+             prev[id]=positions[object].x
             end
-            prev[id]=positions[object].x
            end
           end
-          assert(missed==0 and back==0,missed..' '..back)
-          assert(#U.hot==200 and not U.failed)
+          assert(back==0,back)
+          assert(mostPerFrame<=budget,mostPerFrame)
+          assert(longestGap<1.5,longestGap)
+          assert(not U.failed)
         ''')
 
     def test_baseline_with_older_capture_pose_does_not_snap_moving_replica_back(self):

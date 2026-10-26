@@ -6,23 +6,55 @@ local M={}
 X4LAN_MEASURE=M
 
 -- Wall-clock seconds. Preference: test/diagnostic injection, QueryPerformanceCounter
--- (Windows) or clock_gettime(CLOCK_MONOTONIC) (Linux) through LuaJIT FFI, then
--- GetCurRealTime. The chosen source and its observed resolution are logged.
+-- (Windows) or clock_gettime(CLOCK_MONOTONIC) (Linux) through LuaJIT FFI, then os.clock,
+-- then GetCurRealTime. The chosen source, its observed resolution and why a preferred
+-- source failed (failures=...) are logged. Live Windows clients fell back to GetCurRealTime,
+-- which does not advance within a frame, so every FRAMECOST section read 0 ms.
+local failures={}
+local function failed(source,reason)
+ failures[#failures+1]=source..':'..tostring(reason):gsub('[%s|,]+','_'):sub(1,80)
+end
+-- QueryPerformanceCounter from `library` (ffi.C or an explicitly loaded kernel32).
+local function qpcClock(ffi,library)
+ local counter=ffi.new('int64_t[1]')
+ assert(library.QueryPerformanceFrequency(counter)~=0,'QueryPerformanceFrequency failed')
+ local frequency=tonumber(counter[0])
+ assert(frequency and frequency>0,'invalid QPC frequency')
+ assert(library.QueryPerformanceCounter(counter)~=0,'QueryPerformanceCounter failed')
+ local base=counter[0]
+ local secondsPerTick=1/frequency
+ return function()
+  library.QueryPerformanceCounter(counter)
+  return tonumber(counter[0]-base)*secondsPerTick
+ end
+end
 local function ffiClock()
  local ok,ffi=pcall(require,'ffi')
- if not ok or type(ffi)~='table' or not ffi.cdef or not ffi.new then return nil end
+ if not ok or type(ffi)~='table' or not ffi.cdef or not ffi.new then
+  failed('ffi','unavailable')
+  return nil
+ end
  if ffi.os=='Windows' then
   -- Another module may already have declared these; a redefinition error is harmless.
-  pcall(ffi.cdef,'int QueryPerformanceCounter(int64_t *count); int QueryPerformanceFrequency(int64_t *frequency);')
-  local okFreq,clock=pcall(function()
-   local C=ffi.C;local value=ffi.new('int64_t[1]')
-   assert(C.QueryPerformanceFrequency(value)~=0,'QueryPerformanceFrequency failed')
-   local frequency=tonumber(value[0]);assert(frequency and frequency>0,'invalid QPC frequency')
-   assert(C.QueryPerformanceCounter(value)~=0,'QueryPerformanceCounter failed')
-   local base=value[0];local scale=1/frequency
-   return function() C.QueryPerformanceCounter(value);return tonumber(value[0]-base)*scale end
-  end)
-  if okFreq then return clock,'qpc' end
+  local declared,declareError=pcall(ffi.cdef,'int QueryPerformanceCounter(int64_t *count); int QueryPerformanceFrequency(int64_t *frequency);')
+  if not declared then
+   failed('qpc_cdef',declareError)
+  end
+  local okDefault,clock=pcall(qpcClock,ffi,ffi.C)
+  if okDefault then
+   return clock,'qpc'
+  end
+  failed('qpc',clock)
+  local loaded,kernel32=pcall(ffi.load,'kernel32')
+  if loaded then
+   local okKernel,kernelClock=pcall(qpcClock,ffi,kernel32)
+   if okKernel then
+    return kernelClock,'qpc-kernel32'
+   end
+   failed('qpc_kernel32',kernelClock)
+  else
+   failed('kernel32',kernel32)
+  end
  else
   pcall(ffi.cdef,'typedef struct { long tv_sec; long tv_nsec; } x4lan_measure_timespec; int clock_gettime(int clock, x4lan_measure_timespec *value);')
   local okClock,clock=pcall(function()
@@ -31,7 +63,10 @@ local function ffiClock()
    local base=tonumber(value[0].tv_sec)
    return function() C.clock_gettime(1,value);return (tonumber(value[0].tv_sec)-base)+tonumber(value[0].tv_nsec)*1e-9 end
   end)
-  if okClock then return clock,'clock_gettime' end
+  if okClock then
+   return clock,'clock_gettime'
+  end
+  failed('clock_gettime',clock)
  end
 end
 
@@ -55,14 +90,42 @@ function M.resolution(clock,reads)
  return best
 end
 
-local injected=rawget(_G,'X4LAN_MEASURE_CLOCK')
-if type(injected)=='function' and usable(injected) then
- M.clock,M.source=injected,'injected'
-else
- local clock,source=ffiClock()
- if clock and usable(clock) then M.clock,M.source=clock,source
- else M.clock,M.source=GetCurRealTime,'GetCurRealTime' end
+-- os.clock (C clock(): process time on Linux, wall time since start on Windows, about 1 ms
+-- resolution there) still measures a frame's mod time when no FFI clock is available.
+local function osClock()
+ local osLibrary=rawget(_G,'os')
+ if type(osLibrary)~='table' or type(osLibrary.clock)~='function' then
+  failed('os_clock','unavailable')
+  return nil
+ end
+ if not usable(osLibrary.clock) or not M.resolution(osLibrary.clock,200000) then
+  failed('os_clock','does_not_advance')
+  return nil
+ end
+ return osLibrary.clock
 end
+local function chooseClock()
+ local injected=rawget(_G,'X4LAN_MEASURE_CLOCK')
+ if type(injected)=='function' and usable(injected) then
+  return injected,'injected'
+ end
+ local clock,source=ffiClock()
+ if clock and usable(clock) then
+  return clock,source
+ end
+ if clock then
+  failed(source,'unusable')
+ end
+ local fallback=osClock()
+ if fallback then
+  return fallback,'os.clock'
+ end
+ return GetCurRealTime,'GetCurRealTime'
+end
+local chosenClock,chosenSource=chooseClock()
+M.clock=chosenClock
+M.source=chosenSource
+M.failures=failures
 M.resolutionSeconds=M.resolution(M.clock)
 M.timed=M.resolutionSeconds~=nil
 -- Mean cost of one clock read; each profiled call performs two, so FRAMECOST can state
@@ -81,6 +144,7 @@ function M.percentile(values,p)
  return sorted[rank]
 end
 function M.log(text) DebugError('[X4LAN] '..text) end
-M.log(string.format('MEASURE_CLOCK v=1 source=%s resolution_us=%s read_cost_us=%.3f frame_profile=%s net_probe=%s',
+M.log(string.format('MEASURE_CLOCK v=1 source=%s resolution_us=%s read_cost_us=%.3f frame_profile=%s net_probe=%s failures=%s',
  M.source,M.timed and string.format('%.3f',M.resolutionSeconds*1e6) or 'none',M.clockCostSeconds*1e6,
- tostring(cfg.frame_profile==true),tostring(cfg.net_probe==true)))
+ tostring(cfg.frame_profile==true),tostring(cfg.net_probe==true),
+ #failures>0 and table.concat(failures,',') or 'none'))

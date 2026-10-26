@@ -65,9 +65,16 @@ rate and offset from the least-delayed samples (sliding 3 s window) and slews it
 clock at most 0.1 s/s. A new sample's error blends out with a 0.3 s time constant; an
 error above max(1 km, 1 s of the faster of the old and new speed) snaps, at most once per
 second per replica, logged as `NPC_SNAP`. Prediction coasts 8 s past the last sample, then
-holds. Replicas moving at 150 m/s or more, or moving within 6 km of the player, are
-written every frame (up to 256); the rest at most 128 per frame no faster than every
-15 ms. When the engine pose slipped from the last written pose by more than max(5 km,
+holds. Prediction is continuous; engine pose writes (`SetObjectSectorPos`, about
+0.3-0.4 ms each on the client's main thread) depend on distance from the local player:
+replicas moving within 2.5 km (or the player's target) every frame, within 15 km every
+0.25 s (0.125 s at 150 m/s or more), beyond that checked every 0.5 s and written only
+after 100 m of change or 5 s. Changes below 1 cm and 0.01 degrees are not written, and at
+most 12 replicas are visited per frame (never-written first, then near, then the most
+overdue). `NPC_DIAG` counts `writes`, `near_writes`, `write_skips` and `write_deferred`;
+FRAMECOST has `universe.render`, `universe.write` (including the engine writes) and
+`universe.publish` sections. When the engine pose slipped from the last written pose by
+more than max(5 km,
 2 s of speed) (zone-frame re-parenting, as for co-op ships), replicas near the player or
 that slipped in the last 10 s learn the zone offset per source zone and compensate later
 writes; other slips are rewritten, and a slip lasting 1 s respawns the replica at its
@@ -81,7 +88,15 @@ Guest replica mode removes independent NPCs only in its current sector and only
 following a complete, recent baseline. It creates host macro/owner replicas via
 engine APIs, disables their AI and applies host poses. Local player-owned ships,
 co-op fixtures and player occupants are protected. A replica occupied by the
-player stops the adapter instead of removing the player. This mode is only for
+player stops the adapter instead of removing the player. Every second an MD sweep
+(`find_ship` in the client's sector, cue `X4LAN_Universe.Sweep`) lists the sector's ships;
+those the server would capture and that are not replicas are removed
+(`LOCAL_NPC_SUPPRESSED ... source=sweep`). The server's capture is the union of the
+galaxy-wide faction walk and the same sweep, so every ship a client removes is also
+replicated. Capture filter: operational ships in the sector that are not protected and not
+player-owned, with no class, size, purpose or docking filter and at most 4096 objects.
+Without a sweep reply within 3 s, `FEATURE npc_sweep DISABLED reason=no_reply` is logged
+and the faction walk is used. This mode is only for
 disposable worlds: deleting native NPCs can invalidate local vanilla missions.
 The adapter does not yet suppress independent stations, production, missions or
 all consequences of the guest simulation. Observe mode receives baselines and
@@ -293,9 +308,10 @@ the package's generated `extension/x4_lan_lab/ui/config.lua` on both players aft
 01-INSTALL (05-START-X4 copies it into the game); session recovery rewrites it to false.
 
 The clock is QueryPerformanceCounter (Windows) or `clock_gettime(CLOCK_MONOTONIC)`
-(Linux) through LuaJIT FFI, falling back to `GetCurRealTime`. `MEASURE_CLOCK` logs the
-source, observed resolution and read cost; a clock that never advances is reported as
-untimed rather than as zero cost.
+(Linux) through LuaJIT FFI (QPC also through an explicitly loaded kernel32), falling back
+to `os.clock` and then `GetCurRealTime`. `MEASURE_CLOCK` logs the source, observed
+resolution, read cost and why preferred sources failed (`failures=`); a clock that never
+advances is reported as untimed rather than as zero cost.
 
 `frame_profile=true` wraps the bubble frame root, network client update, each adapter's
 `frame`/`receive` entry point, the seed gate, the shared motion buffer and the mod's

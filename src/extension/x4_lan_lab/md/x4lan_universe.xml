@@ -24,6 +24,22 @@
     <set_object_radar_visible object="event.param3.$object" visible="true"/>
    </do_if></actions>
   </cue>
+  <!-- Client local-NPC sweep: every ship in the given sector, one Lua event each, then a
+       done event with the request token. Lua filters out replicas, shared ships, player
+       occupants and player-owned ships before removing anything. -->
+  <cue name="Sweep" instantiate="true">
+   <conditions><event_ui_triggered screen="'X4LAN_Universe'" control="'Sweep'"/></conditions>
+   <actions>
+    <set_value name="$request" exact="event.param3"/>
+    <do_if value="@$request.$sector.exists">
+     <find_ship name="$ships" space="$request.$sector" multiple="true"/>
+     <do_all exact="$ships.count" counter="$i">
+      <raise_lua_event name="'X4LAN_Universe.Swept'" param="$ships.{$i}"/>
+     </do_all>
+    </do_if>
+    <raise_lua_event name="'X4LAN_Universe.SweepDone'" param="$request.$token"/>
+   </actions>
+  </cue>
   <cue name="Known" instantiate="true">
    <conditions><event_ui_triggered screen="'X4LAN_Universe'" control="'Known'"/></conditions>
    <actions><do_if value="event.param3.isoperational"><set_known object="event.param3" known="true"/></do_if></actions>

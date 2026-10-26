@@ -18,7 +18,7 @@ pcall(ffi.cdef,'UniverseID GetPlayerTargetID(void);')
 local function api(name) local ok,f=pcall(function() return C[name] end);return ok and f or nil end
 local getTarget=api('GetPlayerTargetID')
 local u={receiver=P.receiver(),excluded={},identities={},nextId=0,revision=0,interestSeq=0,
- replicas={},replicaKeys={},motionSeq=0,publish={},publishes={},lastScans={},wanted={},motionCursor=1,hot={},frameNo=0,
+ replicas={},replicaKeys={},motionSeq=0,publish={},publishes={},lastScans={},wanted={},motionCursor=1,frameNo=0,
  clock=M.drClock(),focus={},focusSeq=0,gaps={}}
 A.universe=u
 local function log(v) DebugError('[X4LAN] UNIVERSE '..v) end
@@ -34,10 +34,10 @@ local function log(v) DebugError('[X4LAN] UNIVERSE '..v) end
 -- server's estimated clock (rate and offset), errors blend out over M.dr.tau, and only an
 -- error above the snap limit snaps (logged, at most once per second per replica).
 -- A baseline pose replaces a live track only after `hold` s without motion.
-local NPC={stale=2.5,cap=50000,hold=8,fast=150,hotBudget=256,jump=100,suppressEvery=2,
+local NPC={stale=2.5,cap=50000,hold=8,jump=100,suppressEvery=2,
  budget=32,evalBudget=768,hotRange=6000,warmRange=25000,focusHold=3,focusEvery=1,motionLive=5,
  scanHost=4096,scanGuest=1024,slipMin=5000,slipSpeed=2,slipRespawn=1,slipTrack=10,
- velWindow=.2,maxRate=3,maxTurn=2,urgentMin=300,urgentTime=.1}
+ velWindow=.2,maxRate=3,maxTurn=2,urgentMin=300,urgentTime=.1,sweepEvery=1,sweepTimeout=3}
 NPC.tiers={
  hot={name='hot',pos=3,ang=.02,look=.25,min=.05,keep=1,weight=4},
  warm={name='warm',pos=25,ang=.06,look=.5,min=.2,keep=2,weight=2},
@@ -56,7 +56,7 @@ local function peak(name,v) if diagEvery and v>(diag[name] or 0) then diag[name]
 local function sample(list,v) if diagEvery and #list<4096 then list[#list+1]=v end end
 local DIAG_FIELDS={'creates','respawns','removes','hides','shows','suppressed','commits','samples',
  'reset_gap','reset_jump','baseline_snap','writes','hot_writes','jumps','max_jump','max_gap','max_delay',
- 'snaps','slips','sent','sent_hot','sent_warm','sent_cold','first','urgent','diverge','keepalive','deferred','focus','players','paused'}
+ 'near_writes','write_skips','write_deferred','snaps','slips','sent','sent_hot','sent_warm','sent_cold','first','urgent','diverge','keepalive','deferred','focus','players','paused'}
 local function percentile(list,q)
  if #list==0 then return nil end
  table.sort(list);return list[math.max(1,math.ceil(q*#list))]
@@ -129,10 +129,42 @@ local function beginScan(name,sector)
  local names={};for i=0,count-1 do names[#names+1]=ffi.string(factions[i]) end
  return {name=name,sector=sector,factions=names,faction=1,index=0,seen={},objects={},total=0}
 end
+-- Capture filter, shared by the faction enumeration and the sector sweep: an operational
+-- ship in the scanned sector that is not protected (replica, shared co-op ship, player
+-- occupant, excluded fixture) and not owned by the player faction. There is no class,
+-- size, purpose or docking filter; a baseline holds at most P.limit (4096) objects.
+local MAX_SCANNED_OBJECTS=250000
+local function considerObject(scan,object)
+ local objectKey=key(object)
+ if scan.seen[objectKey] then
+  return
+ end
+ scan.seen[objectKey]=true
+ scan.total=scan.total+1
+ assert(scan.total<=MAX_SCANNED_OBJECTS,'universe fleet exceeds internal scan limit')
+ if not C.IsComponentOperational(object) or protected(object) or not C.IsComponentClass(object,'ship') then
+  return
+ end
+ if C.GetContextByClass(object,'sector',false)~=scan.sector then
+  return
+ end
+ local macro,owner=GetComponentData(A.id(object),'macro','owner')
+ assert(P.atom(macro,true) and P.atom(owner),'NPC descriptor unavailable; refusing incomplete baseline')
+ -- player_factions: a host ship owned only by the host's human replicates as its pool faction.
+ if owner=='player' and cfg.slot=='p1' and A.players then
+  owner=A.players.personalOwner(object) or owner
+ end
+ if owner=='player' then
+  return
+ end
+ scan.objects[#scan.objects+1]={object=object,key=objectKey,macro=macro,owner=owner}
+ assert(#scan.objects<=P.limit,'sector object limit exceeded; refusing a truncated baseline')
+end
 -- Per-frame enumeration budget (objects; a faction fleet read costs 16). The live server
 -- enumerated 512 objects and at most one faction per 20 Hz frame: a capture took 25-30 s
--- of server time, so baselines were 35-40 s old on clients. The dedicated server does not
--- render; the guest keeps a smaller budget for its local-NPC suppression scan.
+-- of server time, so baselines were 35-40 s old on clients. The enumeration walks every
+-- faction's fleet in the galaxy; a guest uses it only when the MD sector sweep is missing.
+local FACTION_READ_COST=16
 local function scanStep(scan)
  -- Bound per-frame enumeration; metadata/positions are read only for this sector.
  local budget=cfg.slot=='p1' and NPC.scanHost or NPC.scanGuest
@@ -140,39 +172,95 @@ local function scanStep(scan)
   budget=budget-1
   if not scan.buffer or scan.index>=scan.count then
    local faction=scan.factions[scan.faction]
-   if not faction then return true end
+   if not faction then
+    return true
+   end
    scan.faction=scan.faction+1
    local count=tonumber(C.GetNumAllFactionShips(faction))
-   assert(count<=250000,'faction fleet exceeds internal scan limit')
+   assert(count<=MAX_SCANNED_OBJECTS,'faction fleet exceeds internal scan limit')
    -- Headroom plus post-read count catches growth/truncation during enumeration.
-   local cap=count+64;scan.buffer=ffi.new('UniverseID[?]',cap)
-   scan.count=tonumber(C.GetAllFactionShips(scan.buffer,cap,faction));scan.index=0
-   if scan.count>=cap or tonumber(C.GetNumAllFactionShips(faction))>scan.count then
+   local capacity=count+64
+   scan.buffer=ffi.new('UniverseID[?]',capacity)
+   scan.count=tonumber(C.GetAllFactionShips(scan.buffer,capacity,faction))
+   scan.index=0
+   if scan.count>=capacity or tonumber(C.GetNumAllFactionShips(faction))>scan.count then
     -- A changing fleet invalidates this capture, not the entire world adapter.
-    scan.retry=true;return true
+    scan.retry=true
+    return true
    end
-   budget=budget-15
+   budget=budget-(FACTION_READ_COST-1)
   else
-   local object=scan.buffer[scan.index];scan.index=scan.index+1
-   local k=key(object)
-   if not scan.seen[k] then
-    scan.seen[k]=true;scan.total=scan.total+1
-    assert(scan.total<=250000,'universe fleet exceeds internal scan limit')
-    if C.IsComponentOperational(object) and not protected(object) and C.IsComponentClass(object,'ship') and
-       C.GetContextByClass(object,'sector',false)==scan.sector then
-     local macro,owner=GetComponentData(A.id(object),'macro','owner')
-     assert(P.atom(macro,true) and P.atom(owner),'NPC descriptor unavailable; refusing incomplete baseline')
-     -- player_factions: a host ship owned only by the host's human replicates as its pool faction.
-     if owner=='player' and cfg.slot=='p1' and A.players then owner=A.players.personalOwner(object) or owner end
-     if owner~='player' then
-      scan.objects[#scan.objects+1]={object=object,key=k,macro=macro,owner=owner}
-      assert(#scan.objects<=P.limit,'sector object limit exceeded; refusing a truncated baseline')
-     end
-    end
-   end
+   local object=scan.buffer[scan.index]
+   scan.index=scan.index+1
+   considerObject(scan,object)
   end
  end
  return false
+end
+-- Guest local-NPC suppression: an MD sweep (find_ship in the player's sector, engine side)
+-- instead of walking every faction's fleet in the galaxy. Live clients walked about 200,000
+-- entries per pass at 1,024 per frame, so the client's own NPCs (freighters docking, ships
+-- launched or arriving through gates, builders, laser towers) stayed visible and unsynced
+-- for up to about 15 s, and the walk cost frame time. A sweep without a reply within
+-- sweepTimeout s disables the sweep (FEATURE npc_sweep DISABLED) and the enumeration is used.
+local sweep={token=0}
+local function beginSweep(name,sectorId,now)
+ sweep.token=sweep.token+1
+ sweep.objects={}
+ sweep.done=false
+ AddUITriggeredEvent('X4LAN_Universe','Sweep',{sector=A.id(sectorId),token=sweep.token})
+ return {name=name,sector=sectorId,sweep=true,token=sweep.token,startedAt=now,seen={},objects={},total=0}
+end
+local function sweepStep(scan,now)
+ if sweep.token~=scan.token then
+  scan.retry=true
+  return true
+ end
+ if not sweep.done then
+  if now-scan.startedAt<NPC.sweepTimeout then
+   return false
+  end
+  u.sweepUnavailable=true
+  feature('npc_sweep','no_reply')
+  scan.retry=true
+  return true
+ end
+ for _,object in ipairs(sweep.objects) do
+  considerObject(scan,object)
+ end
+ return true
+end
+RegisterEvent('X4LAN_Universe.Swept',function(_,object)
+ if sweep.objects and not sweep.done then
+  sweep.objects[#sweep.objects+1]=ConvertIDTo64Bit(object)
+ end
+end)
+RegisterEvent('X4LAN_Universe.SweepDone',function(_,token)
+ if tonumber(token)==sweep.token then
+  sweep.done=true
+ end
+end)
+-- Server capture: the faction walk, then the same MD sector sweep the clients use, so every
+-- ship a client sweep removes is also one the server replicates (union, duplicates skipped).
+local function captureStep(scan,now)
+ if not scan.walked then
+  if not scanStep(scan) then
+   return false
+  end
+  scan.walked=true
+  if scan.retry or u.sweepUnavailable then
+   return true
+  end
+  local request=beginSweep(scan.name,scan.sector,now)
+  scan.token=request.token
+  scan.startedAt=now
+  return false
+ end
+ if not sweepStep(scan,now) then
+  return false
+ end
+ scan.retry=nil  -- a silent sweep only disables the sweep; the walk's capture stands
+ return true
 end
 local function pose(object)
  local p=C.GetObjectPositionInSector(object);return {p.x,p.y,p.z,p.yaw,p.pitch,p.roll}
@@ -244,8 +332,12 @@ local function accept(b,now)
    -- only after the motion feed has been silent for NPC.hold seconds (packet loss/recovery);
    -- otherwise a moving replica would jump back to the capture position on every baseline.
    if not r.at or now-r.at>=(r.modern and NPC.hold or M.stale) then
-    if r.track then count('baseline_snap') end
-    r.track=nil;r.target=nil
+    if r.track then
+     count('baseline_snap')
+    end
+    r.track=nil
+    r.target=nil
+    r.nextWrite=nil  -- show the baseline pose on the next frame
    end
   end
  end
@@ -288,17 +380,38 @@ function u.receive(f,now)
      local g=u.gaps[b] or {n=0,max=0};u.gaps[b]=g;g.n=g.n+1;g.max=math.max(g.max,err)
     end
    end
-   if snapped then count('snaps');logSnap(id,err,last and 'diverged' or 'baseline',now) end
-   r.track=track;r.target=parsed.pose;r.at=now;r.seq=seq;r.modern=true
+   if snapped then
+    count('snaps')
+    logSnap(id,err,last and 'diverged' or 'baseline',now)
+    r.nextWrite=nil  -- write the resynchronised pose on the next frame
+   end
+   r.track=track
+   r.target=parsed.pose
+   r.at=now
+   r.seq=seq
+   r.modern=true
    return true
   end
+  -- Legacy UPOS (no source time): interpolated 0.1 s behind arrival, written every frame.
   local track=(not r.modern) and r.track or nil
-  if not track then track={};M.push(track,now-.1,r.entity.pose,velocity,now-.1) end
+  if not track then
+   track={}
+   M.push(track,now-.1,r.entity.pose,velocity,now-.1)
+  end
   local resets=track.resets or 0
-  if not M.push(track,now,parsed.pose,velocity,now) then return true end
+  if not M.push(track,now,parsed.pose,velocity,now) then
+   return true
+  end
   count('samples')
-  if (track.resets or 0)>resets then count('reset_'..(track.lastReset or 'gap')) end
-  r.track=track;r.target=parsed.pose;r.at=now;r.seq=seq;r.modern=false
+  if (track.resets or 0)>resets then
+   count('reset_'..(track.lastReset or 'gap'))
+  end
+  r.track=track
+  r.target=parsed.pose
+  r.at=now
+  r.seq=seq
+  r.modern=false
+  r.nextWrite=nil
   return true
  elseif f[1]=='UFOCUS' then
   -- A client's selected target (network ID, 0 = none); hot on the server for focusHold s.
@@ -318,126 +431,328 @@ function u.receive(f,now)
  end
  return false
 end
+-- Engine pose writes. SetObjectSectorPos runs on the client's main thread and is the
+-- expensive part of a replica: live clients drew about 1,700 replica writes per second and
+-- fell from about 40 fps (before the replicas loaded) to 13-16 fps, about 0.3-0.4 ms per
+-- write. The prediction (motion.lua M.drRender) is continuous and costs microseconds; only
+-- the write rate depends on the replica's distance from the local player:
+--  near  (within nearRange and moving):  every frame
+--  view  (within viewRange):             every viewInterval s, fastViewInterval s when fast
+--  far   (beyond viewRange):             checked every farInterval s, written only when the
+--                                        pose moved more than farError m, or after farRefresh s
+-- A write is skipped when the pose changed less than minMove m and minTurn rad. At most
+-- budgetPerFrame replicas are visited per frame: never-written replicas first, then near
+-- ones, then the most overdue (round robin).
+local REPLICA_WRITE={
+ budgetPerFrame=12,
+ nearRange=2500,
+ nearMinSpeed=1,
+ viewRange=15000,
+ viewInterval=.25,
+ fastViewInterval=.125,
+ fastSpeed=150,
+ farInterval=.5,
+ farError=100,
+ farRefresh=5,
+ minMove=.01,
+ minTurn=.01*math.pi/180,
+}
+u.replicaWrite=REPLICA_WRITE
+local RADIANS_TO_DEGREES=180/math.pi
+local ZONE_FIX_LIMIT=16          -- learned zone offsets kept per replica
+local RESPAWN_INTERVAL=2         -- seconds between two slip respawns of one replica
+local SLIP_LOG_INTERVAL=5        -- seconds between two NPC_FRAME_SLIP rows
+
 -- Zone-frame slip (coop_game.lua SLIP_*, 43dd063): SetObjectSectorPos converts the pose
 -- into the replica's current zone, re-parents it to the zone at the target and queues the
 -- zone-local pose, which then lands offset by the difference of the two zone origins; the
 -- engine files the replica back into the old zone and the next write repeats it. Near the
--- player the target lies in a zone around the player's ship, so it repeats every frame.
+-- player the target lies in a zone around the player's ship, so it repeats on every write.
 -- For replicas near the player (or that slipped in the last slipTrack s) the slip of a
--- re-parenting write is kept per source zone and
--- subtracted from later writes that start there; elsewhere (and when the predicted target
--- zone is missed) the pose is rewritten. A slip that lasts slipRespawn s respawns the
--- replica at the target pose, at most once per 2 s. One NPC_FRAME_SLIP row per 5 s at most.
-local slipLog={n=0,next=0,zone=0,rewrite=0,respawn=0}
-local function zoneOf(object) return C.GetContextByClass(object,'zone',false) end
-local function writePose(r,sector,value,p,slip,dx,dy,dz,now,track)
- local object=r.object
- if slip>0 and r.wFrom and r.wFrom~=r.wTo then
-  local k=r.wK;r.zoneFix=r.zoneFix or {};r.zoneFixes=(r.zoneFixes or 0)+1
-  if r.zoneFixes>16 then r.zoneFix={};r.zoneFixes=1 end
-  r.zoneFix[tostring(r.wFrom)]={to=r.wTo,k={k[1]+dx,k[2]+dy,k[3]+dz}}
+-- re-parenting write is kept per source zone and subtracted from later writes that start
+-- there; elsewhere (and when the predicted target zone is missed) the pose is rewritten. A
+-- slip that lasts slipRespawn s respawns the replica at the target pose, at most once per
+-- RESPAWN_INTERVAL s. NPC_FRAME_SLIP rows count each action, one row per SLIP_LOG_INTERVAL s.
+local slipLog={rows=0,next=0,zone=0,rewrite=0,respawn=0}
+local function zoneOf(object)
+ return C.GetContextByClass(object,'zone',false)
+end
+local function logSlipAction(replica,slip,action,now)
+ count('slips')
+ slipLog.rows=slipLog.rows+1
+ slipLog[action]=slipLog[action]+1
+ if now<slipLog.next then
+  return
  end
- local from=track and zoneOf(object);local fix=from and r.zoneFix and r.zoneFix[tostring(from)];local k=fix and fix.k
- local pose=value
- if k then
-  pose=ffi.new('UIPosRot',{x=value.x-k[1],y=value.y-k[2],z=value.z-k[3],yaw=value.yaw,pitch=value.pitch,roll=value.roll})
+ log(string.format('NPC_FRAME_SLIP id=%d slip=%.0f action=%s count=%d zone=%d rewrite=%d respawn=%d',
+  replica.entity.id,slip,action,slipLog.rows,slipLog.zone,slipLog.rewrite,slipLog.respawn))
+ slipLog.rows=0
+ slipLog.zone=0
+ slipLog.rewrite=0
+ slipLog.respawn=0
+ slipLog.next=now+SLIP_LOG_INTERVAL
+end
+-- Remembers the zone offset of the last write if that write re-parented and slipped.
+local function learnZoneOffset(replica,slipOffset)
+ local previousOffset=replica.lastWriteOffset
+ replica.zoneFix=replica.zoneFix or {}
+ replica.zoneFixCount=(replica.zoneFixCount or 0)+1
+ if replica.zoneFixCount>ZONE_FIX_LIMIT then
+  replica.zoneFix={}
+  replica.zoneFixCount=1
  end
- C.SetObjectSectorPos(object,sector,pose);r.applied=p
- if track then r.wFrom,r.wTo,r.wK=from,zoneOf(object),k or {0,0,0} else r.wFrom=nil end
- local action
- if k and r.wTo~=fix.to then
-  r.zoneFix[tostring(from)]=nil;C.SetObjectSectorPos(object,sector,value);action='rewrite'
+ replica.zoneFix[tostring(replica.lastWriteFrom)]={
+  to=replica.lastWriteTo,
+  offset={previousOffset[1]+slipOffset[1],previousOffset[2]+slipOffset[2],previousOffset[3]+slipOffset[3]},
+ }
+end
+-- One engine write of `enginePose` (UIPosRot, degrees) for the predicted `pose` (radians).
+-- slip/slipOffset: how far the engine moved the replica since the last write (0 if none).
+local function writePose(replica,sectorId,enginePose,pose,slip,slipOffset,now,trackZones)
+ local object=replica.object
+ if slip>0 and replica.lastWriteFrom and replica.lastWriteFrom~=replica.lastWriteTo then
+  learnZoneOffset(replica,slipOffset)
+ end
+ local fromZone=trackZones and zoneOf(object)
+ local fix=fromZone and replica.zoneFix and replica.zoneFix[tostring(fromZone)]
+ local offset=fix and fix.offset
+ local written=enginePose
+ if offset then
+  written=ffi.new('UIPosRot',{x=enginePose.x-offset[1],y=enginePose.y-offset[2],z=enginePose.z-offset[3],
+   yaw=enginePose.yaw,pitch=enginePose.pitch,roll=enginePose.roll})
+ end
+ C.SetObjectSectorPos(object,sectorId,written)
+ replica.applied=pose
+ if trackZones then
+  replica.lastWriteFrom=fromZone
+  replica.lastWriteTo=zoneOf(object)
+  replica.lastWriteOffset=offset or {0,0,0}
+ else
+  replica.lastWriteFrom=nil
+ end
+ local action=nil
+ if offset and replica.lastWriteTo~=fix.to then
+  -- The predicted target zone was missed: drop the offset and write uncompensated.
+  replica.zoneFix[tostring(fromZone)]=nil
+  C.SetObjectSectorPos(object,sectorId,enginePose)
+  action='rewrite'
+ elseif slip>0 and offset then
+  action='zone'
  elseif slip>0 then
-  action=k and 'zone' or 'rewrite'
-  if not k then C.SetObjectSectorPos(object,sector,value) end
+  C.SetObjectSectorPos(object,sectorId,enginePose)
+  action='rewrite'
  end
- if slip>0 and r.slipSince and now-r.slipSince>=NPC.slipRespawn and now>=(r.nextRespawn or 0) then
-  r.nextRespawn=now+2;r.slipSince=nil;removeReplica(r);r.object=nil;r.applied=nil;r.zoneFix=nil;action='respawn'
+ local slipLasted=replica.slipSince and now-replica.slipSince>=NPC.slipRespawn
+ if slip>0 and slipLasted and now>=(replica.nextRespawn or 0) then
+  replica.nextRespawn=now+RESPAWN_INTERVAL
+  replica.slipSince=nil
+  removeReplica(replica)
+  replica.object=nil
+  replica.applied=nil
+  replica.zoneFix=nil
+  replica.nextWrite=now  -- spawn again on the next frame
+  action='respawn'
  end
  if action then
-  count('slips');slipLog.n=slipLog.n+1;slipLog[action]=slipLog[action]+1
-  if now>=slipLog.next then
-   log(string.format('NPC_FRAME_SLIP id=%d slip=%.0f action=%s count=%d zone=%d rewrite=%d respawn=%d',r.entity.id,slip,action,
-    slipLog.n,slipLog.zone,slipLog.rewrite,slipLog.respawn))
-   slipLog.n,slipLog.zone,slipLog.rewrite,slipLog.respawn,slipLog.next=0,0,0,0,now+5
-  end
+  logSlipAction(replica,slip,action,now)
  end
 end
-local function apply(r,now,sector,hot)
- if r.entity.kind=='drop' then A.cargo.ensure(r,sector);return end
- if A.npcCombat and A.npcCombat.hidden(r) then
-  if not r.hidden then r.hidden=true;count('hides') end
-  A.npcCombat.hide(r,now);return
- end
- if r.hidden then r.hidden=nil;count('shows') end
- local p=r.entity.pose;local speed=0
- if r.track then
-  if r.modern then
-   local q,v=M.drRender(r.track,u.renderT,now,u.clock.rate)
-   if q then p=q;speed=M.speed(v) end
-  else p=M.render(r.track,now,.1) or p end
- end
- local value=ffi.new('UIPosRot',{x=p[1],y=p[2],z=p[3],yaw=p[4]*180/math.pi,pitch=p[5]*180/math.pi,roll=p[6]*180/math.pi})
- if not r.object or not C.IsComponentOperational(r.object) then
-  count(r.object and 'respawns' or 'creates')
-  r.object=C.SpawnObjectAtPos2(r.entity.macro,sector,value,r.entity.owner)
-  assert(r.object~=0,'NPC replica spawn failed');u.replicaKeys[key(r.object)]=r.entity.id
-  C.ActivateObject(r.object,false);r.applied=nil
- end
- assert(r.object~=C.GetPlayerContainerID() and r.object~=C.GetPlayerControlledShipID(),'player in NPC replica')
- -- Client relevance: near the local player (or its target) is hot.
- local near=u.playerPos and (p[1]-u.playerPos[1])^2+(p[2]-u.playerPos[2])^2+(p[3]-u.playerPos[3])^2<=NPC.hotRange^2
- r.tier=(near or u.focusId==r.entity.id) and 'hot' or 'cold'
- local changed=not r.applied
- if r.applied then for i=1,6 do if math.abs(p[i]-r.applied[i])>(i<=3 and .005 or .00001) then changed=true end end end
- local slip,dx,dy,dz=0,0,0,0
- if r.applied then
-  local a=C.GetObjectPositionInSector(r.object)
-  dx,dy,dz=a.x-r.applied[1],a.y-r.applied[2],a.z-r.applied[3]
-  slip=math.sqrt(dx*dx+dy*dy+dz*dz)
-  if slip>math.max(NPC.slipMin,NPC.slipSpeed*speed) then changed=true;r.slipSince=r.slipSince or now;r.zoneTrackUntil=now+NPC.slipTrack
-  else slip=0;r.slipSince=nil end
- end
- if changed then
-  if diagEvery and r.applied and r.appliedAt then
-   local d=math.sqrt((p[1]-r.applied[1])^2+(p[2]-r.applied[2])^2+(p[3]-r.applied[3])^2)
-   local expected=math.max(speed,r.speed or 0)*(now-r.appliedAt)
-   if d>NPC.jump+2*expected then count('jumps');peak('max_jump',d) end
-  end
-  -- Zones are tracked near the player and for slipTrack s after any slip of this replica.
-  writePose(r,sector,value,p,slip,dx,dy,dz,now,near or now<(r.zoneTrackUntil or 0));r.appliedAt=now
-  count(hot and 'hot_writes' or 'writes')
- end
- r.speed=speed;r.frame=u.frameNo
- -- Fast replicas, and moving replicas near the player, are written every frame.
- if speed>=NPC.fast or (near and speed>=1) then u.hot[#u.hot+1]=r end
+local function distanceSquared(a,b)
+ return (a[1]-b[1])^2+(a[2]-b[2])^2+(a[3]-b[3])^2
 end
-local function render(now,sector)
- local ids=u.renderIds or {};if #ids==0 then return end
+-- The predicted pose (radians) and speed (m/s) of a replica now.
+local function predictedPose(replica,now)
+ local pose=replica.entity.pose
+ local speed=0
+ if replica.track and replica.modern then
+  local predicted,velocity=M.drRender(replica.track,u.renderT,now,u.clock.rate)
+  if predicted then
+   pose=predicted
+   speed=M.speed(velocity)
+  end
+ elseif replica.track then
+  pose=M.render(replica.track,now,.1) or pose
+ end
+ return pose,speed
+end
+-- Write class and the time until the next visit.
+local function writeClass(replica,pose,speed)
+ if replica.track and not replica.modern then
+  return 'near',0  -- legacy UPOS replicas have no velocity to classify by
+ end
+ local distance2=u.playerPos and distanceSquared(pose,u.playerPos) or math.huge
+ local focused=u.focusId==replica.entity.id
+ if (distance2<=REPLICA_WRITE.nearRange^2 or focused) and speed>=REPLICA_WRITE.nearMinSpeed then
+  return 'near',0
+ end
+ if distance2<=REPLICA_WRITE.viewRange^2 or focused then
+  if speed>=REPLICA_WRITE.fastSpeed then
+   return 'view',REPLICA_WRITE.fastViewInterval
+  end
+  return 'view',REPLICA_WRITE.viewInterval
+ end
+ return 'far',REPLICA_WRITE.farInterval
+end
+local function poseChanged(pose,applied)
+ for i=1,3 do
+  if math.abs(pose[i]-applied[i])>REPLICA_WRITE.minMove then
+   return true
+  end
+ end
+ for i=4,6 do
+  if math.abs(M.angle(pose[i]-applied[i]))>REPLICA_WRITE.minTurn then
+   return true
+  end
+ end
+ return false
+end
+-- Far replicas are written only when the predicted pose left the written one by more than
+-- farError m, or after farRefresh s.
+local function needsWrite(replica,pose,class,now)
+ if not replica.applied then
+  return true
+ end
+ if not poseChanged(pose,replica.applied) then
+  return false
+ end
+ if class~='far' then
+  return true
+ end
+ local moved2=distanceSquared(pose,replica.applied)
+ return moved2>REPLICA_WRITE.farError^2 or now-(replica.appliedAt or 0)>=REPLICA_WRITE.farRefresh
+end
+-- Engine pose minus the last written pose (zone-frame slip), or 0 when within the limit.
+local function measureSlip(replica,speed,now)
+ if not replica.applied then
+  return 0,{0,0,0}
+ end
+ local engine=C.GetObjectPositionInSector(replica.object)
+ local offset={engine.x-replica.applied[1],engine.y-replica.applied[2],engine.z-replica.applied[3]}
+ local slip=math.sqrt(offset[1]^2+offset[2]^2+offset[3]^2)
+ if slip<=math.max(NPC.slipMin,NPC.slipSpeed*speed) then
+  replica.slipSince=nil
+  return 0,offset
+ end
+ replica.slipSince=replica.slipSince or now
+ replica.zoneTrackUntil=now+NPC.slipTrack
+ return slip,offset
+end
+local function countJump(replica,pose,speed,now)
+ if not diagEvery or not replica.applied or not replica.appliedAt then
+  return
+ end
+ local moved=math.sqrt(distanceSquared(pose,replica.applied))
+ local expected=math.max(speed,replica.speed or 0)*(now-replica.appliedAt)
+ if moved>NPC.jump+2*expected then
+  count('jumps')
+  peak('max_jump',moved)
+ end
+end
+local function ensureObject(replica,sectorId,enginePose)
+ if replica.object and C.IsComponentOperational(replica.object) then
+  return
+ end
+ count(replica.object and 'respawns' or 'creates')
+ replica.object=C.SpawnObjectAtPos2(replica.entity.macro,sectorId,enginePose,replica.entity.owner)
+ assert(replica.object~=0,'NPC replica spawn failed')
+ u.replicaKeys[key(replica.object)]=replica.entity.id
+ C.ActivateObject(replica.object,false)
+ replica.applied=nil
+end
+-- One visit: predict, classify, and write the engine pose when the class asks for it.
+function u.writeReplica(replica,now,sectorId)
+ if replica.entity.kind=='drop' then
+  A.cargo.ensure(replica,sectorId)
+  replica.nextWrite=now+REPLICA_WRITE.viewInterval
+  return
+ end
+ if A.npcCombat and A.npcCombat.hidden(replica) then
+  if not replica.hidden then
+   replica.hidden=true
+   count('hides')
+  end
+  A.npcCombat.hide(replica,now)
+  replica.nextWrite=now+REPLICA_WRITE.viewInterval
+  return
+ end
+ if replica.hidden then
+  replica.hidden=nil
+  count('shows')
+ end
+ local pose,speed=predictedPose(replica,now)
+ local enginePose=ffi.new('UIPosRot',{x=pose[1],y=pose[2],z=pose[3],
+  yaw=pose[4]*RADIANS_TO_DEGREES,pitch=pose[5]*RADIANS_TO_DEGREES,roll=pose[6]*RADIANS_TO_DEGREES})
+ ensureObject(replica,sectorId,enginePose)
+ assert(replica.object~=C.GetPlayerContainerID() and replica.object~=C.GetPlayerControlledShipID(),'player in NPC replica')
+ local class,interval=writeClass(replica,pose,speed)
+ replica.writeClass=class
+ replica.tier=(class=='near' or u.focusId==replica.entity.id) and 'hot' or 'cold'
+ replica.nextWrite=now+interval
+ replica.speed=speed
+ local slip,slipOffset=measureSlip(replica,speed,now)
+ if slip==0 and not needsWrite(replica,pose,class,now) then
+  count('write_skips')
+  return
+ end
+ countJump(replica,pose,speed,now)
+ -- Zones are tracked near the player and for slipTrack s after any slip of this replica.
+ local trackZones=class=='near' or now<(replica.zoneTrackUntil or 0)
+ writePose(replica,sectorId,enginePose,pose,slip,slipOffset,now,trackZones)
+ replica.appliedAt=now
+ count(class=='near' and 'near_writes' or 'writes')
+end
+-- Visit order: never-written replicas first, then near ones, then the most overdue.
+local function visitBefore(a,b)
+ local rankA=a.object and (a.writeClass=='near' and 1 or 2) or 0
+ local rankB=b.object and (b.writeClass=='near' and 1 or 2) or 0
+ if rankA~=rankB then
+  return rankA<rankB
+ end
+ local dueA=a.nextWrite or 0
+ local dueB=b.nextWrite or 0
+ if dueA~=dueB then
+  return dueA<dueB
+ end
+ return a.entity.id<b.entity.id
+end
+local function playerPosition(sectorId)
+ local own=C.GetPlayerContainerID()
+ if own==0 or C.GetContextByClass(own,'sector',false)~=sectorId then
+  return nil
+ end
+ local position=C.GetObjectPositionInSector(own)
+ return {position.x,position.y,position.z}
+end
+-- Per frame: the replicas whose visit is due, at most budgetPerFrame of them.
+function u.renderReplicas(now,sectorId)
+ local ids=u.renderIds or {}
+ if #ids==0 then
+  return
+ end
  u.frameNo=u.frameNo+1
  u.renderT=u.clock.base and M.drTime(u.clock,now)
- local own=C.GetPlayerContainerID()
- if own~=0 and C.GetContextByClass(own,'sector',false)==sector then
-  local o=C.GetObjectPositionInSector(own);u.playerPos={o.x,o.y,o.z}
- else u.playerPos=nil end
- -- A pose-only replica stands still until the next write. Fast movers are therefore
- -- written every frame (bounded, rotating when more are fast than the budget).
- local hot=u.hot;u.hot={}
- local n=#hot;local start=n>0 and (u.hotCursor or 0)%n or 0;local used=0
- for i=1,n do
-  local r=hot[(start+i-1)%n+1]
-  if u.replicas[r.entity.id]==r and r.sector==u.interest then
-   if used<NPC.hotBudget then used=used+1;apply(r,now,sector,true)
-   else u.hot[#u.hot+1]=r end
+ u.playerPos=playerPosition(sectorId)
+ local due={}
+ local nearCount=0
+ for _,id in ipairs(ids) do
+  local replica=u.replicas[id]
+  if replica and replica.sector==u.interest then
+   if replica.writeClass=='near' then
+    nearCount=nearCount+1
+   end
+   if now>=(replica.nextWrite or 0) then
+    due[#due+1]=replica
+   end
   end
  end
- u.hotCursor=start+used
- for _=1,math.min(128,#ids) do
-  local r=u.replicas[ids[u.renderCursor]];u.renderCursor=u.renderCursor%#ids+1
-  if r and r.sector==u.interest and r.frame~=u.frameNo and (not r.nextApply or now>=r.nextApply) then
-   r.nextApply=now+.015
-   apply(r,now,sector,false)
-  end
+ u.nearCount=nearCount
+ table.sort(due,visitBefore)
+ local visits=math.min(#due,REPLICA_WRITE.budgetPerFrame)
+ for i=1,visits do
+  u.writeReplica(due[i],now,sectorId)
+ end
+ if #due>visits then
+  count('write_deferred',#due-visits)
  end
 end
 -- Server: player ship positions per sector, keyed by key(sector): engine IDs are 64-bit
@@ -544,7 +859,7 @@ local function due(identity,p,v,tier,now)
  if age>=tier.keep then return 'keepalive',age/tier.keep*tier.weight*.5,err end
  return nil
 end
-local function publishMotion(now)
+function u.publishMotion(now)
  local players,shipCount=playerShips();local focus={};peak('players',shipCount)
  for who,f in pairs(u.focus) do
   if now-f.at>NPC.focusHold then u.focus[who]=nil elseif f.id>0 then focus[f.id]=true end
@@ -573,6 +888,51 @@ local function publishMotion(now)
  end
  if #list>NPC.budget then count('deferred',#list-NPC.budget) end
  local n=0;for _ in pairs(focus) do n=n+1 end;peak('focus',n)
+end
+-- Guest: removes the client's own NPCs in the replicated sector (every ship the server
+-- would capture, which is not a replica). Sweeps every sweepEvery s; the faction
+-- enumeration fallback every suppressEvery s.
+local SUPPRESS_LOG_INTERVAL=30
+local function suppressLocalNpcs(name,sectorId,now)
+ if not u.scan and now>=(u.nextScan or 0) then
+  if u.sweepUnavailable then
+   u.scan=beginScan(name,sectorId)
+  else
+   u.scan=beginSweep(name,sectorId,now)
+  end
+ end
+ if not u.scan then
+  return
+ end
+ local finished
+ if u.scan.sweep then
+  finished=sweepStep(u.scan,now)
+ else
+  finished=scanStep(u.scan)
+ end
+ if not finished then
+  return
+ end
+ local scan=u.scan
+ u.scan=nil
+ if scan.retry then
+  u.nextScan=now+1
+  return
+ end
+ local removed=0
+ for _,entry in ipairs(scan.objects) do
+  local object=entry.object
+  if C.IsComponentOperational(object) and not protected(object) and C.GetContextByClass(object,'sector',false)==sectorId then
+   C.RemoveComponent(object)
+   removed=removed+1
+  end
+ end
+ count('suppressed',removed)
+ if removed>0 or now>=(u.nextSuppressLog or 0) then
+  u.nextSuppressLog=now+SUPPRESS_LOG_INTERVAL
+  log('LOCAL_NPC_SUPPRESSED count='..removed..' sector='..name..' source='..(scan.sweep and 'sweep' or 'factions'))
+ end
+ u.nextScan=now+(scan.sweep and NPC.sweepEvery or NPC.suppressEvery)
 end
 local function frame(now)
  if u.failed or not s.client or not s.client.lease or not A.coop.ready then return end
@@ -609,28 +969,13 @@ local function frame(now)
      send('UFOCUS|1|'..s.client.lease..'|'..u.focusSeq..'|'..(id or 0))
     end
    end
-   render(now,sector)
-   if not u.scan and now>=(u.nextScan or 0) then u.scan=beginScan(name,sector) end
-   if u.scan and scanStep(u.scan) then
-    if u.scan.retry then u.scan=nil;u.nextScan=now+1;return end
-    local n=0
-    for _,entry in ipairs(u.scan.objects) do
-     if C.IsComponentOperational(entry.object) and not protected(entry.object) and C.GetContextByClass(entry.object,'sector',false)==sector then
-      C.RemoveComponent(entry.object);n=n+1
-     end
-    end
-    -- Locally spawned/arriving NPCs stay visible until this pass; keep the window short.
-    count('suppressed',n)
-    if n>0 or now>=(u.nextSuppressLog or 0) then
-     u.nextSuppressLog=now+30;log('LOCAL_NPC_SUPPRESSED count='..n..' sector='..name)
-    end
-    u.scan=nil;u.nextScan=now+NPC.suppressEvery
-   end
+   u.renderReplicas(now,sector)
+   suppressLocalNpcs(name,sector,now)
   end
   if diagEvery then
    local live=0;u.tierCount={hot=0,cold=0}
    for _,r in pairs(u.replicas) do live=live+1;local t=r.tier=='hot' and 'hot' or 'cold';u.tierCount[t]=u.tierCount[t]+1 end
-   diagFlush(now,'guest','sector='..name..' replicas='..live..' hot='..#u.hot..
+   diagFlush(now,'guest','sector='..name..' replicas='..live..' hot='..(u.nearCount or 0)..
     ' baseline_age='..(u.acceptedAt and string.format('%.1f',now-u.acceptedAt) or '-'))
   end
   return
@@ -649,13 +994,16 @@ local function frame(now)
    if target then u.scan=beginScan(name,target) end
   end
  end
- if u.scan and scanStep(u.scan) then
-  if not u.scan.retry then captured(u.scan) end
-  u.scan=nil;u.nextScan=now+2
+ if u.scan and captureStep(u.scan,now) then
+  if not u.scan.retry then
+   captured(u.scan)
+  end
+  u.scan=nil
+  u.nextScan=now+2
  end
  if #u.publish>0 and now>=(u.nextMotion or 0) then
   u.nextMotion=now+.045  -- every 0.05 s server frame (float steps must not skip one)
-  publishMotion(now)
+  u.publishMotion(now)
  end
  local names={};for name in pairs(u.wanted) do names[#names+1]=name end;table.sort(names)
  diagFlush(now,'host','sectors='..(#names>0 and table.concat(names,',') or '-')..' published='..#u.publish)

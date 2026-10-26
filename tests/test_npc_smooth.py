@@ -177,6 +177,8 @@ class DeadReckoningTests(unittest.TestCase):
 
 
 HOST = '''
+  -- Only the NPCs a test adds exist (the base harness also places 90 and 101-104).
+  for _,id in ipairs({90,101,102,103,104}) do positions[id]=nil end
   npcs={};ids={}
   api.GetNumAllFactionShips=function(f) return f=='argon' and #ids or 0 end
   api.GetAllFactionShips=function(out,cap,f)
@@ -406,6 +408,19 @@ class ServerSendOnDivergenceTests(unittest.TestCase):
           assert(found)
         ''')
 
+    def test_capture_adds_ships_only_the_sector_sweep_finds(self):
+        # Every ship a client sweep would remove must be replicated: the capture is the union
+        # of the faction walk and the same sector sweep.
+        l = self.host()
+        l.execute('''
+          addNpc(1003,1000,1000,300)
+          positions[1004]={x=2000,y=0,z=0,yaw=0,pitch=0,roll=0}  -- in no faction list
+          U.receive({'UINTEREST','1',client.lease,'1','cluster_14_sector001_macro'},now)
+          hostTick(6)
+          rows=#U.sender.baseline.rows
+        ''')
+        self.assertEqual(l.eval('rows'), 2)
+
     def test_capture_enumerates_a_large_universe_in_a_few_frames(self):
         # Live: 512 objects and at most one faction per 20 Hz frame; captures every 25-30 s.
         l = self.host()
@@ -443,6 +458,7 @@ class ClientDeadReckoningTests(unittest.TestCase):
             local arrival=nextS+.02+math.random()*.08
             if arrival<=now then U.receive(umove(1,seq,st,1500+3000*(st-50),3000),now);nextS=nextS+.25 else break end
            end
+           positions[11].x=positions[object].x-400  -- the player flies alongside: near
            local before=#writes+1;frames.onUpdate()
            if f>300 then
             if writesFor(object,before)~=1 then missed=missed+1 end
@@ -527,6 +543,7 @@ class ClientDeadReckoningTests(unittest.TestCase):
           with self.subTest(player_x=player_x):
            l = self.guest('X4LAN_CONFIG.npc_motion_diagnostics=1')
            l.globals().PLAYER_X = player_x
+           l.globals().FROM = 30 if player_x > 20000 else 75
            l.execute('''
           tick(1);baseline(1,{npcRow(1,41000)},true);tick(2)
           local object=U.replicas[1].object
@@ -556,9 +573,10 @@ class ClientDeadReckoningTests(unittest.TestCase):
            now=now+1/60
            if k%6==0 then seq=seq+1;U.receive(umove(1,seq,now,41000+k*650/60,650),now) end
            -- A frame must not start with the replica away from the pose written last frame.
-           if k>30 and math.abs(positions[object].x-U.replicas[1].applied[1])>1 then displaced=displaced+1 end
+           -- A far replica is visited every 0.5 s, so it needs about 1 s to learn the offset.
+           if k>FROM and math.abs(positions[object].x-U.replicas[1].applied[1])>1 then displaced=displaced+1 end
            perFrame=0;frames.onUpdate()
-           if k>30 and perFrame>1 then multi=multi+1 end
+           if k>FROM and perFrame>1 then multi=multi+1 end
            endFrame()
           end
           logged=false;for _,v in ipairs(logs) do if v:find('NPC_FRAME_SLIP id=1',1,true) then logged=true end end
@@ -580,6 +598,134 @@ class ClientDeadReckoningTests(unittest.TestCase):
           target=0;tick(10)
           local last;for _,p in ipairs(sent) do if p:find('^UFOCUS|') then last=p end end
           assert(last:find('|0$'),last)
+        ''')
+
+
+WRITES = '''
+  -- Feed replica `id` a straight track from x0 at vx m/s (server clock = wall clock).
+  function feed(id,seq,x0,vx,t0) U.receive(umove(id,seq,now,x0+vx*(now-t0),vx),now) end
+  function writeTimes(object,from)
+   local times={};for i=from,#writes do if writes[i].id==object then times[#times+1]=writes[i].at end end;return times
+  end
+  local set=api.SetObjectSectorPos
+  api.SetObjectSectorPos=function(id,sector,p) set(id,sector,p);writes[#writes].at=now end
+'''
+
+
+@unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
+class ReplicaWriteRateTests(unittest.TestCase):
+    """Engine pose writes by distance class; the prediction itself is continuous."""
+    make = adapter.UniverseAdapterTests.make
+
+    def guest(self, setup=''):
+        l = self.make('p2', setup=setup)
+        l.execute(adapter.NPC_HELPERS)
+        l.execute(WRITES)
+        return l
+
+    def test_write_rate_follows_distance_class(self):
+        # Player at (100,200,300). 1: near, 300 m/s. 2: 8 km, 100 m/s (view). 3: 13-4 km,
+        # 3 km/s (fast view). 4: 40 km, 300 m/s (far). 5: 40 km, still (far). 6: near, still.
+        l = self.guest()
+        l.execute('''
+          tick(1)
+          baseline(1,{npcRow(1,600),npcRow(2,8000),npcRow(3,16000),npcRow(4,40000),npcRow(5,-40000),npcRow(6,900)},true)
+          tick(2)
+          local t0=now;local seq=1
+          local starts={[1]=600,[2]=8000,[3]=16000,[4]=40000,[5]=-40000,[6]=900}
+          local speeds={[1]=300,[2]=100,[3]=-3000,[4]=300,[5]=0,[6]=0}  -- 3: from 13 to 4 km while counted
+          local from
+          for f=1,240 do
+           now=now+1/60
+           if f%15==1 then for id=1,6 do seq=seq+1;feed(id,seq,starts[id],speeds[id],t0) end end
+           if f==60 then from=#writes+1 end
+           frames.onUpdate()
+          end
+          counts={}
+          for id=1,6 do counts[id]=#writeTimes(U.replicas[id].object,from) end
+        ''')
+        near, view, fast, far, far_still, near_still = [l.eval(f'counts[{i}]') for i in range(1, 7)]
+        # 3 s of frames at 60 fps.
+        self.assertGreaterEqual(near, 175)          # every frame
+        self.assertTrue(9 <= view <= 14, view)      # 4 Hz
+        self.assertTrue(20 <= fast <= 27, fast)     # 8 Hz
+        self.assertTrue(4 <= far <= 7, far)         # 150 m per 0.5 s visit > 100 m: 2 Hz
+        self.assertEqual(far_still, 0)
+        self.assertEqual(near_still, 0)             # below 1 cm / 0.01 degrees: no write
+
+    def test_writes_per_frame_are_capped_round_robin(self):
+        l = self.guest('X4LAN_CONFIG.npc_motion_diagnostics=1')
+        l.execute('''
+          tick(1);local rows={};for id=1,50 do rows[#rows+1]=npcRow(id,100+id*20) end
+          baseline(1,rows,true);tick(10)
+          local t0=now;local seq=1;most=0;local last={};gap=0
+          for f=1,180 do
+           now=now+1/60
+           if f%15==1 then for id=1,50 do seq=seq+1;feed(id,seq,100+id*20,200,t0) end end
+           local before=#writes+1;frames.onUpdate()
+           most=math.max(most,#writes-before+1)
+           for i=before,#writes do
+            local id=U.replicaKeys[tostring(writes[i].id)]
+            if f>30 and last[id] then gap=math.max(gap,f-last[id]) end
+            last[id]=f
+           end
+          end
+          deferred=false;for _,v in ipairs(logs) do if v:find('write_deferred=',1,true) then deferred=true end end
+        ''')
+        self.assertLessEqual(l.eval('most'), 12)
+        self.assertLessEqual(l.eval('gap'), 6)      # 50 near replicas share 12 writes per frame
+        self.assertTrue(l.eval('deferred'))
+
+    def test_replica_sections_appear_in_framecost(self):
+        l = self.guest('''
+          X4LAN_CONFIG.frame_profile=true;X4LAN_CONFIG.enabled=true
+          local step=0;X4LAN_MEASURE_CLOCK=function() step=step+.00001;return now+step end
+        ''')
+        for name in ('measure_clock.lua', 'frame_profile.lua', 'frame_profile_install.lua'):
+            l.execute((UI / name).read_text())
+        l.execute('''
+          tick(1);baseline(1,{npcRow(1,600)},true)
+          local seq=1;local t0=now
+          for f=1,90 do now=now+1/60;if f%15==1 then seq=seq+1;feed(1,seq,600,300,t0) end;frames.onUpdate() end
+          row=nil;for _,v in ipairs(logs) do if v:find('FRAMECOST v=1',1,true) then row=v end end
+        ''')
+        row = l.eval('row')
+        self.assertIsNotNone(row)
+        self.assertIn('universe.render:', row)
+        self.assertIn('universe.write:', row)
+
+
+@unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
+class LocalNpcSuppressionTests(unittest.TestCase):
+    """The client's own simulated ships are removed by a sector sweep, replicas stay."""
+    make = adapter.UniverseAdapterTests.make
+
+    def test_sweep_removes_local_ships_within_a_second_and_keeps_replicas(self):
+        # Live: local freighters (DockAt), builders and escorts stayed 3-15 s with their own
+        # orders while a galaxy-wide faction walk ran. 105 is a local freighter that is not in
+        # any faction list (as a ship the walk never reached), 101/102 are in the lists.
+        l = self.make('p2')
+        l.execute('''
+          tick(1);baseline(1,{testRow},true);tick(2)
+          positions[105]={x=5000,y=0,z=0,yaw=0,pitch=0,roll=0};sectors[105]=22
+          tick(25)   -- 1.25 s
+          assert(positions[105]==nil and positions[101]==nil and positions[102]==nil)
+          local replica=U.replicas[1].object
+          assert(positions[replica] and positions[11] and positions[42] and positions[90] and positions[104])
+          assert(positions[103])   -- another sector
+          local found=false
+          for _,v in ipairs(logs) do if v:find('LOCAL_NPC_SUPPRESSED',1,true) and v:find('source=sweep',1,true) then found=true end end
+          assert(found and not U.failed)
+        ''')
+
+    def test_silent_md_falls_back_to_the_faction_walk(self):
+        l = self.make('p2', setup='mdSweep=false')
+        l.execute('''
+          tick(1);baseline(1,{testRow},true);tick(120)  -- 6 s: 3 s sweep timeout, then the walk
+          assert(positions[101]==nil and positions[102]==nil and not U.failed)
+          local disabled=false
+          for _,v in ipairs(logs) do if v:find('FEATURE npc_sweep DISABLED reason=no_reply',1,true) then disabled=true end end
+          assert(disabled)
         ''')
 
 
@@ -613,6 +759,7 @@ class NpcSceneTests(unittest.TestCase):
         host.execute('history={}')
         wall, next_host, next_relay, frame = 0.0, 0.0, 0.0, 0
         seen, delivered, queue, errors, umoves = 0, False, [], [], 0
+        engine_writes = 0
         hot_ids = set()
         while wall < 14:
             wall = round(wall + .001, 3)
@@ -656,7 +803,10 @@ class NpcSceneTests(unittest.TestCase):
                     else:
                         keep.append((at, p))
                 queue = keep
+                written_before = len(G.writes)
                 guest.execute('frames.onUpdate()')
+                if wall > 4:
+                    engine_writes += len(G.writes) - written_before
                 if wall > 4:
                     errors.extend(self.errors(host, guest))
         # The guest's render time is the server's clock: compare with the truth at that time.
@@ -669,6 +819,9 @@ class NpcSceneTests(unittest.TestCase):
         self.assertEqual(jumps, 0)
         self.assertLess(p95, 30, p95)
         self.assertLess(rate, 200, rate)   # 70 NPCs; the old scheme sent 640/s regardless
+        # Engine pose writes: at most budgetPerFrame (12) per 60 fps frame; the old scheduler
+        # wrote every moving replica every frame (about 3,000/s for this scene).
+        self.assertLess(engine_writes / 10, 721, engine_writes / 10)
 
     @staticmethod
     def errors(host, guest):
@@ -691,12 +844,13 @@ class NpcSceneTests(unittest.TestCase):
         for item in filter(None, pairs.split(';')):
             nid, x, y, z = item.split(':')
             r = data.U.replicas[int(nid)]
-            if r is None or r.object is None:
+            if r is None or r.track is None or not r.modern:
                 continue
-            p = data.positions[r.object]
-            if p is None:
+            # The prediction a write would use now (writes themselves are rate-limited).
+            pose, _ = data.X4LAN_MOTION.drRender(r.track, T, data.now, data.U.clock.rate)
+            if pose is None:
                 continue
-            result.append(math.sqrt((p.x - float(x)) ** 2 + (p.y - float(y)) ** 2 + (p.z - float(z)) ** 2))
+            result.append(math.sqrt((pose[1] - float(x)) ** 2 + (pose[2] - float(y)) ** 2 + (pose[3] - float(z)) ** 2))
         return result
 
 
