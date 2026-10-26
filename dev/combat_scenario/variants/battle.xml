@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Combat scenario variant "battle": the defaults of md.X4MP_CombatScenario.Defaults.
+     40 Argon fighters, 2 frigates, 2 destroyers against 40 Xenon fighters, 2 P, 1 K. -->
+<mdscript name="X4MP_CombatVariant" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <library name="Config">
+      <actions>
+        <set_value name="$Variant" exact="'battle'"/>
+      </actions>
+    </library>
+  </cues>
+</mdscript>

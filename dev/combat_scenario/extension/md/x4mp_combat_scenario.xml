@@ -1,0 +1,275 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  X4MP combat load scenario (test-only, engine rewrite program, combat agent).
+
+  In a fresh custom_creative world it moves the player ship to a fixed, cleared point of the
+  start sector, spawns two fleets next to it (or one passive fleet pair for the idle-turret
+  variant), lets them fight and writes COMBATSCN markers to the debug log (-debug scripts):
+
+    COMBATSCN loaded   version=.. variant=.. module=.. t=..
+    COMBATSCN refused  reason=.. (module, no_player_ship, player_docked, timeout)
+    COMBATSCN armed    t=.. variant=.. sector=.. zone=.. center=x,y,z
+    COMBATSCN spawned  side=A|B count=.. faction=.. t=..
+    COMBATSCN engaged  t=.. hostile=..
+    COMBATSCN tick     t=.. a=.. b=.. ahull=.. bhull=..
+    COMBATSCN window   begin|end t=.. a=.. b=.. reason=..
+    COMBATSCN done     t=.. a=.. b=..
+    COMBATSCN cleaned  t=..
+
+  The measurement window (between "window begin" and "window end") is what a lane profiles.
+  Parameters come from the library md.X4MP_CombatVariant.Config, which the installer copies
+  from dev/combat_scenario/variants/. Never install this extension in a normal profile.
+-->
+<mdscript name="X4MP_CombatScenario" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <library name="Defaults">
+      <actions>
+        <set_value name="$Variant" exact="'battle'"/>
+        <set_value name="$Hostile" exact="true"/>
+        <set_value name="$WarmupS" exact="45s"/>
+        <set_value name="$ArmTimeoutS" exact="600s"/>
+        <set_value name="$SpawnDelayS" exact="3s"/>
+        <set_value name="$EngageDelayS" exact="2s"/>
+        <set_value name="$SettleS" exact="20s"/>
+        <set_value name="$WindowS" exact="120s"/>
+        <set_value name="$TickS" exact="10s"/>
+        <set_value name="$DecidedFraction" exact="0.25"/>
+        <set_value name="$Cleanup" exact="true"/>
+        <set_value name="$CleanupDelayS" exact="5s"/>
+        <set_value name="$ProtectPlayer" exact="true"/>
+        <set_value name="$NeutralPlayer" exact="true"/>
+        <set_value name="$SeedBase" exact="4711"/>
+        <set_value name="$LoadoutLevel" exact="1.0"/>
+        <set_value name="$ArenaY" exact="10km"/>
+        <set_value name="$ArenaClearRadius" exact="8km"/>
+        <set_value name="$ViewDistance" exact="5km"/>
+        <set_value name="$SideGap" exact="4km"/>
+        <set_value name="$A_Faction" exact="faction.argon"/>
+        <set_value name="$A_PilotTags" exact="tag.aipilot"/>
+        <set_value name="$A_Macros" exact="[macro.ship_arg_s_fighter_01_a_macro, macro.ship_arg_s_heavyfighter_02_a_macro, macro.ship_arg_m_frigate_01_a_macro, macro.ship_arg_l_destroyer_01_a_macro]"/>
+        <set_value name="$A_Counts" exact="[30, 10, 2, 2]"/>
+        <set_value name="$B_Faction" exact="faction.xenon"/>
+        <set_value name="$B_PilotTags" exact="tag.pilot"/>
+        <set_value name="$B_Macros" exact="[macro.ship_xen_s_fighter_01_a_macro, macro.ship_xen_s_fighter_02_a_macro, macro.ship_xen_m_corvette_01_a_macro, macro.ship_xen_xl_destroyer_01_a_macro]"/>
+        <set_value name="$B_Counts" exact="[30, 10, 2, 1]"/>
+        <!-- Layout per ship class (same index as the macro lists): grid columns, spacing and
+             distance behind the side's front line. Fighters in front, capital ships behind. -->
+        <set_value name="$Columns" exact="[10, 5, 2, 2]"/>
+        <set_value name="$Spacing" exact="[150m, 200m, 600m, 1200m]"/>
+        <set_value name="$Depth" exact="[0m, 500m, 1200m, 2200m]"/>
+      </actions>
+    </library>
+
+    <!-- Spawn one side into $SpawnList. Inputs: $Side ('A'|'B'), $Faction, $PilotTags, $Macros,
+         $Counts, $Sign (-1: negative x, faces +x; +1: positive x, faces -x). -->
+    <library name="SpawnSide">
+      <actions>
+        <set_value name="$Spawned" exact="0"/>
+        <set_value name="$SpawnList" exact="[]"/>
+        <do_all exact="$Macros.count" counter="$c">
+          <set_value name="$cols" exact="$Columns.{$c}"/>
+          <set_value name="$rows" exact="($Counts.{$c} + $cols - 1) / $cols"/>
+          <do_all exact="$Counts.{$c}" counter="$k">
+            <set_value name="$col" exact="($k - 1) % $cols"/>
+            <set_value name="$row" exact="($k - 1 - $col) / $cols"/>
+            <set_value name="$gx" exact="$Sign * ($SideGap / 2 + $Depth.{$c})"/>
+            <set_value name="$gy" exact="($row - ($rows - 1) / 2.0) * $Spacing.{$c}"/>
+            <set_value name="$gz" exact="$ViewDistance + ($col - ($cols - 1) / 2.0) * $Spacing.{$c}"/>
+            <set_value name="$Spawned" operation="add" exact="1"/>
+            <create_ship name="$ship" macro="$Macros.{$c}" zone="player.zone" seed="$SeedBase + (if $Side == 'A' then 0 else 1000) + $Spawned">
+              <owner exact="$Faction" overridenpc="true"/>
+              <loadout>
+                <level exact="$LoadoutLevel"/>
+                <variation exact="0"/>
+              </loadout>
+              <pilot>
+                <select faction="$Faction" tags="$PilotTags"/>
+              </pilot>
+              <position object="player.ship" x="$gx" y="$gy" z="$gz"/>
+              <rotation yaw="if $Sign lt 0 then 90deg else -90deg"/>
+            </create_ship>
+            <do_if value="$ship">
+              <append_to_list name="$SpawnList" exact="$ship"/>
+            </do_if>
+          </do_all>
+        </do_all>
+        <debug_text text="'COMBATSCN spawned side=%s count=%s requested=%s faction=%s t=%s'.[$Side, $SpawnList.count, $Spawned, $Faction.id, player.age]"/>
+      </actions>
+    </library>
+
+    <!-- Orders for one side. Inputs: $Own and $Enemies (lists of ships). -->
+    <library name="OrderSide">
+      <actions>
+        <do_all exact="$Own.count" counter="$i">
+          <set_value name="$ship" exact="$Own.{$i}"/>
+          <do_if value="$Hostile and $Enemies.count gt 0">
+            <create_order object="$ship" id="'Attack'" immediate="true">
+              <param name="primarytarget" value="$Enemies.{(($i - 1) % $Enemies.count) + 1}"/>
+              <param name="secondarytargets" value="$Enemies"/>
+              <param name="pursuetargets" value="true"/>
+              <param name="allowothertargets" value="false"/>
+            </create_order>
+          </do_if>
+          <do_else>
+            <create_order object="$ship" id="'Wait'" default="true"/>
+          </do_else>
+        </do_all>
+      </actions>
+    </library>
+
+    <library name="HullSums">
+      <actions>
+        <set_value name="$AHull" exact="0"/>
+        <do_all exact="$GroupA.count" counter="$i">
+          <set_value name="$AHull" operation="add" exact="$GroupA.{$i}.hullpercentage"/>
+        </do_all>
+        <set_value name="$BHull" exact="0"/>
+        <do_all exact="$GroupB.count" counter="$i">
+          <set_value name="$BHull" operation="add" exact="$GroupB.{$i}.hullpercentage"/>
+        </do_all>
+      </actions>
+    </library>
+
+    <cue name="Start" namespace="this">
+      <conditions>
+        <event_cue_signalled cue="md.Setup.Start"/>
+      </conditions>
+      <actions>
+        <set_value name="$Version" exact="1"/>
+        <include_actions ref="Defaults"/>
+        <include_actions ref="md.X4MP_CombatVariant.Config"/>
+        <set_value name="$Allowed" exact="player.module == 'custom_creative'"/>
+        <debug_text text="'COMBATSCN loaded version=%s variant=%s module=%s t=%s'.[$Version, $Variant, player.module, player.age]"/>
+        <do_if value="not $Allowed">
+          <debug_text text="'COMBATSCN refused reason=module module=%s'.[player.module]"/>
+        </do_if>
+      </actions>
+      <cues>
+        <cue name="ArmTimeout" checkinterval="5s">
+          <conditions>
+            <check_value value="$Allowed and player.age ge $ArmTimeoutS"/>
+          </conditions>
+          <actions>
+            <debug_text text="'COMBATSCN refused reason=%s t=%s'.[if not player.ship then 'no_player_ship' else 'player_docked', player.age]"/>
+            <cancel_cue cue="Arm"/>
+          </actions>
+        </cue>
+
+        <cue name="Arm" checkinterval="1s">
+          <conditions>
+            <check_value value="$Allowed and player.age ge $WarmupS and player.ship and not player.ship.dock"/>
+          </conditions>
+          <actions>
+            <cancel_cue cue="ArmTimeout"/>
+            <set_value name="$Sector" exact="player.ship.sector"/>
+            <get_safe_pos result="$Center" sector="$Sector" x="0m" y="$ArenaY" z="0m" radius="$ArenaClearRadius"/>
+            <do_if value="$ProtectPlayer">
+              <set_object_min_hull object="player.ship" exact="100"/>
+            </do_if>
+            <do_if value="$NeutralPlayer">
+              <set_faction_relation faction="$A_Faction" otherfaction="faction.player" value="0"/>
+              <set_faction_relation faction="faction.player" otherfaction="$A_Faction" value="0"/>
+              <set_faction_relation faction="$B_Faction" otherfaction="faction.player" value="0"/>
+              <set_faction_relation faction="faction.player" otherfaction="$B_Faction" value="0"/>
+            </do_if>
+            <warp object="player.ship" sector="$Sector">
+              <position x="$Center.x" y="$Center.y" z="$Center.z - $ViewDistance"/>
+              <rotation yaw="0deg" pitch="0deg" roll="0deg"/>
+            </warp>
+            <debug_text text="'COMBATSCN armed t=%s variant=%s sector=%s zone=%s center=%s,%s,%s'.[player.age, $Variant, $Sector.macro.id, player.zone.macro.id, $Center.x, $Center.y, $Center.z]"/>
+          </actions>
+          <cues>
+            <cue name="Spawn">
+              <delay exact="$SpawnDelayS"/>
+              <actions>
+                <create_group groupname="$GroupA"/>
+                <create_group groupname="$GroupB"/>
+                <set_value name="$Side" exact="'A'"/>
+                <set_value name="$Faction" exact="$A_Faction"/>
+                <set_value name="$PilotTags" exact="$A_PilotTags"/>
+                <set_value name="$Macros" exact="$A_Macros"/>
+                <set_value name="$Counts" exact="$A_Counts"/>
+                <set_value name="$Sign" exact="-1"/>
+                <include_actions ref="SpawnSide"/>
+                <add_to_group groupname="$GroupA" list="$SpawnList"/>
+                <set_value name="$SpawnedA" exact="$GroupA.count"/>
+                <set_value name="$Side" exact="'B'"/>
+                <set_value name="$Faction" exact="$B_Faction"/>
+                <set_value name="$PilotTags" exact="$B_PilotTags"/>
+                <set_value name="$Macros" exact="$B_Macros"/>
+                <set_value name="$Counts" exact="$B_Counts"/>
+                <set_value name="$Sign" exact="1"/>
+                <include_actions ref="SpawnSide"/>
+                <add_to_group groupname="$GroupB" list="$SpawnList"/>
+                <set_value name="$SpawnedB" exact="$GroupB.count"/>
+              </actions>
+              <cues>
+                <cue name="Engage">
+                  <delay exact="$EngageDelayS"/>
+                  <actions>
+                    <set_value name="$Own" exact="$GroupA.list"/>
+                    <set_value name="$Enemies" exact="$GroupB.list"/>
+                    <include_actions ref="OrderSide"/>
+                    <set_value name="$Own" exact="$GroupB.list"/>
+                    <set_value name="$Enemies" exact="$GroupA.list"/>
+                    <include_actions ref="OrderSide"/>
+                    <set_value name="$EngagedAt" exact="player.age"/>
+                    <set_value name="$Running" exact="true"/>
+                    <debug_text text="'COMBATSCN engaged t=%s hostile=%s a=%s b=%s'.[player.age, $Hostile, $GroupA.count, $GroupB.count]"/>
+                  </actions>
+                  <cues>
+                    <cue name="Tick" instantiate="true" checkinterval="$TickS">
+                      <conditions>
+                        <check_value value="$Running"/>
+                      </conditions>
+                      <actions>
+                        <include_actions ref="HullSums"/>
+                        <debug_text text="'COMBATSCN tick t=%s a=%s b=%s ahull=%s bhull=%s'.[player.age, $GroupA.count, $GroupB.count, $AHull, $BHull]"/>
+                      </actions>
+                    </cue>
+
+                    <cue name="WindowBegin">
+                      <delay exact="$SettleS"/>
+                      <actions>
+                        <set_value name="$WindowAt" exact="player.age"/>
+                        <debug_text text="'COMBATSCN window begin t=%s a=%s b=%s'.[player.age, $GroupA.count, $GroupB.count]"/>
+                      </actions>
+                      <cues>
+                        <cue name="WindowEnd" checkinterval="1s">
+                          <conditions>
+                            <check_any>
+                              <check_value value="player.age ge $WindowAt + $WindowS"/>
+                              <check_value value="$Hostile and ($GroupA.count le $SpawnedA * $DecidedFraction or $GroupB.count le $SpawnedB * $DecidedFraction)"/>
+                            </check_any>
+                          </conditions>
+                          <actions>
+                            <set_value name="$Running" exact="false"/>
+                            <debug_text text="'COMBATSCN window end t=%s a=%s b=%s reason=%s'.[player.age, $GroupA.count, $GroupB.count, if player.age ge $WindowAt + $WindowS then 'timeout' else 'decided']"/>
+                            <debug_text text="'COMBATSCN done t=%s a=%s b=%s'.[player.age, $GroupA.count, $GroupB.count]"/>
+                          </actions>
+                          <cues>
+                            <cue name="Cleanup">
+                              <conditions>
+                                <check_value value="$Cleanup"/>
+                              </conditions>
+                              <delay exact="$CleanupDelayS"/>
+                              <actions>
+                                <destroy_group group="$GroupA" explosion="false"/>
+                                <destroy_group group="$GroupB" explosion="false"/>
+                                <debug_text text="'COMBATSCN cleaned t=%s'.[player.age]"/>
+                              </actions>
+                            </cue>
+                          </cues>
+                        </cue>
+                      </cues>
+                    </cue>
+                  </cues>
+                </cue>
+              </cues>
+            </cue>
+          </cues>
+        </cue>
+      </cues>
+    </cue>
+  </cues>
+</mdscript>

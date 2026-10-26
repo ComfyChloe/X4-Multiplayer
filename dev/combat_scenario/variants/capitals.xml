@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Combat scenario variant "capitals": turret-heavy fight without fighters.
+     4 Argon destroyers and 4 frigates against 3 Xenon K and 4 P. -->
+<mdscript name="X4MP_CombatVariant" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <library name="Config">
+      <actions>
+        <set_value name="$Variant" exact="'capitals'"/>
+        <set_value name="$A_Macros" exact="[macro.ship_arg_l_destroyer_01_a_macro, macro.ship_arg_m_frigate_01_a_macro]"/>
+        <set_value name="$A_Counts" exact="[4, 4]"/>
+        <set_value name="$B_Macros" exact="[macro.ship_xen_xl_destroyer_01_a_macro, macro.ship_xen_m_corvette_01_a_macro]"/>
+        <set_value name="$B_Counts" exact="[3, 4]"/>
+        <set_value name="$Columns" exact="[4, 4]"/>
+        <set_value name="$Spacing" exact="[1500m, 700m]"/>
+        <set_value name="$Depth" exact="[1000m, 0m]"/>
+        <set_value name="$SideGap" exact="6km"/>
+        <set_value name="$ViewDistance" exact="7km"/>
+      </actions>
+    </library>
+  </cues>
+</mdscript>

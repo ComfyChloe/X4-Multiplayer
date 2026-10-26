@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<content id="x4mp_combat_scenario" name="X4MP combat load scenario (test only)" description="Engine rewrite program test fixture: spawns two fleets in a fresh custom_creative world and logs COMBATSCN markers. Lane profiles only (45850/45851); never in a normal profile." author="X4 Multiplayer rewrite program" version="1" date="2026-10-26" save="false">
+  <dependency version="900" />
+</content>
