@@ -327,14 +327,50 @@ Whole-run mean plain-frame build times were 2,848 us for the direct-memory switc
 2,511 us for the original, with 153 sector tasks; planning averaged 1,796 us and execution
 963 us. Early/late workloads differ substantially as the world settles, so neither these
 aggregate times nor comparisons with the earlier copied-model run establish an optimization.
-Next: a lead-granted quiet window, matched small/multi-sector workloads at 1/N threads, then
-tune task/plan overhead against measured costs. No additional native run was queued.
+This motivated the isolated baseline measurement below. No algorithm change was made between
+the functional test and the measurement.
 `xform-004` was cancelled while still queued to add the duplicate-visit guard; no game launched.
 The tested overlay includes the reviewed Rust duplicate guards and C fail-closed behavior.
 The two final disabled-diagnostic Lua logging lines were added after its immutable overlay was
 made; those lines were covered by the synthetic real-Lua test, not this native run.
 `xform_lane.py --timing` forwards the released tool's quiet-window guard without creating a
 window; the lead must grant `transforms` the window before this option can admit a run.
+
+### Isolated baseline: settled world is slower with four threads
+
+Parent-granted quiet run `xform-quiet-006` finished **PASS at 04:08:58 EDT** (26 Oct),
+`timing_trustworthy=true`, one X4 throughout, at least 37.0 GB available, no memory pressure.
+It used the same immutable overlay as `xform-005`, no rebuild or algorithm changes. Plain
+frames alternate two original/two Rust builds, both cache indices, four planning threads.
+Shadow instrumentation was disabled for this timing run (the exact path was already checked
+above); two original-frame captures at game times 120.002 and 240.006 replay identically.
+7,163 switched frames, zero fallbacks/errors/foreign-thread calls. The lane was restored and
+the quiet lock removed. No further native job was started.
+
+**Predeclared late window:** after the first capture plus five seconds, before the second
+capture; require at least 1,000 plain frames per path. Available log samples bound 127.76 to
+235.00 seconds (107.24 s), with **3,240 timed frames per path**. Subtracting cumulative timing
+sums gives Rust **1,769.38 us**, original **1,204.62 us**, delta **+564.76 us (+46.9%)**.
+All 21 consecutive paired reporting intervals have a positive delta exceeding the precision
+bound from rounded cumulative means; median interval delta +578.26 us. The aggregate delta's
+rounding bound is +/-3.33 us, not a statistical confidence interval. This is one fresh default
+world, not a representative multi-sector/large-world benchmark or a replicated experiment.
+
+The whole-run means, Rust 2,193 us versus original 2,355 us, favor Rust because the startup
+workload is substantially heavier. They must not be used to claim a settled-world speedup.
+The two capture replays have 17,330 then 8,536 actual walk visits as the world settles; the
+planner still dispatches 153 sector tasks. **Reject the performance hypothesis for this
+settled baseline.** Keep the original default; the replacement remains an opt-in test probe.
+Next work is to profile task/planning overhead, compare sequential planning with four threads,
+and measure genuinely multi-sector load before selecting any adaptive strategy. No strategy
+change is inferred or implemented from this single measurement.
+
+Evidence: `.local/evidence-102-withheld,x4lan-debug.txt,engine-output.log}`,
+`xform-quiet-006-captures/`, `xform-quiet-006-replay.txt`,
+`.local/evidence-104-withheld`; analysis script
+`.local/evidence-059-withheld` reproduces the cumulative-counter calculation and precision
+bounds. `.local/evidence-074-withheld` records the bounded command (402 s admitted native
+timeout, with time reserved for collection before 04:12).
 
 ## 8. Open questions
 
