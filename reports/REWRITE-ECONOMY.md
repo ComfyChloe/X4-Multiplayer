@@ -12,10 +12,10 @@ with the log path). Nothing in this report is a native economy result unless mar
 
 | stage | state |
 |---|---|
-| 1 data model crate `rust/x4mp-economy` | done: ef13948, da802ad (14 synthetic tests) |
-| 2 stress scenario + simprof on a lane | scenario written (`dev/econ_scenario/x4mp_econ_stress`); first run cut short by the PC reservation at 01:13 (not a result, see 2.2); rerun queued |
-| 3 production capture/replay, exact | sampler `native/engine/econcap.h` + replay `x4mp-econ-replay` built and synthetic-tested; lab scenario `x4mp_econ_lab` written; native capture queued |
-| 4 trade offers + reservations with the barrier snapshot | crate side done (market, msg); engine RE in progress (section 6) |
+| 1 data model crate `rust/x4mp-economy` | done: ef13948, da802ad |
+| 2 stress scenario + simprof on a lane | `stress2` [native, ended by an all-lanes stop at 13 min; scenario partly broken, see 2.2]; scenario fixed (220ce90); `stress3` stopped by the lead (PC memory pressure), partial; `stress4` queued |
+| 3 production capture/replay, exact | sampler + replay built and synthetic-tested; lab capture queued (`lab2` failed at launch: "Game is already running!", lane-side) |
+| 4 trade offers + reservations with the barrier snapshot | reservations at the owner applied at the barrier, price curve, reservation totals (693712d) [synthetic]; UpdateTradeOffers structure (section 6.3) [static]; offer amounts next |
 | 5 shadow | not started |
 
 ## 2. Where economy work runs (census)
@@ -50,11 +50,17 @@ with the log path). Nothing in this report is a native economy result unless mar
 | run | economy union | trade search | offers/prices/storage | zone reservations | trade actions | production | where |
 |---|---|---|---|---|---|---|---|
 | 8 high-attention sectors (lead, 2026-10-25, `X4-Multiplayer-fixed-tick/.local/evidence-239-withheld`) | ~1.5 % | 1.02 % | - | 0.26 % | 0.11 % | ~0 | AI phase |
-| lane b2 `stress1`, plain custom_creative world, **cut short at 551 s by the PC reservation; stress MD failed (script error), so this is the unloaded universe; other X4 instances ran** (`.local/evidence-097-withheld`, census `x4-re/scripts/rw-economy/econ_census.py`) | 1.89 % | 0.99 % | 0.47 % | 0.27 % | 0.23 % | 0.18 % | AI 1.32 %, walk 0.27 %, events 0.24 % |
+| lane `stress1`: plain custom_creative world (stress MD failed, no clones), game time 30-554 s, 53 windows; **cut short by the PC reservation, not a result**; other X4 instances ran | 1.95 % | 1.02 % | 0.48 % | 0.27 % | 0.24 % | 0.19 % | AI 1.37 %, events 0.25 %, walk 0.27 % |
+| lane `stress2` (b2): ~157 extra factory clones (+16 % of 983 factories), 314 station traders whose trade loop failed (no defence NPC: `trade.find.commander` "Failed to set null.$lookingfortrades"), game time 130-794 s, 67 windows; **ended by an all-lanes stop**; other X4 instances ran | 1.85 % | 0.90 % | 0.54 % | 0.22 % | 0.25 % | 0.19 % | AI 1.30 %, events 0.28 %, walk 0.22 % |
 
-Both are [native] samples of MoveWorker time, but neither is an economy stress result: the second run is
-explicitly *not a result* (lead, 01:13). Shares are functional (timing not trustworthy). The stress run
-(160 factory clones with 320 station traders) is queued (`.local/evidence-071-withheld`).
+All rows are [native] samples of MoveWorker time with untrustworthy timing (shares only). Census:
+`x4-re/scripts/rw-economy/econ_census.py` on the symbolized folded stacks
+(`.local/evidence-096-withheld`). **stress2 vs stress1:** 16 % more factories without
+working station traders leave the economy share flat (1.85 % vs 1.95 %; economy samples per second 17.6
+vs 19.4): idle clones cost almost nothing because production is lazy and their offers are refreshed by
+events only; the offer/price share rose slightly (0.48 to 0.54 %). `stress3` repeats the run with the
+fixed scenario (defence NPC and money for the clones; the Built/Done cues poll at a check interval), so
+the 314 traders trade.
 
 **Reading:** the economy's engine-side cost today is dominated by the AI trade search, which runs inside
 `AIDirector::Move` (ai-driver/ai-orders own that loop); production itself is cheap because it is lazy.
@@ -166,15 +172,97 @@ buildmodule 9, cargobay 0xc, habitation 0x31, processingmodule 0x4e, welfaremodu
 sector 0x58, zone 0x6d. Ware ids resolve through the WareDB map *(0x6cf1620) keyed by FNV-1a-32 of the id
 (GetWareReservationsForWare 0x1ec500). WareClass+0x10 is the id string.
 
-## 6. Trade offers and reservations [static, in progress]
+## 6. Trade offers, prices and reservations [static; models synthetic]
 
-- Offer lists per container at +0x8f8 and +0x910 (the search filters both). `U::Trade` (vtable
-  0x2b97240) derives from `U::OrderIDBase`; Lua `GetTradeData` 0x2afab0 → 0x2e8500 maps the fields.
-- Reservations: `add_ware_reservation` → `Container 0x4128c0(container, flags, reserver id, ware, amount,
-  duration, ...)` (default duration from the settings block +0x5170, `parameters.xml` reservation
-  trade=3600 s), removal 0x413060, query 0x412490. Layout: next batch.
-- Next: UpdateTradeOffers 0x4079e0 (amounts, prices 0x403a60), the reservation store, ExecuteTrade
-  0x10a90e0, ClampTradeAmount 0xc05d60, CreateTradeOrder 0xbb66d0.
+### 6.1 Reservations (Container+0x980)
+
+- 48-byte entries in insertion order: +0x00 u32 word (bits 0-1 type, bits 2-4 flag classes), +0x08
+  reserver id, +0x10 linked trade order id (0 = plain reservation), +0x18 WareClass*, +0x20 amount,
+  +0x28 expiry (f64, unset = -1). Type bit 0 = **outgoing** (wares of this container that someone will
+  take), bit 1 = **incoming** (wares someone will bring); valid type mask `*(0x2f54898)` = 3.
+- `AddWareReservation` 0x4128c0, `RemoveWareReservation` 0x413060, `GetWareReservationAmount`
+  0x412490, per-ware totals 0x4126d0, expiry test 0x4133e0, entry amount 0x3ef840, per-change offer/cache
+  update 0x413480.
+- **Expired** (removed by every scan): linked order no longer in the order registry, expiry passed,
+  empty type bits, or reserver gone. A linked entry's amount is its order's amount (Trade+0x40), or 0 for
+  an outgoing entry whose order has flag 0x200000.
+- **Add** does not check availability: it merges a plain entry of the same reserver, ware and flag bits
+  (adds, or replaces with `replace`), sets expiry = now + duration (default settings+0x5170 = 3600 s,
+  `parameters.xml <reservation trade="3600"/>`), and ends with a forced offer refresh
+  (`UpdateTradeOffers(container, 1, 0)`). Remove reduces one entry (positive amount below the entry's)
+  or removes the matching ones; it refreshes when something was removed.
+- **Totals** 0x4126d0 split by type for one flag class (bit 2 and bit 4 as requested, bit 3 clear); the
+  ware price asks for class (0, 0).
+
+### 6.2 Prices
+
+- Conversions of an offer's unit price (cents, Trade+0x30 tag): total price with a modifier 0x891d00,
+  relative price 0x891b20 (f32, -2..2), quantity factor 0x891de0; mixed f32/f64 as in the disassembly
+  (the decompiler shows all-float). Modelled bit for bit (`prices.rs`).
+- **Station ware prices** 0x403a60(container, out map, ...) fill a map ware → (buy price, sell price);
+  callers: `UpdateTradeOffers`, FFI `GetContainerWarePrice`, `GetObjectValueAction`, build/repair price
+  estimates. Order of work: production catch-up at the thread time (0x41a910), allocation refresh
+  (0x420aa0) when +0x931 is clear, cargo (0x3fa290), stock = cargo + incoming - outgoing (totals class
+  0/0), production needs per operational production module and non-research item over two horizons
+  (cycles in settings+0x5138 and +0x5140, products and resources scaled by the module efficiency
+  0x7602d0), habitation consumption, build-storage needs (0x4350d0 gives a build time, 300 s when none;
+  settings+0x51a8 = 0.25 is the share of build resources that must be present for the maximum price),
+  player overrides (Container+0x798: buy and sell price per ware), trade-ware flags (Container+0x778:
+  sorted (ware, flags), bit 1 sellable 0x403690, bit 2 buyable 0x403610), a buy-price factor
+  (Container+0xac8, f32) and an addition of the ware's maximum price times a 0x14dd240 interpolation
+  for wares of a further list whose amount reaches settings+0x5148 (reading, not yet confirmed).
+- **The price curve** 0x34cde0(ware, stock, target), f64: minimum price when stock > target; maximum
+  price when stock <= 0 or target <= 0; otherwise with h = target/2, d = clamp(stock - h, -h, h)
+  (average when |stock - h| < 1e-7), s = avg - min (d >= 0) or max - avg (d < 0), k = -s/0.7:
+  `trunc(((-s - k) / (target^2 * (h/4))) * d^3 + (k * d) / h + avg)`: maximum at an empty stock,
+  average at half the target, minimum at the target, steepest in the middle. Modelled bit for bit
+  (`prices::stock_price`, operation order from the disassembly).
+- Resource buy price (static reading, to be confirmed with captured offers): curve(stock - need over the
+  short horizon, min(allocation, need over the long horizon - need over the short horizon)); wares
+  without production use the allocation as target.
+- **Settings block** (`*(0x6cf1538)` +0x5130..+0x51b8, filled from `parameters.xml <economy>` by
+  0x632360; defaults from 0x63e760): +0x5130 rounding up (false), +0x5138 144000.0, +0x5140 10800.0
+  (default; XML resource min/max are 3600/144000), +0x5148 1800.0, +0x5150 500000000 (product factor
+  5 M Cr in cents), +0x5158 7200.0, +0x5160 43200.0 (storage normalize), +0x5168 7200.0 (player
+  reservation), +0x5170 3600.0 (trade reservation), +0x5180 18000.0, +0x5188 14400.0, +0x5190 300.0,
+  +0x5198 10000, +0x51a0 20, +0x51a8 0.25 (build min), +0x51b0 0.1f, +0x51b4 0.3f (ship sale factor).
+  Which XML attribute fills which field is not yet traced (the parser uses attribute-id tables); a
+  one-time capture record of the block is the cheap way to pin the values natively.
+
+### 6.3 UpdateTradeOffers 0x4079e0(container, force)
+
+1. Returns at once for a container in state 3, when application flag 8 is set, or (after setting the
+   next-update time +0x928 = now + 1200 s) when trade offers are disabled (vfunc 0x2318 false or
+   +0x930 bit 2: `set_tradeoffers_enabled`).
+2. **Workforce update** 0x431f90(container, 0) with its own timer (+0xa38): it calls the production
+   catch-up and draws from the global RNG (`Random::FloatState`, `Random::I32`); so offer refreshes are
+   one of the places where workforce randomness happens.
+3. Unless `force`, returns while now < +0x928 (when set).
+4. Moves the current offer vector +0x8f8 out, computes the price map (6.2) and the amount lists:
+   wanted amounts (0x41f310), sellable amounts (0x41ea20), the sellable and buyable ware lists
+   (0x41b4b0, 0x41bfb0), processed wares (0x41d7e0, mapped to their products), reservation totals
+   (0x4126d0), build-storage and supply needs (0x42ae40, 0x428970) and a budget check (0x425260
+   against an account amount; reading, not yet confirmed).
+5. Per ware: **buy offer** amount = max(wanted - incoming, 0), desired (Trade+0x50) = max(desired - incoming,
+   0), unit price = buy price; **sell offer** amount = max(sellable - outgoing, 0), unit price = sell price.
+   An existing offer of the same ware and side (found in the old vector with trade filters) is updated in
+   place (+0x40, +0x50, +0x30, 0x891ee0) and moved back into +0x8f8, so offer ids stay stable; a new one is
+   created (`U::ProductionSpawnSource`, 0x894530). Each offer's average price and amount go to
+   0x6a5c80 on the global object *(0x6cf1868) via 0x407650 (probably the economy log, category
+   `tradeoffer`). Old offers not reused are removed.
+
+### 6.4 Footprint (for per-sector execution)
+
+- Reads: the container (cargo, modules, reservations, allocation, overrides, trade rules, subordinates'
+  supply and build needs), global read-only data (ware DB, settings block), the order registry (linked
+  reservations, existing offers).
+- Writes outside the container: **order registry** (new offers get registry slots), **event queue**
+  (UpdateTradeOffersEvent scheduling, workforce events), **thread RNG** (workforce update), **economy
+  log** (probably; the global object at *(0x6cf1868)).
+- Consequence: a sector job may run a station's refresh only with per-sector (or barrier-deferred)
+  registry allocation, its own event queue and RNG stream, and a deferred log; reservations from other
+  sectors arrive as barrier messages (`msg.rs`), and the refresh they cause runs once per owner at the
+  barrier before the next snapshot is published.
 
 ## 7. What this means for per-sector execution
 
@@ -203,13 +291,20 @@ sector 0x58, zone 0x6d. Ware ids resolve through the WareDB map *(0x6cf1620) key
 
 - `production`: `Module` (the fields of 3.3), `Item`, `Method`, `Factors`, `ContainerTimes`;
   `update_production(...)` and `Module::step/prepare` are the engine algorithm; `StationEnv` supplies
-  storage/resource checks, cargo changes, efficiency and offer refresh; `ProductionRng` the draws.
-- `market`: `Offer` (id, owner, sector, tree key, ware, side, amount, reserved, unit price in cents,
-  version), per-sector `OfferBook`, `OfferSnapshot` (tree order; `find(ware, side)`, `get(id)`).
-- `msg`: `EconMsg { stamp, actor, seen_version, op }`, `apply_in_order` (stamp order, stale decisions
-  become `Conflict`, never silently applied).
-- `sector`: `SectorEconomy` + `step_frame` (parallel phase, barrier, snapshot); stand-in storage model
-  until 0x424b90/0x356010/0x420aa0 are modelled.
+  storage/resource checks, cargo changes, efficiency and offer refresh requests; `ProductionRng` the draws.
+- `reservations`: `ReservationList` (6.1: add, remove, amount, totals, expiry, linked amounts) with a
+  `ReservationEnv` for reserver and order lookups; `from_entries` builds a captured list.
+- `prices`: offer price conversions and the stock price curve (6.2).
+- `market`: `Offer` (id, owner, sector, tree key, list, position, ware, side, amount, unit price in
+  cents, flags, version), per-sector `OfferBook` (`touch` gives an owner's offers of a ware a new
+  version), `OfferSnapshot` (tree order; `find(ware, side)`, `get(id)`).
+- `msg`: `EconMsg { stamp, time, actor, seen: (offer, version), op: Reserve | Release at owner }`;
+  `apply_in_order` applies them in stamp order to the owners' reservation lists (stale decisions become
+  `Conflict`, never silently applied) and returns the owners to refresh, once each, first request first.
+- `sector`: `SectorEconomy` + `step_frame` (parallel phase, barrier, refresh of touched owners,
+  snapshot); stations own their reservations; offer refresh and storage are stand-ins (engine price
+  curve and reservation totals, capacity-share target) until 6.3 step 4 and 0x424b90/0x356010/0x420aa0
+  are modelled.
 - `capture`: X4ECON parser, replay (`x4mp-econ-replay`).
 
 Cheap queries for other systems (faction AI): per station `cargo` (sorted ware list), per module `state`,
@@ -237,13 +332,21 @@ Fit with x4mp-sim (interfaces.md v0): stations are entities with economy compone
 
 ## 10. Tests
 
-- `cargo test -p x4mp-economy`: 14 pass [synthetic].
+- `cargo test -p x4mp-economy`: 18 unit tests, 4 replay tests, thread invariance (48 sectors x 4
+  stations, 120 frames, identical state hash and barrier log with 1/2/4/16 threads; 134 reservations
+  applied, 2719 conflicts (all demanders pick the same cheapest offer: worst-case contention), 134
+  barrier refreshes, expiry exercised) [synthetic]. Clippy with `-D warnings` and rustfmt clean.
 - `build.py --fixedtick --test`: test_fixedtick PASS (with econcap compiled in); test_econcap PASS
   (run directly); test_simprof's 3.0 % suspend-overhead bound failed at 3.01-3.11 % while four lane X4
   instances and other jobs ran (timing-sensitive test, unrelated to this branch).
+- MD scenarios validate against the game's `md.xsd` (.NET XmlSchemaSet); the engine additionally rejects
+  cues with only non-event conditions and no check interval (stress2 log), which the schema cannot see.
 
 ## 11. Native steps needed
 
-1. `stress2` (lane, simprof profile mode, ~12 min): economy share under 160 clones + 320 station traders.
-2. `lab1` (lane, probe mode + econcap, ~12 min): production capture; replay must report 0 mismatches.
-Both are queued with `--wait` (`.local/evidence-071-withheld`).
+1. `stress4` (lane, simprof profile mode + econcap of 12 clones, ~12 min; `stress3` was stopped): economy share with working
+   station traders; offers and reservations of trading stations for 6.2/6.3.
+2. `lab3` (lane, probe mode + econcap, ~12 min): production capture; the replay must report 0 mismatches.
+Both run from the released lane tool with `--wait` (`.local/evidence-072-withheld`, `run_econ_lane4.ps1`).
+3. Later: a capture record for the allocation list (+0x940), the trade-ware flags (+0x778), the price
+   overrides (+0x798) and the settings block, to check the offer model against native offers.
