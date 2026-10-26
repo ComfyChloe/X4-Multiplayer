@@ -260,3 +260,41 @@ Stage 1, in order (lane runs with `--overlay .local/evidence-068-withheld`, rele
 - B6 property-lookup (partition report §10, "not located") is **located**: `Expression_PropertyLookup` 0xcec1a0
   / `EvaluateComponentProperty` 0xcedeb0 under the evaluator 0xc97cf0 — relevant to foreign-blackboard access
   inside expressions. Noted for ai-orders and a future finding row.
+
+## 9. Stage 2 (worker threads) — design, gated by the census
+
+**Gate.** The partition report drops stage 2 when the AI phase is under 20 % of the frame, the largest bucket
+holds over 60 %, or over 10 % of runs would migrate. Measured (section 3a): AI phase **≈ 9 %** of the slot loop
+at idle and with 8 high-attention sectors; largest sector 20-26 %; runs touching a foreign sector or cue 5-6 %.
+Amdahl bound: stage 2 can save at most share × (1 − 1/S); with the ideal per-sector S = 3.9-5.2 that is
+≤ 7 % of the frame, and less in practice (a barrier per pass at 6-8 passes per frame, the serial bucket, the
+barrier replay, migrated runs). The combat agent's battle profile (87 ships) shows AIDirector::Move at 10.9 %
+of MoveWorker samples, also under the bar. **Recommendation: do not build stage 2 at these loads.** Re-evaluate
+with the large-battle census (battle-200/400/800 when listed) and after ai-orders' native ports of the top
+scripts (move.generic, trade.find.free, fight.attack.object.fighter ≈ 55 % of AI run time), which remove the
+interpreter cost outright and run per sector in x4mp-sim, where parallelism comes by construction.
+
+**If a load passes the gate**, stage 2 is stage 1's pass-synchronous rounds with the buckets of a pass on N
+workers (largest first by the previous pass's time) and a barrier per pass. The pass structure stays the
+original's. What it needs on top of stage 1, with the partition report's blocker numbers:
+1. Per-thread state (B7, B8): `g_CurrentExecState` 0x38f4c60 (5 functions) and the director's current entity
+   dir+0x238 (read by AbortScriptsOnEntity) in TLS; TLS game time / role flag copied to the workers.
+2. Wakes (B4): a RequestWake 0x106f910 detour routes worker wakes into per-bucket outboxes merged in bucket
+   order at the barrier. The inline copies need no routing: our driver calls RequestWake itself; the one in
+   AICallStackContext::HandleScriptEvent 0x1062f70 runs during event delivery, which is deferred to the
+   barrier on the main thread; RefreshScripts runs at frame end. ClearWake of a context of another bucket
+   writes another worker's read-vector slot: migrate (it is the `cmp_null_lost` interaction anyway).
+3. Events (B3): the walk buffer becomes per worker (thread-local op buffers, merged in bucket order; the walk
+   agent proposes one op-record type, Q8); event values deep-copied at post time (B2 residual).
+4. Script values (B1, B2): the ~14 unlocked live-object lists (104 writer functions) need locked link/unlink
+   or serialised value creation; non-atomic refcounts need bucket exclusivity: fleet-root keying plus
+   migration of any run that reads or writes a foreign blackboard or `global.$` — detection in the expression
+   property lookup 0xcec1a0/0xcedeb0 (B6) and slot-3 guards for hazardous action classes (A6; ai-orders owns
+   those slot-3 entries, so the guard would chain on their table).
+5. Randomness: the interpreter's chance= stream is per thread (TLS+0x318), so N threads draw differently from
+   1; thread-count invariance needs per-entity streams (contrib/ferrite-rng-streams).
+6. Fail closed per pass: a hazard detected on a worker rewinds the action (pc − 1, yield) and migrates the
+   context to the serial tail; any detour verification failure runs the pass on the main thread.
+Cost: high (items 3-4 dominate). Expected gain at measured loads: ≤ 7 % of the frame. Stage 1 stays the
+deliverable: the semantic harness, the order-equivalence instrument, and the driver ai-orders' Rust
+behaviours plug into when they take over contexts.
