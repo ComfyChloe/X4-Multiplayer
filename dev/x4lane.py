@@ -756,7 +756,8 @@ class Run:
                                        'X4 not started (it would show "Game is already running!")',
                                        'lock_release_failed')
             code, lines = x4lock(paths, 'list')
-            if not self.args.test_skip_release and                     any(line.strip() == 'lock_name_present_in_my_session=true' for line in lines):
+            name_present = any(line.strip() == 'lock_name_present_in_my_session=true' for line in lines)
+            if name_present and not self.args.test_skip_release:
                 raise LaunchFailed('EGOSOFT_X4_INSTANCE exists but no X4 holds it (another process does); '
                                    'X4 not started', 'lock_release_failed')
             self.mark('lock_released_s')
