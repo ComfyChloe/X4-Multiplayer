@@ -552,6 +552,17 @@ pre-existing on Windows: LuaJIT/native-environment tests), 729 tests. Native: th
 of sections 13 and 14 (same DLL); the loader itself has not run natively yet.
 
 
+np8 delivery (branch `contrib/ferrite-framediet-np8` from `contrib/ferrite-np8` d914645): c887f66 imports the
+module, `signatures.py`, the synthetic tests, the ABI check, the lane probe and this report from
+contrib/ferrite-rw-frame-diet 6caf810, with `native/engine/build.py` reduced to the frame-diet module; then the Q17
+commits as cherry-picks (`-x`), adapted to np8 where needed: loader 2a8f617 and the 45841-45848 profile gate
+20a5b08 (as is), config/ui.xml 5f11fea (entry after `ui/frame_profile.lua`), installer d49bc7c (np8's dev-rule
+comment, the test session carries `build`), packager 2d42b30 (only `build_framediet()` and `--zig`, np8's pair
+and dedicated-set tests check the module in every Windows package and in no Linux package). Built there, the
+module's code and data sections are identical to the natively validated DLL (only lld's path-dependent build id
+and PE timestamp differ). Full Python suite: 754 tests, the same failure set as d914645 (2 F / 38 E on this
+Windows PC); synthetic C suite and the real Lua ABI check pass.
+
 ## 16. 8-sector timing in the lead's quiet window (26 Oct 2026, 13:24-13:35)
 
 `timing8-002` (lane b1, profile 45850): quiet.lock handed from overhaul-lead, no other X4 in any of 67 samples,
