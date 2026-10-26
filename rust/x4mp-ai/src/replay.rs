@@ -24,15 +24,24 @@ pub struct FactStore {
     pub now: Time,
     facts: HashMap<(Uid, Prop), Val>,
     order_facts: HashMap<(OrderId, Prop), Val>,
+    /// Facts with arguments, keyed by the text of the argument list.
+    arg_facts: HashMap<(Uid, Prop, String), Val>,
 }
 
 impl FactStore {
-    /// `fact <subject> <prop> v=<value>`; order facts: `fact n <prop> order=o:.. v=..`.
+    /// `fact <subject> <prop> v=<value>`; order facts: `fact n <prop> order=o:.. v=..`; facts with
+    /// arguments: `fact <subject> <prop> a=l:[..] v=..`.
     pub fn apply(&mut self, r: &Record) -> Result<(), String> {
         let prop =
             Prop::parse(&r.name).ok_or_else(|| format!("line {}: unknown fact property {:?}", r.line, r.name))?;
         let v = r.get("v").cloned().ok_or_else(|| format!("line {}: fact needs v=", r.line))?;
-        if let Some(o) = r.get("order") {
+        if let Some(a) = r.get("a") {
+            let key = match a {
+                Val::List(_) => a.to_string(),
+                other => Val::List(vec![other.clone()]).to_string(),
+            };
+            self.arg_facts.insert((r.ent, prop, key), v);
+        } else if let Some(o) = r.get("order") {
             let o = o.as_order().ok_or_else(|| format!("line {}: order= must be o:..", r.line))?;
             self.order_facts.insert((o, prop), v);
         } else {
@@ -47,6 +56,10 @@ impl FactStore {
 
     pub fn set_order(&mut self, o: OrderId, p: Prop, v: Val) {
         self.order_facts.insert((o, p), v);
+    }
+
+    pub fn set_args(&mut self, s: Uid, p: Prop, args: &[Val], v: Val) {
+        self.arg_facts.insert((s, p, Val::List(args.to_vec()).to_string()), v);
     }
 }
 
@@ -67,6 +80,9 @@ impl Facts for FactStore {
     fn order_get(&self, o: OrderId, p: Prop) -> Val {
         self.order_facts.get(&(o, p)).cloned().unwrap_or(Val::Null)
     }
+    fn get_args(&self, s: Uid, p: Prop, args: &[Val]) -> Val {
+        self.arg_facts.get(&(s, p, Val::List(args.to_vec()).to_string())).cloned().unwrap_or(Val::Null)
+    }
 }
 
 /// [`Facts`] over a shared [`FactStore`] (facts may change between the records of one run).
@@ -81,6 +97,9 @@ impl Facts for FactView<'_> {
     }
     fn order_get(&self, o: OrderId, p: Prop) -> Val {
         Facts::order_get(&*self.0.borrow(), o, p)
+    }
+    fn get_args(&self, s: Uid, p: Prop, args: &[Val]) -> Val {
+        Facts::get_args(&*self.0.borrow(), s, p, args)
     }
 }
 

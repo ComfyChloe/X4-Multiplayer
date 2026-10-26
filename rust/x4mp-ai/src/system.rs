@@ -264,6 +264,9 @@ impl Facts for SyntheticWorld {
     fn order_get(&self, o: OrderId, p: Prop) -> Val {
         Facts::order_get(&self.facts, o, p)
     }
+    fn get_args(&self, s: Uid, p: Prop, args: &[Val]) -> Val {
+        Facts::get_args(&self.facts, s, p, args)
+    }
 }
 
 fn dist(a: Pos, b: Pos) -> f32 {
@@ -283,7 +286,7 @@ impl Services for SyntheticWorld {
                 });
                 Answer::Zone(pick.map(|(z, _)| *z).unwrap_or(Uid::NULL))
             }
-            Query::GlobalPath { start: _, end } => Answer::Path(vec![*end]),
+            Query::GlobalPath { end, .. } => Answer::Path(vec![*end]),
             Query::CreatePosition { space: _, max } => {
                 let x = rng.float(2.0 * max) - max;
                 let z = rng.float(2.0 * max) - max;
@@ -303,6 +306,21 @@ impl Services for SyntheticWorld {
             Query::SafePosReserve { value, space, component, .. } => {
                 Answer::Reserved { pos: *value, index: Val::Int((component.0 & 0xff) as i64), zone: *space }
             }
+            // Stand-ins for move.generic (the synthetic patrols stay inside their sector).
+            Query::JumpPath { start, end, .. } => Answer::Path(vec![*start, *end]),
+            Query::ZoneAtPosition { sector, .. } => {
+                Answer::Zone(self.zones.get(&sector.0).and_then(|zs| zs.first()).map(|(z, _)| *z).unwrap_or(Uid::NULL))
+            }
+            Query::FindSector { space } => Answer::Zone(*space),
+            Query::SafePosGeneral { value, space, reserve, .. } => {
+                let pos = value.unwrap_or_default();
+                match reserve {
+                    Some((c, _)) => Answer::Reserved { pos, index: Val::Int((c.0 & 0xff) as i64), zone: *space },
+                    None => Answer::Pos(pos),
+                }
+            }
+            Query::CountGravidarContacts { .. } => Answer::Component(Uid::NULL),
+            Query::MoveTo { destination, .. } => Answer::Component(*destination),
         }
     }
 

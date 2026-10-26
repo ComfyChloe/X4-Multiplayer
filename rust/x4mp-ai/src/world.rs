@@ -33,6 +33,11 @@ pub enum Class {
     Spacesuit,
     /// Abstract `class.defensible` (ships, stations, build storages).
     Defensible,
+    Gate,
+    HighwayEntryGate,
+    HighwayExitGate,
+    /// Abstract `class.object` (ships, stations, gates, ...).
+    Object,
     Other,
 }
 
@@ -54,6 +59,10 @@ impl Class {
             "buildstorage" => Class::BuildStorage,
             "spacesuit" => Class::Spacesuit,
             "defensible" => Class::Defensible,
+            "gate" => Class::Gate,
+            "highwayentrygate" => Class::HighwayEntryGate,
+            "highwayexitgate" => Class::HighwayExitGate,
+            "object" => Class::Object,
             _ => Class::Other,
         }
     }
@@ -74,6 +83,10 @@ impl Class {
             Class::BuildStorage => "buildstorage",
             Class::Spacesuit => "spacesuit",
             Class::Defensible => "defensible",
+            Class::Gate => "gate",
+            Class::HighwayEntryGate => "highwayentrygate",
+            Class::HighwayExitGate => "highwayexitgate",
+            Class::Object => "object",
             Class::Other => "other",
         }
     }
@@ -86,6 +99,22 @@ impl Class {
                 (Highway, Zone)
                     | (ShipXS | ShipS | ShipM | ShipL | ShipXL | Spacesuit, Ship)
                     | (ShipXS | ShipS | ShipM | ShipL | ShipXL | Ship | Spacesuit | Station | BuildStorage, Defensible)
+                    | (
+                        ShipXS
+                            | ShipS
+                            | ShipM
+                            | ShipL
+                            | ShipXL
+                            | Ship
+                            | Spacesuit
+                            | Station
+                            | BuildStorage
+                            | Defensible
+                            | Gate
+                            | HighwayEntryGate
+                            | HighwayExitGate,
+                        Object
+                    )
             )
     }
 }
@@ -161,6 +190,41 @@ pub enum Prop {
     PlayerOccupiedShip,
     /// `player.ismadscoreenabled`.
     MadScoreEnabled,
+    // move.generic
+    IsFormationLeader,
+    IsLocalHighway,
+    IsTempZone,
+    IsWreck,
+    /// zone: `haspriority` (path components of get_global_path).
+    HasPriority,
+    /// List of the ship's subordinates (`subordinates`).
+    Subordinates,
+    FormationLeader,
+    /// `subject.pilot.skill.piloting` (int 0..15).
+    PilotSkillPiloting,
+    IsZoneChangePending,
+    /// `subject.gatedistance.{x}` as an alternating list `[c:x; i:jumps; ...]` (negative: no path).
+    GateDistance,
+    /// `subject.dockingallowed.{x}` as an alternating list `[c:x; b:..; ...]`.
+    DockingAllowed,
+    /// `subject.bboxdistanceto.{x}` as an alternating list `[c:x; F:metres; ...]`.
+    BboxDistanceTo,
+    /// `subject.distanceto.[space, pos]` (argument fact `a=l:[c:space;p:pos]`).
+    DistanceToPos,
+    /// `subject.bboxdistanceto.[space, pos, object]` (argument fact `a=l:[c:space;p:pos;c:object]`).
+    BboxDistanceToPos,
+    /// The entity's blackboard `this.$recalling_subordinates` (set by lib.recall.subordinates).
+    RecallingSubordinates,
+    JobMainSector,
+    NextOrder,
+    /// order: `state` (`orderstate.critical`, ...).
+    OrderState,
+    /// order: the `$target` parameter (Escort, SupplyFleet).
+    OrderTarget,
+    /// order: the `$allowothertargets` parameter (Attack).
+    OrderAllowOtherTargets,
+    /// order: the `$primarytarget` parameter (Attack).
+    OrderPrimaryTarget,
 }
 
 impl Prop {
@@ -218,11 +282,32 @@ impl Prop {
             SpaceReservationSpam => "global.$spacereservationspam",
             PlayerOccupiedShip => "player.occupiedship",
             MadScoreEnabled => "player.ismadscoreenabled",
+            IsFormationLeader => "isformationleader",
+            IsLocalHighway => "islocalhighway",
+            IsTempZone => "istempzone",
+            IsWreck => "iswreck",
+            HasPriority => "haspriority",
+            Subordinates => "subordinates",
+            FormationLeader => "formationleader",
+            PilotSkillPiloting => "pilot.skill.piloting",
+            IsZoneChangePending => "iszonechangepending",
+            GateDistance => "gatedistance",
+            DockingAllowed => "dockingallowed",
+            BboxDistanceTo => "bboxdistanceto",
+            DistanceToPos => "distanceto.pos",
+            BboxDistanceToPos => "bboxdistanceto.pos",
+            RecallingSubordinates => "$recalling_subordinates",
+            JobMainSector => "jobmainsector",
+            NextOrder => "nextorder",
+            OrderState => "state",
+            OrderTarget => "$target",
+            OrderAllowOtherTargets => "$allowothertargets",
+            OrderPrimaryTarget => "$primarytarget",
         }
     }
     pub fn parse(s: &str) -> Option<Prop> {
         use Prop::*;
-        const ALL: [Prop; 51] = [
+        const ALL: &[Prop] = &[
             Exists,
             Class,
             Sector,
@@ -274,6 +359,27 @@ impl Prop {
             SpaceReservationSpam,
             PlayerOccupiedShip,
             MadScoreEnabled,
+            IsFormationLeader,
+            IsLocalHighway,
+            IsTempZone,
+            IsWreck,
+            HasPriority,
+            Subordinates,
+            FormationLeader,
+            PilotSkillPiloting,
+            IsZoneChangePending,
+            GateDistance,
+            DockingAllowed,
+            BboxDistanceTo,
+            DistanceToPos,
+            BboxDistanceToPos,
+            RecallingSubordinates,
+            JobMainSector,
+            NextOrder,
+            OrderState,
+            OrderTarget,
+            OrderAllowOtherTargets,
+            OrderPrimaryTarget,
         ];
         ALL.iter().copied().find(|p| p.name() == s)
     }
@@ -305,6 +411,28 @@ pub trait Facts {
     /// `viewer.cansee.{target}` (default: the [`Prop::CanSee`] list).
     fn can_see(&self, viewer: Uid, target: Uid) -> bool {
         self.get(viewer, Prop::CanSee).as_uid_list().is_some_and(|l| l.contains(&target))
+    }
+    /// A fact with arguments (`subject.prop.[args]`), e.g. distances to a position in a space.
+    /// Default: unknown (null).
+    fn get_args(&self, _subject: Uid, _p: Prop, _args: &[Val]) -> Val {
+        Val::Null
+    }
+    /// `a.distanceto.[space, pos]`.
+    fn distance_to_pos(&self, a: Uid, space: Uid, pos: Pos) -> f32 {
+        self.get_args(a, Prop::DistanceToPos, &[Val::uid(space), Val::Pos(pos)]).as_f32().unwrap_or(0.0)
+    }
+    /// `a.bboxdistanceto.[space, pos, object]`.
+    fn bbox_distance_to_pos(&self, a: Uid, space: Uid, pos: Pos, object: Uid) -> f32 {
+        self.get_args(a, Prop::BboxDistanceToPos, &[Val::uid(space), Val::Pos(pos), Val::uid(object)])
+            .as_f32()
+            .unwrap_or(0.0)
+    }
+    /// `a.gatedistance.{b}` (number of jumps; negative when there is no path).
+    fn gate_distance(&self, a: Uid, b: Uid) -> i64 {
+        match self.pair(a, Prop::GateDistance, b) {
+            Val::Int(i) => i,
+            _ => -1,
+        }
     }
     /// A pair fact stored as an alternating list `[c:b; value; ...]` on `a`.
     fn pair(&self, a: Uid, p: Prop, b: Uid) -> Val {
@@ -382,8 +510,37 @@ pub enum Query {
     /// `<find_zone name= space= [normalzone=true] [knownto=]>` with an optional
     /// `<match_distance object= min=>` or `<match class="class.highway" negate="true"/>`.
     FindZone { space: Uid, normalzone: bool, knownto: Val, min_distance: Option<(Uid, f32)>, not_highway: bool },
-    /// `<get_global_path component= multiple="true" uselocalhighways="false"><start object=/><end object=/>`.
-    GlobalPath { start: Uid, end: Uid },
+    /// `<get_global_path component= multiple="true" uselocalhighways=><start object=/><end object=/>`.
+    GlobalPath { start: Uid, end: Uid, uselocalhighways: bool },
+    /// `<get_jump_path component= multiple="true" uselocalhighways= [useblacklist=] [refobject=]
+    /// useknownpath=><start object=/><end object=/>` (move.generic L845-L868).
+    JumpPath { start: Uid, end: Uid, uselocalhighways: bool, useblacklist: Val, refobject: Uid, useknownpath: bool },
+    /// `<get_zone_at_position name= sector= value=>`.
+    ZoneAtPosition { sector: Uid, value: Pos },
+    /// `<find_sector name= space=>`.
+    FindSector { space: Uid },
+    /// `<get_safe_pos result= zone=|sector= [value=] [object=] radius= [max=] ignored= [allowyaxis=]>` with an
+    /// optional `<spacereservation component= duration= index= safezone=><orientation look_away/>` (all
+    /// move.generic forms).
+    SafePosGeneral {
+        space: Uid,
+        in_sector: bool,
+        value: Option<Pos>,
+        object: Uid,
+        radius: f32,
+        max: Option<f32>,
+        ignored: Uid,
+        allowyaxis: bool,
+        reserve: Option<(Uid, f64)>,
+    },
+    /// `<count_gravidar_contacts result= object= class= maybeattackedby= checkoperational="false"
+    /// masstraffic="false" docked="false" min="1" multiple="false">` with the highway-context, build
+    /// storage and wreck exclusions and an optional `<match_distance value= space= max=>` (move.generic
+    /// handler conditions L133/L142). Answer: the contact or null.
+    CountGravidarContacts { object: Uid, classes: Vec<Val>, maybeattackedby: Uid, within: Option<(Pos, Uid, f32)> },
+    /// `<move_to endzone= object= destination= ...>` of move.generic: the engine plans the path and
+    /// reports `$endzone` (null when no path was generated); the frame then blocks.
+    MoveTo { object: Uid, destination: Uid, pos: Option<Pos>, flags: Vec<(&'static str, Val)> },
     /// `<create_position name= space= max=>` (random position in a space).
     CreatePosition { space: Uid, max: f32 },
     /// `<create_position name= space= value= object=>` (position relative to `object`, expressed in `space`).
@@ -406,7 +563,13 @@ pub enum Answer {
     Zone(Uid),
     Path(Vec<Uid>),
     Pos(Pos),
-    Reserved { pos: Pos, index: Val, zone: Uid },
+    Reserved {
+        pos: Pos,
+        index: Val,
+        zone: Uid,
+    },
+    /// One component or null (count_gravidar_contacts, move_to's endzone).
+    Component(Uid),
 }
 
 impl Query {
@@ -419,6 +582,12 @@ impl Query {
             Query::SafePos { .. } => "get_safe_pos",
             Query::SafePosReserve { .. } => "get_safe_pos_reserve",
             Query::GravidarContacts { .. } => "find_gravidar_contact",
+            Query::JumpPath { .. } => "get_jump_path",
+            Query::ZoneAtPosition { .. } => "get_zone_at_position",
+            Query::FindSector { .. } => "find_sector",
+            Query::SafePosGeneral { .. } => "get_safe_pos_general",
+            Query::CountGravidarContacts { .. } => "count_gravidar_contacts",
+            Query::MoveTo { .. } => "move_to",
         }
     }
 
@@ -439,7 +608,75 @@ impl Query {
                 }
                 r
             }
-            Query::GlobalPath { start, end } => r.arg("start", Val::uid(*start)).arg("end", Val::uid(*end)),
+            Query::GlobalPath { start, end, uselocalhighways } => {
+                let r = r.arg("start", Val::uid(*start)).arg("end", Val::uid(*end));
+                if *uselocalhighways {
+                    r.arg("uselocalhighways", Val::Bool(true))
+                } else {
+                    r
+                }
+            }
+            Query::JumpPath { start, end, uselocalhighways, useblacklist, refobject, useknownpath } => {
+                let mut r = r
+                    .arg("start", Val::uid(*start))
+                    .arg("end", Val::uid(*end))
+                    .arg("uselocalhighways", Val::Bool(*uselocalhighways));
+                if !matches!(useblacklist, Val::Null) {
+                    r = r.arg("useblacklist", useblacklist.clone());
+                }
+                if !refobject.is_null() {
+                    r = r.arg("refobject", Val::uid(*refobject));
+                }
+                r.arg("useknownpath", Val::Bool(*useknownpath))
+            }
+            Query::ZoneAtPosition { sector, value } => {
+                r.arg("sector", Val::uid(*sector)).arg("value", Val::Pos(*value))
+            }
+            Query::FindSector { space } => r.arg("space", Val::uid(*space)),
+            Query::SafePosGeneral { space, in_sector, value, object, radius, max, ignored, allowyaxis, reserve } => {
+                let mut r = r.arg(if *in_sector { "sector" } else { "zone" }, Val::uid(*space));
+                if let Some(v) = value {
+                    r = r.arg("value", Val::Pos(*v));
+                }
+                if !object.is_null() {
+                    r = r.arg("object", Val::uid(*object));
+                }
+                r = r.arg("radius", Val::F32(*radius));
+                if let Some(m) = max {
+                    r = r.arg("max", Val::F32(*m));
+                }
+                r = r.arg("ignored", Val::uid(*ignored));
+                if *allowyaxis {
+                    r = r.arg("allowyaxis", Val::Bool(true));
+                }
+                if let Some((c, d)) = reserve {
+                    r = r.arg("component", Val::uid(*c)).arg("duration", Val::F64(*d));
+                }
+                r
+            }
+            Query::CountGravidarContacts { object, classes, maybeattackedby, within } => {
+                let mut r = r
+                    .arg("object", Val::uid(*object))
+                    .arg("class", Val::List(classes.clone()))
+                    .arg("maybeattackedby", Val::uid(*maybeattackedby));
+                if let Some((p, s, m)) = within {
+                    r = r
+                        .arg("within_value", Val::Pos(*p))
+                        .arg("within_space", Val::uid(*s))
+                        .arg("within_max", Val::F32(*m));
+                }
+                r
+            }
+            Query::MoveTo { object, destination, pos, flags } => {
+                let mut r = r.arg("object", Val::uid(*object)).arg("destination", Val::uid(*destination));
+                if let Some(p) = pos {
+                    r = r.arg("pos", Val::Pos(*p));
+                }
+                for (k, v) in flags {
+                    r = r.arg(k, v.clone());
+                }
+                r
+            }
             Query::CreatePosition { space, max } => r.arg("space", Val::uid(*space)).arg("max", Val::F32(*max)),
             Query::CreatePositionIn { space, value, object } => {
                 r.arg("space", Val::uid(*space)).arg("value", Val::Pos(*value)).arg("object", Val::uid(*object))
@@ -477,6 +714,26 @@ impl Query {
                     .as_uid_list()
                     .ok_or_else(|| format!("line {}: contacts must be a list of c:", r.line))?,
             )),
+            Query::JumpPath { .. } => Ok(Answer::Path(
+                need("path")?.as_uid_list().ok_or_else(|| format!("line {}: path must be a list of c:", r.line))?,
+            )),
+            Query::ZoneAtPosition { .. } | Query::FindSector { .. } => Ok(Answer::Zone(
+                need("zone")?.as_uid().ok_or_else(|| format!("line {}: zone must be c: or c:0x0", r.line))?,
+            )),
+            Query::CountGravidarContacts { .. } => Ok(Answer::Component(
+                need("contact")?.as_uid().ok_or_else(|| format!("line {}: contact must be c:", r.line))?,
+            )),
+            Query::MoveTo { .. } => Ok(Answer::Component(
+                need("endzone")?.as_uid().ok_or_else(|| format!("line {}: endzone must be c:", r.line))?,
+            )),
+            Query::SafePosGeneral { reserve: Some(_), .. } => Ok(Answer::Reserved {
+                pos: need("pos")?.as_pos().ok_or_else(|| format!("line {}: pos must be p:", r.line))?,
+                index: need("index")?.clone(),
+                zone: need("zone")?.as_uid().ok_or_else(|| format!("line {}: zone must be c:", r.line))?,
+            }),
+            Query::SafePosGeneral { reserve: None, .. } => {
+                Ok(Answer::Pos(need("pos")?.as_pos().ok_or_else(|| format!("line {}: pos must be p:", r.line))?))
+            }
             Query::GlobalPath { .. } => Ok(Answer::Path(
                 need("path")?.as_uid_list().ok_or_else(|| format!("line {}: path must be a list of c:", r.line))?,
             )),
@@ -553,6 +810,18 @@ pub enum Effect {
     SetKnown {
         object: Uid,
     },
+    /// `<set_avoid_collisions object= bigobjects="false" smallobjects="false"/>`.
+    SetAvoidCollisions {
+        object: Uid,
+    },
+    /// `<reset_avoid_collisions object=/>`.
+    ResetAvoidCollisions {
+        object: Uid,
+    },
+    /// `<stop_boost object=/>`.
+    StopBoost {
+        object: Uid,
+    },
 }
 
 impl Effect {
@@ -572,6 +841,9 @@ impl Effect {
             Effect::StopMoving { .. } => "stop_moving",
             Effect::DefaultFlightControlModel { .. } => "set_to_default_flight_control_model",
             Effect::SetKnown { .. } => "set_known",
+            Effect::SetAvoidCollisions { .. } => "set_avoid_collisions",
+            Effect::ResetAvoidCollisions { .. } => "reset_avoid_collisions",
+            Effect::StopBoost { .. } => "stop_boost",
         }
     }
 
@@ -615,9 +887,14 @@ impl Effect {
                 }
                 r
             }
-            Effect::StopMoving { object } | Effect::DefaultFlightControlModel { object } => {
-                r.arg("object", Val::uid(*object))
-            }
+            Effect::StopMoving { object }
+            | Effect::DefaultFlightControlModel { object }
+            | Effect::ResetAvoidCollisions { object }
+            | Effect::StopBoost { object } => r.arg("object", Val::uid(*object)),
+            Effect::SetAvoidCollisions { object } => r
+                .arg("object", Val::uid(*object))
+                .arg("bigobjects", Val::Bool(false))
+                .arg("smallobjects", Val::Bool(false)),
             Effect::SetKnown { object } => r.arg("object", Val::uid(*object)).arg("known", Val::Bool(true)),
         }
     }

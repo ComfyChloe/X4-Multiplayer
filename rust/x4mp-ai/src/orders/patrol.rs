@@ -474,7 +474,10 @@ impl Patrol {
                         }
                         // L361-376: stayhidden only.
                         if self.p.includeroute {
-                            let mut route = match cx.query(379, Query::GlobalPath { start: ship, end: self.endzone })? {
+                            let mut route = match cx.query(
+                                379,
+                                Query::GlobalPath { start: ship, end: self.endzone, uselocalhighways: false },
+                            )? {
                                 crate::world::Answer::Path(p) => p,
                                 other => {
                                     return Err(Stop::Mismatch(format!("line 379: expected a path, got {other:?}")))
