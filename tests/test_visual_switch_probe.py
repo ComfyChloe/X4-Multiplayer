@@ -1,4 +1,4 @@
-"""Dev-only Windows projectile-switch readiness probe (dev/visual_switch_probe.lua) on doubles."""
+"""Dev-only Windows projectile-switch readiness probe (tools/dev/visual_switch_probe.lua) on doubles."""
 import re
 import unittest
 from pathlib import Path
@@ -6,7 +6,7 @@ from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 
 ROOT = Path(__file__).resolve().parents[1]
-DEV = ROOT / 'dev'
+DEV = ROOT / 'tools/dev'
 SETUP = '''
  X4LAN_CONFIG.visual_switch_probe=true;X4LAN_CONFIG.test_profile='45841'
  local base=require;require=function(n) local m=base(n)
@@ -103,7 +103,7 @@ class VisualSwitchProbeTests(unittest.TestCase):
         for d in decls:
             l.globals().decl = d; l.execute('ffi.cdef(decl)')
         l.execute("assert(ffi.sizeof('UIWeaponGroup')==8 and ffi.new('UIWeaponGroup[?]',2)[1].idx==0 and ffi.typeof('UIWeaponMod'))")
-        shot = (ROOT / 'extension/x4_lan_lab/ui/shot_game.lua').read_text()
+        shot = (ROOT / 'src/extension/x4_lan_lab/ui/shot_game.lua').read_text()
         stock = ' '.join(re.search(r'typedef struct \{[^}]*\} UIWeaponMod;', shot)[0].split())
         self.assertIn(stock, [' '.join(d.split()) for d in decls])
 

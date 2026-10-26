@@ -5,7 +5,7 @@ from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / 'extension/x4_lan_lab/ui'
+UI = ROOT / 'src/extension/x4_lan_lab/ui'
 
 
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
@@ -17,7 +17,7 @@ class HealthProbeTests(unittest.TestCase):
         l.execute("sectors={};ConvertIDTo64Bit=function(v) return tonumber(v) end;GetComponentData=function() return 'cluster_14_sector001_macro' end")
         for file in ('bubble_game.lua', 'motion.lua', 'coop_game.lua', 'health_game.lua'):
             l.execute((UI / file).read_text())
-        l.execute((ROOT / 'dev/health_function_probe.lua').read_text())
+        l.execute((ROOT / 'tools/dev/health_function_probe.lua').read_text())
         l.execute('''events['X4LAN.Loaded']();now=10;frames.onUpdate();events['X4LAN_Bubble.Ready']();frames.onUpdate();events['X4LAN_Coop.Ready']()
          client:receiveExtension({'AUTH','1',client.lease,'1','p1','1','p1','p2','1','p2'},now)
          now=10.1;frames.onUpdate();events['X4LAN_Health.Ready']()
@@ -44,9 +44,9 @@ class HealthProbeTests(unittest.TestCase):
     def test_inert_without_its_flag_and_md_schema(self):
         out = self.make(probe=False).execute('return #probe()')
         self.assertEqual(out, 0)
-        md = (ROOT / 'dev/health_function_probe.xml').read_text()
+        md = (ROOT / 'tools/dev/health_function_probe.xml').read_text()
         self.assertTrue("control=\"'Drop'\"" in md and 'checkinterval="0.05s"' in md and '$arena.$healthProbe' in md)
-        prod = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        prod = (ROOT / 'src/extension/x4_lan_lab/md/x4lan_health.xml').read_text()
         for op in ('Base', 'Apply', 'Release'):                    # post-write readbacks, probe-gated
             self.assertTrue('HEALTH_PROBE written %s' % op in prod, op)
         self.assertEqual(prod.count('<do_if value="@$arena.$healthProbe">'), 3)

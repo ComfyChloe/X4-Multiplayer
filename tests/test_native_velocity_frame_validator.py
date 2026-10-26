@@ -74,7 +74,7 @@ class VelocityFrameValidatorTests(unittest.TestCase):
           X4LAN_BUBBLE_API={coop={ready=true,ships={[2]=42}},state={client={lease='test'}},
             universe={frame=function() end},paused=function() return false end}
         ''')
-        lua.execute((Path(__file__).resolve().parents[1]/'dev/velocity_frame_probe.lua').read_text())
+        lua.execute((Path(__file__).resolve().parents[1]/'tools/dev/velocity_frame_probe.lua').read_text())
         lua.execute('''
           local A=X4LAN_BUBBLE_API;A.universe.frame(0);events['X4LAN_VelocityFrame.Ready']()
           for index=0,5 do

@@ -9,7 +9,7 @@ class ProjectileMotionTests(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.lua.execute((Path(__file__).resolve().parents[1] /
-                          'extension/x4_lan_lab/ui/projectile_motion.lua').read_text())
+                          'src/extension/x4_lan_lab/ui/projectile_motion.lua').read_text())
         self.lua.execute('''
          P=X4LAN_PROJECTILE_MOTION;B=P.new('lease/entity/epoch/gen',0);K=B.key
          function birth(id,t)

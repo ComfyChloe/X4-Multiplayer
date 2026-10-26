@@ -8,7 +8,7 @@ from unittest.mock import patch, Mock
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('isolate_test_mods', ROOT / 'distribution/isolate_test_mods.py')
+spec = importlib.util.spec_from_file_location('isolate_test_mods', ROOT / 'tools/distribution/isolate_test_mods.py')
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 

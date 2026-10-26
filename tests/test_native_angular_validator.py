@@ -71,7 +71,7 @@ class AngularValidatorTests(unittest.TestCase):
             state={client={lease='test'}},universe={frame=function() end},paused=function() return false end}
           requests={};AddUITriggeredEvent=function(screen,control,value) requests[#requests+1]={screen,control,value} end
         ''')
-        lua.execute((Path(__file__).resolve().parents[1]/'dev/angular_probe.lua').read_text())
+        lua.execute((Path(__file__).resolve().parents[1]/'tools/dev/angular_probe.lua').read_text())
         lua.execute('''
           now=106;X4LAN_BUBBLE_API.universe.frame(now);events['X4LAN_AngularProbe.Ready']()
           X4LAN_BUBBLE_API.coop.frame(now)

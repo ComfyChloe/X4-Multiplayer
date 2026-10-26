@@ -8,5 +8,5 @@ Ownership of individual contributions remains with their respective rights holde
 X4: Foundations, its executable, game content and trademarks belong to their
 respective rights holders. This project grants no rights to those materials.
 Separately licensed dependencies retain their own licenses and notices; see
-LICENSING.md and distribution/THIRD-PARTY.txt. Preserve the license and required
+LICENSING.md and tools/distribution/THIRD-PARTY.txt. Preserve the license and required
 notices when sharing this project's source or binaries, including modified copies.

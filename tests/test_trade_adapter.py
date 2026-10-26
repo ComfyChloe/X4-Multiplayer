@@ -1,7 +1,7 @@
 import unittest
 from pathlib import Path
 from lupa.luajit21 import LuaRuntime
-ROOT=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui'
+ROOT=Path(__file__).resolve().parents[1]/'src/extension/x4_lan_lab/ui'
 CATALOG='M,10000000,10000000,100000000,100000000;'+';'.join('W,%s,%d,0,0,300,400,1200,1400,2000,1700,1900,2000'%(w,v) for w,v in [('energycells',1),('foodrations',1),('medicalsupplies',2),('hullparts',12),('refinedmetals',14),('siliconwafers',18)])
 class TradeAdapterTests(unittest.TestCase):
  def setUp(self):

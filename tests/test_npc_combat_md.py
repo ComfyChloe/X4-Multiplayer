@@ -9,7 +9,7 @@ import unittest
 import xml.etree.ElementTree as E
 from pathlib import Path
 
-MD=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/md/x4lan_npc_combat.xml'
+MD=Path(__file__).resolve().parents[1]/'src/extension/x4_lan_lab/md/x4lan_npc_combat.xml'
 TREE=E.parse(MD)
 ACTIONS={e.get('name'):e.find('actions') for e in TREE.iter() if e.tag in ('cue','library')}
 

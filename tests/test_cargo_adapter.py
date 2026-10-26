@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 from test_game_adapter import LuaRuntime
 
-UI=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui'
+UI=Path(__file__).resolve().parents[1]/'src/extension/x4_lan_lab/ui'
 
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
 class CargoAdapterTests(unittest.TestCase):

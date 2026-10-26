@@ -10,7 +10,7 @@ from unittest.mock import patch
 import test_internal_sessions as sessions
 
 launcher = sessions.launcher
-SOURCE = Path(__file__).resolve().parents[1] / 'distribution'
+SOURCE = Path(__file__).resolve().parents[1] / 'tools/distribution'
 
 
 class LauncherRecovery(unittest.TestCase):

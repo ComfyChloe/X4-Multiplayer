@@ -39,8 +39,8 @@ Architecture, requirements, policies and historical test reports are in
 The delivered internal candidate is **7.5.0**; see the
 [delivery evidence](reports/INTERNAL-7-5-DELIVERY.txt). Both Windows/Linux packages include
 the server, private Python runtime and English procedures. Follow
-[installation instructions](distribution/INSTALL.html), the
-[package guide](distribution/README.txt) and [human test procedures](distribution/NEXT-TEST.txt).
+[installation instructions](tools/distribution/INSTALL.html), the
+[package guide](tools/distribution/README.txt) and [human test procedures](tools/distribution/NEXT-TEST.txt).
 The host runs X4 and the relay; UDP45841 and TCP45844 are required. Both players
 use profile45841 with matching game/DLC content and a new private host invitation.
 The sealed7.4.1 pair from235f9ba remains unchanged and does not contain these additions.
@@ -59,7 +59,7 @@ inventory rewards. Separate native host/guest runs passed within their documente
 scope. Subsequent human tests confirmed supported NPC destruction and shared
 kill-contract completion, with intermittent NPC synchronization still unresolved.
 See the [human results](reports/PLAYTEST-7.5.0-20261025.txt) and
-[new NPC/mission procedure](distribution/HUMAN-NPC-MISSION-TEST.txt).
+[new NPC/mission procedure](tools/distribution/HUMAN-NPC-MISSION-TEST.txt).
 
 ## Acceptance and remaining work
 
