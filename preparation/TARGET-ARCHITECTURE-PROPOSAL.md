@@ -240,6 +240,31 @@ slot 12, hashing in Rust), the Rust relay and dedicated supervisor
 hooks." Proposed wording: the transport crate stays hook-free and independently
 testable; the hook layer links it as a library and drives it from the frame callback.
 
+## 9a. Scaling the server simulation
+
+Measured (Windows, single player, highway, 60 fps cap): the MoveWorker slot loop takes a
+median 14.1 ms of a 16.7 ms frame (wall time, including waits for Jolt jobs and the
+pathing join). Several full-detail sectors therefore exceed one thread at 60 Hz.
+
+Order of attempts:
+1. **Threads within one process (first).** Candidates from the read-only survey
+   (`x4-re/coord/reports/parallel-sim.md`) ranked by risk: pure per-object computation
+   (two-phase: parallel compute into buffers, sequential apply), per-sector component
+   updates with buffered events merged in a fixed order at a barrier, then AI/MD
+   (likely unsafe). Prototypes run in **shadow mode** first: the parallel version
+   computes alongside the unchanged sequential update and only compares results; it
+   is applied only after long runs without differences. Same hook technique as the
+   fixed-tick work (call-site redirect, exact-build pinning, full restore).
+2. **Within-sector hot spots** (big battles, large mining fleets): only for parts the
+   sampling profiler shows to dominate; physics is already parallel (Jolt).
+3. **Fallback: sharding by process.** Several unmodified X4 processes each own some
+   sectors; non-owned sectors run in puppet mode; gate jumps hand ships over; one
+   process is the world master for economy/factions. Requires bypassing X4's
+   single-instance lock on Linux.
+
+Measurements that decide: per-sector cost (8-sector attention test), slot-3 phase
+breakdown (sampling profiler), and big-battle profiles.
+
 ## 10. Measure before porting
 
 1. Per-frame cost of today's Lua/MD by subsystem (motion, replicas, health, shots,
