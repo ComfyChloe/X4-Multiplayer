@@ -1,0 +1,177 @@
+STATION BUILD INTENTS (BUILDREQ) - 25 October 2026 - branch contrib/ferrite-build-intents
+Design: preparation/TARGET-ARCHITECTURE-PROPOSAL.md section 8a. Mod level only (Lua, MD,
+Python relay); no engine hooks. Offline evidence only: no X4 was launched for this work.
+
+1. GUEST HOOK AND PLAN FORMAT
+Vanilla station planner (ui/addons/ego_detailmonitor/menu_station_configuration.lua):
+the "Confirm module changes" button is menu.buttonConfirm, which only calls
+C.SetConstructionSequenceFromConstructionMap(menu.container, menu.holomap). The planner
+does NOT call AddBuildTask* (that is the ship configurator, AddBuildTask6). The button
+handler is re-read from the menu table at every display, so replacing
+Helper.getMenu('StationConfigurationMenu').buttonConfirm reaches the button and its hotkey.
+ui/build_game.lua replaces only that function (and MapMenu.buttonRemovePlot for the
+confirmed removal of an empty plot). On the guest it never falls through to the vanilla
+call, also not on a capture error. On the host the vanilla function runs unchanged.
+
+Capture: GetBuildMapConstructionPlan2(holomap, station) gives the WHOLE wanted station
+(kept, moved and new modules; omitted modules are the removals), per entry macro,
+connection, predecessor index/connection and offset (UIPosRot, radians). Loadouts come
+from GetConstructionMapItemLoadoutCounts2/GetConstructionMapItemLoadout2; turret and
+shield groups are carried, per-slot macros, ammunition, units and software are refused
+locally (not representable without X4's slot->path mapping). Plot: GetBuildPlotSize and
+GetBuildPlotCenterOffset of the station. Budget: the guest's local build-storage money.
+Serialisation: X4's construction plan XML in one canonical spelling
+<plan id name><entry index macro connection><predecessor index connection/>
+<offset><position x y z/><rotation yaw pitch roll/></offset><upgrades><groups>
+<turrets|shields macro path group exact/></groups></upgrades></entry></plan>
+Positions in metres (3 decimals), rotations in degrees (4 decimals). Encoders in Lua
+(build_protocol.lua) and Python (x4lan/build.py) produce identical bytes (tested); both
+parsers accept only that spelling (re-encoding must reproduce the input).
+
+2. PROTOCOL (ASCII, every datagram <= 768 bytes)
+Guest -> relay
+ BUILDREQ|1|lease|request|hostEpoch|kind|code|macro|sector|plot|option|entries|bytes|parts|digest
+ BUILDPART|1|lease|request|index|chunk      (chunk <= 560 bytes of the plan XML)
+Relay -> guest (reply to each BUILDREQ, CARGOREQ style)
+ BUILDREPLY|1|lease|request|status|reason|missing   status RECEIVING (missing = first 16
+ part indices), PENDING, ACCEPTED, REFUSED, UNCERTAIN, STALE, BUSY
+Relay -> authority
+ BUILDEXEC|1|hostLease|request|slot|<same 10 header fields>|inbox
+ BUILDXPART|1|hostLease|request|index|chunk  (32 per 0.25 s until RECEIVED)
+Authority -> relay
+ BUILDDONE|1|hostLease|request|RECEIVED|ok, then ACCEPTED|REFUSED|UNCERTAIN|reason
+kind: EXPAND (plan, also covers module removal), REMOVEPLOT (option 1/0 = remove build
+storage cargo), RECYCLE (whole station). Station identity = idcode, macro, sector macro
+(the existing station_catalog identity key; owner checked separately). plot =
+sx,sy,sz,cx,cy,cz metres or '-'. option for EXPAND = budget credits or '-'.
+Limits: 512 entries, 131072 bytes, 256 parts, 64 loadout groups per entry, 1024
+retained request IDs (never evicted; new requests get BUSY relay_full), one open request
+per player. Dedup: same request ID + same signature returns the stored state; a changed
+signature is REFUSED request_conflict. The authority keeps executed results and answers
+a duplicate BUILDEXEC with the stored result only.
+Authority loss: never forwarded -> STALE no_authority (nothing can exist); forwarded and
+the host lease changed or vanished -> UNCERTAIN authority_lost; no RECEIVED within 20 s
+-> UNCERTAIN authority_silent; no final result in 300 s -> UNCERTAIN authority_timeout.
+UNCERTAIN is never replayed into another authority.
+Backward compatibility: sessions without world sync and older relays drop BUILD*
+silently; the guest refuses locally after 15 s with relay_unsupported and logs
+FEATURE station_build_intents DISABLED reason=relay_unsupported. An older host that
+never answers produces UNCERTAIN authority_silent. Nothing is built locally either way.
+Plan delivery: X4 cannot build a player-designed construction sequence from script data
+without a holomap or a library plan ID (no MD action or exported function takes entries;
+create_construction_sequence is random; constructionsequenceelements is gamestart-only).
+The relay therefore writes the validated plan as <plans><plan/></plans> into the
+authority's construction plan folder (plan_inbox; internal host packages:
+<profile 45841>/constructionplans, from installation.json) and sends inbox=1. The
+authority imports it with ImportMapConstructionPlan(file, id) and verifies it. Without a
+folder (relay on another machine, inbox=0) EXPAND is refused with no_plan_inbox. The
+dedicated server must write the same folder for its authority game.
+
+3. AUTHORITY VALIDATION AND NATIVE CALL (host Lua build_game.lua + md/x4lan_build.xml)
+In order, each failure answers REFUSED with the reason:
+ a. assembled size and adler32, strict plan parse, plan id = x4lan_<request>, entry count
+    (digest, plan_*, plan_identity)
+ b. station: enumerate GetAllFactionStations(factionFor(slot)) and match idcode, macro
+    and sector macro; none -> station_not_found_for_owner, several -> station_ambiguous;
+    owner must equal factionFor(slot) -> not_owner. factionFor maps both slots to
+    "player" today; per-player factions replace only this function.
+ c. EXPAND: inbox=1 (no_plan_inbox); importable file appears within 5 s
+    (plan_file_missing); ImportMapConstructionPlan, plan present in GetConstructionPlans
+    (plan_import_failed); IsConstructionPlanValid (plan_invalid_patches:n); the imported
+    plan read back with GetConstructionPlanInfo must equal the request entry by entry
+    (macro, connections, predecessor, position 1 m, rotation 0.002 rad;
+    plan_mismatch:<what><index>); GetMissingConstructionPlanBlueprints3(station, 0, id)
+    empty (missing_blueprints); plot: ExtendBuildPlot by the relative change, price as
+    in Helper.getPlotData (GetBuildPlotPrice - GetBuildPlotPayment in owned non-player
+    space); budget + plot price <= player money (funds; the plot extension is reverted).
+    Then plot payment (TransferPlayerMoneyTo control station, PayBuildPlotSize), then MD
+    add_build_to_expand_station object=$station.buildstorage buildobject=$station
+    constructionplan=<plan id>; on success the build storage is set to the budget
+    (TransferPlayerMoneyTo/TransferMoneyToPlayer) -> ACCEPTED build_created, else
+    REFUSED native_build_failed; no MD answer within 30 s -> UNCERTAIN native_timeout.
+ d. REMOVEPLOT: GetNumStationModules(station, constructions, wrecks) = 0 (has_modules),
+    then RemoveBuildPlot2(station, removeStorage) as the map menu does.
+ e. RECYCLE: MD add_build_to_recycle_station. No vanilla player UI found that triggers a
+    full recycle, so the guest has no hook for it; the authority path exists for a
+    later UI/console command.
+Confidence: wire, dedup, validation order and refusal logic HIGH (tests). FFI names and
+signatures HIGH (Linux .dynsym and the game's own cdefs). Planner hook point HIGH (source).
+add_build_to_expand_station with a library plan ID HIGH as an MD action (vanilla
+tutorial/setup scripts use it with a quoted plan ID); MEDIUM that it behaves exactly like
+the planner's SetConstructionSequenceFromConstructionMap for a player station (builder
+assignment, resource purchasing, staging). MEDIUM: GetImportableConstructionPlans
+rescans the folder at runtime and accepts our <plans> file; the rotation unit in plan
+files (degrees assumed) - a wrong unit fails closed as plan_mismatch:rotation.
+
+4. WHAT THE GUEST SEES / REMAINING GAPS
+Guest sees: notification "sent", then accepted/refused(reason)/uncertain, and BUILDREQ
+log lines. Its planner keeps the unconfirmed layout; no local construction starts.
+Replication today: the universe baseline enumerates GetAllFactionShips only; records are
+kind ship or drop. Stations, modules, construction sites, plots and build progress are
+NOT replicated. Guest worlds start from the same save, so stations that existed at start
+match (station_catalog identity), but:
+ G1 Station applier (main gap): modules built on the host never appear on the guest.
+    Needed: a station record kind (identity, owner, plot size/centre/paid, module list =
+    plan entries + build state, build storage money) sent as a bucketed baseline, and a
+    guest applier that applies the host's sequence to the local station
+    (apply_construction_sequence with remove=true, or create_station from the plan),
+    with guest-local construction suppressed.
+ G2 Plot-only stations: a plot is the station object itself (verified: GetBuildPlotSize,
+    GetBuildPlotCenterOffset, ExtendBuildPlot, PayBuildPlotSize, GetBuildPlotPayment,
+    RemoveBuildPlot2 all take a station UniverseID; MD set_build_plot targets "Station or
+    BuildStorage"; ReserveBuildPlot/reserve_build_plot create "the base station and build
+    storage"; UpdateConstructionMapBuildPlot/UpdateMapBuildPlot take a holomap and only
+    redraw). An empty plot is a valid BUILDREQ target (tested). But plot-only stations,
+    their owner and plot size/position are not replicated either (same applier).
+ G3 New plots: placing a new plot on the guest (map menu, ReserveBuildPlot) is still a
+    local action, creates a guest-only station and is unknown to the host; a BUILDREQ
+    for it is refused station_not_found_for_owner. Needs a RESERVEPLOT intent.
+ G4 Guest-local side effects still possible in the planner: build-storage budget buttons
+    (TransferPlayerMoneyTo on the guest's own copy), plot slider payment and "Buy plot".
+    They only change the guest's copy; the economy channel restores the guest's player
+    money from the host. The budget value is captured and applied on the host.
+ G5 Removing every module (empty plan) is refused locally (empty_plan_unsupported); it
+    needs a removal path without a library plan (remove_from_construction_sequence) or
+    REMOVEPLOT after deconstruction. Module removal within a non-empty plan is covered.
+ G6 Builder assignment (construction vessel) and trade rules of the build storage are
+    not part of the intent.
+ G7 Library hygiene: imported x4lan_<request> plans stay in the host's plan library;
+    the relay deletes the inbox file after the final result.
+
+5. SHIPS (stretch, not implemented)
+Ship purchase at a shipyard: menu_ship_configuration builds the shopping list and calls
+C.AddBuildTask6(container, object, macro, loadout, price, crew, immediate, name, info).
+Plan: override the shopping-list confirm the same way, send
+BUILDREQ kind=SHIP (shipyard identity, macro, loadout as UILoadout groups/macros with
+slot paths, count, price), authority validates shipyard reachability, licences,
+blueprints/ware availability and money, then add_build_to_construct_ship or AddBuildTask6
+on the host; loadout changes of an existing ship map to add_build_to_modify_ship /
+apply_loadout. The ship then reaches the guest through the existing ship baseline.
+
+6. TESTS (offline)
+tests/test_build.py: plan format parity Lua/Python, relay routing, dedup, conflicts,
+size limits, part conflicts, BUSY/relay_full, STALE, UNCERTAIN on authority loss and
+silence, inbox file, backward compatibility; MD structure; md.xsd validation when
+X4_MD_XSD points at the game schema (validated VALID with lxml against
+x4-re/gamescripts/resolved/base/libraries/md.xsd).
+tests/test_build_adapter.py (LuaJIT doubles): planner override captures and sends,
+never calls the vanilla confirm on the guest, pending/accept/refuse/uncertain handling,
+missing-part resend, local refusals, relay_unsupported, plot removal intent, host
+vanilla; authority accept path, every refusal, plan mismatch, plot revert on funds,
+native failure/timeout, REMOVEPLOT, RECYCLE, empty-plot station target.
+
+7. NATIVE TEST STEPS (pending; X4 closed first, disposable world in profile 45841)
+ 1. Matched internal pair with station_build_intents=true; host starts the server from
+    the package (plan_inbox = host profile constructionplans).
+ 2. Host gives the player a station or plot in a test world; confirm it exists on the
+    guest from the shared start (or reserve it before the guest joins).
+ 3. Guest opens the station planner, adds two modules with a turret group, sets a
+    budget, confirms. Expect guest notice "sent"; guest debuglog BUILDREQ sent/pending;
+    server logs/build-*.log received/forwarded; host debuglog BUILDREQ exec/accepted.
+ 4. Host: the station shows a build task with the guest's layout and budget; construction
+    runs. Guest: no local build task; notice "accepted" (modules not visible: G1).
+ 5. Negative: guest plan with a module whose blueprint the host lacks -> missing
+    blueprints; budget above host money -> funds; stop the server mid-request ->
+    uncertain; unknown station -> station_not_found_for_owner.
+ 6. Guest removes an empty plot -> host plot removed. Record the importable filename the
+    engine reports and the GetConstructionPlanInfo rotation values for the unit check.

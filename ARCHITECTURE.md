@@ -103,6 +103,36 @@ Controlled native host and guest checks cover drop/magnet, duplicate intentions,
 lost completion, capacity and partial quantity. Two-native acceptance remains
 separate. Arbitrary NPC loot, multi-ware crates and all cargo categories are open.
 
+## Station build intents (BUILDREQ)
+
+`station_build_intents` (false in the source config, true in internal packages) turns the
+guest's station planner confirmation into an intent. `build_game.lua` replaces only the
+planner's `buttonConfirm` (vanilla: `SetConstructionSequenceFromConstructionMap`) and the
+confirmed empty-plot removal of the map menu; a guest never falls through to the local
+call. The request carries the whole wanted station from `GetBuildMapConstructionPlan2`
+(kept, new and removed modules), turret/shield groups, the station's plot size/centre and
+the build-storage budget, serialised as X4's construction plan XML in one canonical
+spelling shared by `build_protocol.lua` and `x4lan/build.py`:
+
+`BUILDREQ|1|lease|request|hostEpoch|kind|code|macro|sector|plot|option|entries|bytes|parts|digest`,
+`BUILDPART|1|lease|request|index|chunk`, answered by `BUILDREPLY|1|lease|request|status|reason|missing`.
+
+The relay authenticates the sender, deduplicates by request ID (conflicting reuse is
+refused), bounds plans (512 entries, 128 KiB, 256 parts, 1024 retained IDs, one open
+request per player), validates the plan and forwards `BUILDEXEC`/`BUILDXPART` to the
+authority, which answers `BUILDDONE` (RECEIVED, then ACCEPTED/REFUSED/UNCERTAIN with a
+reason). Loss of the authority before forwarding is STALE, after forwarding UNCERTAIN; an
+uncertain request is never replayed. X4 creates player-designed sequences only from a
+holomap or a library plan ID, so the relay writes the plan into the authority profile's
+`constructionplans` folder; the authority imports it, verifies the imported plan entry
+by entry, ownership (`factionFor(slot)`, `player` for both slots today), blueprints,
+plot and money, extends/pays the plot (the plot is the station object) and runs MD
+`add_build_to_expand_station`. Empty-plot removal (`RemoveBuildPlot2`) and whole-station
+recycling (`add_build_to_recycle_station`) use the same validation. Stations, modules and
+plots are not yet replicated to guests: built modules stay invisible there until a
+station applier exists. Details, gaps and native steps:
+[reports/STATION-BUILD-INTENTS-20261025.txt](reports/STATION-BUILD-INTENTS-20261025.txt).
+
 ## Display identity and shared ship observations
 
 `IDENT|1|lease|hostEpoch|sequence|scope|id|code|UTF8nameHex|known|contact` is

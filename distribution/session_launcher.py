@@ -139,6 +139,7 @@ def session_config(session, slot, host):
                seed_id=session['bubble'], seed_verified=False, coop_docks=True,
                pilot_health=True, shot_claims=True, shot_visual=True, shot_capture=True,
                npc_combat=True, faction_missions=True, npc_target_diag=True,
+               station_build_intents=True,  # Dev rule: on in internal packages; logs FEATURE ... DISABLED.
                npc_motion_diagnostics=1, motion_diagnostics=1,
                projectile_visuals=True, shot_undo=False,
                frame_profile=True, net_probe=True,  # On by default in internal packages (dev rule); set false only if they break.
@@ -291,6 +292,17 @@ def test_connection():
     raise RuntimeError('No matching server reply. Check the host address, session file, server and UDP 45841 firewall rule.')
 
 
+def build_plan_inbox():
+    # Station build intents: the host test profile's construction plan folder, from which
+    # host X4 imports a guest's validated plan. None disables plan delivery (guests see a refusal).
+    try:
+        state = read_json(ROOT / 'installation.json')
+        profile = Path(state['profile'])
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+    return str(profile / 'constructionplans') if profile.name == '45841' and profile.is_dir() else None
+
+
 def server(console=False):
     # File managers launch scripts without a TTY. Re-enter through the wrapper
     # in a real terminal, which also keeps errors visible until Enter is pressed.
@@ -324,7 +336,7 @@ def server(console=False):
     with session_lock():
         print('Internal Test server. Keep this window open. Ctrl+C stops it.', flush=True)
         with backend_module('world_launcher').WorldServer(ROOT, cfg):
-            run(cfg, ROOT / 'logs', version=VERSION + ' Internal')
+            run(dict(cfg, plan_inbox=build_plan_inbox()), ROOT / 'logs', version=VERSION + ' Internal')
 
 
 def diagnostics():

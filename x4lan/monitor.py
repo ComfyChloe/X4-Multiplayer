@@ -367,6 +367,15 @@ def run(config, logs: Path, version='unversioned'):
             from .universe import UniverseSession
             session_type = UniverseSession
         relay = Relay('0.0.0.0', config['port'], session_type(config['token'], config['build'], config['bubble']))
+        builds = getattr(relay.session, 'builds', None)
+        if builds is not None:  # Station build intents: authority plan folder and BUILDREQ log.
+            builds.plan_inbox = Path(config['plan_inbox']) if config.get('plan_inbox') else None
+            build_log = logs / ('build-' + datetime.now().strftime('%Y%m%d-%H%M%S') + '.log')
+
+            def log_build(line, path=build_log):
+                with path.open('a', encoding='utf-8') as stream:
+                    stream.write(datetime.now().isoformat(timespec='milliseconds') + ' ' + line + '\n')
+            builds.logger = log_build
     except OSError as exc:
         if exc.errno != errno.EADDRINUSE and getattr(exc, 'winerror', None) != 10048:
             raise

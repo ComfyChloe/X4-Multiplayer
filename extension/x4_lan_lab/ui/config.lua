@@ -12,6 +12,7 @@ X4LAN_CONFIG = {
     shot_undo = false, -- Diagnostic only, needs shot_capture: replayed-hit undo (delays shield recharge).
     faction_missions = false, -- INTERNAL opt-in: native shared faction mission journal.
     npc_combat = false, -- INTERNAL opt-in: host NPC health and acknowledged guest stock-gun hits.
+    station_build_intents = false, -- INTERNAL: guest station planner confirm becomes a host-validated BUILDREQ.
     frame_profile = false, -- Diagnostic only: per-second FRAMECOST wall time of the mod's UI Lua by subsystem.
     net_probe = false, -- Diagnostic only: RTTPING/RTTPONG round trips to the relay, NETRTT every 5 s.
     npc_target_diag = false, -- Diagnostic only: logs NPC orders, targets, attention and radar near the shared ships.

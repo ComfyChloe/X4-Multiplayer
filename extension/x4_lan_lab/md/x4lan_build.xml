@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Station build intents. Only host (authority) Lua raises Expand/Recycle after validating
+     ownership, plan, blueprints, plot and budget (ui/build_game.lua). The guest never
+     creates a local build task; it only shows notices. -->
+<mdscript name="X4LAN_Build" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+<cues>
+ <cue name="Expand" instantiate="true" namespace="this">
+  <conditions><event_ui_triggered screen="'X4LAN_Build'" control="'Expand'"/></conditions>
+  <actions>
+   <set_value name="$a" exact="event.param3"/>
+   <set_value name="$station" exact="$a.$station"/>
+   <set_value name="$build" exact="null"/>
+   <do_if value="$station.exists and $station.isclass.station and $station.owner == faction.{$a.$owner} and $station.buildstorage.exists">
+    <add_build_to_expand_station object="$station.buildstorage" buildobject="$station" constructionplan="$a.$plan" result="$build"/>
+   </do_if>
+   <raise_lua_event name="'X4LAN_Build.Result'" param="'%s|%s|%s'.[$a.$request, (if $build then 1 else 0), $build]"/>
+  </actions>
+ </cue>
+ <cue name="Recycle" instantiate="true" namespace="this">
+  <conditions><event_ui_triggered screen="'X4LAN_Build'" control="'Recycle'"/></conditions>
+  <actions>
+   <set_value name="$a" exact="event.param3"/>
+   <set_value name="$station" exact="$a.$station"/>
+   <set_value name="$build" exact="null"/>
+   <do_if value="$station.exists and $station.isclass.station and $station.owner == faction.{$a.$owner} and $station.buildstorage.exists">
+    <add_build_to_recycle_station object="$station.buildstorage" buildobject="$station" result="$build"/>
+   </do_if>
+   <raise_lua_event name="'X4LAN_Build.Result'" param="'%s|%s|%s'.[$a.$request, (if $build then 1 else 0), $build]"/>
+  </actions>
+ </cue>
+ <cue name="Notice" instantiate="true">
+  <conditions><event_ui_triggered screen="'X4LAN_Build'" control="'Notice'"/></conditions>
+  <actions><show_notification text="event.param3" timeout="8s" priority="8"/></actions>
+ </cue>
+</cues>
+</mdscript>

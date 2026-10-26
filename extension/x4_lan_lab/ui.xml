@@ -37,6 +37,8 @@
     <file name="ui/quest_game.lua" />
     <file name="ui/cargo_game.lua" />
     <file name="ui/identity_game.lua" />
+    <file name="ui/build_protocol.lua" />
+    <file name="ui/build_game.lua" />
     <file name="ui/frame_profile_install.lua" />
   </environment>
 </addon>
