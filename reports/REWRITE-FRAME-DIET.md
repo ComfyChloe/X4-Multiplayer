@@ -254,7 +254,8 @@ state and with it the mod. What it does get, without hooks:
    0.16-0.27 ms) goes away (owner transforms).
 5. Animation timelines in the simulation walk: `maybe_U::Positional::UpdateAnimationTimelines` 0x1165660 with
    `AnimationTimeline::SampleCached` 0x1165ee0 (walk agent's labels) cost 0.25 ms per frame at baseline and
-   1.6 + 0.9 ms (inclusive 1.6) under the 8-sector load, all in slot 3 under Positional::Move. Some timelines are
+   1.6 ms inclusive under the 8-sector load (SampleCached 0.9 ms, mostly inside it, partly via 0x116b0c0), all
+   in slot 3 under Positional::Move. Some timelines are
    cosmetic (lights, rotating parts), others move connections and so attached children (attachment poses depend
    on animation state, see Q11). Not a presentation site as a whole; a per-timeline split (no connections
    driven, no attached component) would be needed first, with walk and transforms.
