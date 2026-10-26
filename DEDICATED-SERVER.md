@@ -58,12 +58,14 @@ size; the relay rejects ships 3.. explicitly (no reply, or `REJECTED` for orders
 | Native cargo drop/pickup (CARGOREQ), market orders (COOPORDER) | rejected (`REJECTED`) |
 | Legacy bubble actions (fixture drops, station transfer) | rejected |
 | Dock attachment (CDOCK) | rejected; the remote ship follows its NAV2 pose only |
+| On-foot avatars (WALK2) | every client, keyed by slot; contexts are shared ships 1..N and stations of the shared save ([WALKING.md](WALKING.md)) |
 | Remote spacesuit kill (SUITKILL) | replicas for every client; the server reports a kill only for the most recent remote suit and only when its generation is unique |
 
 ### Bandwidth
 
 Per client and 20 Hz tick the relay sends AUTH, HGEN, WORLD, one NAV2 and one FIRE2
-per remote ship, one BODY2 per other player, and the existing bounded universe
+per remote ship, one BODY2 per other player, a WALK2 per other player on foot
+(only on a new pose or every 0.2 s), and the existing bounded universe
 traffic (32 motion records, a 12-packet baseline window, IDENT budget). XSHIP adds
 `N - 3` rows per client at 5 Hz. Player traffic therefore grows linearly with N
 (about `3 * (N - 1)` extra packets per tick per client); the universe budgets are per

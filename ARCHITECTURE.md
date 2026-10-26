@@ -185,10 +185,12 @@ and overlapping trigger membership are not replicated. Gimbal aim, projectile
 inheritance and general NPC combat authority remain separate work.
 
 The same native player faction owns both ships. Remote player figures on foot are
-disabled. Spacesuit replicas use `BODY2`, with independent generation and sector.
+opt-in `WALK2` avatars, one per remote client, relative to a shared ship index or a
+station identity; see [WALKING.md](WALKING.md). Spacesuit replicas use `BODY2`, with independent generation and sector.
 Life handling guards lethal hull thresholds, ejects actual occupants, and keeps
 native one-point suits protected until station teleportation finishes. Friendly
-fire remains active. Suit weapons and walking animations are not replicated.
+fire remains active. Suit weapons are not replicated; on-foot animation is the local
+engine walk of the avatar, not the remote player's animation.
 In co-op mode, only host snapshots confirm shared ship and target destruction.
 Guest targets retain a minimum hull guard until that confirmation, so temporary
 local damage can be reconciled without losing an otherwise living shared object.
