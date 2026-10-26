@@ -721,6 +721,18 @@ mod tests {
         f.kids(z1, 0, &[a, b]);
         let r = unsafe { crate::fast::plan(f.ptr(g) as usize, 0, 1.0, 1, 0) };
         assert_eq!(r.err(), Some("open component reached outside its live parent"));
+        // Same-parent aliases also revisit one-shot timers/counts. A live-parent check alone
+        // cannot reject them, so both local and split walkers need an explicit uniqueness guard.
+        f.kids(z1, 0, &[a]);
+        f.kids(z2, 0, &[b, b]);
+        for threads in [1usize, 2, 8] {
+            assert_eq!(unsafe { crate::fast::plan(f.ptr(g) as usize, 0, 1.0, threads, 0) }.err(),
+                       Some("open component visited more than once"));
+        }
+        f.kids(z2, 0, &[b]);
+        f.kids(cl, 0, &[s1, s2, s1]);
+        assert_eq!(unsafe { crate::fast::plan(f.ptr(g) as usize, 0, 1.0, 2, 0) }.err(),
+                   Some("sector task root visited more than once"));
     }
 
     #[test]

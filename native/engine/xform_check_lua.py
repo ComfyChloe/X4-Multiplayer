@@ -27,6 +27,7 @@ def main():
     with tempfile.TemporaryDirectory() as tmp:
         esc = lambda s: ''.join('\\%03d' % b for b in s.encode('utf-8'))  # decimal escapes: paths are data
         module, folder = esc(str(args.module.resolve())), esc(tmp.replace('\\', '/'))
+        wrapper = esc(Path(__file__).with_name('xform_probe.lua').read_text(encoding='utf-8'))
         source = f'''
           local m=assert(package.loadlib("{module}","luaopen_x4lan_xform"))()
           assert(type(m.start)=='function')
@@ -66,6 +67,28 @@ def main():
           local co=coroutine.create(function() refused('main Lua thread required',"{folder}",1,2,3,4) end)
           local ok,err=coroutine.resume(co)
           assert(ok,err)
+          -- Synthetic UI-owner regression in the real Lua runtime: a disabled probe preserves
+          -- the final counters/first difference before stop, logs once and cannot re-arm.
+          local lines,stops,updates={{}},0,nil
+          local s=setmetatable({{reason='shadow mismatch',shadow_first='[switch] node7 dirty differs',
+            shadow_bad_frames=1,shadow_mismatches=1,shadow_switch_bad_frames=1,switch_refusal='-'}},
+            {{__index=function() return 0 end}})
+          local owner={{stats=function() return s end,active=function() return false end,
+            stop=function() stops=stops+1 end}}
+          package.loadlib=function() return function() return {{start=function() return owner end}} end end
+          X4LAN_CONFIG={{test_profile='45841'}}
+          X4LAN_XFORM_DIR="{folder}"
+          X4LAN_XFORM_SHADOW=1
+          X4LAN_XFORM_SWITCH=4
+          DebugError=function(line) lines[#lines+1]=line end
+          GetCurRealTime=function() return 1 end
+          SetScript=function(name,fn) assert(name=='onUpdate'); updates=fn end
+          assert(loadstring("{wrapper}"))()
+          updates(); updates(); updates()
+          assert(stops==1 and #lines==4, 'disabled owner must log once and stop once')
+          assert(lines[2]:find('first=[switch] node7 dirty differs',1,true))
+          assert(lines[3]:find('XFORM SWITCH',1,true))
+          assert(lines[4]:find('FEATURE xform DISABLED reason=shadow mismatch',1,true))
         '''.encode('utf-8')
         try:
             lua.luaL_openlibs(state)
@@ -77,7 +100,7 @@ def main():
         finally:
             lua.lua_close(state)
     print('PASS: real Lua ABI, argument validation (capture, shadow and switch forms), missing directory, coroutine '
-          'rejection, non-X4 process rejection')
+          'rejection, non-X4 process rejection; synthetic UI preserves failure evidence and stops once')
 
 
 if __name__ == '__main__':

@@ -18,11 +18,11 @@
 //!   container (+0xa8): emulated (the walk then iterates the container, as the original iterates
 //!   the rebuilt vector); also for attachments, whose rebuilt vectors are remembered per walker;
 //! - the end loop changes the owner's timers, its own flags (kind 7) and the counts on its live
-//!   parent chain: read again only if a component is visited twice in one frame, which needs a
-//!   child vector listing a component its owner is not the live parent of. Refused: any open
-//!   component (owners are always open) or rebuilt vector reached from a component that is not
-//!   its live parent (+0x70), and any attachment with a rebuilt vector outside the walker's part
-//!   of the tree. Closed visits change nothing the walk reads, so they need no check;
+//!   parent chain: read again if a component is visited twice in one frame. Refused: repeated
+//!   open visits (including a duplicate entry in the same child vector), duplicate sector task
+//!   roots, any open component (owners are always open) or rebuilt vector reached from a
+//!   component that is not its live parent (+0x70), and any attachment with a rebuilt vector
+//!   outside the walker's part of the tree. Closed visits change nothing the walk reads;
 //! - dirty bits change, but whether a component is refreshed depends only on the specification
 //!   stack and its +0x1e0, and only the child bit decides what is walked.
 //!
@@ -34,6 +34,7 @@ use crate::engine::{
     C_FLAGS, C_LIVE, C_PARENT, C_SPEC, C_VC, MAX_DEPTH, MAX_ENTRIES, MAX_STACK, VC_DIRTY, VC_KIDS, VC_SIZE,
 };
 use crate::pool;
+use std::collections::HashSet;
 use x4mp_transform::cache::SpecEntry;
 
 const CHILDREN: u32 = 0x2;
@@ -105,6 +106,8 @@ struct Walker {
     steps: Vec<Step>,
     /// attachments whose child vector a refresh rebuilt (later visits iterate the container)
     rebuilt: Vec<Ptr>,
+    /// Reject repeated open visits: pre-frame timers/counts are no longer valid on a revisit.
+    opened: HashSet<Ptr>,
     /// sector this walker is confined to (tasks), None for the sequential part
     region: Option<Ptr>,
     split: bool,
@@ -126,6 +129,7 @@ impl Walker {
             truncs: Vec::with_capacity(16),
             steps: Vec::new(),
             rebuilt: Vec::new(),
+            opened: HashSet::new(),
             region,
             split,
             tasks: Vec::new(),
@@ -155,6 +159,9 @@ impl Walker {
             return;
         }
         self.stats.opens += 1;
+        if !self.opened.insert(c) {
+            return self.fail("open component visited more than once");
+        }
         if !parent.null() && unsafe { c.ptr(C_PARENT) } != parent {
             return self.fail("open component reached outside its live parent");
         }
@@ -380,6 +387,10 @@ pub unsafe fn plan(galaxy: usize, idx: usize, time: f64, threads: usize, base_fl
         return Err(e);
     }
     let specs = std::mem::take(&mut main.tasks);
+    let mut roots = HashSet::with_capacity(specs.len());
+    if specs.iter().any(|task| !roots.insert(task.root)) {
+        return Err("sector task root visited more than once");
+    }
     let mut stats = main.stats;
     stats.tasks = specs.len();
     let walk_task = |t: &TaskSpec| -> Walker {

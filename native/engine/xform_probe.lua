@@ -49,6 +49,8 @@ SetScript('onUpdate',function()
   nextLog=now+0.5
   local s=owner:stats()
   if not owner:active() then
+   if shadowEvery>0 then DebugError(shadowLine(s)) end
+   if switchThreads>0 then DebugError(switchLine(s)) end
    disabled(s.reason or 'inactive')
    owner:stop();owner=nil;done=true
    return

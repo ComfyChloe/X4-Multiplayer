@@ -278,7 +278,7 @@ of section 6. Sector tasks receive private specification/truncation stacks. The 
 worker pool returns plans in tree order; all engine refreshes and list changes still execute
 serially on the MoveWorker. Planning calls only the pure `IsClass` lookup on workers. It reads
 the original base-flags word, handles child vectors rebuilt by an earlier attachment refresh,
-and refuses open nodes reached outside their live parent or attachment rebuilds crossing task
+and refuses repeated open nodes/sector roots, open nodes reached outside their live parent or attachment rebuilds crossing task
 regions, as well as stack/depth limits and repeated specification kinds. Refusal executes
 nothing and invokes the original build for that frame. This remains a test-lane switch.
 
@@ -289,6 +289,13 @@ and 992 frames in 4-thread A/B mode, every frame shadow-checked with zero differ
 synthetic universes with repeated kinds caused the expected 20 refusals (8 in A/B), falling back
 without changes. Final states matched the original in all 400 scenarios per configuration.
 750 captures replayed identically. Seed 8 also passed before continuation (400 scenarios).
+
+Independent review identified that live-parent checks alone do not prove child-vector uniqueness.
+An explicit open-node/sector-root guard now rejects same-parent duplicates before execution.
+Seed 10 verifies the guarded path: 400 scenarios/69,639 components, 278,775 engine calls exact,
+2,477 switched frames at both 1 and 8 threads and 990 A/B frames per implementation, zero
+differences; 23 expected repeated-kind refusals (10 A/B), all final states identical. All 20,000
+poses and 124 captures also match. Both failure negative controls still pass.
 
 Additional regressions cover same-sector attachment-triggered child-vector rebuilds, rejection
 of cross-region rebuilds, deterministic helper panic reporting and waiting for helpers before
@@ -302,9 +309,12 @@ in the oracle executable only. Both prove exactly one shadow check/one switched 
 subsequent frames original, identical final state, and restored pinned code bytes. The lane
 wrapper also validates completed-run counters instead of accepting a `done` marker alone;
 five tests reject missing/duplicate records, errors, fallbacks and insufficient successful work.
+The disabled Lua owner prints final shadow/switch statistics and the first differing field
+before stopping once; a synthetic UI-owner check in the real Lua runtime covers that path.
 
-Native direct-memory run `xform-004` is queued through the released lane tool (4 threads,
+Native direct-memory run `xform-005` is queued through the released lane tool (4 threads,
 6 captures, 1,000 shadow frames, 2,500 switched frames, A/B). No speedup is accepted yet.
+`xform-004` was cancelled while still queued to add the duplicate-visit guard; no game launched.
 The earlier copied-model native run was slower than the original under contention; its timings
 are diagnostic, not an isolated performance result. A lead-granted quiet window is still needed.
 

@@ -128,10 +128,12 @@ def main() -> int:
             fb = int(sw.split('fallbacks=')[1].split()[0]) if sw else -1
             why = sw.split('refusal=', 1)[1] if 'refusal=' in sw else ''
             # expected refusals: synthetic repeated kinds (both), and for the walk the generator's
-            # stale child vectors (a component listed by a parent that is not its live parent)
+            # stale/duplicate child vectors or an attachment rebuild crossing a task region
             allowed = ('specification list with a repeated kind',) + (
                 ('open component reached outside its live parent',
-                 'child vector rebuilt for a component reached outside its live parent') if impl == 2 else ())
+                 'child vector rebuilt for a component reached outside its live parent',
+                 'open component visited more than once', 'sector task root visited more than once',
+                 "attachment vector rebuilt outside the walker's part of the tree") if impl == 2 else ())
             if (r.returncode != 0 or ' bad=0 ' not in sh or fb < 0 or (fb and why not in allowed)
                     or final_state(res.read_bytes()) != final_state(p.with_suffix('.res').read_bytes())):
                 print(f'oracle switch {tag} {p.name} failed ({r.returncode}): {sw} {sh or r.stderr.strip()}')
