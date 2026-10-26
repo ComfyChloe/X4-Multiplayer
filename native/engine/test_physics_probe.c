@@ -95,6 +95,12 @@ static DWORD WINAPI foreign_caller(LPVOID unused) {
     return 0;
 }
 
+static DWORD WINAPI foreign_uninstall(LPVOID unused) {
+    (void)unused;
+    pp_uninstall();
+    return 0;
+}
+
 int main(void) {
     image = VirtualAlloc(NULL, X4_IMAGE_SIZE, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
     assert(image);
@@ -272,6 +278,32 @@ int main(void) {
         assert(!pp_request_mode("joltwait"));
         pp_frame_end();
         assert(pp_joltwait);
+        /* A disarm on another thread leaves joltwait installed (a barrier may be in flight on the
+           MoveWorker): entries 3/4 and the WaitForJobs router stay ours, counting wrappers go back. */
+        restore_origs();   /* uninstall writes pp_orig back */
+        {
+            HANDLE t = CreateThread(NULL, 0, foreign_uninstall, NULL, 0, NULL);
+            assert(t && WaitForSingleObject(t, 5000) == WAIT_OBJECT_0);
+            CloseHandle(t);
+        }
+        assert(!pp_installed && pp_joltwait && pp_orphaned == 1);
+        assert(*cb == (void *)pj_sb_create && *db == (void *)pj_sb_destroy && *entry_of(PP_WAIT) == (void *)pp_wait);
+        assert(*entry_of(PP_CREATE) == fn_of(PP_CREATE) && *entry_of(PP_ADDED) == fn_of(PP_ADDED));
+        {   /* the router still routes: a serial barrier to the serial wait, X4's to the original */
+            void *sb = pj_sb_create(NULL);
+            assert(pp_wait_target(sb) == (pp_wait_fn)pj_sb_wait && pp_wait_target(fake_scene) == (pp_wait_fn)fn_of(PP_WAIT));
+            pj_sb_destroy(NULL, sb);
+        }
+        /* The next install on the owner thread adopts the router; the owner-thread uninstall restores all. */
+        assert(pp_install(0) && pp_installed && pp_joltwait && *entry_of(PP_WAIT) == (void *)pp_wait);
+        assert(*entry_of(PP_CREATE) == (void *)pp_create);
+        pp_uninstall();
+        assert(!pp_joltwait && *cb == image + x4_physics_mode_vtables[0].fn && *entry_of(PP_WAIT) == fn_of(PP_WAIT));
+        assert(pp_install(0));
+        pp_joltwait_reason = NULL;
+        assert(!pp_request_mode("joltwait"));
+        pp_frame_end();
+        assert(pp_joltwait);
         restore_origs();
         disarm_because("test");   /* uninstall switches back first */
         assert(!pp_joltwait && *cb == image + x4_physics_mode_vtables[0].fn && *db == image + x4_physics_mode_vtables[1].fn);
@@ -288,6 +320,6 @@ int main(void) {
     puts("PASS: physics probe: verified vtable swap or nothing, owner-thread counting, scene attribution");
     puts("PASS: physics probe: frame/window folding, read-only sampler (pool occupancy, pathing pass), loading skip");
     puts("PASS: physics probe: restore on disarm, foreign entries left alone");
-    puts("PASS: physics probe joltwait: verified swap of both barrier entries, routing by barrier kind, fail-back on anomaly");
+    puts("PASS: physics probe joltwait: verified swap of both barrier entries, routing by barrier kind, fail-back on anomaly, queued requests, latched refusals, a disarm on another thread keeps joltwait installed and the next install adopts it");
     return 0;
 }

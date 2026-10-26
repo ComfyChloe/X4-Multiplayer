@@ -102,6 +102,7 @@ static const char *pp_joltwait_reason;   /* first refusal or anomaly; latched: n
 static volatile LONG pp_mode_request;
 static uint64_t pp_lua_foreign;          /* requests made from a thread other than the owner thread */
 static uint64_t pp_win_joltwait_frames;  /* frames of the current stats window run in joltwait mode */
+static uint64_t pp_orphaned;             /* disarms on another thread that left joltwait installed */
 static uint64_t pp_joltwait_seen;        /* anomaly count already accounted */
 static uint64_t pp_joltwait_frames, pp_joltwait_jobs_mark;
 static int pp_installed;
@@ -352,14 +353,23 @@ static const char *pp_joltwait_enable(void) {
     return NULL;
 }
 
+/* On the owner thread (between frames: hooks never run inside a Jolt update) everything is restored. A
+   disarm on another thread (Lua teardown) may race a Jolt update on the MoveWorker that holds a serial
+   barrier, so then joltwait stays installed: barrier entries 3/4 and the WaitForJobs router, which are
+   self-contained, exact and live in the pinned module; a later install on the owner thread adopts them.
+   The pass-through counting wrappers are always restored. */
 static void pp_uninstall(void) {
     InterlockedExchange(&pp_mode_request, PP_REQ_NONE);
-    pp_joltwait_disable(NULL);
+    int keep_joltwait = pp_joltwait && GetCurrentThreadId() != owner_thread;
+    if (keep_joltwait) ++pp_orphaned;
+    else pp_joltwait_disable(NULL);
     pp_sampler_stop();
     if (!pp_installed) return;
     void *wrappers[PP_ENTRIES] = {(void *)pp_create, (void *)pp_wait, (void *)pp_added, (void *)pp_persisted, (void *)pp_removed};
-    for (int k = 0; k < PP_ENTRIES; ++k)
+    for (int k = 0; k < PP_ENTRIES; ++k) {
+        if (k == PP_WAIT && keep_joltwait) continue;
         if (pp_entry[k] && pp_orig[k]) pp_write_entry(pp_entry[k], wrappers[k], pp_orig[k]);
+    }
     pp_installed = 0;
 }
 
@@ -436,16 +446,22 @@ static int pp_install(int verify_code) {
         pp_reason = "physics signature mismatch";
         return 0;
     }
+    int adopted[PP_ENTRIES] = {0};
     for (int k = 0; k < PP_ENTRIES; ++k) {
         void **entry = (void **)(image + x4_physics_vtables[k].entry);
         void *function = image + x4_physics_vtables[k].fn;
-        if (!readable(entry, sizeof(void *), 0) || *entry != function) { pp_reason = "vtable entry not original"; return 0; }
+        if (!readable(entry, sizeof(void *), 0)) { pp_reason = "vtable entry not original"; return 0; }
+        /* The router left installed by a disarm on another thread (joltwait still active) is ours. */
+        adopted[k] = k == PP_WAIT && pp_joltwait && *entry == wrappers[k];
+        if (*entry != function && !adopted[k]) { pp_reason = "vtable entry not original"; return 0; }
         pp_entry[k] = entry;
         pp_orig[k] = function;
     }
     for (int k = 0; k < PP_ENTRIES; ++k) {
+        if (adopted[k]) continue;
         if (!pp_write_entry(pp_entry[k], pp_orig[k], wrappers[k])) {
-            for (int j = 0; j < k; ++j) pp_write_entry(pp_entry[j], wrappers[j], pp_orig[j]);
+            for (int j = 0; j < k; ++j)
+                if (!adopted[j]) pp_write_entry(pp_entry[j], wrappers[j], pp_orig[j]);
             pp_reason = "vtable write failed";
             return 0;
         }
@@ -505,6 +521,7 @@ static void pp_stats(lua_State *L, void (*field)(lua_State *, const char *, doub
     field(L, "joltwait_anomalies", (double)pp_joltwait_anomalies());
     field(L, "phys_mode_frames", (double)pp_win_joltwait_frames);
     field(L, "phys_lua_foreign", (double)pp_lua_foreign);
+    field(L, "joltwait_orphaned", (double)pp_orphaned);
     pp_joltwait_jobs_mark = pj_sb.jobs_run;
     pp_win_joltwait_frames = 0;
     double frames = pp_win.frames ? (double)pp_win.frames : 1.0;
