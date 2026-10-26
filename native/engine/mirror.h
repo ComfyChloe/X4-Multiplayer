@@ -45,6 +45,12 @@
 #define MIRROR_QUEUE 8u /* frames the writer may lag behind before frames are dropped */
 #define MIRROR_RECORD_ALL 1u
 #define MIRROR_NO_NAV_CACHE 2u
+/* Cost measurement: every second captured frame (the odd ones) prefetches the headers of sibling
+   components a few items ahead while walking a container. A hint only: the captured bytes are
+   identical either way (test_mirror). walk_ms is reported per variant. */
+#define MIRROR_AB_PREFETCH 4u
+#define MIRROR_FLAGS_ALL 7u
+#define MIRROR_PREFETCH_AHEAD 4u
 #define MIRROR_CLASS_SECTOR 0x58u
 #define MIRROR_CLASS_CLUSTER 0x0fu
 #define MIRROR_CLASS_GALAXY 0x2fu
@@ -124,6 +130,10 @@ typedef struct {
     unsigned nregions, galaxy_misses;
     uint64_t region_queries, region_cache_full, visited, last_visited;
     double walk_ms_sum, serialize_ms_sum;
+    int prefetch_now;
+    uint64_t frames_prefetch, frames_plain;
+    double walk_ms_prefetch_sum, walk_ms_plain_sum;
+    uint64_t visited_by_class[256]; /* components visited per class id, all captured frames */
     unsigned char *buf; size_t buf_cap, buf_len, fram_at;
     /* writer thread (lock and condition: mirror_cs / mirror_cv, never reset) */
     HANDLE thread;
@@ -530,6 +540,15 @@ static void mirror_children(const unsigned char *field, uint64_t parent, unsigne
             continue;
         }
         for (const unsigned char *p = ib; p < ie; p += 8) {
+            if (ms.prefetch_now && p + 8 * MIRROR_PREFETCH_AHEAD < ie) {
+                /* the item array is range-checked above; prefetching an invalid address never faults */
+                const unsigned char *ahead = *(const unsigned char *const *)(p + 8 * MIRROR_PREFETCH_AHEAD);
+                if (ahead) {
+                    __builtin_prefetch(ahead);
+                    __builtin_prefetch(ahead + MO_MODE);
+                    __builtin_prefetch(ahead + MO_CHILDREN_SECOND);
+                }
+            }
             const unsigned char *child = *(const unsigned char *const *)p;
             if (child) mirror_visit(child, parent, root, depth, level);
         }
@@ -543,8 +562,9 @@ static void mirror_visit(const unsigned char *comp, uint64_t parent, unsigned ro
     if (level > MIRROR_MAX_DEPTH || ((uintptr_t)comp & 7) || !mirror_ok(comp, 0x200)) { ++ms.walk_errors; return; }
     uint32_t vt = mirror_rva(*(const uintptr_t *)comp);
     const mirror_class *cls = vt ? mirror_find_class(vt) : NULL;
-    if (!cls) { ++ms.walk_errors; return; }
+    if (!cls) { ++ms.walk_errors; ++ms.visited_by_class[MIRROR_UNKNOWN_CLASS]; return; }
     uint8_t cid = *(const int32_t *)(comp + MO_MODE) ? cls->id1 : cls->id0;
+    ++ms.visited_by_class[cid];
     uint64_t uid = *(const uint64_t *)(comp + MO_ID);
     if (cid == MIRROR_CLASS_SECTOR || cid == MIRROR_CLASS_CLUSTER) {
         unsigned r = mirror_new_root(uid, cid == MIRROR_CLASS_SECTOR ? 0 : 1);
@@ -882,6 +902,7 @@ static void mirror_frame(uint64_t frame) {
     }
     ms.galaxy_misses = 0;
     unsigned root = mirror_new_root(*(const uint64_t *)(galaxy + MO_ID), 2);
+    ms.prefetch_now = (ms.flags & MIRROR_AB_PREFETCH) && ((ms.frames_written + ms.frames_dropped) & 1);
     uint64_t visited_before = ms.visited;
     mirror_visit(galaxy, 0, root, 0, 0);
     ms.last_visited = ms.visited - visited_before;
@@ -909,7 +930,15 @@ static void mirror_frame(uint64_t frame) {
     LARGE_INTEGER t_ser;
     qpc_read(&t_ser);
     if (qpc_frequency > 0) {
-        ms.walk_ms_sum += (double)(t_walk.QuadPart - t0.QuadPart) * 1000.0 / (double)qpc_frequency;
+        double walk_ms = (double)(t_walk.QuadPart - t0.QuadPart) * 1000.0 / (double)qpc_frequency;
+        ms.walk_ms_sum += walk_ms;
+        if (ms.prefetch_now) {
+            ms.walk_ms_prefetch_sum += walk_ms;
+            ++ms.frames_prefetch;
+        } else {
+            ms.walk_ms_plain_sum += walk_ms;
+            ++ms.frames_plain;
+        }
         ms.serialize_ms_sum += (double)(t_ser.QuadPart - t_walk.QuadPart) * 1000.0 / (double)qpc_frequency;
     }
     if (mirror_hand_off()) {
@@ -931,6 +960,24 @@ static void mirror_frame(uint64_t frame) {
 }
 
 /* --- Lua methods (on the fixed-tick owner userdata; MoveWorker, slot 6) ----------------------- */
+
+/* The `count` most visited class ids as "0xid:n,..." (ties by class id), NUL-terminated. */
+static void mirror_top_classes(char *out, size_t cap, unsigned count) {
+    unsigned char used[256] = {0};
+    size_t at = 0;
+    out[0] = 0;
+    for (unsigned k = 0; k < count; ++k) {
+        int best = -1;
+        for (int c = 0; c < 256; ++c)
+            if (!used[c] && ms.visited_by_class[c] && (best < 0 || ms.visited_by_class[c] > ms.visited_by_class[best])) best = c;
+        if (best < 0) break;
+        used[best] = 1;
+        int n = snprintf(out + at, cap - at, "%s0x%02x:%llu", k ? "," : "", best,
+                         (unsigned long long)ms.visited_by_class[best]);
+        if (n < 0 || (size_t)n >= cap - at) break;
+        at += (size_t)n;
+    }
+}
 
 static void mirror_num(lua_State *L, const char *name, double value) {
     p_lua_pushnumber(L, value);
@@ -955,7 +1002,7 @@ static int l_mirror(lua_State *L) {
         why = "invalid capture path (absolute drive path required)";
     else if (!(interval >= 1 && interval <= 3600 && interval == (double)(unsigned)interval)) why = "invalid interval";
     else if (!(frames >= 1 && frames <= 1e7 && frames == (double)(uint64_t)frames)) why = "invalid frame count";
-    else if (!(flags >= 0 && flags <= 3 && flags == (double)(unsigned)flags)) why = "invalid flags";
+    else if (!(flags >= 0 && flags <= MIRROR_FLAGS_ALL && flags == (double)(unsigned)flags)) why = "invalid flags";
     else if (!(attention >= 0 && attention <= 11)) why = "invalid min_attention";
     else why = mirror_arm(wpath, (unsigned)interval, (uint64_t)frames, (unsigned)flags, (int32_t)attention);
     if (why) {
@@ -994,6 +1041,17 @@ static int l_mirror_stats(lua_State *L) {
         double n = (double)(ms.frames_written + ms.frames_dropped);
         mirror_num(L, "walk_ms", n > 0 ? ms.walk_ms_sum / n : 0.0);
         mirror_num(L, "serialize_ms", n > 0 ? ms.serialize_ms_sum / n : 0.0);
+        mirror_num(L, "frames_prefetch", (double)ms.frames_prefetch);
+        mirror_num(L, "frames_plain", (double)ms.frames_plain);
+        mirror_num(L, "walk_ms_prefetch", ms.frames_prefetch ? ms.walk_ms_prefetch_sum / (double)ms.frames_prefetch : 0.0);
+        mirror_num(L, "walk_ms_plain", ms.frames_plain ? ms.walk_ms_plain_sum / (double)ms.frames_plain : 0.0);
+    }
+    {
+        /* "0x2a:12345,0x3b:678,..." the 16 most visited class ids, all captured frames */
+        char text[16 * 24];
+        mirror_top_classes(text, sizeof text, 16);
+        p_lua_pushlstring(L, text, strlen(text));
+        p_lua_setfield(L, -2, "visited_by_class");
     }
     p_lua_pushlstring(L, MIRROR_LAYOUT_SHA256, strlen(MIRROR_LAYOUT_SHA256));
     p_lua_setfield(L, -2, "layout");

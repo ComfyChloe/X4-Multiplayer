@@ -187,9 +187,11 @@ static void build_scene(void) {
     *(double *)(g_ship2 + MO_HULL) = 77.0;
     *(uint8_t *)(g_ship2 + MO_DEATH) = 1;
     add(g_bay, 0, 0, g_ship2);
-    /* block 1 stays empty; block 2: an asteroid and a component with an unknown vtable */
+    /* block 1 stays empty; block 2: four null entries (skipped; the A/B prefetch reaches past
+       them), an asteroid and a component with an unknown vtable */
     unsigned char *asteroid = comp_new(VT_ASTEROID, 10, 0, 8);
     *(double *)(asteroid + MO_HULL) = 3.0;
+    for (int k = 0; k < 4; ++k) add(g_zone1, 0, 2, NULL);
     add(g_zone1, 0, 2, asteroid);
     add(g_zone1, 0, 2, comp_new(0x100, 11, 0, 8));
     unsigned char *gate = comp_new(VT_GATE, 12, 0, 8);         /* second container: walked after +0xa8 */
@@ -235,6 +237,26 @@ static int write_file(const wchar_t *path, const unsigned char *p, size_t n) {
     int ok = WriteFile(h, p, (DWORD)n, &done, NULL) && done == n;
     CloseHandle(h);
     return ok;
+}
+
+/* Offset just past the HEAD record (the first record after the 16-byte file header). */
+static size_t head_end(const unsigned char *p) {
+    uint32_t len;
+    memcpy(&len, p + 16 + 4, 4);
+    return 16 + 16 + (size_t)len;
+}
+
+/* The test's two frames: frame 1; then ship1 moves (slot index flips to 0), ship2 undocks out of
+   the world, ship3 moves to zone1 (sector 1) in front of the gate container order (appended to
+   zone1's first block) and ship1's hull changes; frame 2. */
+static void two_frames(void) {
+    mirror_frame(1);
+    *(uint32_t *)(image + MG_PATHING_INDEX) = 0;
+    remove_child(g_bay, 0, g_ship2);
+    remove_child(g_zone2, 0, g_ship3);
+    add(g_zone1, 0, 0, g_ship3);
+    *(double *)(g_ship1 + MO_HULL) = 1000.25;
+    mirror_frame(2);
 }
 
 /* Walks the records of a capture; returns the number of FRAM records, checks every checksum. */
@@ -293,8 +315,7 @@ int main(int argc, char **argv) {
     assert(ms.frames_written == 1 && ms.last_rows == 14 && ms.last_roots == 4);
     assert(ms.walk_errors == 1);                  /* the unknown vtable */
     assert(ms.nsample == 5);                      /* ship1, station, ship3, zone1 and the highway */
-    /* Frame 2: ship1 moves (slot index flips to 0), ship2 undocks out of the world, ship3 moves to
-       zone1 (sector 1) in front of the gate container order: appended to zone1's first block. */
+    /* Frame 2: the changes of two_frames(). */
     *(uint32_t *)(image + MG_PATHING_INDEX) = 0;
     remove_child(g_bay, 0, g_ship2);
     remove_child(g_zone2, 0, g_ship3);
@@ -303,6 +324,14 @@ int main(int argc, char **argv) {
     mirror_frame(2);
     assert(!ms.armed && !ms.file);                /* two frames requested: stopped and closed */
     assert(ms.frames_written == 2 && ms.frames_dropped == 0 && ms.last_rows == 13);
+    /* Visit statistics of the two frames: the unknown component once per frame. */
+    assert(ms.visited_by_class[MIRROR_UNKNOWN_CLASS] == 2 && ms.frames_plain == 2 && ms.frames_prefetch == 0);
+    {
+        char top[256], want[32];
+        mirror_top_classes(top, sizeof top, 16);
+        snprintf(want, sizeof want, "0x%02x:4", MIRROR_CLASS_SECTOR);
+        assert(!strncmp(top, "0x", 2) && strstr(top, want));
+    }
 
     size_t n = 0;
     unsigned char *bytes = read_file(out, &n);
@@ -327,6 +356,21 @@ int main(int argc, char **argv) {
             return 1;
         }
     }
+    /* A/B prefetch (flags 4) on a rebuilt scene: every second frame prefetches, and the capture
+       equals the plain one after the HEAD record (which carries the flags). */
+    build_scene();
+    wchar_t ab[MAX_PATH];
+    swprintf(ab, MAX_PATH, L"%ls\\test_mirror_ab.x4cap", exe);
+    DeleteFileW(ab);
+    assert(!mirror_arm_unchecked(ab, 1, 2, MIRROR_AB_PREFETCH, 0));
+    two_frames();
+    assert(!ms.armed && ms.frames_written == 2 && ms.frames_plain == 1 && ms.frames_prefetch == 1);
+    size_t abn = 0;
+    unsigned char *ab_bytes = read_file(ab, &abn);
+    assert(ab_bytes && abn == n && head_end(ab_bytes) == head_end(bytes));
+    assert(!memcmp(ab_bytes + head_end(ab_bytes), bytes + head_end(bytes), n - head_end(bytes)));
+    assert(memcmp(ab_bytes, bytes, head_end(bytes)) != 0); /* the flags differ */
+
     printf("test_mirror: all passed (%zu bytes, layout %s)\n", n, MIRROR_LAYOUT_SHA256);
     return 0;
 }
