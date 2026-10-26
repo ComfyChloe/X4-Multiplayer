@@ -464,6 +464,31 @@ def handoff_for(paths, args) -> bool:
     return bool(chain) and chain[0] == args.agent
 
 
+def timing_gate(paths, agent):
+    """--timing runs and holds only run in a lead-opened quiet window: quiet.lock must name the agent
+    first in its handoff chain, every reserved slot must be filled and no X4.exe may run. Raises
+    TransientRefusal otherwise (queued timing waiters keep waiting without blocking others)."""
+    if not paths.quiet_lock.exists():
+        raise TransientRefusal('timing runs need a lead quiet window (quiet.lock with "handoff: '
+                               f'{agent}"); ask the lead to open one')
+    core.advance_handoff(paths.quiet_lock)
+    owner = core.read_owner(paths.quiet_lock) if paths.quiet_lock.exists() else {}
+    chain = core.handoff_chain(owner)
+    if agent not in chain:
+        raise TransientRefusal('timing runs need a lead quiet window naming this agent (quiet.lock: '
+                               + core.owner_summary(owner) + (f'; handoff: {", ".join(chain)}' if chain else '') + ')')
+    if chain[0] != agent:
+        raise TransientRefusal(f'quiet window: not my turn yet (handoff: {", ".join(chain)})')
+    procs = x4_processes()
+    reserve = core.read_reserve(paths.reserve)
+    unfilled = core.unfilled_slots(reserve, sum(1 for p in procs if is_protected(p)))
+    if unfilled:
+        raise TransientRefusal(f'{unfilled} slot(s) reserved for {reserve.get("owner")} are not filled yet; '
+                               'timing runs wait')
+    if procs:
+        raise TransientRefusal(f'--timing needs no other X4 running: {[describe_x4(p) for p in procs]}')
+
+
 def release_lock(lock, agent, warn):
     """Release one lock; a quiet.lock adopted from a handoff chain is handed to the next agent."""
     try:
@@ -769,6 +794,8 @@ class Run:
         """Checks before any lane is taken. Returns the quiet.lock owner (or None) and whether this
         run may adopt it (quiet-window handoff)."""
         paths, a = self.paths, self.args
+        if a.timing:
+            timing_gate(paths, a.agent)                               # lead window, my turn, no X4
         if paths.quiet_lock.exists():
             skipped = core.advance_handoff(paths.quiet_lock)
             if skipped:
@@ -842,20 +869,15 @@ class Run:
         self.take_lane(self.usable_lanes(list(core.LANE_PROFILES) if a.lane == 'auto' else [a.lane]))
         try:
             if a.timing:
-                others = [describe_x4(p) for p in x4_processes()]
-                if others:
-                    raise TransientRefusal(f'--timing needs no other X4 running: {others}')
+                timing_gate(paths, a.agent)                           # again, now that a lane is taken
                 quiet_info = dict(
                     lock_info(a.agent, f'x4lane timing run lane {self.lane.name}', self.run_id),
                     owner=f'x4lane run {self.run_id} (agent {a.agent})',
                     reason='timing-sensitive lane measurement', since=core.now_iso(),
-                    release='dev/x4lane.py removes it when the run ends')
-                try:
-                    if handoff:
-                        self.quiet = core.DirLock.adopt(paths.quiet_lock, quiet_info, a.agent)
-                        self.result['quiet_lock']['handed_from'] = self.quiet.info.get('handed_from')
-                    else:
-                        self.quiet = core.DirLock.acquire(paths.quiet_lock, quiet_info, take_stale=False)
+                    release='dev/x4lane.py hands it on or removes it when the run ends')
+                try:                                                  # only ever a lead window's lock
+                    self.quiet = core.DirLock.adopt(paths.quiet_lock, quiet_info, a.agent)
+                    self.result['quiet_lock']['handed_from'] = self.quiet.info.get('handed_from')
                 except core.LockBusy as error:
                     raise TransientRefusal(str(error))
                 self.result['quiet_lock']['held_by_this_run'] = True
@@ -1684,16 +1706,13 @@ class SessionRun:
                         raise TransientRefusal(f'{error} (reserved so far: {reserved})')
                     raise
             if a.timing:
-                others = [describe_x4(p) for p in x4_processes()]
-                if others:
-                    raise TransientRefusal(f'--timing needs no other X4 running: {others}')
+                timing_gate(self.paths, a.agent)
                 info = dict(lock_info(a.agent, f'x4lane timing session {self.session_id}', self.session_id),
                             owner=f'x4lane session {self.session_id} (agent {a.agent})',
                             reason='timing-sensitive lane session', since=core.now_iso(),
-                            release='dev/x4lane.py removes it when the session ends')
-                try:
-                    self.quiet = (core.DirLock.adopt(self.paths.quiet_lock, info, a.agent) if handoff else
-                                  core.DirLock.acquire(self.paths.quiet_lock, info, take_stale=False))
+                            release='dev/x4lane.py hands it on or removes it when the session ends')
+                try:                                                  # only ever a lead window's lock
+                    self.quiet = core.DirLock.adopt(self.paths.quiet_lock, info, a.agent)
                 except core.LockBusy as error:
                     raise TransientRefusal(str(error))
                 self.result['quiet_lock']['held_by_this_run'] = True
@@ -2078,24 +2097,16 @@ def cmd_hold(args, paths):
     deadline, last, lock = time.monotonic() + max(0.0, args.wait), None, None
     while lock is None:
         note = None
-        if not paths.quiet_lock.exists():
-            note = 'no quiet window (quiet.lock) is open'
-        else:
-            core.advance_handoff(paths.quiet_lock)
-            chain = core.handoff_chain(core.read_owner(paths.quiet_lock))
-            running = x4_processes()
-            if not chain or chain[0] != args.agent:
-                note = f'not my turn (handoff: {", ".join(chain) or "-"})'
-            elif running:
-                note = f'{len(running)} X4 still running: {[describe_x4(p) for p in running]}'
-            else:
-                try:
-                    lock = core.DirLock.adopt(paths.quiet_lock, dict(
-                        lock_info(args.agent, f'x4lane hold: {" ".join(command)[:120]}', run),
-                        reason='CPU-only work in the quiet window (no X4)'), args.agent)
-                    break
-                except core.LockBusy as error:
-                    note = str(error)
+        try:
+            timing_gate(paths, args.agent)              # lead window, my turn, reserved slots filled, no X4
+            lock = core.DirLock.adopt(paths.quiet_lock, dict(
+                lock_info(args.agent, f'x4lane hold: {" ".join(command)[:120]}', run),
+                reason='CPU-only work in the quiet window (no X4)'), args.agent)
+            break
+        except TransientRefusal as error:
+            note = str(error)
+        except core.LockBusy as error:
+            note = str(error)
         if time.monotonic() + HOLD_POLL_S > deadline:
             result.update(reason='refused', message=f'--wait elapsed: {note}')
             core.write_json(outdir / 'result.json', result)

@@ -480,11 +480,12 @@ class PreflightHandoffTests(FakeWindows):
 
     def test_only_the_named_timing_run_adopts(self):
         quiet = self.quiet('frame-diet')
-        for agent, timing in (('walk', True), ('frame-diet', False)):
+        for agent, timing, text in (('walk', True, 'timing runs need a lead quiet window naming this agent'),
+                                    ('frame-diet', False, 'quiet.lock is held')):
             with self.assertRaises(x4lane.TransientRefusal) as refused:
                 self.run_for(agent, timing).preflight()
-            self.assertIn('quiet.lock is held', str(refused.exception))
-            self.assertIn('handoff to frame-diet', str(refused.exception))
+            self.assertIn(text, str(refused.exception))
+            self.assertIn('frame-diet', str(refused.exception))
         import types
         self.others = [types.SimpleNamespace(pid=7, exe='C:/other/X4.exe', cmdline='-personalfolderid 45843')]
         run = self.run_for('frame-diet', True)
@@ -504,12 +505,27 @@ class PreflightHandoffTests(FakeWindows):
         self.assertFalse(quiet.exists())
         self.assertFalse(self.paths.lane('b1').lock.exists())
 
-    def test_timing_without_handoff_creates_and_removes_its_own_lock(self):
+    def test_timing_needs_a_lead_window_and_filled_reservations(self):
+        with self.assertRaises(x4lane.TransientRefusal) as refused:
+            self.run_for('frame-diet', True).preflight()          # no window: never takes quiet.lock itself
+        self.assertIn('timing runs need a lead quiet window', str(refused.exception))
+        self.assertFalse(self.paths.quiet_lock.exists())
+        self.assertFalse(self.paths.lane('b1').lock.exists())
+        quiet = self.quiet('ecs-core, frame-diet')
+        with self.assertRaises(x4lane.TransientRefusal) as refused:
+            self.run_for('frame-diet', True).preflight()          # listed, but not first
+        self.assertIn('not my turn', str(refused.exception))
+        (quiet / 'owner.txt').write_text('agent: lead' + chr(10) + 'handoff: frame-diet' + chr(10))
+        core.write_json(self.paths.reserve, {'owner': 'x4mods-61', 'slots': 2})
+        with self.assertRaises(x4lane.TransientRefusal) as refused:
+            self.run_for('frame-diet', True).preflight()          # protected clients still down
+        self.assertIn('reserved for x4mods-61 are not filled yet', str(refused.exception))
+        self.paths.reserve.unlink()
         run = self.run_for('frame-diet', True)
         run.preflight()
-        self.assertEqual(core.read_owner(self.paths.quiet_lock)['run'], run.run_id)
+        self.assertEqual(core.read_owner(quiet)['run'], run.run_id)
         run.release()
-        self.assertFalse(self.paths.quiet_lock.exists())
+        self.assertFalse(quiet.exists())
 
 
 class SessionPieceTests(Temp):
@@ -1145,7 +1161,7 @@ class HoldTests(FakeWindows):
         self.others = [types.SimpleNamespace(pid=41, exe='C:/x/X4.exe', cmdline='-personalfolderid 45841', created=1)]
         code, result = self.hold("print(1)")
         self.assertEqual(code, 2)
-        self.assertIn('X4 still running', result['message'])
+        self.assertIn('no other X4 running', result['message'])
 
     def test_x4_appearing_is_recorded_and_timeouts_kill_the_command(self):
         import types
