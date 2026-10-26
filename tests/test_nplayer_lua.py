@@ -235,6 +235,24 @@ class NPlayerMdContractTests(unittest.TestCase):
             self.assertIn('groupname="$weapons%d"' % k, text)
         self.assertNotIn('[false,false]', text)          # per-ship lists follow the ship count
 
+    def test_health_and_shot_lists_cover_every_shared_ship(self):
+        # Native Linux p4 (ship 3): X4LAN_Health.Own read $healthOwn.{3} on a two-entry list
+        # 10 times a second (2,535 MD errors). Every arena list indexed by a shared ship index
+        # must follow the ship count; ships 3+ keep the neutral entry.
+        loop = '<do_all exact="[$arena.$ships.count,2].max" counter="$i">'
+        for name, lists in (('x4lan_health.xml', ('healthOwn', 'healthLive', 'healthValue', 'healthGen', 'healthClosed',
+                                                    'healthAuth', 'healthBased', 'healthAt', 'healthKeptAt',
+                                                    'healthProxyLost', 'healthTop')),
+                            ('x4lan_shot.xml', ('shotStrength', 'shotCurrentGen', 'shotAuthority')),
+                            ('x4lan_shot_visual.xml', ('shotVisualMode', 'shotVisualGen', 'shotVisualAt'))):
+            text = (self.MD / name).read_text()
+            self.assertIn(loop, text, name)
+            for key in lists:
+                self.assertIn('<append_to_list name="$arena.$%s"' % key, text, key)
+                self.assertNotRegex(text, r'<set_value name="\$arena\.\$%s" exact="\[(?:0|false|-?\d+s|\[)' % key)
+        capture = (self.MD / 'x4lan_shot_capture.xml').read_text()
+        self.assertIn('exact="$ai le 2 and $capRemote.{$ai}"', capture)
+
     def test_coop_lists_follow_the_ship_count_and_dock_window_spares_extra_ships(self):
         text = (self.MD / 'x4lan_coop.xml').read_text()
         self.assertNotIn('[[0,0],[0,0]]', text)

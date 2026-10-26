@@ -13,17 +13,25 @@
     <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
     <!-- Read by x4lan_bubble.xml: guest Apply skips health/dead of a ship in $healthOwn; host
          Publish sends $healthValue for a ship in $healthLive instead of the proxy readback. -->
-    <set_value name="$arena.$healthOwn" exact="[false,false]"/>
-    <set_value name="$arena.$healthLive" exact="[false,false]"/>
-    <set_value name="$arena.$healthValue" exact="[[0,0],[0,0]]"/>
-    <set_value name="$arena.$healthGen" exact="[0,0]"/>
-    <set_value name="$arena.$healthClosed" exact="[0,0]"/>
-    <set_value name="$arena.$healthAuth" exact="[0,0]"/>
-    <set_value name="$arena.$healthBased" exact="[0,0]"/>
-    <set_value name="$arena.$healthAt" exact="[0s,0s]"/>
-    <set_value name="$arena.$healthKeptAt" exact="[0s,0s]"/>
-    <set_value name="$arena.$healthProxyLost" exact="[false,false]"/>   <!-- x4lan_life.xml: logged once, never recreated -->
-    <set_value name="$arena.$healthTop" exact="[0,0]"/>
+    <!-- One entry per shared ship (Arena.$ships, up to MAX_PLAYERS): pilot health authority
+         exists for ships 1/2 only (ui/health_game.lua), but the 10 Hz Own readback, life tick,
+         shot capture and NPC combat index these lists by any shared ship, so ships 3+ read the
+         neutral entry instead of an out-of-range lookup (native p4: $healthOwn.{3} error spam). -->
+    <set_value name="$arena.$healthOwn" exact="[]"/><set_value name="$arena.$healthLive" exact="[]"/>
+    <set_value name="$arena.$healthValue" exact="[]"/><set_value name="$arena.$healthGen" exact="[]"/>
+    <set_value name="$arena.$healthClosed" exact="[]"/><set_value name="$arena.$healthAuth" exact="[]"/>
+    <set_value name="$arena.$healthBased" exact="[]"/><set_value name="$arena.$healthAt" exact="[]"/>
+    <set_value name="$arena.$healthKeptAt" exact="[]"/>
+    <set_value name="$arena.$healthProxyLost" exact="[]"/>   <!-- x4lan_life.xml: logged once, never recreated -->
+    <set_value name="$arena.$healthTop" exact="[]"/>
+    <do_all exact="[$arena.$ships.count,2].max" counter="$i">
+     <append_to_list name="$arena.$healthOwn" exact="false"/><append_to_list name="$arena.$healthLive" exact="false"/>
+     <append_to_list name="$arena.$healthValue" exact="[0,0]"/><append_to_list name="$arena.$healthGen" exact="0"/>
+     <append_to_list name="$arena.$healthClosed" exact="0"/><append_to_list name="$arena.$healthAuth" exact="0"/>
+     <append_to_list name="$arena.$healthBased" exact="0"/><append_to_list name="$arena.$healthAt" exact="0s"/>
+     <append_to_list name="$arena.$healthKeptAt" exact="0s"/><append_to_list name="$arena.$healthProxyLost" exact="false"/>
+     <append_to_list name="$arena.$healthTop" exact="0"/>
+    </do_all>
     <raise_lua_event name="'X4LAN_Health.Ready'"/>
     <debug_text text="'[X4LAN] HEALTH_SETUP host=%s'.[$arena.$host]"/>
    </actions>
