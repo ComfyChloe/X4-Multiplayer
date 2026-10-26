@@ -102,3 +102,22 @@ Slot+0x40 and model-after+0x20 each yielded exactly one mismatch and exit1,
 with the correct location reported. The original capture remained unchanged.
 The run used native147e5c9, Lua864600e and fixtureb97b325; later cleanup
 anchoring in64a400f was not retroactively applied to its frozen extension.
+
+## Bounded target-transition replay
+
+Fixture5c26cf7 passed the game's AI XSD and requests three nearby position and
+rotation targets per ship, each interrupted after at most4 seconds. Released
+`forced-motion-001` ran03:47:08?03:48:59 on b1, closed gracefully and restored
+its lane. All nine move markers appeared and ForcedFlight calls continued.
+The capture has3000 records, no drops,3552056 bytes, SHA256
+`88bf16cdbb23867a5c133f6abf1c6d58a595ee8c9864ead0327ef77058001eee`.
+Local run/capture paths use the same `forced-motion-001` stem as above.
+
+Replay reports zero mismatches, including model after-state. Coverage expands
+to12 input and12 target poses,993 distinct dt values (0.0151193?1.0),2039 cheap
+and961 full updates. All records have P(owner); none run on the owner thread.
+There are24 changed-slot records and no changed-model records. This exercises
+bounded discrete target transitions; most calls remain stationary. It does not
+cover arbitrary continuous maneuvers, P(owner)=false, other flight models,
+shadow installation or a gameplay switch. Timing is not trustworthy because
+other X4 lanes were active. No physics native jobs remain after collection.
