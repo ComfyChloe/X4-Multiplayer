@@ -10,6 +10,7 @@
 //!                                              volume 0 in captures before the allocation
 //!                                              record; tags = WareClass+0x100 in newer ones)
 //! D <method#> <time:f64> <product-ware#> <amount> <special> <n1> {<ware#> <amount>}*n1 <n2> .. <n3> ..
+//! P 0x5130 {<qword>}*18                       economy settings block (*(0x6cf1538) +0x5130..)
 //! F <frame> <time:f64> <rng:u64>               frame marker; rng = MoveWorker TLS+0x318 at the sample
 //! C <uid> <last:f64> <a28:f64> <a30:f64> <a4c> <nmodules> <ncargo> {<ware#> <amount>}*ncargo
 //! A <uid> <valid> <n> {<ware#> <amount>}*n    production storage allocation (Container+0x940,
@@ -51,6 +52,8 @@ pub struct Capture {
     pub ware_volumes: Vec<u32>,
     /// Ware table (W records): id, volume, tags.
     pub wares: Vec<WareInfo>,
+    /// Economy settings block from +0x5130 as raw qwords (P record), when captured.
+    pub settings: Vec<u64>,
     pub methods: Vec<Method>,
     pub frames: Vec<Frame>,
 }
@@ -247,6 +250,14 @@ impl Capture {
                     }
                     cap.ware_volumes.push(volume);
                     cap.wares.push(WareInfo { id, volume, tags });
+                }
+                "P" => {
+                    let _base = t.next()?;
+                    for q in t.it.by_ref() {
+                        let v = u64::from_str_radix(q.trim_start_matches("0x"), 16)
+                            .map_err(|_| ParseError { line: ln + 1, msg: "settings qword".into() })?;
+                        cap.settings.push(v);
+                    }
                 }
                 "D" => {
                     let _id = t.u64()?;

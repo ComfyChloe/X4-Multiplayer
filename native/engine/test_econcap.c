@@ -117,6 +117,10 @@ int main(void) {
     put_ptr(map + 0x58, block0);
     put_ptr(image + ECON_IDMAP_PTR_RVA, map);
     put_ptr(image + ECON_RESEARCH_KIND_RVA, (void *)0x5151);
+    /* Settings block with the trade reservation duration 3600.0 at +0x5170. */
+    unsigned char *settings = alloc(0x5200);
+    put_f64(settings + 0x5170, 3600.0);
+    put_ptr(image + ECON_SETTINGS_PTR_RVA, settings);
 
     uintptr_t ecells = make_ware("energycells"), ore = make_ware("ore"), metal = make_ware("refinedmetals");
     put_i32((unsigned char *)ecells + 0xc0, 6); /* WareClass+0xc0 volume */
@@ -281,6 +285,9 @@ int main(void) {
     int n = drain(lines, 256);
     assert(n >= 6);
     assert(!strncmp(lines[0], "X4ECON 1 build=23660954", 23));
+    assert(count_prefix(lines, n, "P 0x5130 ") == 1);
+    for (int i = 0; i < n; ++i)
+        if (!strncmp(lines[i], "P ", 2)) assert(strstr(lines[i], " 0x40ac200000000000")); /* +0x5170 = 3600.0 */
     assert(count_prefix(lines, n, "W ") == 3);
     assert(count_prefix(lines, n, "W energycells 6 1 7") == 1 && count_prefix(lines, n, "W refinedmetals 14 1 7") == 1);
     assert(count_prefix(lines, n, "W ore 10 1 8") == 1);

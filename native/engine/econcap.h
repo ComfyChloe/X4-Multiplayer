@@ -67,6 +67,7 @@
 #define ECON_VT_STORAGE_RVA 0x2b74548u
 #define ECON_RESEARCH_KIND_RVA 0x2f61000u
 #define ECON_ORDERMAP_PTR_RVA 0x6cf1750u
+#define ECON_SETTINGS_PTR_RVA 0x6cf1538u
 #define ECON_MAX_OFFERS 256
 #define ECON_MAX_RESERVATIONS 512
 
@@ -719,6 +720,19 @@ static int econcap_arm(void) {
     econ.len = 0;
     econ_put("X4ECON 1 build=23660954");
     econ_end_line();
+    /* Economy settings block (*(0x6cf1538) +0x5130..+0x51b8, parameters.xml <economy>): raw
+       qwords, so the replay and the price model use the values the engine loaded. */
+    int ok = 1;
+    uint64_t settings = econ_q(image + ECON_SETTINGS_PTR_RVA, &ok);
+    if (ok && settings) {
+        uint64_t q[18];
+        if (econ_read((const unsigned char *)(uintptr_t)settings + 0x5130, q, sizeof(q))) {
+            econ.len = 0;
+            econ_put("P 0x5130");
+            for (int i = 0; i < 18; ++i) econ_put(" 0x%llx", (unsigned long long)q[i]);
+            econ_end_line();
+        }
+    }
     return 1;
 }
 
