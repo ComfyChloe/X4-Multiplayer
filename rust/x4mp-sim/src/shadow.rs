@@ -119,29 +119,80 @@ pub struct FieldStats {
 }
 
 /// Accumulates comparison results. See the module docs.
+///
+/// Field paths are interned in a small trie (one node per distinct path without indices), so a
+/// leaf comparison costs a child lookup, a bit comparison and two counter increments. The policy
+/// tolerance is resolved once per node, and the full path with indices is rendered only when a
+/// difference is recorded.
 #[derive(Debug, Clone)]
 pub struct Comparator {
     policy: Policy,
     at: At,
-    path: String,
-    norm: String,
-    stack: Vec<(usize, usize)>,
-    stats: BTreeMap<String, FieldStats>,
+    nodes: Vec<PathNode>,
+    cur: u32,
+    /// Indices of the `[i]` segments on the current path, outermost first.
+    indices: Vec<usize>,
     diffs: Vec<Difference>,
     max_diffs: usize,
     compared: u64,
     mismatched: u64,
 }
 
+const NO_NODE: u32 = u32::MAX;
+
+/// One interned path segment.
+#[derive(Debug, Clone)]
+struct PathNode {
+    parent: u32,
+    /// `None` for an index segment (`[i]`; `[]` in the statistics key).
+    name: Option<Box<str>>,
+    /// Path without indices: statistics key and policy key.
+    norm: Box<str>,
+    tol: Tol,
+    stats: FieldStats,
+    /// Field children in first-use order. `cursor` is the position of the last hit; struct
+    /// fields are visited in the same order every time, so the next position is tried first.
+    fields: Vec<u32>,
+    cursor: u32,
+    index_child: u32,
+}
+
+impl PathNode {
+    fn new(parent: u32, name: Option<&str>, norm: String, tol: Tol) -> PathNode {
+        PathNode {
+            parent,
+            name: name.map(Into::into),
+            norm: norm.into(),
+            tol,
+            stats: FieldStats::default(),
+            fields: Vec::new(),
+            cursor: 0,
+            index_child: NO_NODE,
+        }
+    }
+}
+
+impl FieldStats {
+    fn merge(&mut self, o: &FieldStats) {
+        self.compared += o.compared;
+        self.mismatched += o.mismatched;
+        self.within_tolerance += o.within_tolerance;
+        self.max_ulps = self.max_ulps.max(o.max_ulps);
+        if o.max_abs > self.max_abs {
+            self.max_abs = o.max_abs;
+        }
+    }
+}
+
 impl Comparator {
     pub fn new(policy: Policy) -> Comparator {
+        let root = PathNode::new(NO_NODE, Some(""), String::new(), policy.tol_for(""));
         Comparator {
             policy,
             at: At::default(),
-            path: String::new(),
-            norm: String::new(),
-            stack: Vec::new(),
-            stats: BTreeMap::new(),
+            nodes: vec![root],
+            cur: 0,
+            indices: Vec::new(),
             diffs: Vec::new(),
             max_diffs: 16,
             compared: 0,
@@ -163,44 +214,108 @@ impl Comparator {
     }
 
     /// Compares `expected` with `actual` under `name` at the current location.
+    #[inline]
     pub fn compare<T: Compare + ?Sized>(&mut self, name: &str, expected: &T, actual: &T) {
         self.field(name, |c| expected.compare(actual, c));
     }
 
     /// Runs `f` with `.name` appended to the path.
+    #[inline]
     pub fn field(&mut self, name: &str, f: impl FnOnce(&mut Comparator)) {
-        self.stack.push((self.path.len(), self.norm.len()));
-        if !self.path.is_empty() {
-            self.path.push('.');
-            self.norm.push('.');
-        }
-        self.path.push_str(name);
-        self.norm.push_str(name);
+        let prev = self.cur;
+        self.cur = self.field_child(prev, name);
         f(self);
-        self.pop();
+        self.cur = prev;
     }
 
     /// Runs `f` with `[i]` appended to the path (`[]` in the statistics key).
+    #[inline]
     pub fn index(&mut self, i: usize, f: impl FnOnce(&mut Comparator)) {
-        self.stack.push((self.path.len(), self.norm.len()));
-        use std::fmt::Write as _;
-        let _ = write!(self.path, "[{i}]");
-        self.norm.push_str("[]");
+        let prev = self.cur;
+        let child = self.nodes[prev as usize].index_child;
+        self.cur = if child != NO_NODE { child } else { self.new_child(prev, None) };
+        self.indices.push(i);
         f(self);
-        self.pop();
+        self.indices.pop();
+        self.cur = prev;
     }
 
-    fn pop(&mut self) {
-        let (p, n) = self.stack.pop().expect("comparator path underflow");
-        self.path.truncate(p);
-        self.norm.truncate(n);
-    }
-
-    fn stats_mut(&mut self) -> &mut FieldStats {
-        if !self.stats.contains_key(&self.norm) {
-            self.stats.insert(self.norm.clone(), FieldStats::default());
+    #[inline]
+    fn field_child(&mut self, parent: u32, name: &str) -> u32 {
+        let p = &self.nodes[parent as usize];
+        let n = p.fields.len();
+        if n > 0 {
+            let at = p.cursor as usize;
+            let next = if at + 1 < n { at + 1 } else { 0 };
+            for k in [next, at] {
+                let c = p.fields[k];
+                if self.nodes[c as usize].name.as_deref() == Some(name) {
+                    self.nodes[parent as usize].cursor = k as u32;
+                    return c;
+                }
+            }
+            if let Some(k) = p.fields.iter().position(|c| self.nodes[*c as usize].name.as_deref() == Some(name)) {
+                let c = p.fields[k];
+                self.nodes[parent as usize].cursor = k as u32;
+                return c;
+            }
         }
-        self.stats.get_mut(&self.norm).expect("inserted")
+        self.new_child(parent, Some(name))
+    }
+
+    #[cold]
+    fn new_child(&mut self, parent: u32, name: Option<&str>) -> u32 {
+        let pn = &self.nodes[parent as usize].norm;
+        let norm = match name {
+            Some(n) if pn.is_empty() => n.to_string(),
+            Some(n) => format!("{pn}.{n}"),
+            None => format!("{pn}[]"),
+        };
+        let tol = self.policy.tol_for(&norm);
+        let id = u32::try_from(self.nodes.len()).expect("comparator path table overflow");
+        self.nodes.push(PathNode::new(parent, name, norm, tol));
+        let p = &mut self.nodes[parent as usize];
+        match name {
+            Some(_) => {
+                p.fields.push(id);
+                p.cursor = (p.fields.len() - 1) as u32;
+            }
+            None => p.index_child = id,
+        }
+        id
+    }
+
+    /// The full current path with indices, e.g. `transform[0][2]`.
+    fn render_path(&self) -> String {
+        use std::fmt::Write as _;
+        let mut chain = Vec::new();
+        let mut n = self.cur;
+        while n != 0 {
+            chain.push(n);
+            n = self.nodes[n as usize].parent;
+        }
+        let mut out = String::new();
+        let mut k = 0;
+        for &n in chain.iter().rev() {
+            match &self.nodes[n as usize].name {
+                Some(name) => {
+                    if !out.is_empty() {
+                        out.push('.');
+                    }
+                    out.push_str(name);
+                }
+                None => {
+                    let _ = write!(out, "[{}]", self.indices.get(k).copied().unwrap_or(0));
+                    k += 1;
+                }
+            }
+        }
+        out
+    }
+
+    #[inline]
+    fn stats_mut(&mut self) -> &mut FieldStats {
+        &mut self.nodes[self.cur as usize].stats
     }
 
     fn record(&mut self, ok: bool, expected: String, actual: String, ulps: Option<u64>, abs: Option<f64>) {
@@ -208,78 +323,95 @@ impl Comparator {
         if !ok {
             self.mismatched += 1;
             if self.diffs.len() < self.max_diffs {
-                self.diffs.push(Difference { at: self.at, field: self.path.clone(), expected, actual, ulps, abs });
+                let field = self.render_path();
+                self.diffs.push(Difference { at: self.at, field, expected, actual, ulps, abs });
             }
         }
     }
 
     /// Leaf comparison of a discrete value (always exact).
+    #[inline]
     pub fn exact<T: PartialEq + fmt::Debug + ?Sized>(&mut self, expected: &T, actual: &T) {
-        let ok = expected == actual;
+        if expected == actual {
+            self.stats_mut().compared += 1;
+            self.compared += 1;
+        } else {
+            self.exact_mismatch(format!("{expected:?}"), format!("{actual:?}"));
+        }
+    }
+
+    #[cold]
+    #[inline(never)]
+    fn exact_mismatch(&mut self, expected: String, actual: String) {
         let s = self.stats_mut();
         s.compared += 1;
-        if !ok {
-            s.mismatched += 1;
-        }
-        let (e, a) = if ok { (String::new(), String::new()) } else { (format!("{expected:?}"), format!("{actual:?}")) };
-        self.record(ok, e, a, None, None);
+        s.mismatched += 1;
+        self.record(false, expected, actual, None, None);
     }
 
     /// Leaf comparison of an f32 under the policy.
+    #[inline]
     pub fn f32(&mut self, expected: f32, actual: f32) {
-        let tol = self.policy.tol_for(&self.norm);
+        if expected.to_bits() == actual.to_bits() {
+            self.stats_mut().compared += 1;
+            self.compared += 1;
+        } else {
+            self.f32_differs(expected, actual);
+        }
+    }
+
+    #[inline(never)]
+    fn f32_differs(&mut self, expected: f32, actual: f32) {
+        let tol = self.nodes[self.cur as usize].tol;
         let (ok, ulps, abs) = judge(
-            expected.to_bits() == actual.to_bits(),
+            false,
             expected.is_nan(),
             actual.is_nan(),
             ulps32(expected, actual),
             (f64::from(expected) - f64::from(actual)).abs(),
             tol,
         );
-        self.float_record(ok, ulps, abs, expected.to_bits() == actual.to_bits(), || {
+        self.float_record(ok, ulps, abs, || {
             (format!("{expected:e}({:#010x})", expected.to_bits()), format!("{actual:e}({:#010x})", actual.to_bits()))
         });
     }
 
     /// Leaf comparison of an f64 under the policy.
+    #[inline]
     pub fn f64(&mut self, expected: f64, actual: f64) {
-        let tol = self.policy.tol_for(&self.norm);
-        let (ok, ulps, abs) = judge(
-            expected.to_bits() == actual.to_bits(),
-            expected.is_nan(),
-            actual.is_nan(),
-            ulps64(expected, actual),
-            (expected - actual).abs(),
-            tol,
-        );
-        self.float_record(ok, ulps, abs, expected.to_bits() == actual.to_bits(), || {
+        if expected.to_bits() == actual.to_bits() {
+            self.stats_mut().compared += 1;
+            self.compared += 1;
+        } else {
+            self.f64_differs(expected, actual);
+        }
+    }
+
+    #[inline(never)]
+    fn f64_differs(&mut self, expected: f64, actual: f64) {
+        let tol = self.nodes[self.cur as usize].tol;
+        let (ok, ulps, abs) =
+            judge(false, expected.is_nan(), actual.is_nan(), ulps64(expected, actual), (expected - actual).abs(), tol);
+        self.float_record(ok, ulps, abs, || {
             (format!("{expected:e}({:#018x})", expected.to_bits()), format!("{actual:e}({:#018x})", actual.to_bits()))
         });
     }
 
-    fn float_record(
-        &mut self,
-        ok: bool,
-        ulps: u64,
-        abs: f64,
-        same_bits: bool,
-        show: impl FnOnce() -> (String, String),
-    ) {
+    /// Records a float leaf whose bits differ.
+    fn float_record(&mut self, ok: bool, ulps: u64, abs: f64, show: impl FnOnce() -> (String, String)) {
         let s = self.stats_mut();
         s.compared += 1;
-        if !same_bits {
-            s.max_ulps = s.max_ulps.max(ulps);
-            if abs.is_finite() && abs > s.max_abs {
-                s.max_abs = abs;
-            }
-            if ok {
-                s.within_tolerance += 1;
-            } else {
-                s.mismatched += 1;
-            }
+        s.max_ulps = s.max_ulps.max(ulps);
+        if abs.is_finite() && abs > s.max_abs {
+            s.max_abs = abs;
+        }
+        if ok {
+            s.within_tolerance += 1;
+        } else {
+            s.mismatched += 1;
         }
         let (e, a) = if ok { (String::new(), String::new()) } else { show() };
-        self.record(ok, e, a, (!same_bits).then_some(ulps), (!same_bits).then_some(abs));
+        self.record(ok, e, a, Some(ulps), Some(abs));
     }
 
     /// Records a structural difference (missing/extra entity, length mismatch) at the current
@@ -308,16 +440,36 @@ impl Comparator {
     pub fn diffs(&self) -> &[Difference] {
         &self.diffs
     }
-    pub fn stats(&self) -> &BTreeMap<String, FieldStats> {
-        &self.stats
+
+    /// Per-field statistics keyed by the path without indices (`hull.current`,
+    /// `transform[][]`), for every path that compared a value since the last
+    /// [`Comparator::reset`].
+    pub fn stats(&self) -> BTreeMap<String, FieldStats> {
+        let mut out: BTreeMap<String, FieldStats> = BTreeMap::new();
+        for n in self.nodes.iter().filter(|n| n.stats.compared > 0) {
+            out.entry(n.norm.to_string()).or_default().merge(&n.stats);
+        }
+        out
     }
+
+    /// Statistics of one path without indices, if it compared anything.
+    pub fn field_stats(&self, path: &str) -> Option<FieldStats> {
+        let mut found: Option<FieldStats> = None;
+        for n in self.nodes.iter().filter(|n| n.stats.compared > 0 && &*n.norm == path) {
+            found.get_or_insert_with(FieldStats::default).merge(&n.stats);
+        }
+        found
+    }
+
     pub fn policy(&self) -> &Policy {
         &self.policy
     }
 
     /// Clears counts, statistics and differences (keeps the policy).
     pub fn reset(&mut self) {
-        self.stats.clear();
+        for n in &mut self.nodes {
+            n.stats = FieldStats::default();
+        }
         self.diffs.clear();
         self.compared = 0;
         self.mismatched = 0;
@@ -326,7 +478,7 @@ impl Comparator {
     /// Multi-line summary: totals, every field with mismatches or tolerance use, first diffs.
     pub fn summary(&self) -> String {
         let mut out = format!("compared={} mismatched={}\n", self.compared, self.mismatched);
-        for (field, s) in &self.stats {
+        for (field, s) in &self.stats() {
             if s.mismatched > 0 || s.within_tolerance > 0 {
                 out.push_str(&format!(
                     "  {field}: compared={} mismatched={} within_tol={} max_ulps={} max_abs={:e}\n",

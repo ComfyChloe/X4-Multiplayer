@@ -228,7 +228,14 @@ fn check_logic_on_golden_frames() {
     {
         let c = &frames[0].sectors[1];
         let hpose = Mat4f::from_flat(pose(c, 16).try_into().unwrap());
-        let expect = x4mp_sim::capture::check::local_step(&Mat4f::IDENTITY, &hpose, 0x81 | 0x200, 0x2b091e0, [1.5, -2.5, 4.0, 0.0]).unwrap();
+        let expect = x4mp_sim::capture::check::local_step(
+            &Mat4f::IDENTITY,
+            &hpose,
+            0x81 | 0x200,
+            0x2b091e0,
+            [1.5, -2.5, 4.0, 0.0],
+        )
+        .unwrap();
         // lane x: ((o.y*t2 + o.x*t1) + o.z*t3) + t0 = ((-2.5*1002 + 1.5*1001) + 4*1003) + 1000
         assert_eq!(expect.position(), [4008.5, 4009.5, 4010.5]);
         let mut h = lines[0];

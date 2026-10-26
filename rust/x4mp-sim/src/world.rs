@@ -552,10 +552,6 @@ impl World {
     pub fn compare_with(&self, actual: &World, opts: &CompareOpts<'_>, frame: u64, c: &mut Comparator) {
         use crate::shadow::At;
         let at = |entity| At { frame, sector: Some(self.ix), entity };
-        let mut index = crate::id::IdHashMap::default();
-        for (r, u) in actual.uids.iter().enumerate() {
-            index.insert(*u, r);
-        }
         // Column pairs once per world, not per row.
         let pairs: Vec<(usize, usize)> = self
             .columns
@@ -564,6 +560,21 @@ impl World {
             .filter(|(_, col)| opts.columns.is_empty() || opts.columns.contains(&col.name()))
             .filter_map(|(ci, _)| actual.column_index(self.types[ci]).map(|aci| (ci, aci)))
             .collect();
+        if self.uids == actual.uids {
+            // Same entities in the same order (the usual shadow case): compare row by row.
+            for (row, uid) in self.uids.iter().enumerate() {
+                c.set_at(at(*uid));
+                for &(ci, aci) in &pairs {
+                    self.columns[ci].compare_row(row, actual.columns[aci].as_ref(), row, c);
+                }
+            }
+            c.set_at(at(UniverseId::NONE));
+            return;
+        }
+        let mut index = crate::id::IdHashMap::default();
+        for (r, u) in actual.uids.iter().enumerate() {
+            index.insert(*u, r);
+        }
         let mut matched = 0usize;
         let mut last_actual_row: Option<usize> = None;
         let mut order_ok = true;

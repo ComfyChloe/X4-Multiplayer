@@ -11,8 +11,8 @@ use std::collections::HashSet;
 
 use super::{col, CapError, ColumnData, FrameRecord, SectorRecord};
 use crate::comp::{
-    Attention, ClassFlags, ClassId, Controller, LocalOffset, CtrlKind, EngineFlags, FactionIx, Hull, Mat4f, NavCache, OrderState, Owner,
-    PoseRef, Transform, Tree, Vel, Velocity, VtableRva,
+    Attention, ClassFlags, ClassId, Controller, CtrlKind, EngineFlags, FactionIx, Hull, LocalOffset, Mat4f, NavCache,
+    OrderState, Owner, PoseRef, Transform, Tree, Vel, Velocity, VtableRva,
 };
 use crate::id::{EntityId, IdHashMap, OrderKey, SectorIx, UniverseId};
 use crate::universe::Universe;

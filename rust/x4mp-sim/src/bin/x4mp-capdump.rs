@@ -249,7 +249,8 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
         m
     };
     let mut pairs = 0u64;
-    let (mut n, mut still, mut exact_k, mut exact_k1, mut within1_k, mut within1_k1) = (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
+    let (mut n, mut still, mut exact_k, mut exact_k1, mut within1_k, mut within1_k1) =
+        (0u64, 0u64, 0u64, 0u64, 0u64, 0u64);
     let mut hist = [0u64; 8];
     // per attention level: (samples, unchanged pose, unchanged with nonzero velocity, exact Euler)
     let mut by_att: std::collections::BTreeMap<i32, [u64; 4]> = std::collections::BTreeMap::new(); // ulp buckets of the better prediction: 0,1,2-3,4-15,16-255,256-65535,more,non-finite
@@ -302,7 +303,17 @@ fn kinematics(cap: &str) -> Result<ExitCode, String> {
         }
     }
     out!("KINEMATICS pairs={pairs} samples={n} stationary={still} exact_v(k)={exact_k} exact_v(k+1)={exact_k1} within1ulp_v(k)={within1_k} within1ulp_v(k+1)={within1_k1}");
-    out!("  best-of-two ulp histogram: 0:{} 1:{} 2-3:{} 4-15:{} 16-255:{} 256-65535:{} more:{} nonfinite:{}", hist[0], hist[1], hist[2], hist[3], hist[4], hist[5], hist[6], hist[7]);
+    out!(
+        "  best-of-two ulp histogram: 0:{} 1:{} 2-3:{} 4-15:{} 16-255:{} 256-65535:{} more:{} nonfinite:{}",
+        hist[0],
+        hist[1],
+        hist[2],
+        hist[3],
+        hist[4],
+        hist[5],
+        hist[6],
+        hist[7]
+    );
     for (att, a) in &by_att {
         out!("  attention {att}: samples={} unchanged={} unchanged_moving={} euler_exact={}", a[0], a[1], a[2], a[3]);
     }
