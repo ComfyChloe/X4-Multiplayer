@@ -89,6 +89,16 @@ Background reports to read before touching a system: `x4-re/coord/reports/parall
 `parallel-walk-design.md`, `sector-partition-scripts.md`, `simtick.md`, `entity.md`, `script.md`,
 `rng.md`, `time.md`, `motion.md`, and `X4-Multiplayer-design/preparation/TARGET-ARCHITECTURE-PROPOSAL.md`.
 
+## Working cadence (user decision, 26 Oct 2026)
+
+Agents keep going. When a stage is done: commit it, update your status line, write a short result note
+to `rewrite-coord/results/<date>-<agent>-<stage>.md`, send the lead a short message (to `main`: commit,
+result, next stage, at most 150 words), and continue with the next stage of your system without waiting.
+Follow the method through to "switch" for your system, then move on to the next hottest piece of your
+domain. Stop and return only when blocked on something only the lead or the user can decide (permission,
+ownership conflict, a quiet timing window, a design choice with real trade-offs), or when your system's
+plan is complete.
+
 ## Rules
 
 - Engine instrumentation follows `ENGINE-INSTRUMENTATION.txt`: runtime only, exact build verified
