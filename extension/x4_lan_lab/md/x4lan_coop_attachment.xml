@@ -81,7 +81,7 @@
         <do_if value="$ship.assigneddock"><remove_docking_request ship="$ship" container="$ship.assigneddock.container" immediate="true"/></do_if>
         <do_if value="$v.$action == 'UNDOCK'"><undock ship="$ship"/></do_if>
        </do_if>
-       <do_elseif value="$v.$action == 'RESERVE'"><request_docking_at_dock ship="$ship" dockingbay="$dock" queuedresult="$queued" grantedresult="$granted"/></do_elseif>
+       <do_elseif value="$v.$action == 'RESERVE'"><do_if value="$ship.owner != faction.player"><set_owner object="$ship" faction="faction.player" /></do_if><request_docking_at_dock ship="$ship" dockingbay="$dock" queuedresult="$queued" grantedresult="$granted"/></do_elseif>
        <do_else><spawn_docked ship="$ship" dock="$dock"/></do_else>
        <set_value name="$allowed" exact="true"/>
        <do_if value="$v.$action == 'RESERVE'"><set_value name="$allowed" exact="$queued or $granted"/></do_if>

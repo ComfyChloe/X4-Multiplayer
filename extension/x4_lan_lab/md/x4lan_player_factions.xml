@@ -20,6 +20,10 @@
      </do_if>
     </do_all>
     <set_value name="$reported" exact="table[]"/>
+    <!-- Applied human-pair relations (guarded against drift), assigned pool factions (relation
+         mirror) and the wanted owner per shared co-op ship (pilot faction). -->
+    <set_value name="$desired" exact="table[]"/><set_value name="$assigned" exact="[]"/>
+    <set_value name="$coopWant" exact="['player','player']"/>
     <set_value name="$ready" exact="$pool == 16"/>
     <debug_text text="'[X4LAN] PLAYER_FACTIONS MD_READY pool=%s factions=%s'.[$pool,lookup.faction.count]"/>
     <raise_lua_event name="'X4LAN_PlayerFactions.Ready'" param="$pool"/>
@@ -45,7 +49,8 @@
        </do_else>
        <set_faction_known faction="$f" known="true"/>
        <set_faction_active faction="$f" active="true"/>
-       <debug_text text="'[X4LAN] PLAYER_FACTIONS IDENTITY index=%s faction=%s name=%s known=%s active=%s'.[$a.$index,$f.id,$f.name,@$f.isknown,@$f.isactive]"/>
+       <do_if value="Setup.$assigned.indexof.{$f} == 0"><append_to_list name="Setup.$assigned" exact="$f"/></do_if>
+       <debug_text text="'[X4LAN] PLAYER_FACTIONS IDENTITY index=%s faction=%s name=%s known=%s active=%s'.[$a.$index,$f.id,$f.name,$f.knowntoplayer,$f.isactive]"/>
        <raise_lua_event name="'X4LAN_PlayerFactions.Assigned'" param="'%s|%s'.[$a.$index,$f.id]"/>
       </do_if>
       <do_else>
@@ -63,6 +68,7 @@
       <do_if value="typeof $fa == datatype.faction and typeof $fb == datatype.faction and $fa != $fb and $a.$value ge -1 and $a.$value le 1">
        <set_faction_relation faction="$fa" otherfaction="$fb" value="$a.$value"/>
        <set_faction_relation faction="$fb" otherfaction="$fa" value="$a.$value"/>
+       <set_value name="Setup.$desired.{'$' + $fa.id + '|' + $fb.id}" exact="[$fa,$fb,$a.$value]"/>
        <debug_text text="'[X4LAN] PLAYER_FACTIONS RELATION_APPLIED %s->%s=%s %s->%s=%s'.[$fa.id,$fb.id,$fa.relationto.{$fb},$fb.id,$fa.id,$fb.relationto.{$fa}]"/>
        <raise_lua_event name="'X4LAN_PlayerFactions.RelationApplied'" param="'%s|%s|%s'.[$a.$a,$a.$b,$fa.relationto.{$fb}]"/>
       </do_if>
@@ -83,6 +89,82 @@
        </do_if>
       </do_if>
       <do_else><raise_lua_event name="'X4LAN_PlayerFactions.Refused'" param="'sector|%s|%s'.[$a.$macro,$a.$faction]"/></do_else>
+     </actions>
+    </cue>
+    <!-- The authority's relation between two humans is the only valid one. Local events (friendly
+         fire between humans, boarding) change relations natively; restore the authored value. -->
+    <cue name="RelationGuard" instantiate="true" checkinterval="5s">
+     <conditions><check_value value="Setup.$ready and Setup.$desired.keys.count gt 0"/></conditions>
+     <actions>
+      <do_for_each name="$key" valuename="$r" in="Setup.$desired">
+       <set_value name="$d1" exact="$r.{1}.relationto.{$r.{2}} - $r.{3}"/><set_value name="$d2" exact="$r.{2}.relationto.{$r.{1}} - $r.{3}"/>
+       <do_if value="$d1 gt 0.001 or $d1 lt -0.001 or $d2 gt 0.001 or $d2 lt -0.001">
+        <set_faction_relation faction="$r.{1}" otherfaction="$r.{2}" value="$r.{3}"/>
+        <set_faction_relation faction="$r.{2}" otherfaction="$r.{1}" value="$r.{3}"/>
+        <debug_text text="'[X4LAN] PLAYER_FACTIONS RELATION_DRIFT %s-%s was=%s/%s restored=%s now=%s'.[$r.{1}.id,$r.{2}.id,$r.{3}+$d1,$r.{3}+$d2,$r.{3},$r.{1}.relationto.{$r.{2}}]"/>
+       </do_if>
+      </do_for_each>
+     </actions>
+    </cue>
+    <!-- Shared reputation (design 7: per player assets, shared reputation at first): every assigned
+         pool faction carries this machine's player relations to all NPC factions, so NPCs treat the
+         other human like this one (xenon hostile, police friendly). Locked relations are left alone. -->
+    <cue name="RelationMirror" instantiate="true" checkinterval="10s">
+     <conditions><check_value value="Setup.$ready and Setup.$assigned.count gt 0"/></conditions>
+     <actions>
+      <do_for_each name="$pf" in="Setup.$assigned">
+       <set_value name="$changed" exact="0"/>
+       <do_all exact="lookup.faction.count" counter="$i">
+        <set_value name="$o" exact="lookup.faction.{$i}"/>
+        <do_if value="$o != faction.player and $o != $pf and not @Setup.$isPool.{'$' + $o.id} and not $o.isrelationlocked">
+         <set_value name="$want" exact="faction.player.relationto.{$o}"/><set_value name="$d" exact="$pf.relationto.{$o} - $want"/>
+         <do_if value="$d gt 0.001 or $d lt -0.001">
+          <set_faction_relation faction="$pf" otherfaction="$o" value="$want"/>
+          <set_faction_relation faction="$o" otherfaction="$pf" value="$o.relationto.{faction.player}"/>
+          <set_value name="$changed" operation="add"/>
+         </do_if>
+        </do_if>
+       </do_all>
+       <do_if value="$changed gt 0">
+        <debug_text text="'[X4LAN] PLAYER_FACTIONS RELATION_MIRROR faction=%s changed=%s xenon=%s argon=%s'.[$pf.id,$changed,@$pf.relationto.{faction.xenon},@$pf.relationto.{faction.argon}]"/>
+        <raise_lua_event name="'X4LAN_PlayerFactions.Mirror'" param="'%s|%s'.[$pf.id,$changed]"/>
+       </do_if>
+      </do_for_each>
+     </actions>
+    </cue>
+    <!-- Shared co-op ships: Lua sends the wanted owner per ship (the pilot's faction, `player` when
+         nobody or this machine's human flies it). Docked, docking, trading, dead or occupied ships
+         always stay `player`, so docking, trade, handoff and the accepted co-op paths are unchanged. -->
+    <cue name="CoopOwner" instantiate="true" namespace="this">
+     <conditions><event_ui_triggered screen="'X4LAN_PlayerFactions'" control="'CoopOwner'"/><check_value value="Setup.$ready"/></conditions>
+     <actions>
+      <set_value name="$a" exact="event.param3"/>
+      <do_if value="($a.$ship == 1 or $a.$ship == 2) and ($a.$faction == 'player' or @Setup.$isPool.{'$' + $a.$faction})">
+       <set_value name="Setup.$coopWant.{$a.$ship}" exact="$a.$faction"/>
+      </do_if>
+      <do_else><raise_lua_event name="'X4LAN_PlayerFactions.Refused'" param="'coop|%s|%s'.[$a.$ship,$a.$faction]"/></do_else>
+     </actions>
+    </cue>
+    <cue name="CoopOwnerTick" instantiate="true" checkinterval="1s">
+     <conditions><check_value value="Setup.$ready and @md.X4LAN_Bubble.Arena.$ships.count == 2"/></conditions>
+     <actions>
+      <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+      <do_all exact="2" counter="$i">
+       <set_value name="$ship" exact="$arena.$ships.{$i}"/>
+       <do_if value="$ship.isoperational">
+        <set_value name="$want" exact="Setup.$coopWant.{$i}"/>
+        <do_if value="$want != 'player' and ($ship == player.occupiedship or $ship == player.controlled or $ship.dock or $ship.assigneddock or @$arena.$docking.{$i} or @$arena.$dead.{$i} or @$arena.$busy)">
+         <set_value name="$want" exact="'player'"/>
+        </do_if>
+        <set_value name="$f" exact="if $want == 'player' then faction.player else @Setup.$byId.{'$' + $want}"/>
+        <do_if value="typeof $f == datatype.faction and $ship.owner != $f">
+         <set_value name="$was" exact="$ship.owner"/>
+         <set_owner object="$ship" faction="$f"/>
+         <debug_text text="'[X4LAN] PLAYER_FACTIONS COOP_OWNER ship=%s object=%s was=%s now=%s want=%s'.[$i,$ship,@$was.id,@$ship.owner.id,Setup.$coopWant.{$i}]"/>
+         <raise_lua_event name="'X4LAN_PlayerFactions.CoopOwnerApplied'" param="'%s|%s|%s'.[$i,@$was.id,@$ship.owner.id]"/>
+        </do_if>
+       </do_if>
+      </do_all>
      </actions>
     </cue>
     <!-- Report owners of sectors held by any human (player or pool), and every later change of

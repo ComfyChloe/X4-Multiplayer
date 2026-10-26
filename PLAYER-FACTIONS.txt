@@ -15,12 +15,21 @@ assets belong to x4lan_player1. Mod-prefixed ids suffice; nothing requires a pla
   no economy and no diplomacy agents act for them. Diplomacy stays inactive (vanilla default).
 - Licences: the same basic set the vanilla player starts with (base-game issuers).
 - Relations: allied (0.75; ally range 0.5..1) to "player" and to every other pool faction,
-  neutral to everyone else. Both sides of the "player" pair are written.
+  neutral to everyone else in the library. At runtime every ASSIGNED pool faction then carries
+  this machine's player relations to all NPC factions (MD RelationMirror, every 10 s, skips
+  relation-locked factions): shared reputation, so xenon/pirates are hostile to the other human's
+  ships and police friendly, exactly as to the local player.
 
 MAPPING
-Machine of human L: human L = real "player"; human K != L = x4lan_playerK. The same rule is used
+Client of human L: human L = real "player"; human K != L = x4lan_playerK. The same rule is used
 for identities, relations, ships and sectors (ui/player_factions_core.lua: factionFor, tokenFor).
-Machine-neutral owner tokens on the wire: S<K> for human K, otherwise the NPC faction id.
+Machine-neutral owner tokens on the wire: S<K> for human K, otherwise the NPC faction id; a
+literal "player" or x4lan_playerK token is refused (it would name another machine's human).
+Roles: slot p1 is the authority. In 7.x sessions p1 is client 1 (a human who also runs the
+authority world). On a dedicated server (cfg.dedicated = true, p1 = the server, no human) the
+core has no local human: it sends no PFID, maps EVERY human K to x4lan_playerK, never publishes
+its own observer "player" as a human owner, and authors the default alliance for every pair of
+connected humans (also client 2 <-> client 3).
 
 PROTOCOL (relay x4lan/players.py, routed in Relay.step; old relays drop PF* packets)
   PFID     client -> relay   own name (UTF-8 hex, plain text, max 48 bytes) and icon id, every 2 s
@@ -45,19 +54,31 @@ FLOW
 4. Ships: host-side NPC scene capture (universe_game.lua) now also publishes player-owned ships
    that did NOT exist when player factions became ready, with owner x4lan_player1. On the guest
    they become ordinary scene replicas owned by the host's faction: host colour, not commandable.
+4b. Shared co-op ships (md.X4LAN_Bubble.Arena.$ships) follow their pilot (coop AUTH pilots):
+   a ship another human is flying shows as that human's pool faction on this machine; a ship
+   nobody flies, or this human flies, stays "player". So on client 1 the ship client 2 flies is
+   owned by x4lan_player2 (client 2's name/colour in the map, target monitor and property owner),
+   and on client 2 it is its own "player" ship. MD CoopOwnerTick (1 s) keeps "player" whenever the
+   ship is docked, has or requests a dock, trades (Arena.$busy/$docking), is dead, or is this
+   machine's occupied/controlled ship; every request_docking of a shared ship first hands it back
+   to "player" (bubble/coop/trade/coop_attachment MD, inert while the feature is off). A stopped
+   feature hands both ships back to "player". Logs: COOP_PILOT, COOP_OWNER(_APPLIED).
 5. Sectors: MD polls every 5 s and reports sectors owned by player/pool factions (and later
    changes of those). The host publishes S<K> rows; guests apply set_owner with the mapping.
    A guest's local claim becomes an intent; the host applies x4lan_player<guest> and reflects it.
+6. Relation guard: the authority's value per human pair is reapplied when a local event (friendly
+   fire between humans, boarding) moved it (MD RelationGuard every 5 s, log RELATION_DRIFT).
 Logs: [X4LAN] PLAYER_FACTIONS READY/ASSIGN/IDENTITY/IDENTITY_APPLIED/RELATION/RELATION_APPLIED/
-RELATION_REQUEST/SECTOR/SECTOR_CLAIM/SECTOR_APPLY/SECTOR_OWNER/REFUSED and
+RELATION_REQUEST/RELATION_DRIFT/RELATION_MIRROR/COOP_PILOT/COOP_OWNER/SECTOR/SECTOR_CLAIM/
+SECTOR_APPLY/SECTOR_OWNER/REFUSED and
 FEATURE player_factions DISABLED reason=core_missing|bubble_adapter_inactive|requires_coop|
 invalid_slot|md_unavailable|pool_missing count=N|relay_unsupported|error.
 
 DELIBERATELY UNCHANGED
-- The two shared co-op ships (md.X4LAN_Bubble.Arena.$ships), the test station, donor, targets
-  and drops stay player/ownerless-owned on both machines. Either human may pilot either co-op
-  ship (handoff), dock, trade and drop cargo; re-owning them would make the other human's ship
-  uncommandable and break the accepted radar/cargo/Cooperative Trial/docking results.
+- The test station, donor, targets and drops stay player/ownerless-owned on both machines. The
+  two shared co-op ships are "player" whenever docked, docking, trading or free (4b), so handoff,
+  docking, trade and cargo keep their 7.x owner; only a ship in free flight under the OTHER
+  human shows that human's faction.
 - Player-owned assets that already exist when the feature starts (fixtures and the pristine
   save's own assets) exist in BOTH worlds and stay "player" on both; re-publishing them would
   spawn a duplicate replica on top of the guest's own copy.

@@ -169,12 +169,12 @@ class LuaCore(unittest.TestCase):
         lua = LuaRuntime(unpack_returned_tuples=True)
         lua.execute((EXT / 'ui/player_factions_core.lua').read_text(encoding='utf-8'))
         lua.execute('''
-            function make(slot)
+            function make(slot,dedicated)
               local io={sent={},calls={},logs={}}
               io.send=function(p) io.sent[#io.sent+1]=p end
               io.md=function(a,t) io.calls[#io.calls+1]={action=a,args=t} end
               io.log=function(l) io.logs[#io.logs+1]=l end
-              return X4LAN_PLAYERS_CORE.new({slot=slot},io),io
+              return X4LAN_PLAYERS_CORE.new({slot=slot,dedicated=dedicated},io),io
             end
             function split(p) local f={};for v in (p..'|'):gmatch('(.-)|') do f[#f+1]=v end;return f end
         ''')
@@ -274,6 +274,67 @@ class LuaCore(unittest.TestCase):
             h.localSector('L','cluster_14_sector001_macro','argon')
             g.receive('L',split(hio.sent[3]),5)
             assert(gio.calls[2].args.faction=='argon')
+        ''')
+
+    def test_human_factions_travel_only_as_tokens(self):
+        lua = self.runtime()
+        lua.execute('''
+            local K=X4LAN_PLAYERS_CORE
+            assert(K.factionForToken('player',2)==nil and K.factionForToken('x4lan_player1',2)==nil)
+            assert(K.factionForToken('xenon',2)=='xenon')
+            local g=make('p2')
+            assert(g.localFaction('x4lan_player2')=='player' and g.localFaction('x4lan_player1')=='x4lan_player1')
+            assert(g.localFaction('argon')=='argon')
+        ''')
+
+    def test_coop_ship_owner_follows_the_flying_human(self):
+        lua = self.runtime()
+        lua.execute('''
+            local K=X4LAN_PLAYERS_CORE
+            local h=make('p1');local g=make('p2');local s=make('p1',true)
+            -- Nobody at the controls: shared `player` everywhere (handoff and docking unchanged).
+            assert(h.coopOwner('0')=='player' and g.coopOwner('0')=='player' and s.coopOwner('0')=='player')
+            -- Ship flown by client 2: client 2 sees its own `player`, everybody else its pool faction.
+            assert(g.coopOwner('p2')=='player' and h.coopOwner('p2')=='x4lan_player2' and s.coopOwner('p2')=='x4lan_player2')
+            assert(g.coopOwner('p1')=='x4lan_player1' and h.coopOwner('p1')=='player')
+            assert(K.coopOwner('p99',1)=='player' and K.coopOwner(nil,1)=='player')
+        ''')
+
+    def test_server_has_no_local_human(self):
+        lua = self.runtime()
+        lua.execute('''
+            local s,io=make('p1',true)
+            assert(s.server and s.authority and s.local_==nil)
+            assert(s.identity('L1','Server','faction_player')==false and #io.sent==0)
+            assert(s.faction(1)=='x4lan_player1' and s.faction(2)=='x4lan_player2')
+            s.receive('L1',split('PFROSTER|1|L1|2|41|faction_player|1'),1)
+            s.receive('L1',split('PFROSTER|1|L1|3|42|faction_player|1'),1)
+            assert(io.calls[1].action=='Assign' and io.calls[1].args.faction=='x4lan_player2')
+            assert(io.calls[2].action=='Assign' and io.calls[2].args.faction=='x4lan_player3')
+            -- Default alliance between the two clients, authored by the server.
+            assert(io.calls[3].action=='Relation' and io.calls[3].args.fa=='x4lan_player2' and io.calls[3].args.fb=='x4lan_player3')
+            assert(io.sent[1]=='PFREL|1|L1|1|2|3|0.7500')
+            local ok,why=s.setRelation('L1','p2','hostile');assert(not ok and why=='no_local_human')
+            -- Client 2 asks for war with client 3; the server applies and publishes it.
+            s.receive('L1',split('PFREQ|1|L1|2|1|3|-0.5000'),2)
+            assert(io.calls[4].args.value==-0.5 and io.sent[2]=='PFREL|1|L1|2|2|3|-0.5000')
+            -- The server's own `player` (observer) is no human: never published as a sector owner.
+            s.localSector('L1','cluster_14_sector001_macro','player')
+            assert(#io.sent==2)
+            s.localSector('L1','cluster_14_sector001_macro','x4lan_player3')
+            assert(io.sent[3]=='PFSEC|1|L1|1|cluster_14_sector001_macro|S3')
+            s.baseline={};assert(s.personalOwner('7')==nil)
+            assert(not pcall(make,'p2',true))
+        ''')
+
+    def test_three_clients_get_pairwise_default_alliances(self):
+        lua = self.runtime()
+        lua.execute('''
+            local h,io=make('p1')
+            for i=1,3 do h.receive('L',split('PFROSTER|1|L|'..i..'|41|faction_player|1'),0) end
+            local seen={}
+            for _,c in ipairs(io.calls) do if c.action=='Relation' then seen[#seen+1]=c.args.a..'-'..c.args.b end end
+            table.sort(seen);assert(table.concat(seen,',')=='1-2,1-3,2-3',table.concat(seen,','))
         ''')
 
     def test_host_ship_ownership_only_after_baseline(self):
@@ -382,11 +443,49 @@ class LuaGlue(unittest.TestCase):
         pf.frame(40)
         self.assertIn('[X4LAN] FEATURE player_factions DISABLED reason=relay_unsupported', self.logs(g))
 
+    def test_coop_pilot_changes_reach_md_and_stop_restores_player(self):
+        lua, g = self.load(dict(enabled=True, coop=True, slot='p2', player_factions=True))
+        lua.execute("X4LAN_BUBBLE_API.coop={pilots={'0','0'}}")
+        pf = g.X4LAN_BUBBLE_API.players
+        pf.frame(0); g.events['X4LAN_PlayerFactions.Ready'](None, '16'); pf.frame(1); pf.frame(2)
+
+        def coop():
+            return [(e.args.ship, e.args.faction) for e in g.ui.values() if e.action == 'CoopOwner']
+        self.assertEqual(coop(), [(1, 'player'), (2, 'player')])
+        lua.execute("X4LAN_BUBBLE_API.coop.pilots={'p1','p2'}")
+        pf.frame(3); pf.frame(4)
+        self.assertEqual(coop()[2:], [(1, 'x4lan_player1')])  # own ship 2 stays `player`
+        # Any failure stops the feature loudly and hands both shared ships back to `player`.
+        lua.execute("X4LAN_BUBBLE_API.players.core.receive=function() error('boom') end")
+        pf.receive(lua.table('PFROSTER'), 5)
+        self.assertIn('[X4LAN] FEATURE player_factions DISABLED reason=error', self.logs(g))
+        self.assertEqual(coop()[3:], [(1, 'player'), (2, 'player')])
+
     def test_small_pool_disables(self):
         _, g = self.load(dict(enabled=True, coop=True, slot='p2', player_factions=True))
         pf = g.X4LAN_BUBBLE_API.players
         pf.frame(0); g.events['X4LAN_PlayerFactions.Ready'](None, '3'); pf.frame(1)
         self.assertIn('[X4LAN] FEATURE player_factions DISABLED reason=pool_missing count=3', self.logs(g))
+
+
+class CoopOwnerMd(unittest.TestCase):
+    def test_md_cues_and_docking_guards(self):
+        root = E.parse(MD).getroot()
+        names = {c.get('name') for c in root.iter('cue')}
+        self.assertTrue({'RelationGuard', 'RelationMirror', 'CoopOwner', 'CoopOwnerTick'} <= names)
+        tick = E.tostring(next(c for c in root.iter('cue') if c.get('name') == 'CoopOwnerTick'), encoding='unicode')
+        for keep in ('player.occupiedship', '$ship.dock', '$ship.assigneddock', '$arena.$docking', '$arena.$busy'):
+            self.assertIn(keep, tick)
+        mirror = E.tostring(next(c for c in root.iter('cue') if c.get('name') == 'RelationMirror'), encoding='unicode')
+        self.assertIn('isrelationlocked', mirror)
+        # Every docking request of a shared ship first hands it back to `player`.
+        guard = '<do_if value="$ship.owner != faction.player"><set_owner object="$ship" faction="faction.player"'
+        for name in ('x4lan_bubble.xml', 'x4lan_coop.xml', 'x4lan_trade.xml', 'x4lan_coop_attachment.xml'):
+            text = (EXT / 'md' / name).read_text(encoding='utf-8')
+            hits = list(re.finditer(r'<request_docking(?:_at_dock)? ship="\$ship"', text))
+            self.assertTrue(hits, name)
+            for m in hits:
+                self.assertIn(guard, text[max(0, m.start() - 300):m.start()], name)
 
 
 class FlagDefaults(unittest.TestCase):

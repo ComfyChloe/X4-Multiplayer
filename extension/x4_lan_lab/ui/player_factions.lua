@@ -22,7 +22,13 @@ local core
 local function lease() return s.client and s.client.lease end
 local function send(packet) if s.transport and lease() then s.transport:send(packet) end end
 local io={send=send,md=function(action,args) AddUITriggeredEvent('X4LAN_PlayerFactions',action,args) end,log=log}
-local function stop(reason) if not pf.failed then pf.failed=reason;disabled(reason) end end
+-- Shared co-op ships carry the faction of the human flying them (see coopFrame); a stopped feature
+-- hands both back to `player` so the 7.x co-op paths see their original owners.
+local function stop(reason)
+ if pf.failed then return end
+ pf.failed=reason;disabled(reason)
+ if pf.coopSent then for i=1,2 do pcall(io.md,'CoopOwner',{ship=i,faction='player'}) end end
+end
 local function key(object) return (tostring(object):gsub('ULL$','')) end
 -- Host: player-owned ships existing at session start exist in both worlds (shared fixtures,
 -- the pristine save's assets); they stay `player` everywhere. Later ones are the host's own.
@@ -46,9 +52,26 @@ function pf.receive(f,now)
  if not ok then stop('error');log('PLAYER_FACTIONS STOPPED '..tostring(err)) end
  return true
 end
+function pf.localFaction(faction)
+ if pf.failed or not core or not pf.ready then return faction end
+ return core.localFaction(faction)
+end
 function pf.personalOwner(object)
  if pf.failed or not core or not pf.ready then return nil end
  return core.personalOwner(key(object))
+end
+-- Pilot of each shared co-op ship (coop_game.lua AUTH: '0' or the flying slot) -> wanted owner.
+local function coopFrame()
+ local c=A.coop;if not c or not c.pilots then return end
+ pf.coopSent=pf.coopSent or {}
+ for i=1,2 do
+  local want=core.coopOwner(c.pilots[i] or '0')
+  if pf.coopSent[i]~=want then
+   pf.coopSent[i]=want
+   io.md('CoopOwner',{ship=i,faction=want})
+   log('PLAYER_FACTIONS COOP_PILOT ship='..i..' pilot='..tostring(c.pilots[i] or '0')..' want='..want)
+  end
+ end
 end
 local function frame(now)
  if pf.failed or not s.ready or not lease() or A.paused() then return end
@@ -60,16 +83,17 @@ local function frame(now)
    pf.ready=true;pf.readyAt=now
    if core.host then core.baseline,pf.baselineCount=baseline() end
    for _,r in ipairs(pf.queued or {}) do core.localSector(lease(),r[1],r[2]) end;pf.queued=nil
-   log('PLAYER_FACTIONS READY slot='..cfg.slot..' local=player pool='..K.poolFaction(core.local_)..
-    ' host='..tostring(core.host)..' baseline_ships='..tostring(pf.baselineCount or '-'))
+   log('PLAYER_FACTIONS READY slot='..cfg.slot..' local='..(core.local_ and 'player pool='..K.poolFaction(core.local_) or 'none (server)')..
+    ' authority='..tostring(core.host)..' baseline_ships='..tostring(pf.baselineCount or '-'))
   elseif now-pf.setupAt>=SETUP_TIMEOUT then stop('md_unavailable') end
   return
  end
  if now>=(pf.nextId or 0) then
   pf.nextId=now+2
-  core.identity(lease(),playerName(),cfg.player_faction_icon)
+  if core.local_ then core.identity(lease(),playerName(),cfg.player_faction_icon) end
   core.republish(lease())
  end
+ coopFrame()
  if core.host and now>=(pf.nextSectors or 0) then pf.nextSectors=now+5;core.republishSectors(lease()) end
  if not core.relayAt and now-pf.readyAt>=RELAY_TIMEOUT then stop('relay_unsupported') end
 end
@@ -95,6 +119,8 @@ RegisterEvent('X4LAN_PlayerFactions.Assigned',function(_,text)
   log('PLAYER_FACTIONS IDENTITY_APPLIED slot=p'..index..' faction='..faction..' name='..string.format('%q',row and row.name or '?'))
  end
 end)
+RegisterEvent('X4LAN_PlayerFactions.CoopOwnerApplied',function(_,text) log('PLAYER_FACTIONS COOP_OWNER_APPLIED '..tostring(text)) end)
+RegisterEvent('X4LAN_PlayerFactions.Mirror',function(_,text) log('PLAYER_FACTIONS RELATION_MIRROR '..tostring(text)) end)
 RegisterEvent('X4LAN_PlayerFactions.RelationApplied',function(_,text) log('PLAYER_FACTIONS RELATION_APPLIED '..tostring(text)) end)
 RegisterEvent('X4LAN_PlayerFactions.Refused',function(_,text) log('PLAYER_FACTIONS REFUSED '..tostring(text)) end)
 RegisterEvent('X4LAN_PlayerFactions.Sector',function(_,text)
