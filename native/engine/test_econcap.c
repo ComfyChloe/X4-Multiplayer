@@ -110,6 +110,9 @@ int main(void) {
     put_ptr(image + ECON_RESEARCH_KIND_RVA, (void *)0x5151);
 
     uintptr_t ecells = make_ware("energycells"), ore = make_ware("ore"), metal = make_ware("refinedmetals");
+    put_i32((unsigned char *)ecells + 0xc0, 6); /* WareClass+0xc0 volume */
+    put_i32((unsigned char *)ore + 0xc0, 10);
+    put_i32((unsigned char *)metal + 0xc0, 14);
 
     /* Method: refinedmetals from energycells + ore. */
     unsigned char *method = alloc(0x200);
@@ -219,6 +222,13 @@ int main(void) {
     put_ptr(st + 0x980, res);
     put_ptr(st + 0x988, res + 0x30);
     memcpy(st + 0x08, &sid, 8);
+    /* Production storage allocation (+0x940 -> list, +0x931 valid): refinedmetals 500. */
+    unsigned char *alloc_list = alloc(0x30);
+    uintptr_t aw[1] = {metal};
+    uint32_t aa[1] = {500};
+    put_inline_list(alloc_list, 1, aw, aa);
+    put_ptr(st + 0x940, alloc_list);
+    st[0x931] = 1;
 
     /* Resolution and decoding. */
     assert(econ_component(sid) == st);
@@ -247,6 +257,10 @@ int main(void) {
     assert(n >= 6);
     assert(!strncmp(lines[0], "X4ECON 1 build=23660954", 23));
     assert(count_prefix(lines, n, "W ") == 3);
+    assert(count_prefix(lines, n, "W energycells 6") == 1 && count_prefix(lines, n, "W refinedmetals 14") == 1);
+    assert(count_prefix(lines, n, "A 0x") == 1);
+    for (int i = 0; i < n; ++i)
+        if (!strncmp(lines[i], "A ", 2)) assert(strstr(lines[i], " 1 1 2 500"));
     assert(count_prefix(lines, n, "D 0 ") == 1);
     assert(count_prefix(lines, n, "F 100 0x4029000000000000 0xabcdef") == 1);
     assert(count_prefix(lines, n, "C 0x") == 1 && count_prefix(lines, n, "M 0x123456789 ") == 1);
@@ -265,6 +279,19 @@ int main(void) {
     econcap_frame(12.6, 101, 0xabcdef);
     assert(drain(lines, 256) == 0);
 
+    /* The allocation alone changes (invalidated, then recomputed smaller): a new record. */
+    st[0x931] = 0;
+    econcap_frame(12.7, 98, 0xabcdef);
+    n = drain(lines, 256);
+    assert(count_prefix(lines, n, "A 0x") == 1);
+    for (int i = 0; i < n; ++i)
+        if (!strncmp(lines[i], "A ", 2)) assert(strstr(lines[i], " 0 1 2 500"));
+    st[0x931] = 1;
+    econcap_frame(12.8, 99, 0xabcdef);
+    assert(drain(lines, 256) > 0);
+    econcap_frame(12.9, 100, 0xabcdef);
+    assert(drain(lines, 256) == 0);
+
     /* A transition: cycle finished and restarted; cargo changed. */
     put_f64(st + 0xa18, 160.0);
     put_f64(prod + 0x388, 160.0);
@@ -273,8 +300,8 @@ int main(void) {
     put_inline_list(sto1 + 0x360, 2, rw, c3);
     econcap_frame(160.0, 102, 0x1);
     n = drain(lines, 256);
-    assert(n == 5 && !strncmp(lines[0], "F 102 ", 6) && !strncmp(lines[1], "C ", 2) && !strncmp(lines[2], "O ", 2) &&
-           !strncmp(lines[3], "V ", 2) && !strncmp(lines[4], "M ", 2));
+    assert(n == 6 && !strncmp(lines[0], "F 102 ", 6) && !strncmp(lines[1], "C ", 2) && !strncmp(lines[2], "A ", 2) &&
+           !strncmp(lines[3], "O ", 2) && !strncmp(lines[4], "V ", 2) && !strncmp(lines[5], "M ", 2));
     assert(strstr(lines[1], " 0 720 1 1920") != NULL);
 
     /* Station destroyed (generation changed): dropped once, counted, no partial record. */

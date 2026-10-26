@@ -14,6 +14,8 @@
  * The sampler writes a station only when one of its captured fields changed.
  *
  * Layout (X4 9.00, Steam build 23660954; reports/REWRITE-ECONOMY.md section 3):
+ *   Container: +0x931 u8 production allocation valid, +0x940 -> production allocation ware
+ *     list (NULL = empty; 0x420aa0 recomputes it when +0x931 is clear),
  *   Container: +0x08 UniverseID, +0xa8 child container (+0x08 bucket vector begin, +0x10 end,
  *     +0x20 int count; bucket = 32 bytes {Component** begin, end, ...}; production modules
  *     from bucket 8, storage modules from bucket 10, iteration continues into later buckets
@@ -27,7 +29,7 @@
  *     +0x3c repeat (u8).
  *   WareProduction: +0xb8 product WareClass*, +0xc0 kind pointer (== *(0x2f61000): research),
  *     +0xe8 time, +0xf8 amount (i32), +0x170/+0x1a0/+0x1d0 resource lists.
- *   WareClass: +0x10 id (MSVC std::string).
+ *   WareClass: +0x10 id (MSVC std::string), +0xc0 volume (i32).
  *   Ware amount list (small vector): data inline at +0 when +0x20 == 2, else pointer at +0;
  *     count at +0x28; entry of 16 bytes at address A: q = *(u64*)A, ware = A ^ q,
  *     amount = ((u32)q & 0x7fffffff) ^ *(u32*)(A + 8).
@@ -297,8 +299,10 @@ static int econ_ware_index(uintptr_t ware) {
     size_t keep = econ.len;
     char saved[ECON_LINE_BYTES];
     memcpy(saved, econ.line, keep);
+    int ok = 1;
+    int32_t volume = (int32_t)econ_d((const unsigned char *)ware + 0xc0, &ok);
     econ.len = 0;
-    econ_put("W %s 0", id);
+    econ_put("W %s %d", id, ok ? volume : 0);
     econ_end_line();
     memcpy(econ.line, saved, keep);
     econ.len = keep;
@@ -469,6 +473,20 @@ static int econ_station(econ_watch_entry *w, int force) {
             ++no;
         }
     }
+    /* Production storage allocation (Container+0x940 -> ware amount list, NULL = empty; valid flag
+       +0x931: when clear, the next reader recomputes it, 0x420aa0). */
+    uint8_t alloc_valid = 0;
+    if (!econ_read(st + 0x931, &alloc_valid, 1)) return 0;
+    uint64_t alloc_ptr = econ_q(st + 0x940, &ok);
+    if (!ok) return 0;
+    econ_wa alloc[ECON_MAX_LIST * 4];
+    int na = 0;
+    if (alloc_ptr) {
+        na = econ_list((const unsigned char *)(uintptr_t)alloc_ptr, alloc, ECON_MAX_LIST * 4);
+        if (na < 0) return 0;
+    }
+    h = econ_hash_bytes(h, &alloc_valid, 1);
+    h = econ_hash_wa(h, alloc, na);
     uint64_t rb = econ_q(st + 0x980, &ok), re = econ_q(st + 0x988, &ok);
     if (!ok || re < rb || (re - rb) % 0x30 || (re - rb) / 0x30 > ECON_MAX_RESERVATIONS) return 0;
     int nr = (int)((re - rb) / 0x30);
@@ -484,6 +502,10 @@ static int econ_station(econ_watch_entry *w, int force) {
     econ_put_f64(a30);
     econ_put(" %d %d", a4c ? 1 : 0, np);
     if (!econ_put_list(cargo, nc)) { econ.len = 0; return 0; }
+    econ_end_line();
+    econ.len = 0;
+    econ_put("A 0x%llx %d", (unsigned long long)w->uid, alloc_valid ? 1 : 0);
+    if (!econ_put_list(alloc, na)) { econ.len = 0; return 0; }
     econ_end_line();
     for (int i = 0; i < no; ++i) {
         const unsigned char *t = offers[i];

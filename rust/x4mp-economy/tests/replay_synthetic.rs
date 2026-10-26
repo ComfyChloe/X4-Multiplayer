@@ -2,7 +2,7 @@
 //! must classify every transition as exact; a corrupted record must be reported with its
 //! first difference. This checks the format and the replay pipeline, not the engine.
 
-use x4mp_economy::capture::{replay, write_method, write_station, Capture, StationRecord};
+use x4mp_economy::capture::{replay, write_method, write_station, Allocation, Capture, StationRecord};
 use x4mp_economy::ids::WareIx;
 use x4mp_economy::production::{
     update_production, ContainerTimes, Factors, Item, Method, Module, ProductionRng, State, StationEnv, WareAmount,
@@ -14,10 +14,33 @@ const ECELLS: WareIx = WareIx(0);
 const ORE: WareIx = WareIx(1);
 const METAL: WareIx = WareIx(2);
 
+/// How the synthetic station limits refined metals storage.
+#[derive(Clone, Copy)]
+enum Storage {
+    Unlimited,
+    /// Blocked once the stock reaches the limit (whole cycles only, no partial store); the
+    /// capture has no allocation record, so the replay takes the decision from the recording.
+    Threshold(i32),
+    /// The engine's production allocation semantics (0x424b90: limit - stock >= amount for
+    /// every product, a ware without allocation cannot be stored; the pending flush stores what
+    /// fits); refined metals get the limit, energy cells a large one; the capture writes the
+    /// allocation record.
+    Allocation(i32),
+}
+
 struct Env {
     cargo: Vec<WareAmount>,
-    /// Refined metals storage limit (storage full: the refinery retries in "choosing item").
-    metal_cap: Option<i32>,
+    storage: Storage,
+}
+
+const ECELLS_ALLOCATION: i32 = 1_000_000;
+
+fn alloc_of(metal_cap: i32, w: WareIx) -> i32 {
+    match w {
+        METAL => metal_cap,
+        ECELLS => ECELLS_ALLOCATION,
+        _ => 0,
+    }
 }
 
 impl Env {
@@ -37,10 +60,24 @@ impl StationEnv for Env {
         m.factors
     }
     fn can_store(&mut self, p: &[WareAmount]) -> bool {
-        match self.metal_cap {
-            Some(cap) => !p.iter().any(|&(w, a)| w == METAL && a > 0 && self.amount(METAL) >= cap),
-            None => true,
+        match self.storage {
+            Storage::Unlimited => true,
+            Storage::Threshold(cap) => !p.iter().any(|&(w, a)| w == METAL && a > 0 && self.amount(METAL) >= cap),
+            Storage::Allocation(cap) => p.iter().all(|&(w, a)| alloc_of(cap, w) - self.amount(w) >= a),
         }
+    }
+    fn store_fitting(&mut self, p: &[WareAmount], t: f64) -> Vec<WareAmount> {
+        let fits: Vec<WareAmount> = match self.storage {
+            Storage::Allocation(cap) => p
+                .iter()
+                .filter_map(|&(w, a)| {
+                    let take = a.min(alloc_of(cap, w) - self.amount(w));
+                    (take > 0).then_some((w, take))
+                })
+                .collect(),
+            _ => p.to_vec(),
+        };
+        self.store(&fits, t)
     }
     fn has_resources(&mut self, r: &[WareAmount]) -> bool {
         r.iter().all(|&(w, a)| self.amount(w) >= a)
@@ -111,11 +148,11 @@ fn module(addr: u64, m: &Method, factors: Factors) -> Module {
 /// A capture of one station: solar module and refinery, ore runs out half way (retries);
 /// with `metal_cap`, refined metals storage fills up first (storage retries).
 fn synthetic_capture() -> String {
-    capture_with(None, 3)
+    capture_with(Storage::Unlimited, 3)
 }
 
 /// `stride`: the station is read every `stride` frames of 7.25 s.
-fn capture_with(metal_cap: Option<i32>, stride: u64) -> String {
+fn capture_with(storage: Storage, stride: u64) -> String {
     let ms = methods();
     let mut out = String::from("X4ECON 1 build=23660954\nW energycells 1\nW ore 10\nW refinedmetals 14\n");
     for (i, m) in ms.iter().enumerate() {
@@ -123,7 +160,7 @@ fn capture_with(metal_cap: Option<i32>, stride: u64) -> String {
     }
     let f = Factors { product: 1.13, time: 0.97, ..Factors::default() };
     let mut mods = vec![module(0x5000, &ms[0], f), module(0x4000, &ms[1], f)];
-    let mut env = Env { cargo: vec![(ECELLS, 300), (ORE, 1500)], metal_cap };
+    let mut env = Env { cargo: vec![(ECELLS, 300), (ORE, 1500)], storage };
     let mut times = ContainerTimes::default();
     let mut rng = EconRng(42);
     let index = |m: &Method| ms.iter().position(|x| x == m);
@@ -142,6 +179,12 @@ fn capture_with(metal_cap: Option<i32>, stride: u64) -> String {
             modules: mods.iter().map(|m| (m.addr | 0x1, m.clone())).collect(),
             offers: Vec::new(),
             reservations: Vec::new(),
+            allocation: match storage {
+                Storage::Allocation(cap) => {
+                    Some(Allocation { valid: true, amounts: vec![(ECELLS, ECELLS_ALLOCATION), (METAL, cap)] })
+                }
+                _ => None,
+            },
         };
         write_station(&mut out, &rec, &index);
     }
@@ -206,7 +249,7 @@ fn storage_retries_replay_with_the_recorded_storage_decision() {
     // "choosing item" with random delays. The replay does not model storage; it takes the
     // decision from the recorded state and must explain every transition.
     // Read every frame (7.25 s): mostly one 5-6 s retry per catch-up.
-    let text = capture_with(Some(150), 1);
+    let text = capture_with(Storage::Threshold(150), 1);
     let rep = replay(&Capture::parse(&text).expect("parse"));
     assert_eq!(rep.mismatched, 0, "{rep:?}");
     assert!(rep.exact_with_storage_decision > 0, "{rep:?}");
@@ -242,4 +285,19 @@ fn records_embedded_in_a_debug_log_are_found() {
     let a = replay(&Capture::parse(&text).expect("plain"));
     let b = replay(&Capture::parse(&log).expect("embedded"));
     assert_eq!((a.transitions, a.exact, a.mismatched), (b.transitions, b.exact, b.mismatched));
+}
+
+#[test]
+fn allocation_record_makes_storage_decisions_exact() {
+    // Allocation 150 refined metals, cycles of 99: the second cycle does not fit, the pending
+    // flush stores part of it. With the allocation record the replay decides storage itself
+    // and must not need the recorded decision.
+    for stride in [1, 3] {
+        let text = capture_with(Storage::Allocation(150), stride);
+        assert!(text.lines().any(|l| l.starts_with("A 0x123 1 2 0 1000000 2 150")), "allocation record written");
+        let rep = replay(&Capture::parse(&text).expect("parse"));
+        assert_eq!(rep.mismatched, 0, "stride {stride}: {rep:?}");
+        assert_eq!(rep.exact_with_storage_decision, 0, "stride {stride}: {rep:?}");
+        assert!(rep.exact + rep.exact_with_recorded_draws > 0, "stride {stride}: {rep:?}");
+    }
 }

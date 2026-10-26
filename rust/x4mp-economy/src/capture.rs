@@ -6,10 +6,13 @@
 //!
 //! ```text
 //! X4ECON 1 build=23660954                      header
-//! W <ware> <volume>                            ware table entry (index = order of W lines)
+//! W <ware> <volume>                            ware table entry (index = order of W lines;
+//!                                              volume 0 in captures before the allocation record)
 //! D <method#> <time:f64> <product-ware#> <amount> <special> <n1> {<ware#> <amount>}*n1 <n2> .. <n3> ..
 //! F <frame> <time:f64> <rng:u64>               frame marker; rng = MoveWorker TLS+0x318 at the sample
 //! C <uid> <last:f64> <a28:f64> <a30:f64> <a4c> <nmodules> <ncargo> {<ware#> <amount>}*ncargo
+//! A <uid> <valid> <n> {<ware#> <amount>}*n    production storage allocation (Container+0x940,
+//!                                              valid = +0x931); newer captures only
 //! M <uid> <addr> <functional> <state> <start:f64> <next:f64> <psince:f64> <ptotal:f64> <item> <cycle>
 //!   <ftime:f64> <fproduct:f64> <fprimary:f64> <fsecondary:f64> <ftertiary:f64>
 //!   <npending> {<ware#> <amount>}* <nitems> {<ware#> <method#|-1> <tf> <pf> <prf> <sf> <tef> <cycles> <repeat>}*
@@ -58,6 +61,15 @@ pub struct StationRecord {
     pub offers: Vec<OfferRecord>,
     /// Ware reservations of the station (`R`... `V` records), in engine order.
     pub reservations: Vec<ReservationRecord>,
+    /// Production storage allocation (`A` record), when captured.
+    pub allocation: Option<Allocation>,
+}
+
+/// Container+0x940 (per-ware production storage limits) and its valid flag +0x931.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Allocation {
+    pub valid: bool,
+    pub amounts: Vec<WareAmount>,
 }
 
 /// One trade offer as captured from Container+0x8f8 (list 0) or +0x910 (list 1).
@@ -220,7 +232,16 @@ impl Capture {
                         modules: Vec::new(),
                         offers: Vec::new(),
                         reservations: Vec::new(),
+                        allocation: None,
                     });
+                }
+                "A" => {
+                    let fr = cap.frames.last_mut().ok_or_else(|| t.err("A before F"))?;
+                    let st = fr.stations.last_mut().ok_or_else(|| t.err("A before C"))?;
+                    let _uid = t.u64()?;
+                    let valid = t.bool()?;
+                    let amounts = t.list()?;
+                    st.allocation = Some(Allocation { valid, amounts });
                 }
                 "O" => {
                     let fr = cap.frames.last_mut().ok_or_else(|| t.err("O before F"))?;
@@ -347,8 +368,21 @@ pub struct ReplayEnv {
     /// `(module address, factors)` from the later record.
     pub factors: Vec<(u64, Factors)>,
     /// Product wares the station cannot store in this catch-up (storage decision taken from
-    /// the recording; the engine's checks 0x424b90 / 0x356010 are not modelled yet).
+    /// the recording, for captures without the allocation record).
     pub blocked: Vec<WareIx>,
+    /// Production storage allocation: with it, can-store is the engine's allocation check
+    /// 0x424b90 (`allocation - running amount >= product amount` for every product) and the
+    /// pending flush stores `min(pending, allocation - running amount)` (0x8f15b0). The
+    /// physical capacity check 0x356010 / fit 0x3faff0 is not modelled (assumed to pass).
+    pub allocation: Option<Vec<WareAmount>>,
+}
+
+impl ReplayEnv {
+    fn free(&self, w: WareIx) -> Option<i32> {
+        let alloc = self.allocation.as_ref()?;
+        let a = alloc.iter().find(|e| e.0 == w).map_or(0, |e| e.1);
+        Some(a.wrapping_sub(self.amount(w)))
+    }
 }
 
 impl ReplayEnv {
@@ -368,10 +402,24 @@ impl StationEnv for ReplayEnv {
         self.factors.iter().find(|f| f.0 == m.addr).map_or(m.factors, |f| f.1)
     }
     fn can_store(&mut self, p: &[WareAmount]) -> bool {
+        if self.allocation.is_some() {
+            // 0x424b90: every product within the allocation left (signed i32 compare).
+            return p.iter().all(|&(w, a)| self.free(w).unwrap_or(0) >= a);
+        }
         !p.iter().any(|&(w, a)| a > 0 && self.blocked.contains(&w))
     }
     fn store_fitting(&mut self, p: &[WareAmount], t: f64) -> Vec<WareAmount> {
-        let fits: Vec<WareAmount> = p.iter().copied().filter(|&(w, _)| !self.blocked.contains(&w)).collect();
+        let fits: Vec<WareAmount> = if self.allocation.is_some() {
+            p.iter()
+                .filter_map(|&(w, a)| {
+                    let f = self.free(w).unwrap_or(0);
+                    let take = if f < a { f } else { a };
+                    (take > 0).then_some((w, take))
+                })
+                .collect()
+        } else {
+            p.iter().copied().filter(|&(w, _)| !self.blocked.contains(&w)).collect()
+        };
         self.store(&fits, t)
     }
     fn has_resources(&mut self, r: &[WareAmount]) -> bool {
@@ -466,10 +514,14 @@ struct Outcome {
 fn run_once(prev: &StationRecord, next: &StationRecord, rng: &mut OracleRng, blocked: &[WareIx]) -> Outcome {
     let mut times = prev.times;
     let mut modules: Vec<Module> = prev.modules.iter().map(|m| m.1.clone()).collect();
+    // The catch-up recomputes an invalid allocation at its start, so the later record holds the
+    // allocation it used; older captures have none.
+    let allocation = next.allocation.as_ref().or(prev.allocation.as_ref()).map(|a| a.amounts.clone());
     let mut env = ReplayEnv {
         cargo: prev.cargo.clone(),
         factors: next.modules.iter().map(|m| (m.1.addr, m.1.factors)).collect(),
         blocked: blocked.to_vec(),
+        allocation,
     };
     update_production(&mut times, next.times.last_update, false, &mut modules, &mut env, rng);
     Outcome { modules, times, cargo: env.cargo, asks: std::mem::take(&mut rng.asks) }
@@ -554,7 +606,8 @@ fn storage_blocked_wares(next: &StationRecord) -> Vec<WareIx> {
 fn replay_one(prev: &StationRecord, next: &StationRecord, rep: &mut ReplayReport) {
     rep.transitions += 1;
     let first = attempt(prev, next, &[]);
-    let blocked = storage_blocked_wares(next);
+    let blocked =
+        if next.allocation.is_some() || prev.allocation.is_some() { Vec::new() } else { storage_blocked_wares(next) };
     let result = match first {
         Attempt::Exact { .. } | Attempt::External => first,
         _ if blocked.is_empty() => first,
@@ -626,6 +679,13 @@ pub fn write_station(out: &mut String, st: &StationRecord, method_index: &dyn Fn
         let _ = write!(out, " {} {}", w.0, a);
     }
     out.push('\n');
+    if let Some(al) = &st.allocation {
+        let _ = write!(out, "A {:#x} {} {}", st.uid, al.valid as u8, al.amounts.len());
+        for &(w, a) in &al.amounts {
+            let _ = write!(out, " {} {}", w.0, a);
+        }
+        out.push('\n');
+    }
     for (uid, m) in &st.modules {
         let f = &m.factors;
         let _ = write!(
