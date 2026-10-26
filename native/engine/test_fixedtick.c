@@ -93,6 +93,9 @@ static uintptr_t fake_galaxy_move(void *self) {
     return 0;
 }
 
+/* Stands in for "the pointer lies in x4lan_hooks_64.dll": only the fake attention wrapper. */
+static int fake_chain_ok(void *target) { return target == (void *)(image + 7); }
+
 static void fixed_frame(void) {
     fake_now.QuadPart += 166667;
     *(double *)(image + GAME_TIME_RVA) += 1.0 / 60.0;
@@ -221,10 +224,26 @@ int main(void) {
     fake_table[SIM_BEGIN_SLOT] = &hook_begin; fake_table[SIM_END_SLOT] = &hook_end;
     for (int k = 0; k < WK_COUNT; ++k)
         *(void **)(image + x4_walk_sites[k].entry) = image + x4_walk_sites[k].fn;
+    for (size_t e = 0; e < WALK_EXTRAS; ++e)
+        *(void **)(image + x4_walk_extras[e].entry) = image + x4_walk_sites[x4_walk_extras[e].cls].fn;
+    *(void **)(image + x4_walk_extras[0].entry) = image + 1; /* foreign pointer in an extra vtable */
+    assert(!walk_install(0) && !walk_installed);
+    assert(*(void **)(image + x4_walk_sites[WK_ZONE].entry) == image + x4_walk_sites[WK_ZONE].fn);
+    *(void **)(image + x4_walk_extras[0].entry) = image + x4_walk_sites[x4_walk_extras[0].cls].fn;
     *(void **)(image + x4_walk_sites[WK_ZONE].entry) = image + 1; /* foreign pointer */
     assert(!walk_install(0) && !walk_installed);
     *(void **)(image + x4_walk_sites[WK_ZONE].entry) = image + x4_walk_sites[WK_ZONE].fn;
+    walk_sector_grace = 2;
     assert(walk_install(0) && walk_installed);
+    /* Sector entry is shared with the attention hooks: left alone until the grace ends. */
+    assert(*(void **)(image + x4_walk_sites[WK_SECTOR].entry) == image + x4_walk_sites[WK_SECTOR].fn);
+    assert(*(void **)(image + x4_walk_sites[WK_ZONE].entry) == (void *)walk_zone);
+    for (size_t e = 0; e < WALK_EXTRAS; ++e)
+        assert(*(void **)(image + x4_walk_extras[e].entry) == (void *)walk_ship);
+    sim_begin(&hook_begin); sim_end(&hook_end);
+    assert(walk_sector_state == WS_PENDING);
+    sim_begin(&hook_begin); sim_end(&hook_end);
+    assert(walk_sector_state == WS_ORIGINAL && walk_win.frames == 0);
     assert(*(void **)(image + x4_walk_sites[WK_SECTOR].entry) == (void *)walk_sector);
     walk_orig[WK_GALAXY] = fake_galaxy_move;
     walk_orig[WK_SECTOR] = fake_sector_move;
@@ -249,11 +268,39 @@ int main(void) {
     assert(!walk_installed);
     for (int k = 0; k < WK_COUNT; ++k)
         assert(*(void **)(image + x4_walk_sites[k].entry) == image + x4_walk_sites[k].fn);
+    for (size_t e = 0; e < WALK_EXTRAS; ++e)
+        assert(*(void **)(image + x4_walk_extras[e].entry) == image + x4_walk_sites[WK_SHIP].fn);
+
+    /* Attention hooks already own the sector entry: chain on top, restore their wrapper. */
+    {
+        void **sector_entry = (void **)(image + x4_walk_sites[WK_SECTOR].entry);
+        void *attention_wrapper = image + 7;
+        walk_chain_ok = fake_chain_ok;
+        *sector_entry = attention_wrapper;
+        assert(walk_install(0) && walk_sector_state == WS_PENDING);
+        walk_frame_end();
+        assert(walk_sector_state == WS_CHAINED && *sector_entry == (void *)walk_sector);
+        assert(walk_orig[WK_SECTOR] == (walk_move_fn)attention_wrapper);
+        walk_uninstall();
+        assert(*sector_entry == attention_wrapper && !walk_installed);
+        /* Unknown claimant: sectors stay unprofiled, entry untouched, the rest still installed. */
+        assert(walk_install(0));
+        *sector_entry = image + 9;
+        walk_frame_end();
+        assert(walk_sector_state == WS_REFUSED && *sector_entry == image + 9);
+        assert(*(void **)(image + x4_walk_sites[WK_ZONE].entry) == (void *)walk_zone);
+        walk_uninstall();
+        assert(*sector_entry == image + 9);
+        assert(*(void **)(image + x4_walk_sites[WK_ZONE].entry) == image + x4_walk_sites[WK_ZONE].fn);
+        *sector_entry = image + x4_walk_sites[WK_SECTOR].fn;
+        walk_chain_ok = walk_in_hooks_module;
+    }
 
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: fixedtick read-only cadence, pause/loading, lifetime and fail-closed guards");
     puts("PASS: fixed60 dt branch patch, per-frame guards and restore on every disarm");
     puts("PASS: component-walk profiling: verified vtable swap, per-sector sum/max, foreign threads, restore");
+    puts("PASS: component-walk sector entry: grace, chain on attention hooks, refuse unknown, restore");
     puts("PASS: simulation-cost brackets measure the slot loop, skip loading/foreign threads, unregister on stop");
     puts("PASS: fixed60catchup tracks wall time at 30/60/144/1000 fps, bounded catch-up, Jolt sub-steps, restore");
     return 0;

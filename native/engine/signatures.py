@@ -38,6 +38,15 @@ WALK_SITES = {
     'ship': (0x7CC810, 0x2B85FA8, '809f44f2b8b4712e0ca1a54404595f609dd2c134847e4c884363061a7277649c'),
     'station': (0x41A430, 0x2B779E8, 'cdf874aac2d43fa934141f7bf472c51a9ac539a6f97b4f8bb57bebcb5c47e986'),
 }
+# Further vtables whose Move entry holds the same function as a primary class above
+# (class, vtable entry RVA). S/M/L/XL ships each have their own vtable; the base 'ship'
+# vtable alone is never reached by the walk.
+WALK_EXTRA_ENTRIES = [
+    ('ship', 0x2B813C8),   # ship_s
+    ('ship', 0x2B83950),   # ship_m
+    ('ship', 0x2B9D508),   # ship_l
+    ('ship', 0x2B9AF98),   # ship_xl
+]
 WALK_CODE_SITES = {f'walk_{name}_move': (fn, 32, sha) for name, (fn, _entry, sha) in WALK_SITES.items()}
 
 SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES}
@@ -61,5 +70,11 @@ def c_header() -> str:
     lines.append('static const x4_walk_site x4_walk_sites[] = {')
     for name, (fn, entry, sha) in WALK_SITES.items():
         lines.append(f'    {{"{name}", 0x{fn:x}, 0x{entry:x}, 32, "{sha}"}},')
+    lines.append('};')
+    classes = list(WALK_SITES)
+    lines.append('typedef struct { int cls; size_t entry; } x4_walk_extra;')
+    lines.append('static const x4_walk_extra x4_walk_extras[] = {')
+    for name, entry in WALK_EXTRA_ENTRIES:
+        lines.append(f'    {{{classes.index(name)}, 0x{entry:x}}},')
     lines.append('};')
     return '\n'.join(lines) + '\n'

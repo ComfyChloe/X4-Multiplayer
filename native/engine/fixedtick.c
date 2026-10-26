@@ -412,7 +412,7 @@ static void number_field(lua_State *L, const char *name, double value) {
 
 static int stats(lua_State *L) {
     owner *o = p_luaL_checkudata(L, 1, META);
-    p_lua_createtable(L, 0, 54);
+    p_lua_createtable(L, 0, 55);
     number_field(L, "frames", (double)o->frames);
     number_field(L, "loading_skips", (double)o->loading_skips);
     number_field(L, "paused_frames", (double)o->paused_frames);
@@ -448,6 +448,7 @@ static int stats(lua_State *L) {
         char key[48];
         number_field(L, "walk_installed", walk_installed);
         number_field(L, "walk_refused", o->walk_refused);
+        number_field(L, "walk_sector_hook", walk_sector_state);
         number_field(L, "walk_frames", (double)walk_win.frames);
         number_field(L, "walk_mean_ms", walk_win.walk_ms / frames);
         number_field(L, "walk_max_ms", walk_win.walk_max_ms);

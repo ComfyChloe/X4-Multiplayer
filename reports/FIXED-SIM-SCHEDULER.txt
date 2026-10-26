@@ -171,6 +171,37 @@ Goal: decide whether a per-sector parallel universe walk is worth building.
   foreign-thread pass-through, restore), Lua probe tests, 16 signatures PASS on the
   copied and installed X4.exe. Native run pending (single player highway, then the
   8-sector attention load harness on contrib/ferrite-attention-load-test).
+- Sector entry sharing: the attention hooks (x4lan_hooks_64.dll) verify and replace
+  the same Sector::Move entry (attn_sector_vtable_move 0x2b1ff58). Run 1 (25 Oct,
+  profiler installed first) made the hooks refuse (HOOKS_DISABLED, ATTNLOAD error
+  hooks_disabled). The sector wrapper is now added lazily at frame end: chained on
+  top of the attention wrapper when the entry points into x4lan_hooks_64.dll, on the
+  original after a 900-frame grace, otherwise refused (sectors unprofiled). While
+  chained, the hooks' own restore fails closed for the session. S/M/L/XL ships use
+  their own vtables (entries 0x2b813c8/0x2b83950/0x2b9d508/0x2b9af98, same function
+  0x7cc810); they are swapped too (base ship entry alone counted 0 ships). Highway
+  zones (Move 0x5f4a40) and XS ships (0x7e52f0) are not covered.
+- Native, Windows, profile 45842, new custom_creative world, ship idle, attention
+  load harness 0 then 8 proxies (evidence .local/evidence-237-withheld
+  walkprof-8sectors-x4lan-debug.txt; hooks ready, 0 refusals, completed=1):
+                         baseline (0)    8 high-attention sectors
+    sim fps              60              41
+    slot-loop sim ms     11.2 (p95 14.5) 24.5 (p95 27.5)
+    walk ms (share)      1.9 (0.17)      8.8 (0.36)
+    sector sum / max ms  1.54 / 1.52     8.18 / 2.04
+    ideal speedup        1.01            3.96
+  Each high-attention sector adds ~1.6 ms of slot-loop time, ~0.86 ms of it in
+  the walk. Ship counts in this run were 0 (base vtable only; fixed since).
+- Sampling profile, same harness (contrib/ferrite-simprof d00b8a1, 1 kHz, overhead
+  2.9%, lost 2.4%; evidence simprof-8sectors-x4lan-debug.txt, -report.txt, .folded).
+  Share of MoveWorker samples, baseline phase -> 8-sector phase: slot3 universe
+  update 52 -> 64%, slot6 UI 30 -> 21%, slot10 render 13 -> 9%. Inclusive over the
+  whole run: Sector::Move 22.4%, UI controller 23.3%, Component::BuildCache 16.1%
+  (mostly camera/scene path; it shrinks under load), GameRender 10.1%, AIDirector
+  8.0% (ExecState 8.4%, Expression_Evaluate 4.1%), event processing 5.1%
+  (DeliverEvent 4.7%), Weapon Move 4.6% (0 at baseline), Jolt step 3.3%, MD
+  scheduler 1.6%, pathing join 0.9%, Ship::Move 0.5%. The sector-scaling cost is
+  dominated by the walk; UI/render/BuildCache are per-frame client costs.
 
 NEXT STAGES (unchanged plan): 3 render continues while simulation is held without
 semaphore misuse; 4 explicit input/UI/Lua cadence and pause/loading/SETA/save/load
