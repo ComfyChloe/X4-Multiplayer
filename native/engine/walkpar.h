@@ -126,6 +126,12 @@ static wp_window wp_frame;             /* reset each walk */
 static wp_window wp_win;               /* accumulated across the report window */
 static uint64_t wp_frame_sector_max_ticks;
 
+/* Per-frame cache for the native sector resolver (the +0x70 parent walk), keyed by source pointer,
+   cleared each walk. Keeps the resolver off the hot per-post path (review note 1). */
+#define WP_SCACHE 2048
+static void *wp_scache_key[WP_SCACHE];
+static uint64_t wp_scache_val[WP_SCACHE];
+
 /* MD cue activations compared as an order-independent multiset (MD is universe-level, not per task):
    index 0 = normal run, 1 = replay run. */
 static uint64_t wp_cue_xor[2], wp_cue_cnt[2];
@@ -190,6 +196,7 @@ static void wp_frame_reset(void) {
     wp_deliver_depth = 0;
     wp_frame_sector_max_ticks = 0;
     for (int i = 0; i < WP_TASK_MAX; ++i) wp_task_ms[i] = 0.0;
+    memset(wp_scache_key, 0, sizeof(wp_scache_key));   /* resolver cache is per frame */
 }
 
 /* Start of the galaxy walk (the 0x9fdf95 wrapper). Records the walk thread and turns buffering on.
@@ -658,6 +665,29 @@ static const wp_api *walkpar_api(void) { return &WP_API; }
 static int wp_want;     /* requested mode, armed lazily each frame until the thread freeze takes */
 #ifdef X4_HAVE_WALKPAR_SITES
 
+/* U::Sector vtable (RVA 0x2b1ea48; slot 674 = Sector::Move 0x784230, verified). The native sector
+   resolver walks the +0x70 parent chain (entity.md: +0x70 = parent) to the first component whose
+   vtable is the Sector vtable and returns its UniverseID (+8). Sanity-checked raw reads on the live
+   object graph (bounded, aligned, canonical user-space), cached per source per frame; on any doubt
+   it returns 0 (the post counts as rootlevel) and never faults. */
+#define WP_SECTOR_VFTABLE_RVA 0x2b1ea48u
+static uint64_t wp_native_sector(void *comp) {
+    if (!comp) return 0;
+    unsigned h = (unsigned)(((uintptr_t)comp >> 4) & (WP_SCACHE - 1));
+    if (wp_scache_key[h] == comp) return wp_scache_val[h];
+    void *leaf = comp, *sector_vt = (void *)(image + WP_SECTOR_VFTABLE_RVA);
+    uint64_t sid = 0;
+    for (int i = 0; i < 16 && comp; ++i) {
+        uintptr_t p = (uintptr_t)comp;
+        if ((p & 7) || p < 0x10000 || (p >> 47)) break;   /* not a plausible component pointer */
+        if (*(void **)comp == sector_vt) { sid = *(uint64_t *)((char *)comp + 8); break; }
+        comp = *(void **)((char *)comp + 0x70);           /* parent */
+    }
+    wp_scache_key[h] = leaf;
+    wp_scache_val[h] = sid;
+    return sid;
+}
+
 /* One contiguous descriptor array (the installer freezes/patches them together). Census installs
    post + deliver; replay also installs cancel. The walk is bracketed by the galaxy-call dispatcher
    (wp_cs), NOT by a Sector::Move body patch: the attention hooks pin and re-verify a 738-byte range
@@ -703,6 +733,7 @@ static int walkpar_dispatcher_on(void) { return wp_cs.installed; }
 static int walkpar_arm_native(int mode) {
     if (wp_ready != WP_READY_OK || (mode != WP_CENSUS && mode != WP_REPLAY)) return 0;
     if (wp_det_n) return 1;                            /* already armed */
+    wp_sector_resolver = wp_native_sector;             /* enable native cross-sector attribution */
     wp_det[WPD_POST].detour = (void *)wp_d_post;       wp_det[WPD_POST].sha = x4_walkpar_checks[0].sha;
     wp_det[WPD_CANCEL].detour = (void *)wp_d_cancel;   wp_det[WPD_CANCEL].sha = x4_walkpar_checks[1].sha;
     wp_det[WPD_DELIVER].detour = (void *)wp_d_deliver; wp_det[WPD_DELIVER].sha = x4_walkpar_checks[2].sha;

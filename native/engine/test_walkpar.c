@@ -155,6 +155,29 @@ int main(void) {
     walkpar_set_mode(WP_REPLAY);
     assert(wp_mode == WP_OFF);              /* refused -> stays off */
 
+    /* native sector resolver: +0x70 parent walk to the Sector vtable, cached per frame */
+    {
+        void **sec = (void **)(image + 0x9000);
+        sec[0] = (void *)(image + WP_SECTOR_VFTABLE_RVA);          /* a sector */
+        *(uint64_t *)((char *)sec + 8) = 777;
+        void **ship = (void **)(image + 0x9100);
+        ship[0] = (void *)(image + 0x1000);                        /* not the sector vtable */
+        *(uint64_t *)((char *)ship + 8) = 111;
+        *(void **)((char *)ship + 0x70) = sec;                     /* parent = sector */
+        void **loose = (void **)(image + 0x9200);
+        loose[0] = (void *)(image + 0x1000);
+        *(void **)((char *)loose + 0x70) = NULL;                   /* no sector ancestor */
+        memset(wp_scache_key, 0, sizeof(wp_scache_key));
+        assert(wp_native_sector(ship) == 777);
+        assert(wp_native_sector(loose) == 0);
+        assert(wp_native_sector(NULL) == 0);
+        *(void **)((char *)ship + 0x70) = NULL;                    /* same frame -> cached */
+        assert(wp_native_sector(ship) == 777);
+        memset(wp_scache_key, 0, sizeof(wp_scache_key));           /* new frame -> recomputed */
+        assert(wp_native_sector(ship) == 0);
+        wp_sector_resolver = NULL;
+    }
+
     /* Stage 0 census: counters fold into the window, cross-sector flags, sector timing. */
     engine_setup(WP_CENSUS);
     scene_init();
