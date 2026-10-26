@@ -10,6 +10,8 @@
           station traders (TradeRoutine + AssignCommander, as factionlogic_economy does);
        4. a counter line every 60 s, then ECONSTRESS done after $Duration.
      All numbers are logged with the prefix [X4MP] ECONSTRESS so lane runs can wait for them.
+     Cues with only non-event conditions poll at a checkinterval (without one the engine rejects
+     them: "event condition required").
      Parameters: $CloneLimit, $TradersPerClone, $Duration, $Batch (cue Setup). -->
 <mdscript name="X4MP_EconStress" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
   <cues>
@@ -74,6 +76,7 @@
               <set_value name="parent.$FillIndex" exact="1" />
               <set_value name="parent.$Traders" exact="0" />
               <set_value name="parent.$Managers" exact="0" />
+              <set_value name="parent.$Defence" exact="0" />
               <set_value name="parent.$NoProduction" exact="0" />
             </do_if>
           </actions>
@@ -101,6 +104,18 @@
                       <set_value name="parent.$Managers" operation="add" />
                     </do_if>
                   </do_if>
+                  <!-- station traders register at the defence NPC (trade.find.commander:
+                       $commanderstation.defencenpc.$lookingfortrades), as on scenario stations -->
+                  <do_if value="not $C.defencenpc">
+                    <create_control_entity object="$C" post="controlpost.defence">
+                      <select tags="controlpost.defence.tag" />
+                      <owner exact="$C.owner" />
+                    </create_control_entity>
+                    <do_if value="$C.defencenpc">
+                      <set_value name="parent.$Defence" operation="add" />
+                    </do_if>
+                  </do_if>
+                  <transfer_money from="$C.owner" to="$C" amount="10000000Cr" />
                   <set_value name="$Resources" exact="@$C.resources.list" />
                   <set_value name="$Products" exact="@$C.products.list" />
                   <do_if value="not $Products or $Products.count == 0">
@@ -162,7 +177,7 @@
             </do_if>
           </actions>
         </cue>
-        <cue name="Built">
+        <cue name="Built" checkinterval="1s">
           <conditions>
             <check_value value="@parent.$Phase == 'built'" />
           </conditions>
@@ -181,7 +196,7 @@
               <find_sell_offer result="$Se" seller="parent.$Clones.{$i}" multiple="true" />
               <set_value name="$SampleOffers" operation="add" exact="$B.count + $Se.count" />
             </do_all>
-            <debug_text text="'[X4MP] ECONSTRESS built time=%s clones=%s managers=%s traders=%s failed=%s noproduction=%s stations=%s productionmodules=%s sampleclones=%s sampleoffers=%s'.[player.age, parent.$Clones.count, parent.$Managers, parent.$Traders, parent.$Failed, parent.$NoProduction, $Stations2.count, $ModuleCount2, $Sample, $SampleOffers]" filter="general" />
+            <debug_text text="'[X4MP] ECONSTRESS built time=%s clones=%s managers=%s defence=%s traders=%s failed=%s noproduction=%s stations=%s productionmodules=%s sampleclones=%s sampleoffers=%s'.[player.age, parent.$Clones.count, parent.$Managers, parent.$Defence, parent.$Traders, parent.$Failed, parent.$NoProduction, $Stations2.count, $ModuleCount2, $Sample, $SampleOffers]" filter="general" />
             <set_value name="parent.$MeasureStart" exact="player.age" />
             <set_value name="parent.$Phase" exact="'measure'" />
           </actions>
@@ -200,7 +215,7 @@
             <debug_text text="'[X4MP] ECONSTRESS tick time=%s cloneSubordinates=%s'.[player.age, $Subs]" filter="general" />
           </actions>
         </cue>
-        <cue name="Done">
+        <cue name="Done" checkinterval="5s">
           <conditions>
             <check_value value="@parent.$Phase == 'measure' and player.age ge parent.$MeasureStart + parent.$Duration" />
           </conditions>

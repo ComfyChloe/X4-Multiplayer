@@ -10,7 +10,9 @@
        - every lab station is raised as 'X4MP.EconWatch' to the Lua side (one sampler watch each);
        - two reader cues read cargo (which runs the engine's lazy production catch-up) of the
          even lab stations every 7 s and of the odd ones every 61 s: short and long lazy gaps;
-       - ECONLAB done after $Duration. -->
+       - ECONLAB done after $Duration.
+     Cues with only non-event conditions poll at a checkinterval (without one the engine rejects
+     them: "event condition required"). -->
 <mdscript name="X4MP_EconLab" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
   <cues>
     <cue name="Start">
@@ -52,7 +54,7 @@
             <set_value name="parent.$Phase" exact="'settle'" />
           </actions>
         </cue>
-        <cue name="Fill">
+        <cue name="Fill" checkinterval="1s">
           <conditions>
             <check_value value="@parent.$Phase == 'settle'" />
           </conditions>
@@ -111,7 +113,7 @@
             </do_all>
           </actions>
         </cue>
-        <cue name="Done">
+        <cue name="Done" checkinterval="5s">
           <conditions>
             <check_value value="@parent.$Phase == 'run' and player.age ge parent.$Start + parent.$Duration" />
           </conditions>
