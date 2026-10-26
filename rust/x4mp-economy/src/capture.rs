@@ -155,14 +155,17 @@ impl Capture {
     pub fn parse(text: &str) -> Result<Capture, ParseError> {
         let mut cap = Capture::default();
         let mut header = false;
+        // Records embedded in an X4 debug log or stdout follow a "[X4LAN] ECONCAP " prefix; in
+        // such a file every other line is log text and skipped.
+        let embedded = text.contains("ECONCAP ");
         for (ln, line) in text.lines().enumerate() {
             let line = line.trim();
             if line.is_empty() || line.starts_with('#') {
                 continue;
             }
-            // Accept records embedded in the X4 debug log after a "[X4LAN] ECONCAP " prefix.
             let line = match line.find("ECONCAP ") {
                 Some(p) => &line[p + 8..],
+                None if embedded => continue,
                 None => line,
             };
             let mut t = Tok { it: line.split_whitespace(), line: ln + 1 };
@@ -343,6 +346,9 @@ pub struct ReplayEnv {
     pub cargo: Vec<WareAmount>,
     /// `(module address, factors)` from the later record.
     pub factors: Vec<(u64, Factors)>,
+    /// Product wares the station cannot store in this catch-up (storage decision taken from
+    /// the recording; the engine's checks 0x424b90 / 0x356010 are not modelled yet).
+    pub blocked: Vec<WareIx>,
 }
 
 impl ReplayEnv {
@@ -361,8 +367,12 @@ impl StationEnv for ReplayEnv {
     fn efficiency(&mut self, m: &Module, _item: usize, _t: f64) -> Factors {
         self.factors.iter().find(|f| f.0 == m.addr).map_or(m.factors, |f| f.1)
     }
-    fn can_store(&mut self, _p: &[WareAmount]) -> bool {
-        true
+    fn can_store(&mut self, p: &[WareAmount]) -> bool {
+        !p.iter().any(|&(w, a)| a > 0 && self.blocked.contains(&w))
+    }
+    fn store_fitting(&mut self, p: &[WareAmount], t: f64) -> Vec<WareAmount> {
+        let fits: Vec<WareAmount> = p.iter().copied().filter(|&(w, _)| !self.blocked.contains(&w)).collect();
+        self.store(&fits, t)
     }
     fn has_resources(&mut self, r: &[WareAmount]) -> bool {
         r.iter().all(|&(w, a)| self.amount(w) >= a)
@@ -420,8 +430,13 @@ pub struct ReplayReport {
     /// Module fields matched, cargo did not: something other than production changed the
     /// cargo between the records (trades, scripts). Not counted as a model error.
     pub external: u64,
+    /// Matched after taking the storage decision from the recording: the recorded module
+    /// was retrying because its products could not be stored (counted here, not in `exact`).
+    pub exact_with_storage_decision: u64,
     pub mismatched: u64,
     pub first_difference: Option<String>,
+    /// Every mismatch, one line each (station, module, time, model vs engine fields).
+    pub differences: Vec<String>,
 }
 
 /// Replays every catch-up in the capture (see the module documentation).
@@ -448,21 +463,29 @@ struct Outcome {
     asks: Vec<(u64, u8, f32)>,
 }
 
-fn run_once(prev: &StationRecord, next: &StationRecord, rng: &mut OracleRng) -> Outcome {
+fn run_once(prev: &StationRecord, next: &StationRecord, rng: &mut OracleRng, blocked: &[WareIx]) -> Outcome {
     let mut times = prev.times;
     let mut modules: Vec<Module> = prev.modules.iter().map(|m| m.1.clone()).collect();
     let mut env = ReplayEnv {
         cargo: prev.cargo.clone(),
         factors: next.modules.iter().map(|m| (m.1.addr, m.1.factors)).collect(),
+        blocked: blocked.to_vec(),
     };
     update_production(&mut times, next.times.last_update, false, &mut modules, &mut env, rng);
     Outcome { modules, times, cargo: env.cargo, asks: std::mem::take(&mut rng.asks) }
 }
 
-fn replay_one(prev: &StationRecord, next: &StationRecord, rep: &mut ReplayReport) {
-    rep.transitions += 1;
+enum Attempt {
+    Exact { draws: bool },
+    External,
+    RngDependent,
+    Mismatch(String),
+}
+
+/// One replay of a transition with the given storage decision.
+fn attempt(prev: &StationRecord, next: &StationRecord, blocked: &[WareIx]) -> Attempt {
     let mut rng = OracleRng::default();
-    let mut out = run_once(prev, next, &mut rng);
+    let mut out = run_once(prev, next, &mut rng, blocked);
     let mut used_draws = false;
     if !out.asks.is_empty() {
         let mut per_module: std::collections::HashMap<u64, Vec<(u8, f32)>> = std::collections::HashMap::new();
@@ -470,8 +493,7 @@ fn replay_one(prev: &StationRecord, next: &StationRecord, rep: &mut ReplayReport
             per_module.entry(addr).or_default().push((kind, max));
         }
         if per_module.values().any(|v| v.len() != 1 || v[0].0 != 0) {
-            rep.rng_dependent += 1;
-            return;
+            return Attempt::RngDependent;
         }
         // draw = recorded next - model next with a zero draw (exact in f32 here, see report).
         let mut oracle = OracleRng::default();
@@ -484,18 +506,14 @@ fn replay_one(prev: &StationRecord, next: &StationRecord, rep: &mut ReplayReport
             };
             let d = (b.1.next - a.next) as f32;
             if !(d >= 0.0 && d < max.max(f32::MIN_POSITIVE)) {
-                rep.mismatched += 1;
-                if rep.first_difference.is_none() {
-                    rep.first_difference = Some(format!(
-                        "station {:#x} module {:#x}: implied retry draw {d} outside [0, {max})",
-                        next.uid, addr
-                    ));
-                }
-                return;
+                return Attempt::Mismatch(format!(
+                    "station {:#x} module {:#x} at {}: implied retry draw {d} outside [0, {max})",
+                    next.uid, addr, next.times.last_update
+                ));
             }
             oracle.floats.insert(*addr, d);
         }
-        out = run_once(prev, next, &mut oracle);
+        out = run_once(prev, next, &mut oracle, blocked);
         used_draws = true;
     }
     let mut cargo_model = out.cargo.clone();
@@ -509,17 +527,56 @@ fn replay_one(prev: &StationRecord, next: &StationRecord, rep: &mut ReplayReport
     let times_equal =
         out.times.a28.to_bits() == next.times.a28.to_bits() && out.times.a30.to_bits() == next.times.a30.to_bits();
     if modules_equal && times_equal && cargo_model == cargo_rec {
-        if used_draws {
-            rep.exact_with_recorded_draws += 1;
-        } else {
-            rep.exact += 1;
-        }
+        Attempt::Exact { draws: used_draws }
     } else if modules_equal && times_equal {
-        rep.external += 1;
+        Attempt::External
     } else {
-        rep.mismatched += 1;
-        if rep.first_difference.is_none() {
-            rep.first_difference = Some(first_diff(next.uid, next.times.last_update, &out.modules, next));
+        Attempt::Mismatch(first_diff(next.uid, next.times.last_update, &out.modules, next))
+    }
+}
+
+/// Product wares of the recorded modules that are retrying in "choosing item" because their
+/// products could not be stored (state 4, no cycle, next time in the future of the record).
+fn storage_blocked_wares(next: &StationRecord) -> Vec<WareIx> {
+    let mut out = Vec::new();
+    for (_, m) in &next.modules {
+        if m.state == State::ChoosingItem && m.cycle == -1 && m.next > next.times.last_update {
+            if let Some(item) = usize::try_from(m.item).ok().and_then(|i| m.items.get(i)) {
+                if !out.contains(&item.ware) {
+                    out.push(item.ware);
+                }
+            }
+        }
+    }
+    out
+}
+
+fn replay_one(prev: &StationRecord, next: &StationRecord, rep: &mut ReplayReport) {
+    rep.transitions += 1;
+    let first = attempt(prev, next, &[]);
+    let blocked = storage_blocked_wares(next);
+    let result = match first {
+        Attempt::Exact { .. } | Attempt::External => first,
+        _ if blocked.is_empty() => first,
+        _ => match (attempt(prev, next, &blocked), first) {
+            (Attempt::Exact { .. }, _) => {
+                rep.exact_with_storage_decision += 1;
+                return;
+            }
+            (Attempt::External, _) => Attempt::External,
+            (second @ Attempt::RngDependent, Attempt::Mismatch(_)) => second,
+            (_, first) => first,
+        },
+    };
+    match result {
+        Attempt::Exact { draws: true } => rep.exact_with_recorded_draws += 1,
+        Attempt::Exact { draws: false } => rep.exact += 1,
+        Attempt::External => rep.external += 1,
+        Attempt::RngDependent => rep.rng_dependent += 1,
+        Attempt::Mismatch(line) => {
+            rep.mismatched += 1;
+            rep.first_difference.get_or_insert_with(|| line.clone());
+            rep.differences.push(line);
         }
     }
 }

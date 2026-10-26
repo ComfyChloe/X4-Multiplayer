@@ -16,6 +16,8 @@ const METAL: WareIx = WareIx(2);
 
 struct Env {
     cargo: Vec<WareAmount>,
+    /// Refined metals storage limit (storage full: the refinery retries in "choosing item").
+    metal_cap: Option<i32>,
 }
 
 impl Env {
@@ -34,8 +36,11 @@ impl StationEnv for Env {
     fn efficiency(&mut self, m: &Module, _i: usize, _t: f64) -> Factors {
         m.factors
     }
-    fn can_store(&mut self, _p: &[WareAmount]) -> bool {
-        true
+    fn can_store(&mut self, p: &[WareAmount]) -> bool {
+        match self.metal_cap {
+            Some(cap) => !p.iter().any(|&(w, a)| w == METAL && a > 0 && self.amount(METAL) >= cap),
+            None => true,
+        }
     }
     fn has_resources(&mut self, r: &[WareAmount]) -> bool {
         r.iter().all(|&(w, a)| self.amount(w) >= a)
@@ -103,8 +108,14 @@ fn module(addr: u64, m: &Method, factors: Factors) -> Module {
     }
 }
 
-/// A capture of one station: solar module and refinery, ore runs out half way (retries).
+/// A capture of one station: solar module and refinery, ore runs out half way (retries);
+/// with `metal_cap`, refined metals storage fills up first (storage retries).
 fn synthetic_capture() -> String {
+    capture_with(None, 3)
+}
+
+/// `stride`: the station is read every `stride` frames of 7.25 s.
+fn capture_with(metal_cap: Option<i32>, stride: u64) -> String {
     let ms = methods();
     let mut out = String::from("X4ECON 1 build=23660954\nW energycells 1\nW ore 10\nW refinedmetals 14\n");
     for (i, m) in ms.iter().enumerate() {
@@ -112,14 +123,14 @@ fn synthetic_capture() -> String {
     }
     let f = Factors { product: 1.13, time: 0.97, ..Factors::default() };
     let mut mods = vec![module(0x5000, &ms[0], f), module(0x4000, &ms[1], f)];
-    let mut env = Env { cargo: vec![(ECELLS, 300), (ORE, 1500)] };
+    let mut env = Env { cargo: vec![(ECELLS, 300), (ORE, 1500)], metal_cap };
     let mut times = ContainerTimes::default();
     let mut rng = EconRng(42);
     let index = |m: &Method| ms.iter().position(|x| x == m);
     for frame in 0..400u64 {
         let now = 3.0 + frame as f64 * 7.25;
         // Lazy reads: the station is looked at only every few frames.
-        if frame % 3 != 0 {
+        if frame % stride != 0 {
             continue;
         }
         update_production(&mut times, now, false, &mut mods, &mut env, &mut rng as &mut dyn ProductionRng);
@@ -187,4 +198,48 @@ V 0x5 0x9 0x777 0x0 0 300 0x40ac340000000000
     assert_eq!((st.offers[0].amount, st.offers[0].unit_price, st.offers[0].flags), (600, 17340, 0x40));
     assert_eq!(st.reservations[0].amount, 300);
     assert_eq!(st.reservations[0].expiry, 3610.0);
+}
+
+#[test]
+fn storage_retries_replay_with_the_recorded_storage_decision() {
+    // Refined metals storage is full after two cycles: the refinery then retries in
+    // "choosing item" with random delays. The replay does not model storage; it takes the
+    // decision from the recorded state and must explain every transition.
+    // Read every frame (7.25 s): mostly one 5-6 s retry per catch-up.
+    let text = capture_with(Some(150), 1);
+    let rep = replay(&Capture::parse(&text).expect("parse"));
+    assert_eq!(rep.mismatched, 0, "{rep:?}");
+    assert!(rep.exact_with_storage_decision > 0, "{rep:?}");
+    assert_eq!(
+        rep.transitions,
+        rep.exact + rep.exact_with_recorded_draws + rep.exact_with_storage_decision + rep.rng_dependent + rep.external,
+        "{rep:?}"
+    );
+}
+
+#[test]
+fn records_embedded_in_a_debug_log_are_found() {
+    let text = synthetic_capture();
+    let mut log = String::from(
+        "Logfile started
+[=ERROR=] 0.00 something else
+",
+    );
+    for (i, l) in text.lines().enumerate() {
+        log.push_str(&format!(
+            "[=ERROR=] {}.00 [X4LAN] ECONCAP {l}
+",
+            i
+        ));
+        if i % 7 == 0 {
+            log.push_str(
+                "======================================
+[General] 1.0 unrelated 1 2 3
+",
+            );
+        }
+    }
+    let a = replay(&Capture::parse(&text).expect("plain"));
+    let b = replay(&Capture::parse(&log).expect("embedded"));
+    assert_eq!((a.transitions, a.exact, a.mismatched), (b.transitions, b.exact, b.mismatched));
 }
