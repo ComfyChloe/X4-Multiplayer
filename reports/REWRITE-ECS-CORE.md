@@ -163,7 +163,7 @@ Procedure: lane run with the fixed-tick probe overlay plus a mirror overlay (`de
 | **NATIVE** mirror-validate-1 (b4) | 57c2ed2 | 10 x 16.5k objects, 282 roots | walk_errors 0; local 320/320 and Object sector 282/282 bit-identical; 913 ms/capture (old region cache) |
 | **NATIVE** mirror-validate-2 (b3) | f772266 | 60 | walk_errors 0; Object sector 1732/1732 exact; local 1901/1920: the 19 misses are two superhighways (class overrides GetLocalTransform, see below); 262 ms/capture |
 | **NATIVE** mirror-validate-3 (b6) | 247642b (v1.1) | 60 x 16.3-16.7k objects | walk_errors 0; **local 1920/1920** (10 of them superhighways) and **Object sector 1758/1758** bit-identical; 271 ms/capture; 2,570 VirtualQuery/frame |
-| **NATIVE** mirror-validate-4 (b1, run mirror-005) | 3179ba6 | 60 x 16.7k objects | functional: **429,325 components visited per frame** for 16,690 recorded rows; walk 272.8 ms, serialize 3.0 ms (of 275.9 ms); region cache never full (2.7k VirtualQuery/frame) |
+| **NATIVE** mirror-validate-4 (b1, run mirror-005) | 3179ba6 | 60 x 16.7k objects | walk_errors 0; **EXACT**: local 1920/1920 (37 superhighways), Object sector 1707/1707; **429,325 components visited per frame** for 16,690 recorded rows; walk 272.8 ms, serialize 3.0 ms (of 275.9 ms); region cache never full (2.7k VirtualQuery/frame) |
 | mirror-ab-1 | 96730d9 | 60 | queued: per-class visit histogram, A/B prefetch (odd frames) |
 
 Findings from the native data: six classes override GetLocalTransform (slot 648): Explosive, Missile,
