@@ -20,6 +20,10 @@ MAX_OBJECTS = 4096
 MAX_RECORD = 512
 WINDOW = 12
 MOTION_BUDGET = 32
+# Unchanged samples repeated per tick for datagram loss. A full budget of repeats
+# (32 per tick, 640/s per guest) made up half of a guest's datagrams in a dense
+# sector while every mover already sends fresh samples; still objects resend every 2 s.
+REPEAT_BUDGET = 2
 RETRY = .25
 STAGE_TIMEOUT = 15
 
@@ -333,8 +337,8 @@ class UniverseSession(DockSession):
         # Independent, lossy motion cannot create entities or commit a baseline.
         # Samples not yet forwarded go first (oldest arrival first): a blind round robin
         # over every live entity repeats unchanged samples while new ones wait, adding up
-        # to len(live)/640 s of jitter per sample in a dense sector. Remaining budget
-        # repeats latest samples round robin, as before, to cover datagram loss.
+        # to len(live)/640 s of jitter per sample in a dense sector. Up to REPEAT_BUDGET
+        # latest samples are then repeated round robin to cover datagram loss.
         if self.forwarded_lease != guest.lease:
             self.forwarded = {}; self.forwarded_lease = guest.lease
         live = [(k, v) for k, v in self.positions.items() if v[2] == sector and now - v[1] < .75]
@@ -345,7 +349,7 @@ class UniverseSession(DockSession):
                 taken = {k for k, _ in chosen}
                 rest = [kv for kv in live if kv[0] not in taken]
                 if rest:
-                    take = min(MOTION_BUDGET - len(chosen), len(rest))
+                    take = min(REPEAT_BUDGET, MOTION_BUDGET - len(chosen), len(rest))
                     chosen += [rest[(self.position_cursor + i) % len(rest)] for i in range(take)]
                     self.position_cursor = (self.position_cursor + take) % len(rest)
             for entity, entry in chosen:

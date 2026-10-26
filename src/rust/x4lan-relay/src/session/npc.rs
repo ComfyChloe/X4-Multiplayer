@@ -51,8 +51,40 @@ pub struct NpcCombat {
     descriptors: OrderedMap<u32, Descriptor>,
     states: OrderedMap<u32, NpcState>,
     claims: OrderedMap<ClaimKey, Claim>,
-    cursor: usize,
+    /// guest lease -> (npc -> NHP seq last forwarded). Only a new host sequence is
+    /// forwarded: the host repeats every NPC with a new sequence at least every keepalive
+    /// (npc_combat_game.lua), which recovers a lost datagram and feeds a late joiner.
+    forwarded: OrderedMap<Hex32, OrderedMap<u32, u32>>,
     next_send: f64,
+}
+
+impl NpcCombat {
+    /// New NHP sequences for one guest, oldest arrival first, within the per-tick budget
+    /// (npc_combat.py `snapshots`).
+    fn fresh_for(&mut self, guest: Hex32, sector: Option<&str>, now: f64) -> Vec<String> {
+        if !self.forwarded.contains_key(&guest) {
+            self.forwarded.insert(guest, OrderedMap::new());
+        }
+        let states = &self.states;
+        let forwarded = self.forwarded.get_mut(&guest).expect("inserted");
+        forwarded.retain(|entity, _| states.contains_key(entity));
+        let live: Vec<(u32, &NpcState)> = states
+            .iter()
+            .filter(|(_, r)| now - r.at < FRESH && sector == Some(r.descriptor.0.as_str()))
+            .map(|(k, r)| (*k, r))
+            .collect();
+        let mut fresh: Vec<(u32, &NpcState)> =
+            live.iter().copied().filter(|(k, r)| forwarded.get(k) != Some(&r.seq)).collect();
+        // Stable, like Python's sorted(): equal arrival times keep insertion order.
+        fresh.sort_by(|a, b| a.1.at.partial_cmp(&b.1.at).unwrap_or(std::cmp::Ordering::Equal));
+        let budget = fresh.len().min(live.len().div_ceil(10).clamp(32, 256));
+        let mut out = Vec::with_capacity(budget);
+        for (entity, r) in fresh.into_iter().take(budget) {
+            forwarded.insert(entity, r.seq);
+            out.push(r.fields.join("|"));
+        }
+        out
+    }
 }
 
 impl NpcCombat {
@@ -227,17 +259,10 @@ impl Session {
             }
             let interest_sector = self.universe.interest(guest_lease).map(|i| i.sector.to_string());
             let npc = &mut self.universe.npc;
-            let states: Vec<&NpcState> = npc
-                .states
-                .values()
-                .filter(|r| now - r.at < FRESH && interest_sector.as_deref() == Some(r.descriptor.0.as_str()))
-                .collect();
-            let budget = states.len().min(states.len().div_ceil(10).clamp(32, 256));
-            for i in 0..budget {
-                let fields = &states[(npc.cursor + i) % states.len()].fields;
-                out.push((guest_address, format!("NHP|1|{guest_lease}|{}", fields.join("|")).into_bytes()));
+            npc.forwarded.retain(|lease, _| *lease == guest_lease);
+            for fields in npc.fresh_for(guest_lease, interest_sector.as_deref(), now) {
+                out.push((guest_address, format!("NHP|1|{guest_lease}|{fields}").into_bytes()));
             }
-            npc.cursor += budget;
             let keys: Vec<ClaimKey> = self.universe.npc.claims.keys().copied().collect();
             for key in keys {
                 let (lease, entity, gen, shooter, sg) = key;
@@ -275,19 +300,11 @@ impl Session {
         let interests: Vec<Option<String>> =
             guests.iter().map(|(_, lease, _)| self.universe.interest(*lease).map(|i| i.sector.to_string())).collect();
         let npc = &mut self.universe.npc;
+        npc.forwarded.retain(|lease, _| guests.iter().any(|(_, guest, _)| guest == lease));
         for (index, (_, guest_lease, guest_address)) in guests.iter().enumerate() {
-            let interest_sector = &interests[index];
-            let states: Vec<&NpcState> = npc
-                .states
-                .values()
-                .filter(|r| now - r.at < FRESH && interest_sector.as_deref() == Some(r.descriptor.0.as_str()))
-                .collect();
-            let budget = states.len().min(states.len().div_ceil(10).clamp(32, 256));
-            for i in 0..budget {
-                let fields = &states[(npc.cursor + i) % states.len()].fields;
-                out.push((*guest_address, format!("NHP|1|{guest_lease}|{}", fields.join("|")).into_bytes()));
+            for fields in npc.fresh_for(*guest_lease, interests[index].as_deref(), now) {
+                out.push((*guest_address, format!("NHP|1|{guest_lease}|{fields}").into_bytes()));
             }
-            npc.cursor += budget;
         }
         let keys: Vec<ClaimKey> = self.universe.npc.claims.keys().copied().collect();
         for key in keys {

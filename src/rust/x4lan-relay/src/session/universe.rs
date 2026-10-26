@@ -18,6 +18,8 @@ const MAX_OBJECTS: u32 = 4096;
 const MAX_RECORD: usize = 512;
 const WINDOW: usize = 12;
 const MOTION_BUDGET: usize = 32;
+/// Unchanged samples repeated per tick for datagram loss (universe.py `REPEAT_BUDGET`).
+const REPEAT_BUDGET: usize = 2;
 const RETRY: f64 = 0.25;
 const STAGE_TIMEOUT: f64 = 15.0;
 const POSITION_LIMIT: f64 = 50_000_000.0;
@@ -497,8 +499,8 @@ impl Session {
                 out.extend(delivery.packets(guest_lease, now).into_iter().map(|p| (guest_address, p)));
             }
             // Independent, lossy motion cannot create entities or commit a baseline.
-            // Samples not yet forwarded go first (oldest arrival first); the remaining budget
-            // repeats latest samples round robin to cover datagram loss (universe.py).
+            // Samples not yet forwarded go first (oldest arrival first); up to REPEAT_BUDGET
+            // latest samples are then repeated round robin to cover datagram loss (universe.py).
             let live: Vec<(u32, &Position)> = u
                 .positions
                 .iter()
@@ -515,7 +517,7 @@ impl Session {
                     let rest: Vec<(u32, &Position)> =
                         live.iter().copied().filter(|(k, _)| !chosen.iter().any(|(c, _)| c == k)).collect();
                     if !rest.is_empty() {
-                        let take = (MOTION_BUDGET - chosen.len()).min(rest.len());
+                        let take = REPEAT_BUDGET.min(MOTION_BUDGET - chosen.len()).min(rest.len());
                         for i in 0..take {
                             chosen.push(rest[(view.position_cursor + i) % rest.len()]);
                         }

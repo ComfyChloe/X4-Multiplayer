@@ -4,7 +4,7 @@ use std::io::ErrorKind;
 use std::net::{SocketAddr, UdpSocket};
 
 use crate::players::PlayerRoster;
-use crate::session::{Session, TICK_HZ};
+use crate::session::{bundle, Session, TICK_HZ};
 use crate::wire::MAX_PACKET;
 
 pub struct Relay {
@@ -120,10 +120,9 @@ impl Relay {
             }
         }
         if now >= self.next_tick {
-            for (address, packet) in self.session.snapshots(now) {
-                self.send(&packet, address);
-            }
-            for (address, packet) in self.players.snapshots(&self.session.core.peers, now) {
+            let mut packets = self.session.snapshots(now);
+            packets.extend(self.players.snapshots(&self.session.core.peers, now));
+            for (address, packet) in bundle(packets, &self.session.core.peers) {
                 self.send(&packet, address);
             }
             self.next_tick = now + 1.0 / f64::from(TICK_HZ);

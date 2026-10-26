@@ -294,9 +294,23 @@ timed from Lua; its cost appears only in the game's frame interval.
 at transport level; a ping never reaches the session, refreshes a lease or is forwarded.
 Older relays drop RTTPING; older clients never send it. The client logs
 `NETRTT v=1 side=client` every 5 s (pings, pongs, lost after 2 s, late, loss, RTT
-min/median/p95/max, relay-to-client jitter p95, transport packet/byte rates). The relay
+min/median/p95/max, relay-to-client jitter p95, transport packet/byte rates, and
+`rx_msgs`/`rx_types=KIND:per_s,...`, received messages by kind with bundles unpacked). The relay
 writes `NETRTT v=1 side=relay` per peer to `logs/netprobe-*.log` (created at the first
 ping) with RTT from the echoed relay time minus client hold, upstream jitter, sequence-gap
 loss and per-peer rates; the status JSON and dashboard show the latest summary. Samples are
 read once per UI frame and once per relay poll, so RTT includes up to one frame interval
 plus the relay's 5 ms poll sleep. Jitter is p95 of |inter-arrival - source spacing|.
+
+### Datagram bundles and NPC send cadence
+
+A client sends `XBCAP|1|lease|1` with each 1 s HELLO (`net_bundle=false` opts out).
+For such a peer, both relays pack each 20 Hz tick's snapshot packets into
+`XB|1|lease|<len>:<item>...` datagrams of at most 768 bytes (the native transport
+limit). An item is a packet `KIND|1|lease|rest` carried as `KIND|rest`; `client.lua`
+restores the envelope and passes every message through the unchanged receive path.
+Other packets, and every packet for a peer without `XBCAP`, are sent as before; older
+relays ignore `XBCAP`, so old/new peers mix safely. The host sends `NHP` and `IDENT` only
+when a value changes, otherwise with a new sequence every 1.5 s (`NHP`) or 1.2 s
+(`IDENT`); the relays forward only sequences a client has not yet received, and repeat
+at most two unchanged universe motion samples per tick for loss.

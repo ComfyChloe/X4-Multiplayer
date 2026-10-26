@@ -6,6 +6,28 @@ local MAX_REMOTES = 7 -- Up to eight players: every other player is one remote.
 -- sector (universe motion, identity, NPC health, co-op frames); at 20-45 FPS a cap of 32
 -- per frame queued them in the OS buffer (seconds of added latency, then loss).
 local DRAIN = 256
+-- XB bundles (host.py bundle): XB|1|<lease>|<len>:<item>... where an item KIND|rest is
+-- the message KIND|1|<lease>|rest. Announced with XBCAP; relays without it ignore that.
+local BUNDLE_VERSION = "1"
+local function unbundle(packet, lease)
+    local header = "XB|1|" .. lease .. "|"
+    if #packet > 768 or packet:sub(1, #header) ~= header then return {} end
+    local out, at = {}, #header + 1
+    while at <= #packet do
+        local digits = packet:match("^(%d%d?%d?):", at)
+        if not digits then break end
+        local length = tonumber(digits)
+        local start = at + #digits + 1
+        local body = packet:sub(start, start + length - 1)
+        if length == 0 or #body ~= length then break end
+        local kind, rest = body:match("^([%u%d_]+)(|.*)$")
+        if not kind then break end
+        out[#out+1] = kind .. "|1|" .. lease .. rest
+        at = start + length
+    end
+    return out
+end
+X4LAN_CLIENT.unbundle = unbundle
 local function split(packet)
     if #packet > 768 or packet:find("[^%g]") then return {} end
     local fields = {}
@@ -139,6 +161,9 @@ function X4LAN_CLIENT.new(config, transport, nonce, log, resume)
                 hello[1],hello[8],hello[9],hello[10]='RESUME',self.resume.nonce,self.resume.lease,self.nonce
             end
             self.transport:send(table.concat(hello, '|'))
+            if self.lease and config.net_bundle ~= false then
+                self.transport:send("XBCAP|1|" .. self.lease .. "|" .. BUNDLE_VERSION)
+            end
             self.lastHello = now
         end
         local drained = 0
@@ -146,7 +171,13 @@ function X4LAN_CLIENT.new(config, transport, nonce, log, resume)
             local packet = self.transport:receive()
             if not packet then break end
             drained = drained + 1
-            self:receive(packet, now)
+            if packet:sub(1, 3) == "XB|" then
+                if self.lease then
+                    for _, message in ipairs(unbundle(packet, self.lease)) do self:receive(message, now) end
+                end
+            else
+                self:receive(packet, now)
+            end
         end
         self.drained, self.drainedMax = drained, math.max(self.drainedMax or 0, drained)
         if self.reset then return false, 'relay-reset' end

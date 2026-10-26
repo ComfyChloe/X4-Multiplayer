@@ -19,6 +19,7 @@ local function resetWindow(now)
  N.windowStart=now;N.pings,N.pongs,N.lost,N.late=0,0,0,0
  N.rtts,N.deviations={},{}
  N.tx,N.txBytes,N.rx,N.rxBytes=0,0,0,0
+ N.messages,N.kinds=0,{}
 end
 resetWindow(clock())
 
@@ -65,17 +66,27 @@ function N.pong(client,packet,arrival)
 end
 
 local function value(v) return v and string.format('%.3f',v*1000) or 'na' end
+-- Received messages per second by kind (an XB bundle counts each message it carries;
+-- rx_pps counts datagrams), largest first: rx_types=UMOVE:310.2,NHP:84.0,...
+local function kinds(window)
+ local list={}
+ for kind,n in pairs(N.kinds) do list[#list+1]={kind,n} end
+ table.sort(list,function(a,b) return a[2]>b[2] or a[2]==b[2] and a[1]<b[1] end)
+ local out={}
+ for i=1,math.min(#list,12) do out[i]=string.format('%s:%.1f',list[i][1],list[i][2]/window) end
+ return #out>0 and table.concat(out,',') or 'na'
+end
 function N.report(now)
  local window=now-N.windowStart
  local answered=N.pongs+N.lost
  M.log(string.format('NETRTT v=1 side=client slot=%s window_s=%.3f pings=%d pongs=%d lost=%d late=%d loss_pct=%s '..
   'rtt_ms_min=%s rtt_ms_median=%s rtt_ms_p95=%s rtt_ms_max=%s jitter_ms_p95=%s '..
-  'tx_pps=%.1f tx_Bps=%.0f rx_pps=%.1f rx_Bps=%.0f interval_s=%.3f clock=%s',
+  'tx_pps=%.1f tx_Bps=%.0f rx_pps=%.1f rx_Bps=%.0f interval_s=%.3f clock=%s rx_msgs=%.1f rx_types=%s',
   tostring(cfg.slot),window,N.pings,N.pongs,N.lost,N.late,
   answered>0 and string.format('%.1f',100*N.lost/answered) or 'na',
   value(M.percentile(N.rtts,0)),value(M.percentile(N.rtts,.5)),value(M.percentile(N.rtts,.95)),value(M.percentile(N.rtts,1)),
   value(M.percentile(N.deviations,.95)),
-  N.tx/window,N.txBytes/window,N.rx/window,N.rxBytes/window,interval,M.source))
+  N.tx/window,N.txBytes/window,N.rx/window,N.rxBytes/window,interval,M.source,N.messages/window,kinds(window)))
  resetWindow(now)
 end
 
@@ -104,6 +115,10 @@ X4LAN_CLIENT.new=function(...)
  local receive,update=c.receive,c.update
  if type(receive)=='function' then
   c.receive=function(self,packet,...)
+   if type(packet)=='string' then
+    local kind=packet:match('^([%u%d_]+)|')
+    if kind and #kind<=32 then N.messages=N.messages+1;N.kinds[kind]=(N.kinds[kind] or 0)+1 end
+   end
    if type(packet)=='string' and packet:sub(1,8)=='RTTPONG|' then
     if self.lease then N.pong(self,packet,clock()) end
     return

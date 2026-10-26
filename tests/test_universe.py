@@ -3,7 +3,7 @@ import random
 from pathlib import Path
 import unittest
 
-from x4lan.universe import Baseline, Receiver, Sender, UniverseSession, record
+from x4lan.universe import REPEAT_BUDGET, Baseline, Receiver, Sender, UniverseSession, record
 from test_game_adapter import LuaRuntime
 from test_host import TOKEN, P1, P2, FOREIGN
 
@@ -207,8 +207,10 @@ class UniverseRelayTests(unittest.TestCase):
         self.assertEqual(seen,set(range(1,201)))  # each fresh sample exactly once first
         for n,entity in enumerate((150,7,93)): self.s.receive(packet(entity,300+n,2),P1,.6)
         self.assertEqual(sorted(forwarded(.61)[:3]),[7,93,150])
-        repeats=forwarded(.66)  # nothing fresh: the budget repeats latest samples for loss
-        self.assertEqual(len(repeats),32)
+        repeats=forwarded(.66)  # nothing fresh: a small budget repeats latest samples for loss
+        self.assertEqual(len(repeats),REPEAT_BUDGET)
+        later=forwarded(.71)  # round robin, not the same entities every tick
+        self.assertEqual(len(later),REPEAT_BUDGET);self.assertFalse(set(later)&set(repeats))
 
 
 @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')

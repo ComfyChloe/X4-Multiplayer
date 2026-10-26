@@ -87,6 +87,90 @@ pub struct Peer {
     pub state_messages: u64,
     /// The nonce a RESUME replaced, until the next accepted state (lost WELCOME retry).
     pub resume_from: Option<Hex32>,
+    /// The client sent `XBCAP|1|<lease>|1`: it unpacks XB bundles (see [`bundle`]).
+    pub bundle: bool,
+}
+
+/// The XB bundle format a client announces with `XBCAP|1|<lease>|<version>`.
+pub const BUNDLE_VERSION: &str = "1";
+
+/// host.py `bundle`: pack one tick's snapshot packets into XB datagrams for
+/// bundle-capable peers.
+///
+/// `XB|1|<lease>|<len>:<item><len>:<item>...`: an item is a packet `KIND|1|<lease>|rest`
+/// addressed to that peer, carried as `KIND|rest`; the client restores the envelope and
+/// validates every message exactly as if sent alone. Datagrams stay within
+/// [`MAX_PACKET`], the limit of the native client transport. Packets for other peers,
+/// other forms and oversize items pass through unchanged and each destination's packet
+/// order is preserved. A bundle of one item is sent as the original packet. Without
+/// capable peers the input is returned unchanged.
+pub fn bundle(packets: Vec<Packet>, peers: &OrderedMap<Slot, Peer>) -> Vec<Packet> {
+    let capable: Vec<(SocketAddr, Hex32)> = peers.values().filter(|p| p.bundle).map(|p| (p.address, p.lease)).collect();
+    if capable.is_empty() {
+        return packets;
+    }
+    let lease_of = |address: &SocketAddr| capable.iter().find(|(a, _)| a == address).map(|(_, l)| *l);
+    // address -> (lease, [(original packet, encoded item)], encoded size)
+    type Open = (Hex32, Vec<(Vec<u8>, Vec<u8>)>, usize);
+    let mut out = Vec::with_capacity(packets.len());
+    let mut open: OrderedMap<SocketAddr, Open> = OrderedMap::new();
+    let flush = |open: &mut OrderedMap<SocketAddr, Open>, out: &mut Vec<Packet>, address: SocketAddr| {
+        let Some((lease, mut items, _)) = open.remove(&address) else { return };
+        if items.len() == 1 {
+            out.push((address, items.pop().expect("one item").0));
+            return;
+        }
+        let mut packet = format!("XB|1|{lease}|").into_bytes();
+        for (_, item) in &items {
+            packet.extend_from_slice(item);
+        }
+        out.push((address, packet));
+    };
+    for (address, packet) in packets {
+        let item = lease_of(&address).and_then(|lease| {
+            let bar = packet.iter().position(|b| *b == b'|')?;
+            let kind = &packet[..bar];
+            if kind.is_empty()
+                || kind.len() > 32
+                || !kind.iter().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || *b == b'_')
+            {
+                return None;
+            }
+            let envelope = format!("1|{lease}|");
+            let rest = packet[bar + 1..].strip_prefix(envelope.as_bytes())?;
+            let length = kind.len() + 1 + rest.len();
+            let mut item = format!("{length}:").into_bytes();
+            item.extend_from_slice(kind);
+            item.push(b'|');
+            item.extend_from_slice(rest);
+            Some((lease, item))
+        });
+        let Some((lease, item)) = item else {
+            flush(&mut open, &mut out, address);
+            out.push((address, packet));
+            continue;
+        };
+        let header = "XB|1|".len() + 32 + 1;
+        if header + item.len() > MAX_PACKET {
+            flush(&mut open, &mut out, address);
+            out.push((address, packet));
+            continue;
+        }
+        if open.get(&address).is_some_and(|(_, _, size)| header + size + item.len() > MAX_PACKET) {
+            flush(&mut open, &mut out, address);
+        }
+        if !open.contains_key(&address) {
+            open.insert(address, (lease, Vec::new(), 0));
+        }
+        let entry = open.get_mut(&address).expect("opened");
+        entry.2 += item.len();
+        entry.1.push((packet, item));
+    }
+    let remaining: Vec<SocketAddr> = open.keys().copied().collect();
+    for address in remaining {
+        flush(&mut open, &mut out, address);
+    }
+    out
 }
 
 /// host.py `Session` state.
@@ -356,6 +440,17 @@ impl Session {
                 self.state(f, address, now);
                 vec![]
             }
+            ("XBCAP", 4) => {
+                // Additive capability: relays without it ignore the message, and only a
+                // client that announced it ever receives an XB bundle.
+                if f[3] == BUNDLE_VERSION {
+                    let slot = self.core.peers.iter().find(|(_, p)| p.address == address && p.lease.matches(f[2]));
+                    if let Some(slot) = slot.map(|(s, _)| *s) {
+                        self.core.peers.get_mut(&slot).expect("found").bundle = true;
+                    }
+                }
+                vec![]
+            }
             _ => vec![],
         }
     }
@@ -447,6 +542,7 @@ impl Session {
                 joined_at: now,
                 state_messages: 0,
                 resume_from: None,
+                bundle: false,
             };
             self.core.peers.insert(slot, peer);
             self.core.resumable.remove(&slot);

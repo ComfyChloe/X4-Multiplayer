@@ -16,7 +16,7 @@ use std::net::SocketAddr;
 
 use x4lan_relay::json::{quote, Json};
 use x4lan_relay::pynum::{fmt_f, fmt_g, py_float};
-use x4lan_relay::session::{LeaseSource, Level, Session};
+use x4lan_relay::session::{bundle, LeaseSource, Level, Session};
 
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
@@ -73,7 +73,9 @@ fn main() {
                 format!("{{\"out\":[{}]}}", items.join(","))
             }
             "snap" => {
-                let packets = session.as_mut().expect("session").snapshots(t);
+                // The relay loop bundles every tick for XBCAP peers (host.py `bundle`).
+                let session = session.as_mut().expect("session");
+                let packets = bundle(session.snapshots(t), &session.core.peers);
                 let items: Vec<String> =
                     packets.iter().map(|(a, p)| format!("[{},{}]", quote(&a.to_string()), quote(&hex(p)))).collect();
                 format!("{{\"out\":[{}]}}", items.join(","))

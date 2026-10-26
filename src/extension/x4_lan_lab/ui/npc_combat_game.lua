@@ -8,6 +8,12 @@ local nativeCode=C.GetObjectIDCode -- Before identity_game's display-only overri
 local U,P,s,c,h,d=A.universe,X4LAN_UNIVERSE_PROTOCOL,A.state,A.coop,A.health,A.shot
 local n={records={},states={},claims={},pending={},seq=0,serial=0,cursor=0};A.npcCombat=n
 local function log(v) DebugError('[X4LAN] NPC_COMBAT '..v) end
+-- Host NHP cadence. A record is read every poll, but NHP is sent only when its health or
+-- death changes, and otherwise repeated with a new sequence every KEEPALIVE seconds. The
+-- relay forwards new sequences only; a guest binds health while its newest sequence is
+-- under 5 s old, so 1.5 s survives two consecutive lost datagrams. Formerly every read
+-- was sent: up to 128 NHP per 0.1 s.
+n.KEEPALIVE=1.5
 local function integer(v,max) local i=P.integer(tostring(v));return i and i<=(max or 2147483647) and i end
 local function percent(v) local x=tonumber(v);return x and x==x and x>=0 and x<=100 and x end
 local function key(id,gen,e,sg) return table.concat({id,gen,e,sg},'|') end
@@ -121,6 +127,9 @@ function n.read(payload)
  if not r or r.gen~=gen or r.serial~=serial or not hull or not shield or (f[6]~='0' and f[6]~='1') then return end
  if f[6]=='1' and (r.dead or not safe(r)) then return end
  r.hull,r.shield,r.dead,r.readAt=hull,shield,f[6]=='0',h.now
+ local now=h.now or 0;local sent=r.sent
+ if sent and sent.hull==hull and sent.shield==shield and sent.dead==r.dead and now-sent.at<n.KEEPALIVE then return end
+ r.sent={hull=hull,shield=shield,dead=r.dead,at=now}
  n.seq=n.seq+1
  send({'NHP',1,s.client.lease,s.client.lease,id,gen,n.seq,r.sector,r.code,r.macro,r.owner,hull,shield,r.dead and 0 or 1})
 end
@@ -179,7 +188,11 @@ function n.frame(now)
    local dead={};for _,r in pairs(n.records) do if r.dead and U.wanted[r.sector] then dead[#dead+1]=r end end
    for i=1,math.min(#dead,128) do
     n.deadCursor=(n.deadCursor or 0)%#dead+1;local r=dead[n.deadCursor]
-    n.seq=n.seq+1;send({'NHP',1,s.client.lease,s.client.lease,r.id,r.gen,n.seq,r.sector,r.code,r.macro,r.owner,0,0,0})
+    -- The death itself was sent by n.read; repeat it at the keepalive cadence only.
+    if not r.sent or not r.sent.dead or now-r.sent.at>=n.KEEPALIVE then
+     r.sent={hull=0,shield=0,dead=true,at=now}
+     n.seq=n.seq+1;send({'NHP',1,s.client.lease,s.client.lease,r.id,r.gen,n.seq,r.sector,r.code,r.macro,r.owner,0,0,0})
+    end
    end
   end
  end

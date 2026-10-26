@@ -386,6 +386,43 @@ def handwritten():
     s.send(2.1, P2, "CARGOREQ", 1, lease(2), "d" * 32, lease(1), 2, 1, "DROP", 0, "energycells", 5).snap(2.2)
     s.send(2.3, P2, "UINTEREST", 1, lease(2), 2, SECTOR2).snap(2.4).expire(40).snap(40)
 
+    # XB bundles: only an XBCAP peer (right lease, address and version) receives them; a
+    # dense NPC sector fills several bundles per tick, NHP/IDENT forward new sequences only.
+    for capable in (("p2",), ("p1", "p2")):
+        s = case(f"universe: XB bundles for {'+'.join(capable)}, dense NPC health/identity/motion", "universe")
+        s.hello(0).hello(0, "p2", P2, 2)
+        s.send(.01, P1, "WORLD", 1, lease(1), 1, *world())
+        s.send(.02, P1, "CREW", 1, lease(1), 1, 1, 1).send(.02, P2, "CREW", 1, lease(2), 1, 2, 2)
+        s.send(.03, P2, "UINTEREST", 1, lease(2), 1, SECTOR)
+        ids = list(range(1, 41))
+        rows = [ship_row(i) for i in ids]
+        digest = zlib.adler32("\n".join(rows).encode())
+        s.send(.04, P1, "UBEGIN", 1, lease(1), lease(1), 1, SECTOR, len(rows), digest)
+        for i, row in enumerate(rows, 1):
+            s.send(.04, P1, "UOBJECT", 1, lease(1), lease(1), 1, i, row)
+        s.send(.04, P1, "UCOMMIT", 1, lease(1), lease(1), 1)
+        s.send(.05, P2, "XBCAP", 1, lease(1), 1)          # wrong lease for P2
+        s.send(.05, P2, "XBCAP", 1, lease(2), 2)          # unknown version
+        s.send(.05, P1, "XBCAP", 1, lease(2), 1)          # wrong address
+        s.snap(.06)
+        for slot in capable:
+            s.send(.07, P1 if slot == "p1" else P2, "XBCAP", 1, lease(int(slot[1])), 1)
+        seq = 0
+        for step in range(4):
+            t = .1 + step * .1
+            for i in ids:
+                seq += 1
+                s.send(t, P1, "NHP", 1, lease(1), lease(1), i, 1, seq, SECTOR, f"ARG-{i}",
+                       "ship_arg_s_fighter_01_a_macro", "argon", 100 - step if i % 3 == 0 or step == 0 else 100, 50, 1)
+                s.send(t, P1, "IDENT", 1, lease(1), lease(1), seq, "N", i, f"ARG-{i}", "4142", 1, i % 2)
+                s.send(t, P1, "UMOVE", 1, lease(1), lease(1), i, seq, SECTOR, 10 + t, 1.25 * i, 2, 3, 0, 0.5, 0,
+                       100, 0, 0, 0, 0, 0)
+            for k in range(3):
+                s.snap(t + .01 + k * .05)
+        s.send(.6, P2, "UACK", 1, lease(2), lease(1), 1, 0)
+        for t in (.62, .7, .8, 1.0, 1.4, 2.5):
+            s.snap(t)
+
     s = case("universe: build label must start with world1-", "universe")
     s.commands[0]["build"] = "test"
     s = case("base: invalid constructor token", "base")
@@ -446,7 +483,7 @@ class Fuzzer:
     def packet(self, slot):
         """One (mostly) well-formed packet for this level's vocabulary."""
         r, L, lvl = self.r, self.lease(slot), self.level
-        kinds = ["HELLO", "STATE", "IDLE", "PING", "RESUME"]
+        kinds = ["HELLO", "STATE", "IDLE", "PING", "RESUME", "XBCAP"]
         if lvl != "base":
             kinds += ["WORLD", "ACTION", "DONE", "FIRE", "BODY", "WALK", "WALK2", "SUITKILL"]
         if lvl not in ("base", "bubble"):
@@ -483,6 +520,8 @@ class Fuzzer:
             return [fields]
         if kind == "PING":
             return [["PING", 1, TOKEN, nonce(r.randint(1, 9))]]
+        if kind == "XBCAP":
+            return [["XBCAP", 1, L, r.choice(["1", "1", "1", "2", "01"])]]
         if kind == "STATE":
             return [["STATE", 1, L, self.next_seq(("state", slot)), *self.pose(60000)]]
         if kind == "IDLE":

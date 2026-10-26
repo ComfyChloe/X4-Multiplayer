@@ -56,7 +56,8 @@ def handle(session, cmd):
             out = session.receive(bytes.fromhex(cmd["hex"]), address(cmd["addr"]), cmd["t"])
             return session, {"out": [p.hex() for p in out]}
         if op == "snap":
-            out = session.snapshots(cmd["t"])
+            # The relay loop bundles every tick for XBCAP peers (host.Relay.step).
+            out = host.bundle(session.snapshots(cmd["t"]), session.peers)
             return session, {"out": [[f"{a[0]}:{a[1]}", p.hex()] for a, p in out]}
         if op == "expire":
             session.expire(cmd["t"])

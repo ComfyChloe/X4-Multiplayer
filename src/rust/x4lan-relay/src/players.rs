@@ -271,6 +271,7 @@ mod tests {
             joined_at: 0.0,
             state_messages: 0,
             resume_from: None,
+            bundle: false,
         }
     }
 
