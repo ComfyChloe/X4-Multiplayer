@@ -307,3 +307,70 @@ impl<const N: usize> Blob<N> {
         u64::from_le_bytes(self.0[at..at + 8].try_into().unwrap())
     }
 }
+
+/// Pinned RVAs of original functions the flight tests call (build 23660954).
+pub mod rva {
+    /// `U::Path::ForcedFlightControlModel::Update` (vtable 0x2c4f7d0 slot +0x70).
+    pub const FORCED_UPDATE: u32 = 0x00eb_04c0;
+    /// Statically linked CRT `atan2f` / `asinf` called by the flight models.
+    pub const ATAN2F: u32 = 0x01a1_a398;
+    pub const ASINF: u32 = 0x01b4_3ce0;
+}
+
+/// SHA-256 of the first 32 code bytes at [`rva::FORCED_UPDATE`] (native/engine/signatures.py).
+pub const FORCED_UPDATE_HEAD: &str = "ac3fd226dd09d17861cd229954eec4430efc62e1ecb057d26ea502a8d58cf140";
+
+/// X4's own CRT math, executed from the mapped image (finite arguments only: the NaN error paths reach
+/// the CRT's error handling, which is not initialised in this process).
+pub struct MappedMath<'a> {
+    atan2f: extern "C" fn(f32, f32) -> f32,
+    asinf: extern "C" fn(f32) -> f32,
+    _image: &'a Image,
+}
+
+impl<'a> MappedMath<'a> {
+    pub fn new(image: &'a Image) -> MappedMath<'a> {
+        // SAFETY: pinned build verified by Image::load; both are leaf math functions (Windows x64 ABI).
+        unsafe {
+            MappedMath {
+                atan2f: std::mem::transmute::<*mut u8, extern "C" fn(f32, f32) -> f32>(image.at(rva::ATAN2F)),
+                asinf: std::mem::transmute::<*mut u8, extern "C" fn(f32) -> f32>(image.at(rva::ASINF)),
+                _image: image,
+            }
+        }
+    }
+}
+
+impl crate::flight::CrtMath for MappedMath<'_> {
+    fn atan2f(&self, y: f32, x: f32) -> f32 {
+        (self.atan2f)(y, x)
+    }
+    fn asinf(&self, x: f32) -> f32 {
+        (self.asinf)(x)
+    }
+}
+
+impl Image {
+    /// Run the original forced Update on a synthetic model object and a 0x1a0-byte slot image.
+    /// `model` bytes: +0x20 target position, +0x30..+0x5f target rows; +0x10 is pointed at a private
+    /// agent blob holding `max_forward` at +0x364. Returns the slot image afterwards.
+    #[allow(clippy::too_many_arguments)]
+    pub fn call_forced_update(&self, model: &[u8; 0x60], slot: &[u8; 0x1a0], dt: f32, t: f64, cheap: u8, p: u8,
+                              max_forward: f32) -> [u8; 0x1a0] {
+        let mut agent = Blob::<0x400>::zeroed();
+        agent.put_f32(0x364, max_forward);
+        let mut m = Blob::<0x60>::zeroed();
+        m.0.copy_from_slice(model);
+        m.put_u64(0x10, agent.ptr() as u64);
+        let mut s = Blob::<0x1a0>::zeroed();
+        s.0.copy_from_slice(slot);
+        type Update = extern "C" fn(*mut u8, *mut u8, f32, f64, u8, u8);
+        // SAFETY: pinned code (file hash checked at load); the function reads the model, the agent field
+        // and the slot only, and calls the two CRT leaf functions.
+        unsafe {
+            let update = std::mem::transmute::<*mut u8, Update>(self.at(rva::FORCED_UPDATE));
+            update(m.ptr(), s.ptr(), dt, t, cheap, p);
+        }
+        s.0
+    }
+}
