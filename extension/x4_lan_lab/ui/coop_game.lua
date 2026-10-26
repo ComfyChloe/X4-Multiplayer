@@ -260,7 +260,15 @@ end
 -- Play FIRE2 trigger evidence back at the same source time as the rendered NAV2 pose.
 local function fire2Frame(i,r,ship,now)
  -- Observed-projectile mode never aims/fires a native replay gun.
- if cfg.projectile_visuals then stopFire2(i);return end
+ if cfg.projectile_visuals or (cfg.shot_visual and i>2) then
+  -- Projectile and harmless-shot visuals exist for ships 1/2 only: remote fire of ships
+  -- 3.. is not drawn in those modes (fail closed, logged once per ship).
+  if i>2 and c.fire2[i] and not (c.fireLimitLogged or {})[i] then
+   c.fireLimitLogged=c.fireLimitLogged or {};c.fireLimitLogged[i]=true
+   log('FIRE_VISUAL_LIMIT ship='..i..': remote fire is not drawn for ships beyond 2 in projectile/shot visual mode')
+  end
+  stopFire2(i);return
+ end
  local q=c.fire2[i]
  if not q then return end
  local visualGen=A.health and A.health.valid[i]

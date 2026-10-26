@@ -44,7 +44,7 @@ size; the relay rejects ships 3.. explicitly (no reply, or `REJECTED` for orders
 | WORLD rows (hull/shield/cargo/dock) | separate server-owned `XSHIP` rows, 5 Hz |
 | Pilot-reported health (HEALTH/HACK/HSTALE/HBASE), HGEN | not offered; health is server-owned via `XSHIP` |
 | Shot claims (SHOT), NPC hit claims (NCLAIM) | rejected; no hit credit from ships 3.. |
-| Projectile visuals (BOLT/BEND) | rejected; FIRE2 trigger playback still works |
+| Projectile visuals (BOLT/BEND), harmless shot visuals | rejected; remote fire of ships 3.. is therefore **not drawn** in packaged sessions (`projectile_visuals`/`shot_visual` on), logged once as `FIRE_VISUAL_LIMIT`. FIRE2 is still relayed and replayed natively only when both visual modes are off (dev configs) |
 | Native cargo drop/pickup (CARGOREQ), market orders (COOPORDER) | rejected (`REJECTED`) |
 | Legacy bubble actions (fixture drops, station transfer) | rejected |
 | Dock attachment (CDOCK) | rejected; the remote ship follows its NAV2 pose only |
