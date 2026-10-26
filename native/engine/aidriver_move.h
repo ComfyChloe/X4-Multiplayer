@@ -327,7 +327,6 @@ static int ad_global_interrupts(void *dir, void *ctx, void *es, uint32_t mask) {
     if (!best_rec) return 0;
 
     /* apply the chosen handler */
-    ++ad.win.global_applied;
     unsigned char *rec = (unsigned char *)PTR(ctx, AD_C_PENDING) + best_idx * 0x50;
     int32_t kw = I32(rec, 8);
     ad_value v[4];
@@ -347,6 +346,7 @@ static int ad_global_interrupts(void *dir, void *ctx, void *es, uint32_t mask) {
     }
     if (target) {
         void *g = ad_dir();
+        ++ad.win.global_applied;   /* counted at ClearWake(target), as the census does */
         E.clear_wake(target);
         U32(target, AD_C_TMASK) = 0;
         F64(target, AD_C_WAKETIME) = -1.0;
@@ -435,6 +435,7 @@ static void ad_return_to_caller(void *es) {
         }
     }
     U32(caller, AD_C_MASK) |= 0x20;
+    ++ad.win.caller_wakes;
     E.request_wake(ad_dir(), caller);
 }
 
@@ -475,13 +476,13 @@ static void ad_process_context(void *dir, void *ctx, unsigned r, int timed, unsi
             return;
         }
     } else {
-        ++ad.win.attention_restarts;
         if (!(mask & 0x81)) {
             void *bl = E.blocking_action(es);
             if (!bl) ++ad.win.bad_caller;   /* the original dereferences it unchecked (would fault) */
             else if (PTR(bl, 0x50)) ad_irq(ctx, es, PTR(es, AD_E_PROGRAM), (uintptr_t)PTR(bl, 0x50), (uintptr_t)PTR(bl, 0x58), 1, mask);
         }
         if (!U8(es, AD_E_NOATT)) {
+            ++ad.win.attention_restarts;   /* counted at GetAttentionBlock, as the census does */
             int32_t attention = I32(PTR(ctx, AD_C_ENTITY), AD_ENTITY_ATTENTION);
             I32(ctx, AD_C_CACHED_ATT) = attention;
             PTR(es, AD_E_PROGRAM) = E.attention_block(PTR(ctx, AD_C_SCRIPT), (uintptr_t)(uint32_t)attention);

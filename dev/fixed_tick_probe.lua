@@ -58,7 +58,9 @@ local function logStats(now)
     string.format(' sectors=%.2f secSumMs=%.3f secMaxMs=%.3f serialMs=%.3f speedup=%.2f maxShare=%.3f fleets=%.2f fleetSpeedup=%.2f dropped=%d',
     a.sectors or 0,a.sector_sum_ms or 0,a.sector_max_ms or 0,a.serial_ms or 0,a.speedup or 0,a.max_share or 0,a.fleets or 0,a.fleet_speedup or 0,a.dropped or 0)..
     string.format(' fleetResolver=%d fleetMaxShare=%.3f wakeFleetSame=%.2f evFleetSame=%.3f evPendingForeign=%.3f',
-    a.fleet_resolver or 0,a.fleet_max_share or 0,a.wake_fleet_same or 0,a.ev_fleet_same or 0,a.ev_pending_foreign or 0))
+    a.fleet_resolver or 0,a.fleet_max_share or 0,a.wake_fleet_same or 0,a.ev_fleet_same or 0,a.ev_pending_foreign or 0)..
+    string.format(' attRestarts=%.3f removed=%.3f callerWakes=%.3f globalApplied=%.3f',
+    a.attention_restarts or 0,a.removed or 0,a.caller_wakes or 0,a.global_applied or 0))
    DebugError('[X4LAN] AIPROF scripts '..(a.scripts or ''))
    DebugError('[X4LAN] AIPROF sectors '..(a.top_sectors or ''))
    if a.mode~='census' or (a.driver_frames or 0)>0 then

@@ -67,7 +67,8 @@
 #define AD_STUB_BYTES 32
 #define AD_STUB_PAGE 4096
 
-enum { AD_CALL_PHASE, AD_CALL_EXEC, AD_CALL_IRQ_GLOBAL, AD_CALL_IRQ_INT, AD_CALL_IRQ_ATT, AD_CALLS };
+enum { AD_CALL_PHASE, AD_CALL_EXEC, AD_CALL_IRQ_GLOBAL, AD_CALL_IRQ_INT, AD_CALL_IRQ_ATT,
+       AD_CALL_ATTN_BLOCK, AD_CALL_REMOVE, AD_CALL_CALLER_WAKE, AD_CALL_GLOBAL_CLEAR, AD_CALLS };
 enum { AD_V_CTX, AD_V_STACK, AD_V_CUE, AD_VSITES };
 enum { AD_OFF, AD_CENSUS, AD_NORMAL, AD_ROUNDS, AD_COMPARE };
 static const char *const ad_mode_names[] = {"off", "census", "normal", "rounds", "compare"};
@@ -112,7 +113,7 @@ typedef struct {
     uint64_t ev_pending_foreign;      /* census: event to a still-queued context of another sector */
     uint64_t wake_fleet_same, ev_fleet_same, fleet_hops, fleet_dropped;   /* fleet-root resolver */
     /* stage 1 driver */
-    uint64_t driver_frames, preflight_refusals, loop_logs, global_applied, attention_restarts, removed;
+    uint64_t driver_frames, preflight_refusals, loop_logs, global_applied, attention_restarts, removed, caller_wakes;
     uint64_t bad_caller, rounds_fallback, buckets_run, deferred;
     uint64_t cmp_event_pending, cmp_event_ran, cmp_null_lost, cmp_unchecked, cmp_passes_clean, cmp_passes_dirty;
     uint64_t cmp_post_cancel, cmp_wake_absorb;
@@ -591,6 +592,26 @@ static uintptr_t ad_irq_global(void *es, void *p, uintptr_t a3, uintptr_t a4, ui
 static uintptr_t ad_irq_interrupt(void *es, void *p, uintptr_t a3, uintptr_t a4, uintptr_t a5) { return ad_irq_common(AD_CALL_IRQ_INT, es, p, a3, a4, a5); }
 static uintptr_t ad_irq_attention(void *es, void *p, uintptr_t a3, uintptr_t a4, uintptr_t a5) { return ad_irq_common(AD_CALL_IRQ_ATT, es, p, a3, a4, a5); }
 
+/* Branch counters inside the original Move (census): pass-through, counted at the same engine calls
+   the stage-1 driver counts, so census and driver runs compare branch by branch. */
+static int ad_counting(void) { return ad_owner_ok() && ad.in_phase && ad.mode == AD_CENSUS; }
+static void *ad_c_attn_block(void *script, uintptr_t attention) {
+    if (ad_counting()) ++ad.win.attention_restarts;
+    return ((void *(*)(void *, uintptr_t))ad.calls[AD_CALL_ATTN_BLOCK].target)(script, attention);
+}
+static void ad_c_remove(void *dir, void *ctx) {
+    if (ad_counting()) ++ad.win.removed;
+    ((void (*)(void *, void *))ad.calls[AD_CALL_REMOVE].target)(dir, ctx);
+}
+static void ad_c_caller_wake(void *dir, void *ctx) {
+    if (ad_counting()) ++ad.win.caller_wakes;
+    ((void (*)(void *, void *))ad.calls[AD_CALL_CALLER_WAKE].target)(dir, ctx);
+}
+static void ad_c_global_clear(void *ctx) {
+    if (ad_counting()) ++ad.win.global_applied;
+    ((void (*)(void *))ad.calls[AD_CALL_GLOBAL_CLEAR].target)(ctx);
+}
+
 static void ad_rounds_event(void *receiver);   /* aidriver_move.h */
 
 static void ad_event_note(int kind, void *self) {
@@ -733,7 +754,9 @@ static void ad_uninstall(void) {
 /* Verify every site, then patch all or nothing. verify_code=0 skips the SHA-256 checks (tests). */
 static const char *ad_install_hooks(int verify_code) {
     static void *const call_wrappers[AD_CALLS] = {(void *)ad_phase, (void *)ad_exec_run, (void *)ad_irq_global,
-                                                  (void *)ad_irq_interrupt, (void *)ad_irq_attention};
+                                                  (void *)ad_irq_interrupt, (void *)ad_irq_attention,
+                                                  (void *)ad_c_attn_block, (void *)ad_c_remove,
+                                                  (void *)ad_c_caller_wake, (void *)ad_c_global_clear};
     void *vwrappers[AD_VSITES] = {(void *)ad_ctx_event, (void *)ad_stack_event, (void *)ad_cue_event};
     if (sizeof(x4_ai_calls) / sizeof(x4_ai_calls[0]) != AD_CALLS ||
         sizeof(x4_ai_vsites) / sizeof(x4_ai_vsites[0]) != AD_VSITES) return "signature table mismatch";
@@ -992,6 +1015,7 @@ static int ad_lua_stats(lua_State *L) {
     number_field(L, "global_applied", (double)w->global_applied / frames);
     number_field(L, "attention_restarts", (double)w->attention_restarts / frames);
     number_field(L, "removed", (double)w->removed / frames);
+    number_field(L, "caller_wakes", (double)w->caller_wakes / frames);
     number_field(L, "bad_caller", (double)w->bad_caller);
     number_field(L, "rounds_fallback", (double)w->rounds_fallback);
     number_field(L, "buckets_run", (double)w->buckets_run / frames);

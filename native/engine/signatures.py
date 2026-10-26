@@ -70,6 +70,11 @@ AIDRIVER_CALL_SITES = {
     'irq_global': (0x106D8D6, 0xB58CE0),
     'irq_interrupt': (0x106E2EF, 0xB58CE0),
     'irq_attention': (0x106E34A, 0xB58CE0),
+    # branch counters for the stage-1 A/B (census counts what the driver counts, at the same calls)
+    'attn_block': (0x106E372, 0x1074850),    # GetAttentionBlock: attention-block restart
+    'remove_ctx': (0x106E624, 0x106F710),    # RemoveContext: script finished
+    'caller_wake': (0x106E612, 0x106F910),   # RequestWake of the caller after a return (0x20)
+    'global_clear': (0x106DC85, 0x10669C0),  # ClearWake(target): a global interrupt handler applied
 }
 # Data-only: vtable slot 565 (HandleScriptEvent) entries (entry RVA, function RVA).
 AIDRIVER_VTABLE_SITES = {

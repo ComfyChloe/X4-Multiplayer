@@ -60,7 +60,9 @@ def main():
     for label, num, den in [('irq per run', 'irqRuns', 'runs'), ('timed due per run', 'timedDue', 'runs'),
                             ('ext wakes per run', 'extWakes', 'runs'), ('cue events per run', 'evCue', 'runs'),
                             ('foreign wake fraction', 'wakeForeign', ('wakeOwn', 'wakeForeign')),
-                            ('runs per sector', 'runs', 'sectors')]:
+                            ('runs per sector', 'runs', 'sectors'),
+                            ('attention restarts/run', 'attRestarts', 'runs'), ('removals per run', 'removed', 'runs'),
+                            ('caller wakes per run', 'callerWakes', 'runs'), ('global handlers/run', 'globalApplied', 'runs')]:
         ra, rb = ratio(a, num, den), ratio(b, num, den)
         rel = (rb / ra - 1.0) if ra else 0.0
         flag = '  <-- differs' if abs(rel) > tol else ''
