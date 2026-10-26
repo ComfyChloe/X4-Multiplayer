@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from types import SimpleNamespace
 ROOT=Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('internal_launcher',ROOT/'distribution/session_launcher.py')
+spec=importlib.util.spec_from_file_location('internal_launcher',ROOT/'tools/distribution/session_launcher.py')
 launcher=importlib.util.module_from_spec(spec);spec.loader.exec_module(launcher)
 
 class InternalSessions(unittest.TestCase):

@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Opt-in health observation in a disposable world; never shipped (tools/dev/HEALTH-FUNCTION-PROBE.txt). -->
+<mdscript name="X4LAN_HealthProbe" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+ <cues>
+  <cue name="Observe" namespace="this">
+   <conditions><event_ui_triggered screen="'X4LAN_Health'" control="'Setup'"/></conditions>
+   <actions>
+    <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
+    <set_value name="$n" exact="0"/>
+    <!-- Enables the post-write readbacks ('written ...') inside md/x4lan_health.xml. -->
+    <set_value name="$arena.$healthProbe" exact="true"/>
+    <debug_text text="'[X4LAN] HEALTH_PROBE observe host=%s'.[$arena.$host]"/>
+   </actions>
+   <cues>
+    <!-- 20 Hz native state of both co-op ships: health, floor authority, fences and life state. -->
+    <cue name="Sample" instantiate="true" checkinterval="0.05s"><conditions><check_value value="true"/></conditions><actions>
+     <set_value name="$n" operation="add" exact="1"/>
+     <do_all exact="2" counter="$i">
+      <set_value name="$s" exact="$arena.$ships.{$i}"/>
+      <debug_text text="'[X4LAN] HEALTH_PROBE sample=%s age=%s wall=%s timewarp=%s entity=%s operational=%s hull=%s shield=%s live=%s gen=%s closed=%s value=%s at=%s dead=%s'.[$n,player.age,player.systemtime.{'%Y-%m-%dT%H:%M:%S'},player.timewarp.factor,$i,@$s.isoperational,@$s.hullpercentage,@$s.shieldpercentage,@$arena.$healthLive.{$i},@$arena.$healthGen.{$i},@$arena.$healthClosed.{$i},@$arena.$healthValue.{$i},@$arena.$healthAt.{$i},@$arena.$dead.{$i}]"/>
+     </do_all>
+    </actions></cue>
+    <!-- Phase 3 only (requested by the Lua probe): a labelled host-side setter below the 2% floor. -->
+    <cue name="Drop" instantiate="true"><conditions><event_ui_triggered screen="'X4LAN_HealthProbe'" control="'Drop'"/></conditions><actions>
+     <set_value name="$s" exact="$arena.$ships.{event.param3.$entity}"/>
+     <do_if value="@$s.isoperational">
+      <set_object_hull object="$s" exact="event.param3.$hull"/>
+      <debug_text text="'[X4LAN] HEALTH_PROBE drop entity=%s requested=%s readback=%s'.[event.param3.$entity,event.param3.$hull,$s.hullpercentage]"/>
+     </do_if>
+    </actions></cue>
+   </cues>
+  </cue>
+ </cues>
+</mdscript>

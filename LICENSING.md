@@ -63,7 +63,7 @@ rights over previously submitted or separately owned work.
 This license applies only to rights the project's licensors can grant. It does
 not relicense X4 itself, Egosoft content, runtime dependencies, SDKs, or other
 third-party components. Their own terms continue to apply. Distribution notices
-are in [distribution/THIRD-PARTY.txt](distribution/THIRD-PARTY.txt); downloaded
+are in [tools/distribution/THIRD-PARTY.txt](tools/distribution/THIRD-PARTY.txt); downloaded
 runtimes carry their own notices.
 
 The separate `X4-Multiplayer-Source` repository contains historical source

@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 from test_game_adapter import MOCK, LuaRuntime
 
-UI = Path(__file__).resolve().parents[1] / "extension/x4_lan_lab/ui"
+UI = Path(__file__).resolve().parents[1] / "src/extension/x4_lan_lab/ui"
 SETUP = """
 X4LAN_CONFIG.bubble_actions=true;X4LAN_CONFIG.coop=true;X4LAN_CONFIG.world_sync=true
 X4LAN_CONFIG.test_profile='45841';X4LAN_CONFIG.seed_id=string.rep('b',32)

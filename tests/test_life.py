@@ -5,7 +5,7 @@ from test_host import TOKEN,P1,P2,FOREIGN,hello
 from test_game_adapter import MOCK,LuaRuntime
 from test_bubble_adapter import EXTRA
 
-UI=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui'
+UI=Path(__file__).resolve().parents[1]/'src/extension/x4_lan_lab/ui'
 
 class BodyProtocolTests(unittest.TestCase):
     def setUp(self):

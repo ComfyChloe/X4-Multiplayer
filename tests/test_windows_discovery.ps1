@@ -3,7 +3,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version 2
 $sourceRoot = Split-Path -Parent $PSScriptRoot
 $errors = $null
-$ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot 'distribution/windows_setup.ps1'), [ref]$null, [ref]$errors)
+$ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot 'tools/distribution/windows_setup.ps1'), [ref]$null, [ref]$errors)
 if ($errors.Count) { throw ($errors | Out-String) }
 foreach ($statement in $ast.EndBlock.Statements) {
     if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) { Invoke-Expression $statement.Extent.Text }

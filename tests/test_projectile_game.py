@@ -4,7 +4,7 @@ import unittest
 import xml.etree.ElementTree as E
 from test_game_adapter import LuaRuntime
 ROOT=Path(__file__).resolve().parents[1]
-UI=ROOT/'extension/x4_lan_lab/ui'
+UI=ROOT/'src/extension/x4_lan_lab/ui'
 
 
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
@@ -202,13 +202,13 @@ class ProjectileAdapterTests(unittest.TestCase):
 
 class NativeProjectileGateTests(unittest.TestCase):
     def test_setup_stops_only_remote_scripted_fire_and_preserves_player_input(self):
-        tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_projectile.xml')
+        tree=E.parse(ROOT/'src/extension/x4_lan_lab/md/x4lan_projectile.xml')
         stop=tree.find('cues/cue/actions/do_all/do_if')
         self.assertEqual(stop.get('value'),'@$arena.$ships.{$e}.isoperational and player.controlled != $arena.$ships.{$e}')
         self.assertIsNotNone(stop.find('stop_shooting'))
 
     def test_native_slot_cancel_fences_queued_create_and_cannot_remove_newer_object(self):
-        tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_projectile.xml')
+        tree=E.parse(ROOT/'src/extension/x4_lan_lab/md/x4lan_projectile.xml')
         cues={x.get('name'):x for x in tree.iter('cue')}
         create=cues['Create'].find('actions/do_if').get('value')
         remove=cues['Remove'].find('actions/do_if').get('value')
@@ -223,7 +223,7 @@ class NativeProjectileGateTests(unittest.TestCase):
         self.assertTrue(permits(c,10,9));self.assertFalse(permits(r,9,10))
 
     def test_full_native_execution_gate_rechecks_identity_generation_pause_and_deadline(self):
-        tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_projectile.xml')
+        tree=E.parse(ROOT/'src/extension/x4_lan_lab/md/x4lan_projectile.xml')
         window=next(x for x in tree.iter('library') if x.get('name')=='Window').findall('actions/set_value')[-1].get('exact')
         create=next(x for x in tree.iter('cue') if x.get('name')=='Create').find('actions/do_if').get('value')
         mapping={
@@ -263,7 +263,7 @@ class NativeProjectileGateTests(unittest.TestCase):
             with self.subTest(change=change):self.assertFalse(accepted(change))
 
     def test_carrier_is_meshless_effects_finite_and_no_damage_or_physical_bullets_are_created(self):
-        root=ROOT/'extension/x4_lan_lab';base=root/'assets/x4lan/projectiles'
+        root=ROOT/'src/extension/x4_lan_lab';base=root/'assets/x4lan/projectiles'
         carrier=E.parse(base/'x4lan_projectile_carrier.xml').find('component')
         self.assertEqual(carrier.get('class'),'object');self.assertIsNone(carrier.find('source'));self.assertFalse(carrier.findall('.//part'))
         effects=E.parse(root/'libraries/effects.xml').findall('add/effect')

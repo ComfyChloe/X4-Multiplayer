@@ -10,7 +10,7 @@ from unittest.mock import patch
 from x4lan import seed
 
 ROOT=Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('world_launcher',ROOT/'distribution/world_launcher.py')
+spec=importlib.util.spec_from_file_location('world_launcher',ROOT/'tools/distribution/world_launcher.py')
 w=importlib.util.module_from_spec(spec);spec.loader.exec_module(w)
 
 class WorldLauncher(unittest.TestCase):

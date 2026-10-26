@@ -15,7 +15,7 @@ from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 
 SOURCE = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('public_launcher', SOURCE / 'distribution/public/launcher.py')
+spec = importlib.util.spec_from_file_location('public_launcher', SOURCE / 'tools/distribution/public/launcher.py')
 launcher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(launcher)
 
@@ -127,7 +127,7 @@ class PublicSessionTests(unittest.TestCase):
                 self.assertIn('C:\\Games\\X4 Foundations',args)
 
     def test_linux_temp_config_link_never_overwrites_another_profile(self):
-        spec=importlib.util.spec_from_file_location('public_linux_fixture',SOURCE/'distribution/linux_setup.py')
+        spec=importlib.util.spec_from_file_location('public_linux_fixture',SOURCE/'tools/distribution/linux_setup.py')
         setup=importlib.util.module_from_spec(spec);spec.loader.exec_module(setup)
         profile=self.root/'45842';profile.mkdir()
         protected=self.root/'normal-config.xml';protected.write_text('<root><language>49</language></root>')
@@ -166,7 +166,7 @@ class PublicProfileTests(unittest.TestCase):
         lua.execute(MOCK+EXTRA)
         lua.globals().X4LAN_CONFIG.test_profile=configured_profile
         lua.execute('api.GetSaveFolderPath=function() return ... end'.replace('...', '"/isolated/X4/'+actual_profile+'/save/"'))
-        lua.execute((SOURCE/'extension/x4_lan_lab/ui/bubble_game.lua').read_text())
+        lua.execute((SOURCE/'src/extension/x4_lan_lab/ui/bubble_game.lua').read_text())
         return lua
 
     def test_public_profile_activates_and_internal_or_normal_profile_does_not(self):

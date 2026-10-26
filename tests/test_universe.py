@@ -7,7 +7,7 @@ from x4lan.universe import Baseline, Receiver, Sender, UniverseSession, record
 from test_game_adapter import LuaRuntime
 from test_host import TOKEN, P1, P2, FOREIGN
 
-UI = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/ui'
+UI = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/ui'
 EPOCH = 'a' * 32
 SECTOR = 'cluster_14_sector001_macro'
 OTHER = 'cluster_01_sector001_macro'

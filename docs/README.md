@@ -9,6 +9,7 @@ stay at the root: [README.md](../README.md), [AGENTS.md](../AGENTS.md),
 
 ## Development and design
 
+- [LAYOUT.md](LAYOUT.md): source folders and how to convert old-layout patches.
 - [DEVELOPMENT.txt](DEVELOPMENT.txt): setup, commands, packaging and machine changes.
 - [ARCHITECTURE.md](ARCHITECTURE.md): internal architecture and protocol reference.
 - [WORLD-SYNC-REQUIREMENTS.txt](WORLD-SYNC-REQUIREMENTS.txt): shared-universe requirements and diagnosis.
@@ -29,5 +30,5 @@ Early test evidence, kept for reference. Current results are in
 - [testing/TRADE_TESTS.txt](testing/TRADE_TESTS.txt): market trading evidence, versions 3 to 5.
 
 Other documentation lives next to what it describes: [onboarding/](../onboarding/)
-for new contributors and [distribution/](../distribution/) for package and
+for new contributors and [tools/distribution/](../tools/distribution/) for package and
 human-test procedures.

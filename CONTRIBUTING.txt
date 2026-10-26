@@ -22,7 +22,7 @@ Use this entry path; load additional documents for the assigned task:
 2. CONTINUE-HERE.txt: current state, measured evidence and outstanding work.
 3. docs/DEVELOPMENT.txt for setup, commands, packaging or machine changes.
 4. docs/WORLD-SYNC-REQUIREMENTS.txt and relevant docs/ARCHITECTURE.md sections before
-   gameplay/authority changes. Use distribution/NEXT-TEST.txt for the current test.
+   gameplay/authority changes. Use tools/distribution/NEXT-TEST.txt for the current test.
 5. docs/INTERNET-HOSTING-ANALYSIS.txt when working on transport or dedicated hosting.
 
 The shared-start implementation transfers one native starting save; acceptance and pending work are
@@ -57,8 +57,8 @@ any additional permissions required from the relevant rights holders.
 For a new Linux x86_64 checkout:
   git clone https://github.com/Lith7ium/X4-Multiplayer.git X4-Multiplayer
   cd X4-Multiplayer
-  python3 dev/bootstrap.py
-  .venv/bin/python dev/check.py
+  python3 tools/dev/bootstrap.py
+  .venv/bin/python tools/dev/check.py
 
 This installs the development dependencies in .venv and runs the existing checks;
 it does not install or launch X4. It needs Python 3.10+, package-download access

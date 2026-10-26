@@ -7,7 +7,7 @@ from unittest.mock import patch
 import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('profile_settings', ROOT / 'distribution/profile_settings.py')
+spec = importlib.util.spec_from_file_location('profile_settings', ROOT / 'tools/distribution/profile_settings.py')
 settings = importlib.util.module_from_spec(spec); spec.loader.exec_module(settings)
 
 

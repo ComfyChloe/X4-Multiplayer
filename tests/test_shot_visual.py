@@ -137,7 +137,7 @@ class VisualAdapterTests(unittest.TestCase):
 
 class NativeReplayGateTests(unittest.TestCase):
     def test_observed_mode_latches_before_prepare_and_never_stops_actual_player_input(self):
-        root=ROOT/'extension/x4_lan_lab/md'
+        root=ROOT/'src/extension/x4_lan_lab/md'
         visual=E.parse(root/'x4lan_shot_visual.xml');session=visual.find('cues/cue')
         actions=list(session.find('actions'))
         flag=next(x for x in actions if x.get('name')=='$arena.$projectileVisualEnabled')
@@ -163,7 +163,7 @@ class NativeReplayGateTests(unittest.TestCase):
         self.assertEqual(on.find('actions/do_if').get('value'),'not @$projectileVisualEnabled')
 
     def test_observed_controlled_ship_discards_stale_replay_budget_without_stopping_input(self):
-        tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_coop.xml')
+        tree=E.parse(ROOT/'src/extension/x4_lan_lab/md/x4lan_coop.xml')
         cue=next(x for x in tree.iter('cue') if x.get('name')=='Fire2')
         refused=cue.find('actions/do_else');self.assertIsNotNone(refused)
         self.assertFalse(list(refused.iter('stop_shooting')))
@@ -174,7 +174,7 @@ class NativeReplayGateTests(unittest.TestCase):
         self.assertEqual(state,{'$arena.$fireRemaining.{$v.$ship}':[0,0], '$arena.$fireManaged.{$v.$ship}':False})
 
     def test_queued_positive_grant_is_refused_after_mode_gen_closure_or_expiry_change(self):
-        tree=E.parse(ROOT/'extension/x4_lan_lab/md/x4lan_coop.xml')
+        tree=E.parse(ROOT/'src/extension/x4_lan_lab/md/x4lan_coop.xml')
         cue=next(c for c in tree.iter('cue') if c.get('name')=='Fire2')
         guard=cue.find('actions/do_if/do_if')
         expression=guard.get('value')
@@ -203,7 +203,7 @@ class NativeReplayGateTests(unittest.TestCase):
         self.assertEqual([n.get('exact') for n in refused.findall('set_value')],['[0,0]','false'])
 
     def test_assets_are_separately_indexed_zero_damage_stock_references(self):
-        root=ROOT/'extension/x4_lan_lab'
+        root=ROOT/'src/extension/x4_lan_lab'
         entries=[e for e in E.parse(root/'index/macros.xml').findall('add/entry') if e.get('name').startswith('x4lan_visual_')]
         self.assertEqual(len(entries),3)
         for entry in entries:

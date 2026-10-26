@@ -1,4 +1,4 @@
-"""BOLT/BEND relay (x4lan/projectile_relay.py via CoopSession): authority, loss, reorder, pause, caps."""
+"""BOLT/BEND relay (src/x4lan/projectile_relay.py via CoopSession): authority, loss, reorder, pause, caps."""
 import unittest
 from x4lan import projectile_protocol as pp
 from x4lan import projectile_relay as pr

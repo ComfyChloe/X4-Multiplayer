@@ -10,7 +10,7 @@ import unittest
 import xml.etree.ElementTree as E
 from pathlib import Path
 
-MD = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/md/x4lan_health.xml'
+MD = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/md/x4lan_health.xml'
 WALL = "player.systemtime.{'%Y-%m-%dT%H:%M:%S'}"
 TOKENS = [
     (r'\[([^\[\]]+)\]\.max', r'max(\1)'),   # before any bracketed rewrite

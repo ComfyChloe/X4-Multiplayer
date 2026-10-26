@@ -2,7 +2,7 @@
 from pathlib import Path
 import unittest
 from test_game_adapter import MOCK,LuaRuntime
-SCRIPT=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui/bubble_game.lua'
+SCRIPT=Path(__file__).resolve().parents[1]/'src/extension/x4_lan_lab/ui/bubble_game.lua'
 EXTRA='''
 X4LAN_CONFIG.bubble_actions=true
 GetComponentData=function() return 'cluster_14_sector001_macro' end

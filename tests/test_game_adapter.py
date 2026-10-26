@@ -7,7 +7,7 @@ try:
 except ImportError:
     LuaRuntime = None
 
-GAME = Path(__file__).resolve().parents[1] / "extension/x4_lan_lab/ui/game.lua"
+GAME = Path(__file__).resolve().parents[1] / "src/extension/x4_lan_lab/ui/game.lua"
 MOCK = '''
 now, valid, paused, controlled, sector = 0, true, false, 11, 22
 shipPos = {x=100, y=200, z=300, yaw=.1, pitch=.2, roll=.3}

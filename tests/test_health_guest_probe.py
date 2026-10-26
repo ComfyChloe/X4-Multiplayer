@@ -5,7 +5,7 @@ from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / 'extension/x4_lan_lab/ui'
+UI = ROOT / 'src/extension/x4_lan_lab/ui'
 
 
 @unittest.skipUnless(LuaRuntime, 'LuaJIT unavailable')
@@ -21,7 +21,7 @@ class HealthGuestProbeTests(unittest.TestCase):
         l.execute('''local real=X4LAN_TRANSPORT.open
          X4LAN_TRANSPORT.open=function(...) local t=real(...)
           return setmetatable({},{__index=function(_,k) return t[k] end,__newindex=function() error('attempt to index userdata') end}) end''')
-        l.execute((ROOT / 'dev/health_guest_probe.lua').read_text())
+        l.execute((ROOT / 'tools/dev/health_guest_probe.lua').read_text())
         l.execute('''events['X4LAN.Loaded']();now=10;frames.onUpdate();events['X4LAN_Bubble.Ready']();frames.onUpdate();events['X4LAN_Coop.Ready']()
          client:receiveExtension({'AUTH','1',client.lease,'1','p1','1','p1','p2','1','p2'},now)
          now=10.1;frames.onUpdate();events['X4LAN_Health.Ready']()

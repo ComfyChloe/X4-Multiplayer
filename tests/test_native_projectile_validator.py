@@ -70,7 +70,7 @@ class ProjectileValidatorTests(unittest.TestCase):
 
     @unittest.skipUnless(LuaRuntime,'LuaJIT unavailable')
     def test_production_orientation_mode_does_not_secretly_correct_tested_poses(self):
-        source=(Path(__file__).resolve().parents[1]/'dev/projectile_probe.lua').read_text()
+        source=(Path(__file__).resolve().parents[1]/'tools/dev/projectile_probe.lua').read_text()
         for hold in (False,True):
             lua=LuaRuntime(unpack_returned_tuples=True);lua.execute(MOCK)
             lua.globals().X4LAN_CONFIG.projectile_probe_hold_orientation=hold

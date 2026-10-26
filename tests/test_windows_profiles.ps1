@@ -5,7 +5,7 @@ Set-StrictMode -Version 2
 $sourceRoot = Split-Path -Parent $PSScriptRoot
 foreach ($file in @('windows_setup.ps1','update_windows_launcher.ps1')) {
     $errors = $null
-    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot ('distribution/' + $file)), [ref]$null, [ref]$errors)
+    $ast = [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $sourceRoot ('tools/distribution/' + $file)), [ref]$null, [ref]$errors)
     if ($errors.Count) { throw ($errors | Out-String) }
     foreach ($statement in $ast.EndBlock.Statements) {
         if ($statement -is [System.Management.Automation.Language.FunctionDefinitionAst]) { Invoke-Expression $statement.Extent.Text }
@@ -114,7 +114,7 @@ try {
         (Get-FileHash -LiteralPath (Join-Path $PackageRoot $_)).Hash.ToLowerInvariant() + '  ' + $_
     }
     [IO.File]::WriteAllLines((Join-Path $PackageRoot 'SHA256SUMS.txt'), [string[]]$lines, $Utf8)
-    $payload = Join-Path $sourceRoot 'distribution/windows_setup.ps1'
+    $payload = Join-Path $sourceRoot 'tools/distribution/windows_setup.ps1'
     Update-WindowsLauncher $PackageRoot $payload
     $updated = Get-Content -Raw -LiteralPath $pkgFile | ConvertFrom-Json
     $state = Get-Content -Raw -LiteralPath $stateFile | ConvertFrom-Json

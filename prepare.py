@@ -18,7 +18,7 @@ def prepare(output: Path, host: str, build: str, mode: str = "telemetry", port: 
     output.mkdir(parents=True, exist_ok=False)
     session = dict(token=secrets.token_hex(16), build=build, bubble="bubble-01", port=port)
     (output / "session.json").write_text(json.dumps(session, indent=2)+"\n", encoding="utf-8")
-    source = Path(__file__).parent / "extension" / "x4_lan_lab"
+    source = Path(__file__).parent / "src" / "extension" / "x4_lan_lab"
     for slot in ("p1", "p2"):
         target = output / slot / "extensions" / "x4_lan_lab"
         shutil.copytree(source, target)

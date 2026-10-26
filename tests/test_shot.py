@@ -8,8 +8,8 @@ from test_bubble_adapter import EXTRA
 from test_health_md import run, cue as health_cue, E
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / 'extension/x4_lan_lab/ui'
-MD = ROOT / 'extension/x4_lan_lab/md/x4lan_shot.xml'
+UI = ROOT / 'src/extension/x4_lan_lab/ui'
+MD = ROOT / 'src/extension/x4_lan_lab/md/x4lan_shot.xml'
 WORLD = [100, 100, 0, 64.5, 30, 0, 100, 100, 100, 100, 200, 1, 1, 0, 0, 0, 0]
 DIGEST = 'weapon_ter_s_plasma_01_mk1_macro:40.000'
 
@@ -197,10 +197,10 @@ class ShotAdapterTests(unittest.TestCase):
         for file in ('bubble_game.lua', 'motion.lua', 'coop_game.lua', 'health_game.lua', 'shot_game.lua'):
             l.execute((UI / file).read_text())
         self.assertIsNone(l.eval('X4LAN_BUBBLE_API.shot'))
-        ui = (ROOT / 'extension/x4_lan_lab/ui.xml').read_text()
+        ui = (ROOT / 'src/extension/x4_lan_lab/ui.xml').read_text()
         self.assertLess(ui.index('ui/health_game.lua'), ui.index('ui/shot_game.lua'))
         self.assertTrue('shot_claims = false' in (UI / 'config.lua').read_text())
-        md = (ROOT / 'extension/x4_lan_lab/md/x4lan_shot.xml').read_text()
+        md = (ROOT / 'src/extension/x4_lan_lab/md/x4lan_shot.xml').read_text()
         for event in ('event_object_hull_damaged', 'event_object_shield_damaged', 'event_object_attacked'):
             self.assertTrue(event not in md, 'capture must stay unarmed: ' + event)
 

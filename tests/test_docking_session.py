@@ -6,7 +6,7 @@ from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 from x4lan.economy import EconomySession
 
-UI = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/ui'
+UI = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/ui'
 
 @unittest.skipUnless(LuaRuntime, 'lupa.luajit21 not installed')
 class DockingSessionTests(unittest.TestCase):

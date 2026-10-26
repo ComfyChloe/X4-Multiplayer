@@ -8,7 +8,7 @@ from pathlib import Path
 from types import SimpleNamespace as NS
 from xml.etree import ElementTree as E
 
-TREE=E.parse(Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/md/x4lan_missions.xml')
+TREE=E.parse(Path(__file__).resolve().parents[1]/'src/extension/x4_lan_lab/md/x4lan_missions.xml')
 ACTIONS={n.get('name'):n.find('actions') for n in TREE.iter() if n.tag in ('cue','library')}
 
 
