@@ -3,7 +3,8 @@
 -- first: it owns the probe and publishes it as X4LAN_FIXEDTICK_OWNER).
 -- Settings (ui/config.lua): X4LAN_MIRROR_PATH (absolute capture file; required, must not exist),
 -- X4LAN_MIRROR_INTERVAL (frames between captures, default 1), X4LAN_MIRROR_FRAMES (default 10),
--- X4LAN_MIRROR_FLAGS (1 = record every component, 2 = skip the nav cache; default 0),
+-- X4LAN_MIRROR_FLAGS (1 = record every component, 2 = skip the nav cache, 4 = A/B prefetch cost measurement;
+-- default 0),
 -- X4LAN_MIRROR_ATTENTION (skip sector subtrees below this attention, default 0),
 -- X4LAN_MIRROR_DELAY (seconds after the probe armed, default 20), X4LAN_MIRROR_CHECKS (samples per
 -- captured frame, default 16).
@@ -70,9 +71,12 @@ SetScript('onUpdate',function()
  end
  if s.armed==0 then
   done=true
-  log(string.format('MIRROR done frames=%d dropped=%d partial=%d rows=%d roots=%d factions=%d bytes=%d walkErrors=%d meanMs=%.3f maxMs=%.3f checks=%d regionQueries=%d cacheFull=%d visited=%d walkMs=%.3f serializeMs=%.3f reason=%s',
+  -- before the done line: lane runs end on it
+  if s.visited_by_class and s.visited_by_class~='' then log('MIRROR visitedByClass '..s.visited_by_class) end
+  log(string.format('MIRROR done frames=%d dropped=%d partial=%d rows=%d roots=%d factions=%d bytes=%d walkErrors=%d meanMs=%.3f maxMs=%.3f checks=%d regionQueries=%d cacheFull=%d visited=%d walkMs=%.3f serializeMs=%.3f walkMsPrefetch=%.3f walkMsPlain=%.3f framesPrefetch=%d reason=%s',
    s.frames_written,s.frames_dropped,s.partial_frames,s.rows,s.roots,s.factions,s.bytes,s.walk_errors,
    s.mean_ms,s.max_ms,checked,s.region_queries or 0,s.region_cache_full or 0,s.visited or 0,
-   s.walk_ms or 0,s.serialize_ms or 0,tostring(s.reason or 'complete')))
+   s.walk_ms or 0,s.serialize_ms or 0,s.walk_ms_prefetch or 0,s.walk_ms_plain or 0,s.frames_prefetch or 0,
+   tostring(s.reason or 'complete')))
  end
 end)
