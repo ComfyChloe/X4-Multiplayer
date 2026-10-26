@@ -9,3 +9,7 @@ rust-version.workspace = true
 [lib]
 name = "x4mp_ai"
 crate-type = ["rlib"]
+
+[dependencies]
+# Engine generator, seed derivation and the per-sector ECS scheduler (ecs-core).
+x4mp-sim = { path = "../x4mp-sim" }

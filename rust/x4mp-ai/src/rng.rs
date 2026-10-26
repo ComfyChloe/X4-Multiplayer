@@ -7,29 +7,20 @@
 //! The engine has one generator, a 64-bit LCG with PCG constants whose *rotated* value becomes the new
 //! state. The script interpreter draws from the executing thread's stream (TLS block + 0x318, the
 //! MoveWorker stream for AI and MD). The rewrite gives every entity its own stream instead
-//! ([`stream_seed`]); in replay mode the stream is reset to the captured TLS state at the start of each
-//! captured run, so the values are the original ones as long as our draw *order and count* match.
+//! ([`ai_stream_seed`]); in replay mode the stream is reset to the captured TLS state at the start of
+//! each captured run, so the values are the original ones as long as our draw *order and count* match.
 //!
-//! [`EngineLcg`] mirrors `x4mp_sim::rng::EngineLcg` (ecs-core, rewrite-coord/interfaces.md v0) and is
-//! kept API-compatible so it can become a re-export once x4mp-sim is on the base branch.
+//! The generator itself (`step`, [`EngineLcg`] with `Random::U64State`/`FloatState`) and the seed
+//! derivation are x4mp-sim's (`x4mp_sim::rng`, ecs-core, rewrite-coord/interfaces.md v0.5), re-exported
+//! here; this module adds the script-level draws (chance rolls, ranges, distributions).
 
-/// LCG multiplier (immediate in 0x14ddb30 and 117 inlined copies).
-pub const MULTIPLIER: u64 = 0x5851_F42D_4C95_7F2D;
-/// LCG increment.
-pub const INCREMENT: u64 = 0x1405_7B7E_F767_814F;
+pub use x4mp_sim::rng::{
+    entity_seed, role_seed, step, steps_between, EngineLcg, Rng, FLOAT_SCALE, INCREMENT, MULTIPLIER,
+};
 
-/// `2^-32` as f32 (bits 0x2f800000), the constant at RVA 0x2cbe008 used by `Random::FloatState` 0x14ddc90.
-pub const FLOAT_SCALE: f32 = 1.0 / 4294967296.0;
 /// `100 * 2^-32` as f32 (= 25 * 2^-30, exact; bits 0x32c80000), the constant at RVA 0x2cbe040 used by the
 /// interpreter's `chance` roll in `Scripts::ExecState_Run` 0xb58bb0.
 pub const CHANCE_SCALE: f32 = 25.0 / 1073741824.0;
-
-/// One engine LCG step: `ror64(state * MULTIPLIER + INCREMENT, 30)`. The rotated value is stored as the
-/// new state (so this is not textbook PCG). The step is a bijection on u64.
-#[inline]
-pub const fn step(state: u64) -> u64 {
-    state.wrapping_mul(MULTIPLIER).wrapping_add(INCREMENT).rotate_right(30)
-}
 
 /// Inverse of [`step`] (for tests and for walking captured states backwards).
 pub const fn unstep(state: u64) -> u64 {
@@ -41,55 +32,6 @@ pub const fn unstep(state: u64) -> u64 {
         i += 1;
     }
     state.rotate_left(30).wrapping_sub(INCREMENT).wrapping_mul(inv)
-}
-
-/// Number of steps from `from` to `to`, if it is at most `cap` (used to verify captured draw counts).
-pub fn steps_between(from: u64, to: u64, cap: u64) -> Option<u64> {
-    let mut s = from;
-    for n in 0..=cap {
-        if s == to {
-            return Some(n);
-        }
-        s = step(s);
-    }
-    None
-}
-
-/// The engine generator over an explicit state (API of `x4mp_sim::rng::EngineLcg`).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub struct EngineLcg(pub u64);
-
-impl EngineLcg {
-    /// One step; returns the new state.
-    #[inline]
-    pub fn next_state(&mut self) -> u64 {
-        self.0 = step(self.0);
-        self.0
-    }
-
-    /// `Random::U64State` 0x14ddb30 (TLS variant `Random::U64` 0x14dde20): `n == 0` logs an error and
-    /// returns 0 **without a step**; otherwise one step and `state % n`.
-    #[inline]
-    pub fn u64_below(&mut self, n: u64) -> u64 {
-        if n == 0 {
-            return 0;
-        }
-        self.next_state() % n
-    }
-
-    /// `Random::FloatState` 0x14ddc90 (TLS variant `Random::Float` 0x14ddfe0). `!(max >= 0)` (negative
-    /// or NaN) logs and returns 0.0 **without a step**. Otherwise one step and
-    /// `(f32(low32(state)) * 2^-32f) * max`, all in f32 (cvtsi2ss of the zero-extended low 32 bits, two
-    /// mulss). The result lies in `[0, max]`: low32 values >= 2^32 - 128 round to 2^32 and give `max`.
-    #[inline]
-    #[allow(clippy::neg_cmp_op_on_partial_ord)] // NaN must take the error path, as comiss/jae does
-    pub fn float(&mut self, max: f32) -> f32 {
-        if !(max >= 0.0) {
-            return 0.0;
-        }
-        let low = self.next_state() as u32;
-        (low as f32) * FLOAT_SCALE * max
-    }
 }
 
 /// Random number profile of the script `random` attribute group (`profile=`), as the distribution id
@@ -115,7 +57,7 @@ pub enum NumKind {
 }
 
 /// A per-entity engine stream with a draw counter.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Stream {
     lcg: EngineLcg,
     draws: u64,
@@ -266,29 +208,16 @@ impl Stream {
     }
 }
 
-/// Seed of an entity's script stream in authoritative (non-replay) mode: FNV-1a 64 over the
-/// little-endian bytes of `session_seed`, `uid` and `purpose`, then one LCG step. Placeholder with the
-/// same inputs as `x4mp_sim::rng::stream_seed`; replaced by that function when x4mp-sim lands.
-pub fn stream_seed(session_seed: u64, uid: u64, purpose: u32) -> u64 {
-    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
-    let mut eat = |b: u8| {
-        h ^= b as u64;
-        h = h.wrapping_mul(0x0000_0100_0000_01b3);
-    };
-    for b in session_seed.to_le_bytes() {
-        eat(b);
-    }
-    for b in uid.to_le_bytes() {
-        eat(b);
-    }
-    for b in purpose.to_le_bytes() {
-        eat(b);
-    }
-    step(h)
-}
-
 /// Purpose key of the AI script stream (`'AISC'`).
 pub const PURPOSE_AI_SCRIPT: u32 = 0x4149_5343;
+
+/// Seed of an AI context's script stream in authoritative (non-replay) mode:
+/// `x4mp_sim::rng::entity_seed(session, uid, 'AISC')` (FNV-1a over `session_le ++ "entity" ++ uid_le ++
+/// purpose_le`, no generator step). Independent of the entity's purpose-0 stream that x4mp-sim seeds at
+/// spawn.
+pub fn ai_stream_seed(session_seed: u64, uid: u64) -> u64 {
+    entity_seed(session_seed, x4mp_sim::UniverseId(uid), PURPOSE_AI_SCRIPT)
+}
 
 #[cfg(test)]
 mod tests {
@@ -408,9 +337,11 @@ mod tests {
 
     #[test]
     fn stream_seed_is_stable_and_distinct() {
-        let a = stream_seed(123456789, 0x1001, PURPOSE_AI_SCRIPT);
-        assert_eq!(a, stream_seed(123456789, 0x1001, PURPOSE_AI_SCRIPT));
-        assert_ne!(a, stream_seed(123456789, 0x1002, PURPOSE_AI_SCRIPT));
-        assert_ne!(a, stream_seed(123456789, 0x1001, 0));
+        // Published vector (rewrite-coord/interfaces.md v0.5, x4mp-sim `entity_seed_vectors`).
+        assert_eq!(ai_stream_seed(0x1081_d6b6, 0x0200_0001), 0xf884_40b3_b827_5ffc);
+        let a = ai_stream_seed(123456789, 0x1001);
+        assert_eq!(a, ai_stream_seed(123456789, 0x1001));
+        assert_ne!(a, ai_stream_seed(123456789, 0x1002));
+        assert_ne!(a, entity_seed(123456789, x4mp_sim::UniverseId(0x1001), 0));
     }
 }

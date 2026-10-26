@@ -9,9 +9,18 @@ use x4mp_ai::world::Effect;
 const SESSION: u64 = 276944566;
 
 fn run(threads: usize, sectors: usize, ships: usize) -> (Vec<(Uid, u32, Effect)>, u64, Vec<(Uid, String)>) {
-    let (mut w, mut ais) = synthetic_universe(SESSION, sectors, 4, ships);
     // 20 s of game time at 30 fps; every move_to arrives after 3 s.
-    run_synthetic(&mut w, &mut ais, 600, 1.0 / 30.0, 90, threads)
+    run_frames(threads, sectors, ships, 600)
+}
+
+fn run_frames(
+    threads: usize,
+    sectors: usize,
+    ships: usize,
+    frames: u64,
+) -> (Vec<(Uid, u32, Effect)>, u64, Vec<(Uid, String)>) {
+    let (mut w, mut ais) = synthetic_universe(SESSION, sectors, 4, ships);
+    run_synthetic(&mut w, &mut ais, frames, 1.0 / 30.0, 90, threads)
 }
 
 #[test]

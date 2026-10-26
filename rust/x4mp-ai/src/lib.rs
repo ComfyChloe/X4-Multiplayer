@@ -19,6 +19,7 @@
 //! No third-party crates (workspace rule). No engine code is copied; semantics come from the game's
 //! own XML content and from disassembly notes cited at each item.
 
+pub mod ecs;
 pub mod native;
 pub mod order;
 pub mod orders;

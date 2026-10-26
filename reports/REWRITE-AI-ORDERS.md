@@ -132,7 +132,9 @@ ego_dlc_pirate diff) draws only when X4's debug channel is on, so the debug filt
 (lanes run with debug output on; a player's game usually without).
 
 **Per-entity streams.** In the rewrite each entity's AI scripts draw from their own stream,
-`stream_seed(session, uid, 'AISC')`, in the script's draw order. In replay mode the stream is reset to the
+`ai_stream_seed(session, uid)` = x4mp-sim's `entity_seed(session, uid, 'AISC')` (FNV-1a over
+`session_le ++ "entity" ++ uid_le ++ purpose_le`; vector `0xf88440b3b8275ffc` for session 0x1081d6b6, uid
+0x2000001), in the script's draw order. The generator (`step`, `EngineLcg`) is x4mp-sim's too. In replay mode the stream is reset to the
 captured TLS state at the start of every interpreter bracket (run or interrupt run), so the values are the
 original ones; in authoritative mode the stream simply continues (deterministic, thread-count invariant;
 the original's thread-global stream seeded from wall clock is not reproducible anyway).
@@ -278,11 +280,11 @@ X4LAN_AICAPTURE_MAX or 8)` when `X4LAN_AICAPTURE` is set, log `owner:aicapstats(
 of every `<wait>` of Patrol and orders.base, exact draw counts per bracket class, the Patrol leg's engine
 share (create_position + get_safe_pos draws), and delivery draws per event class.
 
-## 8. Implementation (`rust/x4mp-ai`, no third-party crates)
+## 8. Implementation (`rust/x4mp-ai`, no third-party crates; depends on x4mp-sim)
 
 | module | content |
 |---|---|
-| `rng` | engine LCG, FloatState/U64State, chance roll, WithDistribution, random ranges, per-entity `Stream`, `stream_seed` |
+| `rng` | x4mp-sim's engine LCG and seeds re-exported; chance roll, WithDistribution, random ranges, per-entity `Stream`, `ai_stream_seed` |
 | `val`, `trace` | values (floats by bits) and the X4AITRACE codec (fail closed on build/version) |
 | `world` | `Facts` (typed reads), `Query`/`Answer`, `Effect`, `Io`, `Cx` (roll, range, query, effect helpers) |
 | `runtime` | `Agent` (frame stack, waiting states, timed wake), calls/returns, two-phase interrupts, aborts with on_abort |
@@ -291,6 +293,7 @@ share (create_position + get_safe_pos draws), and delivery draws per event class
 | `replay` | trace replay with bit-exact comparison and first-difference report |
 | `native` | checks of native bracket captures (sessions, wake times, draw classes; `x4ai-check`) |
 | `system` | per-sector driver (passes, outbox, barrier merge in sector order), synthetic world, thread-invariance bed |
+| `ecs` | the driver on x4mp-sim: AI state as a per-world resource, one `Universe::step` per pass, effects ordered by x4mp-sim's barrier |
 
 **Order interface** (for the faction AI that will command orders; published in rewrite-coord/interfaces.md):
 `OrderSpec` holds an order's typed `<params>` with the XML defaults (`OrderSpec::Patrol(PatrolParams)`),

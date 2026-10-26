@@ -3,17 +3,16 @@
 //! A frame runs in passes like `AIDirector::Move` (calls, returns and wakes made in a pass run in the
 //! next pass of the same frame; at most 0x40 passes). In a pass each sector job runs the due agents of
 //! its sector in engine tree order; an agent reads only immutable world data ([`Services`]) and its own
-//! state, draws from its own stream (`rng::stream_seed(session, uid, 'AISC')`) and writes effects into
+//! state, draws from its own stream (`rng::ai_stream_seed(session, uid)`) and writes effects into
 //! its sector's [`Outbox`]. The barrier after every pass applies all outboxes in sector order, then
 //! emission order, which is the order a sequential run produces; so 1 and N threads give identical
 //! results by construction (tested below).
 //!
-//! The ECS binding (x4mp-sim `System::run_sector` / `barrier`, rewrite-coord/interfaces.md v0) is a thin
-//! adapter over [`run_pass`] and the per-pass barrier of [`run_frame`]; it is not wired yet because
-//! x4mp-sim is not on the base branch.
+//! [`crate::ecs`] runs the same passes on x4mp-sim's scheduler (one `Universe::step` per pass, effects
+//! ordered by x4mp-sim's barrier); its test checks that both give identical results.
 
 use crate::replay::FactStore;
-use crate::rng::{stream_seed, Stream, PURPOSE_AI_SCRIPT};
+use crate::rng::{ai_stream_seed, Stream};
 use crate::runtime::{Agent, Frame, RetVals, Waiting, Yield};
 use crate::val::{OrderId, Pos, Time, Uid, Val};
 use crate::world::{Answer, Effect, Facts, Io, Prop, Query, Stop, R};
@@ -384,7 +383,7 @@ pub fn synthetic_universe(session: u64, sectors: usize, zones: usize, ships: usi
             let range = if k % 2 == 0 { "class.zone" } else { "class.sector" };
             let params = vec![("range".to_string(), Val::key(range))];
             let p = PatrolParams::from_params(&params, 8000.0).expect("params");
-            let mut a = Agent::new(pilot, stream_seed(session, pilot.0, PURPOSE_AI_SCRIPT));
+            let mut a = Agent::new(pilot, ai_stream_seed(session, pilot.0));
             let mut sink = Outbox::default();
             let mut io = NativeIo { services: &w, out: &mut sink, rolls: 0 };
             a.start_order(Frame::Patrol(Box::new(Patrol::new(p, ship))), &w, &mut io).expect("init");
