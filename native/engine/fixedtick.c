@@ -307,6 +307,12 @@ static void schedule_next(owner *o) {
     if (!k) ++o->zero_step_frames; else if (k > 1) ++o->multi_step_frames;
 }
 
+/* AI phase census / per-sector driver (native/engine/aidriver.h, included after the Lua helpers it
+   uses). Forward-declared here for disarm_because, sim_end and move. */
+static void ad_uninstall(void);
+static const char *ad_check(void);
+static void ad_note_sim_frame(double ms);
+
 static void unregister_sim_hooks(void) {
     if (!registered_table || !readable(registered_table, 0x138, 1) || table_now() != registered_table) return;
     InterlockedCompareExchangePointer((void *volatile *)&registered_table[SIM_BEGIN_SLOT], NULL, &hook_begin);
@@ -318,6 +324,7 @@ static void disarm_because(const char *reason) {
     simprof_stop(); /* the sampler stops before anything is unregistered */
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
+    ad_uninstall();
     walk_uninstall();
     unregister_sim_hooks();
     if (table_owned())
@@ -355,6 +362,7 @@ static void sim_end(handler *self) {
     unsigned bucket = (unsigned)(ms * 4.0);
     o->win_hist[bucket < SIM_BUCKETS ? bucket : SIM_BUCKETS - 1]++;
     walk_frame_end();
+    ad_note_sim_frame(ms);
 }
 
 /* p95 of the current window in ms (bucket upper edge), then reset the window. */
@@ -385,6 +393,7 @@ static void move(handler *self) {
         const char *why = fixed_guard();
         if (why) { disarm_because(why); return; }
     }
+    { const char *why = ad_check(); if (why) { disarm_because(why); return; } }
     double game = *(volatile double *)(image + GAME_TIME_RVA);
     double real = *(volatile double *)(image + REAL_TIME_RVA);
     double speed = *(volatile double *)(image + SPEED_RVA);
@@ -552,6 +561,8 @@ static int failure(lua_State *L, const char *reason) {
     return 2;
 }
 
+#include "aidriver.h"
+
 static int start(lua_State *L) {
     int fixed = 0, profiling = 0, top = p_lua_gettop(L);
     unsigned interval_us = SP_DEFAULT_INTERVAL_US, depth = SP_DEFAULT_DEPTH;
@@ -689,6 +700,7 @@ __declspec(dllexport) int luaopen_x4lan_fixedtick(lua_State *L) {
     method(L, "__gc", stop); method(L, "stop", stop);
     method(L, "active", active); method(L, "stats", stats);
     method(L, "profile", profile); method(L, "folds", folds);
+    method(L, "aidriver", ad_lua_start); method(L, "aistats", ad_lua_stats);
     p_lua_settop(L, -2);
     p_lua_createtable(L, 0, 1); method(L, "start", start);
     return 1;

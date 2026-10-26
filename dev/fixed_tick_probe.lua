@@ -19,6 +19,10 @@ local nextLog=0
 local profiling,reportEvery,foldLines=false,10,20
 local nextProfile=0
 local profileDisabled=false
+-- X4LAN_AIDRIVER='census' arms the AI phase census (aidriver.h) once the probe is armed and logs an
+-- AIPROF line each second. Opt-in; absent = no AI hooks. Stage 1 'rounds' is not yet wired here.
+local aidriver=false
+local aiRefusedLogged=false
 local function logStats(now)
  local s=owner:stats()
  DebugError(string.format('[X4LAN] FRAMEPROBE frames=%d wallDt=%.6f maxWallDt=%.6f gameDt=%.9f realDt=%.9f gameTime=%.6f realTime=%.6f speed=%.3f paused=%d loadingSkips=%d regressions=%d',
@@ -40,6 +44,22 @@ local function logStats(now)
  elseif (s.walk_refused or 0)==1 and not walkRefusedLogged then
   walkRefusedLogged=true
   DebugError('[X4LAN] FEATURE walkprof DISABLED reason=vtable or signature mismatch')
+ end
+ if aidriver and owner.aistats then
+  local a=owner:aistats()
+  if (a.installed or 0)==1 then
+   DebugError(string.format('[X4LAN] AIPROF mode=%s frames=%d ms=%.3f maxMs=%.3f share=%.3f runs=%.2f irqRuns=%.2f passes=%.2f maxPasses=%d loopFrames=%d',
+    a.mode,a.frames or 0,a.ms or 0,a.max_ms or 0,a.share or 0,a.runs or 0,a.irq_runs or 0,a.passes or 0,a.max_passes or 0,a.loop_frames or 0)..
+    string.format(' extWakes=%.2f timedDue=%.2f wakeOwn=%.2f wakeForeign=%.2f evOwn=%.2f evForeign=%.2f evCue=%.2f evDirector=%.2f hazard=%.3f keyless=%.2f',
+    a.ext_wakes or 0,a.timed_due or 0,a.wake_own or 0,a.wake_foreign or 0,a.ev_own or 0,a.ev_foreign or 0,a.ev_cue or 0,a.ev_director or 0,a.hazard or 0,a.keyless_runs or 0)..
+    string.format(' sectors=%.2f secSumMs=%.3f secMaxMs=%.3f serialMs=%.3f speedup=%.2f maxShare=%.3f fleets=%.2f fleetSpeedup=%.2f dropped=%d',
+    a.sectors or 0,a.sector_sum_ms or 0,a.sector_max_ms or 0,a.serial_ms or 0,a.speedup or 0,a.max_share or 0,a.fleets or 0,a.fleet_speedup or 0,a.dropped or 0))
+   DebugError('[X4LAN] AIPROF scripts '..(a.scripts or ''))
+   DebugError('[X4LAN] AIPROF sectors '..(a.top_sectors or ''))
+  elseif (a.refused or 0)==1 and not aiRefusedLogged then
+   aiRefusedLogged=true
+   DebugError('[X4LAN] FEATURE aidriver DISABLED reason='..tostring(a.reason or 'unknown'))
+  end
  end
  nextLog=now+1
 end
@@ -96,6 +116,16 @@ SetScript('onUpdate',function()
  if result then
   owner=result;nextLog=0
   DebugError('[X4LAN] FRAMEPROBE armed in MoveWorker slot 5 mode='..(X4LAN_FIXEDTICK_MODE or 'probe'))
+  aidriver=false;aiRefusedLogged=false
+  if X4LAN_AIDRIVER and owner.aidriver then
+   local okai,_,whyai=pcall(owner.aidriver,owner,X4LAN_AIDRIVER)
+   if okai and (owner:aistats().installed or 0)==1 then
+    aidriver=true
+    DebugError('[X4LAN] FEATURE aidriver ENABLED mode='..tostring(X4LAN_AIDRIVER))
+   else
+    DebugError('[X4LAN] FEATURE aidriver DISABLED reason='..tostring(whyai or 'unknown'))
+   end
+  end
   if profiling then
    profileDisabled=false;nextProfile=now+reportEvery
    local s=owner:stats()

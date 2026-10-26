@@ -98,6 +98,46 @@ class FixedTickProbeTests(unittest.TestCase):
           assert(n==1)
         ''')
 
+    def test_aidriver_census_line_is_logged(self):
+        self.runtime().execute('''
+          X4LAN_AIDRIVER='census'
+          handle.aidriver=function(self,mode) aimode=mode;return true end
+          handle.aistats=function(self)
+            return {installed=1,mode='census',frames=120,ms=1.8,max_ms=3.2,share=0.08,runs=40,irq_runs=5,
+              passes=2.3,max_passes=9,loop_frames=0,ext_wakes=42,timed_due=7,wake_own=30,wake_foreign=2,
+              ev_own=10,ev_foreign=1,ev_cue=3,ev_director=0,hazard=0.05,keyless_runs=1,sectors=6,
+              sector_sum_ms=1.6,sector_max_ms=0.5,serial_ms=0.2,speedup=3.2,max_share=0.31,fleets=5,
+              fleet_speedup=2.5,dropped=0,scripts='order.fight=0.4ms/3.0',top_sectors='101=40.0%'}
+          end
+          ui();assert(aimode=='census')
+          local en for _,l in ipairs(logs) do if l=='[X4LAN] FEATURE aidriver ENABLED mode=census' then en=true end end
+          assert(en)
+          ui()
+          local prof,scr
+          for _,l in ipairs(logs) do
+            if l:find('AIPROF mode=census frames=120',1,true) and l:find('speedup=3.20',1,true) then prof=true end
+            if l:find('AIPROF scripts order.fight=0.4ms/3.0',1,true) then scr=true end
+          end
+          assert(prof and scr)
+        ''')
+
+    def test_aidriver_refusal_is_loud(self):
+        self.runtime().execute('''
+          X4LAN_AIDRIVER='census'
+          handle.aidriver=function(self,mode) return nil,'AI call site changed' end
+          handle.aistats=function(self) return {installed=0,refused=1,reason='AI call site changed'} end
+          ui()
+          local n=0 for _,l in ipairs(logs) do if l:find('FEATURE aidriver DISABLED',1,true) then n=n+1 end end
+          assert(n==1)
+        ''')
+
+    def test_aidriver_absent_by_default(self):
+        self.runtime().execute('''
+          handle.aidriver=function() error('unexpected') end
+          ui();ui()
+          for _,l in ipairs(logs) do assert(not l:find('AIPROF',1,true)) end
+        ''')
+
     def profile_runtime(self):
         lua = self.runtime()
         lua.execute('''

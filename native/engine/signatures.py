@@ -49,7 +49,36 @@ WALK_EXTRA_ENTRIES = [
 ]
 WALK_CODE_SITES = {f'walk_{name}_move': (fn, 32, sha) for name, (fn, _entry, sha) in WALK_SITES.items()}
 
-SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES}
+# AI phase census / per-sector AI driver (ai-driver, native/engine/aidriver.h). Code ranges hashed before
+# any patch: the whole AIDirector::Move body pins every inner call site and its frame layout.
+AIDRIVER_CODE_SITES = {
+    'ai_frame_calls': (0x9FE080, 32, 'e5a8dc86de93977def723836b9479f24291ecb4a35117dfef142cf9f567b82ea'),
+    'ai_move_body': (0x106D250, 0x140E, '360cdc20473b7acde457f95c71540da76295a706b8e7509d9b8466a19e706018'),
+    'ai_exec_run': (0xB58BB0, 0x12F, '7509510d2582f326fb87c58a23b715d1f7499577bf681c67377347314e3aa759'),
+    'ai_irq_run': (0xB58CE0, 32, '8486f9ae019f1ddfdc0abe9f405f3948e647368dfe1f321e395ac9bbb7978faf'),
+    'ai_request_wake': (0x106F910, 0x67, 'da5cdd3e66f63039820bd06f8bca198ad6bc7f02433361157f54f695af893c91'),
+    'ai_clear_wake': (0x10669C0, 0xB5, 'ee0472216b11cfa19adbabf701c6147d6841e62850c6704ba0274b1e890c0a8f'),
+    'ai_ctx_event': (0x1066750, 32, '28be89dd71415b9965f178729efab95fff2e586b2c435ab9c774e90be30ca1f4'),
+    'ai_stack_event': (0x1062F70, 32, 'b57a76b0c72966487a4d26431fef60d77c49378f0bf8dd59283213c01f8b310e'),
+    'ai_cue_event': (0x111F990, 32, '16141305ae7036c9128223e1d14b15b5e81e58ee801672e7dfb09cf3ffb9ec17'),
+}
+# E8 rel32 call sites redirected through a near stub: (site RVA, original callee RVA). 'ai_phase' is the
+# AIDirector::Move call in UniverseFrameUpdate; the others sit inside Move (census only).
+AIDRIVER_CALL_SITES = {
+    'ai_phase': (0x9FE093, 0x106D250),
+    'exec_run': (0x106E3F6, 0xB58BB0),
+    'irq_global': (0x106D8D6, 0xB58CE0),
+    'irq_interrupt': (0x106E2EF, 0xB58CE0),
+    'irq_attention': (0x106E34A, 0xB58CE0),
+}
+# Data-only: vtable slot 565 (HandleScriptEvent) entries (entry RVA, function RVA).
+AIDRIVER_VTABLE_SITES = {
+    'ctx_event': (0x2C6B418, 0x1066750),    # AI::AIScriptContext
+    'stack_event': (0x2C6A260, 0x1062F70),  # AI::AICallStackContext
+    'cue_event': (0x2C76318, 0x111F990),    # MD::Cue
+}
+
+SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **WALK_CODE_SITES, **AIDRIVER_CODE_SITES}
 
 
 def c_header() -> str:
@@ -76,5 +105,19 @@ def c_header() -> str:
     lines.append('static const x4_walk_extra x4_walk_extras[] = {')
     for name, entry in WALK_EXTRA_ENTRIES:
         lines.append(f'    {{{classes.index(name)}, 0x{entry:x}}},')
+    lines.append('};')
+    lines.append('static const x4_signature_check x4_aidriver_checks[] = {')
+    for rva, length, sha in AIDRIVER_CODE_SITES.values():
+        lines.append(f'    {{0x{rva:x}, {length}, "{sha}"}},')
+    lines.append('};')
+    lines.append('typedef struct { const char *name; size_t site; size_t target; } x4_ai_call;')
+    lines.append('static const x4_ai_call x4_ai_calls[] = {')
+    for name, (site, target) in AIDRIVER_CALL_SITES.items():
+        lines.append(f'    {{"{name}", 0x{site:x}, 0x{target:x}}},')
+    lines.append('};')
+    lines.append('typedef struct { const char *name; size_t entry; size_t fn; } x4_ai_vsite;')
+    lines.append('static const x4_ai_vsite x4_ai_vsites[] = {')
+    for name, (entry, fn) in AIDRIVER_VTABLE_SITES.items():
+        lines.append(f'    {{"{name}", 0x{entry:x}, 0x{fn:x}}},')
     lines.append('};')
     return '\n'.join(lines) + '\n'
