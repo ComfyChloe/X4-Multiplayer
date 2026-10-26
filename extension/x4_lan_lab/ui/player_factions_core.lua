@@ -1,7 +1,9 @@
 -- Player factions: pure session logic (no engine calls; LuaJIT-tested). Config flag player_factions.
--- Every human slot pK owns pool faction x4lan_playerK (libraries/factions.xml). Each machine maps
+-- Every human slot pK owns pool faction x4lan_playerK (libraries/factions.xml). Each client maps
 -- its OWN human to the real `player` faction and every other human to that human's pool faction.
--- The host (p1) is the authority for inter-player relations and sector ownership.
+-- Slot p1 is the authority for inter-player relations and sector ownership: in 7.x sessions p1 is
+-- client 1 (a human that also runs the authority world); on a dedicated server (cfg.dedicated) p1
+-- is the server, which has no local human, so there every human maps to its pool faction.
 -- Wire (ASCII version-1 envelope; relays without support drop these, the feature then disables):
 --   client -> relay  PFID|1|lease|seq|nameHex|icon                 own display identity
 --   relay -> client  PFROSTER|1|lease|slot|nameHex|icon|seq         every connected human
@@ -26,21 +28,33 @@ function K.poolIndex(faction)
  local n=type(faction)=='string' and faction:match('^x4lan_player(%d+)$');n=n and tonumber(n)
  if n and n>=1 and n<=K.POOL and tostring(n)==faction:sub(13) then return n end
 end
--- Faction that represents human `index` on the machine whose own human is `localIndex`.
+-- Faction that represents human `index` on the machine whose own human is `localIndex`
+-- (localIndex nil: a server without a local human).
 function K.factionFor(index,localIndex)
- if index==localIndex then return 'player' end
+ if localIndex and index==localIndex then return 'player' end
  return K.poolFaction(index)
 end
 -- Local faction id -> machine-neutral owner token (S<index>) or the NPC faction id itself.
+-- On a server `player` is no human (observer), so it has no token.
 function K.tokenFor(faction,localIndex)
- if faction=='player' then return 'S'..localIndex end
+ if faction=='player' then return localIndex and 'S'..localIndex or nil end
  local n=K.poolIndex(faction);if n then return 'S'..n end
  return faction
 end
 function K.factionForToken(token,localIndex)
  local n=type(token)=='string' and token:match('^S(%d+)$');n=n and tonumber(n)
  if n then if n>=1 and n<=K.POOL then return K.factionFor(n,localIndex) end;return nil end
+ -- Human factions travel only as S<index>: a literal player/pool id would mean another machine's human.
+ if token=='player' or K.poolIndex(token) then return nil end
  if K.atom(token) then return token end
+end
+-- Owner of shared co-op ship on this machine, from its current pilot slot ('0' = nobody at the
+-- controls). A ship flown by another human shows as that human's faction; a free ship stays
+-- `player` (on every machine), so either human can still take it over (handoff) and dock it.
+function K.coopOwner(pilot,localIndex)
+ local n=K.index(pilot)
+ if not n or n==localIndex then return 'player' end
+ return K.poolFaction(n)
 end
 function K.atom(s) return type(s)=='string' and #s>0 and #s<=64 and not s:find('[^a-zA-Z0-9_]') end
 function K.macro(s) return type(s)=='string' and #s<=96 and s:match('^[a-z0-9_]+_macro$')~=nil end
@@ -90,18 +104,32 @@ K.integer=integer
 
 -- io: send(packet), md(action,args), log(text). cfg: slot, player name/icon.
 function K.new(cfg,io)
- local localIndex=assert(K.index(cfg.slot),'invalid slot')
- local p={local_=localIndex,host=localIndex==1,roster={},assigned={},relations={},applied={},
+ local slotIndex=assert(K.index(cfg.slot),'invalid slot')
+ local server=cfg.dedicated==true
+ assert(not server or slotIndex==1,'a dedicated server must be slot p1')
+ -- localIndex: this machine's own human (nil on a server). Authority: slot p1.
+ local localIndex=not server and slotIndex or nil
+ local p={local_=localIndex,server=server,host=slotIndex==1,roster={},assigned={},relations={},applied={},
   seq=0,relRev=0,secSeq=0,sectors={},hostSectors={},claims={},io=io}
+ p.authority=p.host
  function p.faction(index) return K.factionFor(index,localIndex) end
+ function p.coopOwner(pilot) return K.coopOwner(pilot,localIndex) end
+ -- Incoming owner id -> local faction (the pool id of this machine's own human is `player`).
+ function p.localFaction(faction)
+  local n=K.poolIndex(faction)
+  if n then return K.factionFor(n,localIndex) end
+  return faction
+ end
  function p.pair(a,b) if a>b then a,b=b,a end;return a..'-'..b,a,b end
- -- Own identity; resent periodically by the frame.
+ -- Own identity; resent periodically by the frame. A server has no human to announce.
  function p.identity(lease,name,icon)
+  if not localIndex then return false end
   name=K.cleanName(name) or ('LAN Player '..localIndex)
   icon=K.atom(icon) and icon or 'faction_player'
   p.name,p.icon=name,icon
   p.seq=p.seq+1
   io.send(table.concat({'PFID','1',lease,p.seq,K.encode(name),icon},'|'))
+  return true
  end
  local function applyRelation(a,b,value,rev,source)
   local key=p.pair(a,b)
@@ -131,6 +159,7 @@ function K.new(cfg,io)
  function p.setRelation(lease,other,value)
   local target=type(other)=='number' and other or K.index(other)
   value=K.relation(value)
+  if not localIndex then return false,'no_local_human' end
   if not target or target==localIndex or not value then return false,'invalid' end
   if p.host then return p.authorRelation(lease,localIndex,target,value,'local'),'applied' end
   if not lease then return false,'offline' end
@@ -157,8 +186,12 @@ function K.new(cfg,io)
     io.log(string.format('PLAYER_FACTIONS ASSIGN slot=p%d faction=player pool=%s name=%q (local human)',index,K.poolFaction(index),name))
    end
    -- Default: every pair of humans starts allied (authority only; mirrored to peers).
-   if p.host and index~=localIndex and not p.relations[p.pair(localIndex,index)] then
-    p.authorRelation(lease,localIndex,index,K.DEFAULT,'default')
+   if p.host then
+    for other in pairs(p.roster) do
+     if other~=index and not p.relations[p.pair(other,index)] then
+      p.authorRelation(lease,other,index,K.DEFAULT,'default')
+     end
+    end
    end
   else row.at=now end
  end
@@ -166,13 +199,14 @@ function K.new(cfg,io)
  function p.localSector(lease,macro,faction)
   if not K.macro(macro) or not K.atom(faction) then return end
   local token=K.tokenFor(faction,localIndex)
+  if not token then return end
   local old=p.sectors[macro];p.sectors[macro]=token
   if old==token then return end
   if p.host then
    p.secSeq=p.secSeq+1
    if lease then io.send(table.concat({'PFSEC','1',lease,p.secSeq,macro,token},'|')) end
    io.log(string.format('PLAYER_FACTIONS SECTOR macro=%s owner=%s token=%s source=authority',macro,faction,token))
-  elseif token=='S'..localIndex and p.hostSectors[macro]~=token then
+  elseif localIndex and token=='S'..localIndex and p.hostSectors[macro]~=token then
    -- A local claim by this human: ask the authority (never applied here first).
    p.secSeq=p.secSeq+1;p.claims[macro]=true
    if lease then io.send(table.concat({'PFSEC','1',lease,p.secSeq,macro,token},'|')) end
@@ -238,7 +272,7 @@ function K.new(cfg,io)
  -- baseline was taken belongs to the host's human only (the shared co-op fixtures and the
  -- pristine save's own player assets exist in both worlds and stay `player` everywhere).
  function p.personalOwner(key)
-  if not p.host or not p.baseline or p.baseline[key] then return nil end
+  if not p.host or not localIndex or not p.baseline or p.baseline[key] then return nil end
   return K.poolFaction(localIndex)
  end
  return p
