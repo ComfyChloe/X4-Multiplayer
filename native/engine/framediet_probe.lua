@@ -7,6 +7,9 @@
 -- X4LAN_FRAMEDIET_DIGEST      components per digest (default 16384)
 -- X4LAN_FRAMEDIET_REPORT_S    seconds between FRAMEDIET lines (default 10)
 -- X4LAN_FRAMEDIET_AB_S        diet mode: alternate diet/pass every N seconds (A/B in one session)
+-- X4LAN_FRAMEDIET_AB_CYCLE    with AB_S: ';'-separated phases to cycle instead, e.g. 'pass;server;all'
+--                             ('pass' = wrappers inert, any other entry = diet with those sites, which
+--                             X4LAN_FRAMEDIET_SITES must cover)
 -- X4LAN_FRAMEDIET_DELAY_S     seconds after the first UI update before arming (default 0)
 -- X4LAN_FRAMEDIET_PATH        development DLL path
 if not X4LAN_FRAMEDIET_MODE then return end
@@ -24,7 +27,9 @@ local mode=X4LAN_FRAMEDIET_MODE
 local sites=X4LAN_FRAMEDIET_SITES or 'server'
 local reportEvery=X4LAN_FRAMEDIET_REPORT_S or 10
 local abEvery=mode=='diet' and X4LAN_FRAMEDIET_AB_S or nil
-local owner,finished,armAt,nextTry,nextReport,nextPhase,phase
+local cycle={}
+for entry in string.gmatch(abEvery and X4LAN_FRAMEDIET_AB_CYCLE or '','[^;]+') do cycle[#cycle+1]=entry end
+local owner,finished,armAt,nextTry,nextReport,nextPhase,phase,cycleIndex
 local SITE_NAMES={{1,'ui_scenes'},{2,'ui_render'},{4,'camera'},{8,'draw'}}
 local function siteText(mask)
  local names={}
@@ -52,6 +57,16 @@ local function report(s,now)
   end
  end
 end
+-- Phase switch: 'pass' keeps the wrappers inert; any other cycle entry is a diet site set.
+local function enter(entry,now)
+ local ok,why
+ if entry=='pass' or entry=='diet' then ok,why=owner:set(entry)
+ else ok,why=owner:set('diet',entry) end
+ if not ok then disabled('phase switch refused: '..tostring(why));owner:stop();owner=nil;finished=true;return false end
+ phase=entry
+ DebugError(string.format('[X4LAN] FRAMEDIET phase=%s t=%.3f frames=%d',phase,now,owner:stats().frames))
+ return true
+end
 local function arm(now)
  local ok,result,why=pcall(native.start,mode,sites,X4LAN_FRAMEDIET_PERIOD,X4LAN_FRAMEDIET_AUDIT_EVERY,X4LAN_FRAMEDIET_DIGEST)
  if not ok then finished=true;disabled(result);return end
@@ -64,7 +79,10 @@ local function arm(now)
  DebugError(string.format('[X4LAN] FRAMEDIET armed mode=%s sites=%s period=%d digest=%d t=%.3f',
   mode,siteText(s.sites),s.period,s.digest_max,now))
  nextReport=now+reportEvery
- if abEvery then nextPhase=now+abEvery end
+ if abEvery then
+  nextPhase=now+abEvery
+  if #cycle>0 then cycleIndex=1;enter(cycle[1],now) end
+ end
 end
 SetScript('onUpdate',function()
  if finished then return end
@@ -76,11 +94,11 @@ SetScript('onUpdate',function()
    disabled(s and s.reason or 'disarmed');owner:stop();owner=nil;finished=true;return
   end
   if abEvery and now>=nextPhase then
-   phase=phase=='diet' and 'pass' or 'diet'
-   local ok,why=owner:set(phase)
-   if not ok then disabled('phase switch refused: '..tostring(why));owner:stop();owner=nil;finished=true;return end
+   local entry
+   if #cycle>0 then cycleIndex=cycleIndex%#cycle+1;entry=cycle[cycleIndex]
+   else entry=phase=='diet' and 'pass' or 'diet' end
+   if not enter(entry,now) then return end
    nextPhase=now+abEvery
-   DebugError(string.format('[X4LAN] FRAMEDIET phase=%s t=%.3f frames=%d',phase,now,owner:stats().frames))
   end
   if now>=nextReport then report(owner:stats(),now);nextReport=now+reportEvery end
   return

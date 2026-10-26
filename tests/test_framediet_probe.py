@@ -41,7 +41,9 @@ class FrameDietProbeTests(unittest.TestCase):
         ''' + STATS + '''
           handle={active=function(self) return armed end,stop=function(self) stops=stops+1 end,
             stats=function(self) return stats_table() end,
-            set=function(self,mode) sets[#sets+1]=mode;current_mode=mode;return true end}
+            set=function(self,mode,sites) sets[#sets+1]=sites and (mode..':'..sites) or mode;current_mode=mode
+              if set_refusal then return nil,set_refusal end
+              return true end}
           function package.loadlib(path,symbol)
             assert(symbol=='luaopen_x4lan_framediet');loaded_path=path
             if load_failure then return nil,load_failure end
@@ -133,6 +135,22 @@ class FrameDietProbeTests(unittest.TestCase):
         self.assertEqual(list(lua.eval('sets').values()), ['pass', 'diet', 'pass'])
         phases = [line for line in self.logs(lua) if 'FRAMEDIET phase=' in line]
         self.assertEqual([line.split()[2] for line in phases], ['phase=pass', 'phase=diet', 'phase=pass'])
+
+    def test_ab_cycle_enters_each_phase_in_order(self):
+        lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';X4LAN_FRAMEDIET_SITES='all';X4LAN_FRAMEDIET_AB_S=30;"
+                           "X4LAN_FRAMEDIET_AB_CYCLE='pass;server;ui_scenes,camera';X4LAN_FRAMEDIET_REPORT_S=1000")
+        lua.execute('ui();now=30;ui();now=60;ui();now=90;ui()')
+        self.assertEqual(list(lua.eval('sets').values()),
+                         ['pass', 'diet:server', 'diet:ui_scenes,camera', 'pass'])
+        phases = [line.split()[2] for line in self.logs(lua) if 'FRAMEDIET phase=' in line]
+        self.assertEqual(phases, ['phase=pass', 'phase=server', 'phase=ui_scenes,camera', 'phase=pass'])
+
+    def test_refused_phase_switch_disarms_loudly(self):
+        lua = self.runtime("X4LAN_FRAMEDIET_MODE='diet';X4LAN_FRAMEDIET_AB_S=30;set_refusal='site not installed'")
+        lua.execute('ui();now=30;ui();now=60;ui()')
+        disabled = [line for line in self.logs(lua) if 'FEATURE framediet DISABLED' in line]
+        self.assertEqual(disabled, ['[X4LAN] FEATURE framediet DISABLED reason=phase switch refused: site not installed'])
+        self.assertEqual(lua.eval('stops'), 1)
 
     def test_ab_is_ignored_outside_diet_mode(self):
         lua = self.runtime("X4LAN_FRAMEDIET_MODE='audit';X4LAN_FRAMEDIET_AB_S=30")
