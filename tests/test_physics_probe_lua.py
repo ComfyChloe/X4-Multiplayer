@@ -169,6 +169,35 @@ class PhysicsProbeLuaTests(unittest.TestCase):
           assert(#calls==0)
         ''')
 
+    def test_flight_capture_armed_and_written_once(self):
+        self.runtime().execute('''
+          X4LAN_FLIGHTCAP='forced';X4LAN_FLIGHTCAP_PATH='C:/p/x4mp-flightcap-forced.log';X4LAN_FLIGHTCAP_N=500;calls={}
+          handle.flight_capture=function(self,m,n,path,frames) calls[#calls+1]={m,n,path,frames};return true end
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.phys_installed=1;s.phys_frames=60
+            if #calls>0 then s.flight_installed=1;s.flight_frames=60;s.flight_cap_written=1;s.flight_cap_records=500
+              s.flight_cap_dropped=7;s.flight_cap_bytes=476056 end
+            return s end
+          ui();ui();now=30;ui();now=31;ui();now=32;ui()
+          assert(#calls==1 and calls[1][1]=='forced' and calls[1][2]==500 and calls[1][3]=='C:/p/x4mp-flightcap-forced.log' and calls[1][4]==3000)
+          local armed,written=0,0
+          for _,l in ipairs(logs) do
+            if l:find('FLIGHTCAP armed model=forced records=500 frames=3000',1,true) then armed=armed+1 end
+            if l:find('FLIGHTCAP written records=500 dropped=7 bytes=476056',1,true) then written=written+1 end
+          end
+          assert(armed==1 and written==1)
+        ''')
+
+    def test_flight_capture_refusal_is_loud(self):
+        self.runtime().execute('''
+          X4LAN_FLIGHTCAP='steering';X4LAN_FLIGHTCAP_PATH='C:/p/cap.log'
+          handle.flight_capture=function(self,m,n,path,frames) return nil,'model class not capturable' end
+          ui();ui();now=30;ui()
+          local n=0
+          for _,l in ipairs(logs) do if l:find('FEATURE flightcap DISABLED reason=model class not capturable',1,true) then n=n+1 end end
+          assert(n==1)
+        ''')
+
     def test_old_dll_without_physics_mode_is_ignored(self):
         self.runtime().execute('''
           X4LAN_PHYSICS_MODE='joltwait'

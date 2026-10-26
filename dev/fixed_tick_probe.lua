@@ -10,6 +10,8 @@
 -- X4LAN_PHYSICS_AB_S seconds (default 20).
 -- X4LAN_FLIGHTPROF=true adds the flight-model census (FLIGHTPROF: Update calls per frame and us per call for
 -- each of the six U::Path flight control models, cheap-mode calls; data-only, refusal FEATURE flightprof DISABLED).
+-- X4LAN_FLIGHTCAP='forced' records that model's Update inputs/outputs (X4LAN_FLIGHTCAP_N records, default 20000,
+-- at most X4LAN_FLIGHTCAP_FRAMES frames, default 3000) into <profile>/x4mp-flightcap-<model>.log for offline replay.
 if not X4LAN_CONFIG or X4LAN_CONFIG.test_profile~='45841' then return end
 if X4LAN_FIXEDTICK_PROBE then return end
 X4LAN_FIXEDTICK_PROBE=true
@@ -22,6 +24,7 @@ local walkRefusedLogged
 local physRefusedLogged
 local joltwaitLogged,joltwaitOnLogged
 local flightRequested,flightRefusedLogged
+local capRequested,capLogged
 local physMode,nextPhysMode=nil,0
 local sectorHooks={[0]='pending',[1]='original',[2]='chained',[3]='refused'}
 local nextTry=0
@@ -84,6 +87,15 @@ local function logStats(now)
     s.flight_frames,s.flight_calls or 0,s.flight_calls_max or 0,s.flight_cheap or 0,s.flight_ms or 0,
     s.flight_owner_calls or 0)..table.concat(parts,' '))
   end
+  if (s.flight_cap_written or 0)~=0 and not capLogged then
+   capLogged=true
+   if s.flight_cap_written==1 then
+    DebugError(string.format('[X4LAN] FLIGHTCAP written records=%d dropped=%d bytes=%d',
+     s.flight_cap_records or 0,s.flight_cap_dropped or 0,s.flight_cap_bytes or 0))
+   else
+    DebugError('[X4LAN] FEATURE flightcap DISABLED reason=capture file write failed')
+   end
+  end
   if s.flight_reason and not flightRefusedLogged then
    flightRefusedLogged=true
    DebugError('[X4LAN] FEATURE flightprof DISABLED reason='..tostring(s.flight_reason))
@@ -103,6 +115,29 @@ local function setPhysicsMode(mode,now)
  else
   DebugError('[X4LAN] FEATURE joltwait DISABLED reason='..tostring(why))
   physMode='refused'
+ end
+end
+local function capturePath(model)
+ local ok,ffi=pcall(require,'ffi')
+ if not ok then return nil end
+ pcall(ffi.cdef,'const char* GetSaveFolderPath(void);')
+ local okp,folder=pcall(function() return ffi.string(ffi.C.GetSaveFolderPath()) end)
+ if not okp or not folder then return nil end
+ folder=folder:gsub('\\','/'):gsub('/+$',''):gsub('/save$','')
+ return folder..'/x4mp-flightcap-'..model..'.log'
+end
+local function applyFlightCapture()
+ if capRequested or not X4LAN_FLIGHTCAP or not owner.flight_capture then return end
+ capRequested=true
+ local path=X4LAN_FLIGHTCAP_PATH or capturePath(X4LAN_FLIGHTCAP)
+ local n,frames=X4LAN_FLIGHTCAP_N or 20000,X4LAN_FLIGHTCAP_FRAMES or 3000
+ local ok,why
+ if path then ok,why=owner:flight_capture(X4LAN_FLIGHTCAP,n,path,frames) else why='no profile folder' end
+ if ok then
+  DebugError(string.format('[X4LAN] FLIGHTCAP armed model=%s records=%d frames=%d path=%s',X4LAN_FLIGHTCAP,n,frames,path))
+ else
+  capLogged=true
+  DebugError('[X4LAN] FEATURE flightcap DISABLED reason='..tostring(why))
  end
 end
 local function applyFlightCensus()
@@ -163,6 +198,7 @@ SetScript('onUpdate',function()
   if now>=nextLog then logStats(now) end
   applyPhysicsMode(now)
   applyFlightCensus()
+  applyFlightCapture()
   if profiling then
    if now>=nextProfile then logProfile(now) end
    drainFolds()

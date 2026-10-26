@@ -16,6 +16,25 @@ static void fake_update(void *self, void *slot, float dt, double t, uint8_t chea
         InterlockedIncrement(&flight_bad_args);
     InterlockedIncrement(&flight_seen);
 }
+static void fake_forced(void *self, void *slot, float dt, double t, uint8_t cheap, uint8_t p) {
+    (void)self; (void)dt; (void)t; (void)cheap; (void)p;
+    ((unsigned char *)slot)[0x40] = 0x99;   /* the original's write */
+}
+static DWORD WINAPI capture_worker(LPVOID arg) {
+    int worker = (int)(intptr_t)arg;
+    static unsigned char agents[2][0x400], models[2][0x60], slots[2][0x1a0];
+    unsigned char *agent = agents[worker], *model = models[worker], *slot = slots[worker];
+    agent[0x340] = (unsigned char)(0x40 + worker);
+    *(float *)(agent + 0x364) = 321.0f + (float)worker;
+    *(unsigned char **)(model + 0x10) = agent;
+    model[0x20] = (unsigned char)(0x20 + worker);
+    void **entry = (void **)(image + x4_physics_flight_vtables[0].entry);
+    for (int i = 0; i < 40; ++i) {
+        slot[0x40] = 0x11;
+        ((pf_update_fn)*entry)(model, slot, 0.5f, (double)worker, 0, 1);
+    }
+    return 0;
+}
 static DWORD WINAPI flight_worker(LPVOID arg) {
     int model = (int)(intptr_t)arg;
     void **entry = (void **)(image + x4_physics_flight_vtables[model].entry);
@@ -377,6 +396,65 @@ int main(void) {
         assert(!pf_installed);
     }
     puts("PASS: flight census: verified swap of six model slots or none, counts on any thread, arguments unchanged, fold, latched refusal, restore");
+
+    /* Flight capture: staged, armed at frame end, records from worker threads (model bytes, agent block,
+       slot before/after the original), written when full; refusals for unknown/uncapturable classes. */
+    {
+        setup();
+        assert(pp_install(0));
+        use_fakes();
+        for (int i = 0; i < PF_MODELS; ++i)
+            *(void **)(image + x4_physics_flight_vtables[i].entry) = image + x4_physics_flight_vtables[i].fn;
+        pf_reason = NULL;
+        wchar_t wpath[MAX_PATH];
+        char path[MAX_PATH];
+        GetTempPathW(MAX_PATH, wpath);
+        wcscat(wpath, L"x4pf-test-capture.log");
+        WideCharToMultiByte(CP_UTF8, 0, wpath, -1, path, MAX_PATH, NULL, NULL);
+        DeleteFileW(wpath);
+        assert(pf_request_capture("warp", 10, path, 0) && pf_request_capture("steering", 10, path, 0));
+        assert(pf_request_capture("forced", 0, path, 0) && pf_request_capture("forced", 10, NULL, 0));
+        assert(!pf_request_capture("forced", 64, path, 1000));
+        assert(pf_request_capture("forced", 64, path, 1000));   /* one capture per session */
+        pp_frame_end();
+        assert(pf_installed && pf_cap.armed && pf_cap.capacity == 64 && pf_cap.model == 0);
+        for (int i = 0; i < PF_MODELS; ++i) pf_orig[i] = (void *)fake_forced;
+        HANDLE w[2] = {CreateThread(NULL, 0, capture_worker, (LPVOID)(intptr_t)0, 0, NULL),
+                       CreateThread(NULL, 0, capture_worker, (LPVOID)(intptr_t)1, 0, NULL)};
+        assert(w[0] && w[1] && WaitForMultipleObjects(2, w, TRUE, 5000) == WAIT_OBJECT_0);
+        CloseHandle(w[0]); CloseHandle(w[1]);
+        assert(pf_cap.next == 80 && pf_cap.dropped == 16);
+        pp_frame_end();   /* full: disarm and write */
+        assert(!pf_cap.armed && pf_cap.written == 1);
+        HANDLE f = CreateFileW(wpath, GENERIC_READ, 0, NULL, OPEN_EXISTING, 0, NULL);
+        assert(f != INVALID_HANDLE_VALUE);
+        static unsigned char file[1 << 20];
+        DWORD got_bytes = 0;
+        assert(ReadFile(f, file, sizeof(file), &got_bytes, NULL));
+        CloseHandle(f);
+        DeleteFileW(wpath);
+        const uint32_t *hdr = (const uint32_t *)(file + 8);
+        assert(!memcmp(file, PF_CAP_MAGIC, 8) && hdr[0] == 1 && hdr[1] == 0 && hdr[3] == 0x60 && hdr[7] == 64);
+        assert(hdr[8] == 16 && hdr[9] == X4_PE_TIMESTAMP && hdr[10] == X4_IMAGE_SIZE && hdr[11] == sizeof(pf_cap_head));
+        size_t rs = hdr[2];
+        assert(rs == pf_cap_record_size(0x60) && got_bytes == 8 + 48 + 64 * rs);
+        for (int r = 0; r < 64; ++r) {
+            const unsigned char *rec = file + 56 + r * rs;
+            const pf_cap_head *h = (const pf_cap_head *)rec;
+            int worker = (int)h->t;          /* the worker id is passed as t */
+            assert(h->model == 0 && h->dt == 0.5f && h->max_forward == 321.0f + (float)worker && (h->flags & 3) == 2);
+            const unsigned char *model = rec + sizeof(pf_cap_head);
+            assert(model[0x20] == 0x20 + worker);                       /* model bytes */
+            const unsigned char *agent = model + 0x60;
+            assert(agent[0] == 0x40 + worker);                          /* agent +0x340 */
+            const unsigned char *before = agent + PF_CAP_AGENT_BYTES, *after = before + PF_CAP_SLOT;
+            assert(before[0x40] == 0x11 && after[0x40] == 0x99 && after[0x41] == before[0x41]);
+        }
+        restore_origs();
+        disarm_because("test");
+        assert(!pf_installed);
+    }
+    puts("PASS: flight capture: staged, armed at frame end, records from workers, dropped beyond capacity, file written");
 
     /* An entry changed by someone else after install is left alone on uninstall. */
     setup();

@@ -698,7 +698,7 @@ __declspec(dllexport) int luaopen_x4lan_fixedtick(lua_State *L) {
     method(L, "__gc", stop); method(L, "stop", stop);
     method(L, "active", active); method(L, "stats", stats);
     method(L, "profile", profile); method(L, "folds", folds);
-    method(L, "physics_mode", pp_lua_mode); method(L, "flight_census", pf_lua_census);
+    method(L, "physics_mode", pp_lua_mode); method(L, "flight_census", pf_lua_census); method(L, "flight_capture", pf_lua_capture);
     p_lua_settop(L, -2);
     p_lua_createtable(L, 0, 1); method(L, "start", start);
     return 1;
