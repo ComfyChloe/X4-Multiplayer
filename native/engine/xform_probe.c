@@ -81,6 +81,7 @@ static const struct { uint32_t rva, length; const char *sha; } code_checks[] = {
     {0x3d5440u, 373, "802f10fc00f188e16598771fcda681fbcfe288fc8a3123206f017a84520563de"},  /* RemoveCacheSpecification */
 };
 #define RVA_REMOVE_SPEC 0x3d5440u
+#define RVA_BASE_FLAGS 0x3d72b8cu /* base cache flags, read by BuildCache (data) */
 
 typedef struct {
     uint32_t rva, target;
@@ -111,7 +112,7 @@ typedef struct {
     char shadow_first[200];
     /* switch: our BuildCache (x4mp_xform_build) runs instead of the original; with switch_alternate
        the plain frames and the shadow frames each alternate between the original and ours (A/B) */
-    uint32_t switch_threads, switch_alternate;
+    uint32_t switch_threads, switch_alternate, switch_impl; /* impl 1: copy + model, 2: exact walk */
     uint64_t switch_frames, switch_fallbacks, switch_components, switch_tasks, switch_refreshes;
     double switch_plan_us_sum, switch_exec_us_sum, switch_plan_us_max;
     char switch_refusal[200];
@@ -135,6 +136,7 @@ typedef uint32_t (*shadow_abi_fn)(void);
 typedef struct {
     void (*propagate)(void *c, unsigned idx, const uint32_t *flags);
     void (*remove_spec)(void *c, int32_t kind);
+    const uint32_t *base_flags;
 } engine_api;
 typedef struct {
     uint64_t components, tasks, refreshes, timers, removed;
@@ -143,6 +145,8 @@ typedef struct {
 } xform_build;
 typedef int32_t (*switch_build_fn)(void *galaxy, uint32_t idx, double time, uint32_t threads, uint32_t drop,
                                    const engine_api *api, xform_build *out);
+typedef int32_t (*switch_fast_fn)(void *galaxy, uint32_t idx, double time, uint32_t threads, const engine_api *api,
+                                  xform_build *out);
 
 /* The state is static so that the hook never reads Lua memory; the userdata is a handle. */
 static owner state;
@@ -170,6 +174,7 @@ static int tracing;
 static int64_t qpc_freq;
 static shadow_check_fn shadow_check;
 static switch_build_fn switch_build;
+static switch_fast_fn switch_fast;
 static engine_api switch_api;
 
 static int readable(const void *ptr, size_t length) {
@@ -405,7 +410,9 @@ static void run_switch(void *galaxy, unsigned idx, double time, void *ctx) {
     owner *o = ctx;
     xform_build r;
     memset(&r, 0, sizeof r);
-    int32_t rc = switch_build(galaxy, idx, time, o->switch_threads, image[XC_RVA_DROP_POSE] != 0, &switch_api, &r);
+    int32_t rc = o->switch_impl == 2 ? switch_fast(galaxy, idx, time, o->switch_threads, &switch_api, &r)
+                                     : switch_build(galaxy, idx, time, o->switch_threads, image[XC_RVA_DROP_POSE] != 0,
+                                                    &switch_api, &r);
     if (rc != 0) {
         ++o->switch_fallbacks;
         if (!o->switch_refusal[0]) {
@@ -523,6 +530,8 @@ static void shadow(owner *o, void *galaxy, unsigned idx, double time) {
     if (why) {
         ++o->shadow_errors;
         o->last_skip = why;
+        o->reason = "shadow capture failed; original BuildCache restored";
+        o->armed = 0;
         return;
     }
     xform_check r;
@@ -532,6 +541,8 @@ static void shadow(owner *o, void *galaxy, unsigned idx, double time) {
     if (rc != 0) {
         ++o->shadow_errors;
         o->last_skip = "shadow check refused the capture";
+        o->reason = "shadow check failed; original BuildCache restored";
+        o->armed = 0;
         return;
     }
     ++o->shadow_frames;
@@ -553,6 +564,10 @@ static void shadow(owner *o, void *galaxy, unsigned idx, double time) {
             o->shadow_first[sizeof o->shadow_first - 1] = 0;
             o->shadow_first_frame = o->frames;
         }
+        /* The frame already ran: do not execute it twice. Subsequent entries into the hook
+           use the original immediately; the Lua owner reports DISABLED and unpatches safely. */
+        o->reason = "shadow mismatch; original BuildCache restored";
+        o->armed = 0;
     }
 }
 
@@ -599,7 +614,8 @@ static void disarm(owner *o) {
 
 /* Everything start() does after the Lua checks: verify, stub page, sites, arm, patch. */
 static const char *arm(double first_s, double every_s, uint32_t count, uint32_t trace_every, int with_file,
-                       uint32_t shadow_every, const WCHAR *shadow_path, uint32_t switch_threads, uint32_t switch_alternate) {
+                       uint32_t shadow_every, const WCHAR *shadow_path, uint32_t switch_threads, uint32_t switch_alternate,
+                       uint32_t switch_impl) {
     const char *why = verify_image(with_file);
     if (why) return why;
     if (shadow_every || switch_threads) {
@@ -608,14 +624,18 @@ static const char *arm(double first_s, double every_s, uint32_t count, uint32_t 
         shadow_abi_fn abi = (shadow_abi_fn)(void *)GetProcAddress(m, "x4mp_xform_abi");
         shadow_check = (shadow_check_fn)(void *)GetProcAddress(m, "x4mp_xform_check");
         switch_build = (switch_build_fn)(void *)GetProcAddress(m, "x4mp_xform_build");
+        switch_fast = (switch_fast_fn)(void *)GetProcAddress(m, "x4mp_xform_build_fast");
         uint32_t version = abi ? abi() : 0;
-        if (!shadow_check || version < 1 || (switch_threads && (version < 2 || !switch_build))) {
+        if (!shadow_check || version < 1 ||
+            (switch_threads && (version < 3 || !switch_build || !switch_fast || (switch_impl != 1 && switch_impl != 2)))) {
             shadow_check = NULL;
             switch_build = NULL;
+            switch_fast = NULL;
             return "shadow library ABI mismatch";
         }
         switch_api.propagate = (void (*)(void *, unsigned, const uint32_t *))(void *)(image + RVA_PROPAGATE);
         switch_api.remove_spec = (void (*)(void *, int32_t))(void *)(image + RVA_REMOVE_SPEC);
+        switch_api.base_flags = (const uint32_t *)(void *)(image + RVA_BASE_FLAGS);
     }
     void **table = *(void ***)(image + VBI_RVA);
     if (table && *(int *)((unsigned char *)table + 0x130)) return "loading";
@@ -647,6 +667,7 @@ static const char *arm(double first_s, double every_s, uint32_t count, uint32_t 
     o->shadow_every = shadow_every;
     o->switch_threads = switch_threads;
     o->switch_alternate = switch_alternate;
+    o->switch_impl = switch_impl;
     owner_thread = GetCurrentThreadId();
     current = o;
     o->armed = 1;
@@ -743,6 +764,7 @@ static int stats(lua_State *L) {
     number_field(L, "switch_plan_us_max", o->switch_plan_us_max);
     if (o->switch_refusal[0]) string_field(L, "switch_refusal", o->switch_refusal);
     number_field(L, "switch_alternate", o->switch_alternate);
+    number_field(L, "switch_impl", o->switch_impl);
     number_field(L, "shadow_switch_frames", (double)o->shadow_switch_frames);
     number_field(L, "shadow_switch_bad_frames", (double)o->shadow_switch_bad_frames);
     number_field(L, "shadow_switch_mismatches", (double)o->shadow_switch_mismatches);
@@ -758,12 +780,19 @@ static int stats(lua_State *L) {
     return 1;
 }
 
-/* start(dir, first_s, every_s, count, trace_every[, shadow_every, dll[, switch_threads[, alternate]]]) on
-   the main Lua thread (MoveWorker, slot 6). */
+/* start(dir, first_s, every_s, count, trace_every[, shadow_every, dll[, switch_threads[, alternate[, impl]]]])
+   on the main Lua thread (MoveWorker, slot 6); impl 1 = copy + model, 2 = exact walk (default). */
 static int start(lua_State *L) {
     int top = p_lua_gettop(L);
     WCHAR shadow_path[400] = L"";
-    uint32_t shadow_every = 0, switch_threads = 0, switch_alternate = 0;
+    uint32_t shadow_every = 0, switch_threads = 0, switch_alternate = 0, switch_impl = 2;
+    if (top == 10) {
+        double si = p_lua_type(L, 10) == LUA_TNUMBER ? p_lua_tonumber(L, 10) : -1.0;
+        if (!(si == 1 || si == 2)) return failure(L, "invalid arguments");
+        switch_impl = (uint32_t)si;
+        p_lua_settop(L, 9);
+        top = 9;
+    }
     if (top == 9) {
         double sa = p_lua_type(L, 9) == LUA_TNUMBER ? p_lua_tonumber(L, 9) : -1.0;
         if (!(sa == 0 || sa == 1)) return failure(L, "invalid arguments");
@@ -808,7 +837,7 @@ static int start(lua_State *L) {
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, (LPCWSTR)&hook_build_cache, &pinned))
         return failure(L, "cannot pin module");
     const char *why = arm(first_s, every_s, (uint32_t)count, (uint32_t)trace_every, 1, shadow_every, shadow_path, switch_threads,
-                          switch_alternate);
+                          switch_alternate, switch_impl);
     if (why) return failure(L, why);
     handle *h = p_lua_newuserdata(L, sizeof *h);
     h->generation = ++generation;

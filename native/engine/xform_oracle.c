@@ -75,6 +75,20 @@ static unsigned char *text_start, *text_end;
 #define XFORM_PROBE_EMBED
 #include "xform_probe.c"
 
+/* Negative control in this offline executable only: the native probe has no fault switch. */
+static int shadow_fault_mode;
+static unsigned shadow_fault_calls;
+static shadow_check_fn clean_shadow_check;
+static int32_t fault_shadow_check(const uint8_t *data, size_t length, xform_check *out) {
+    ++shadow_fault_calls;
+    int32_t rc = clean_shadow_check(data, length, out);
+    if (rc != 0) return rc;
+    if (shadow_fault_mode == 2) return -2;
+    ++out->mismatches;
+    strcpy(out->message, "injected offline mismatch");
+    return 0;
+}
+
 static int digest_hex(const unsigned char d[32], const char *expected) {
     static const char hex[] = "0123456789abcdef";
     for (int i = 0; i < 32; ++i) {
@@ -491,9 +505,21 @@ static int run_cache(const char *scn_path, const char *res_path, const char *cap
         WCHAR alternate_text[4] = L"";
         DWORD al = GetEnvironmentVariableW(L"XFORM_ORACLE_ALTERNATE", alternate_text, 4);
         uint32_t switch_alternate = al == 1 && alternate_text[0] == L'1';
-        const char *why = shadowing ? arm(1e300, 0.0, 1, 0, 0, 1, shadow_path, switch_threads, switch_alternate)
-                                    : arm(time0, 0.0, frames, 2, 0, 0, NULL, 0, 0);
+        /* XFORM_ORACLE_IMPL=1|2: copy + model (1) or the exact walk (2, default) */
+        WCHAR impl_text[4] = L"";
+        DWORD il = GetEnvironmentVariableW(L"XFORM_ORACLE_IMPL", impl_text, 4);
+        uint32_t switch_impl = il == 1 && impl_text[0] == L'1' ? 1 : 2;
+        const char *why = shadowing ? arm(1e300, 0.0, 1, 0, 0, 1, shadow_path, switch_threads, switch_alternate, switch_impl)
+                                    : arm(time0, 0.0, frames, 2, 0, 0, NULL, 0, 0, 2);
         if (why) { fprintf(stderr, "xform_oracle: probe refused: %s\n", why); return 3; }
+        WCHAR fault_text[4] = L"";
+        DWORD fl = GetEnvironmentVariableW(L"XFORM_ORACLE_SHADOW_FAULT", fault_text, 4);
+        if (fl == 1 && (fault_text[0] == L'1' || fault_text[0] == L'2')) {
+            if (!shadowing || !switch_threads || switch_alternate) return 2;
+            shadow_fault_mode = fault_text[0] - L'0';
+            clean_shadow_check = shadow_check;
+            shadow_check = fault_shadow_check;
+        }
     }
     event_cap = 1u << 22;
     events = malloc(event_cap * sizeof *events);
@@ -551,15 +577,15 @@ static int run_cache(const char *scn_path, const char *res_path, const char *cap
                        sha256(image + 0x3d4a80u, 1792, d) && digest_matches(d, code_checks[0].sha) &&
                        sha256(image + 0x9fe500u, 128, d) && digest_matches(d, code_checks[2].sha);
         if (o && o->switch_threads) {
-            printf("SWITCH threads=%u frames=%llu fallbacks=%llu components=%llu tasks=%llu refusal=%s\n", o->switch_threads,
-                   (unsigned long long)o->switch_frames, (unsigned long long)o->switch_fallbacks,
+            printf("SWITCH impl=%u threads=%u frames=%llu fallbacks=%llu components=%llu tasks=%llu refusal=%s\n",
+                   o->switch_impl, o->switch_threads, (unsigned long long)o->switch_frames, (unsigned long long)o->switch_fallbacks,
                    (unsigned long long)o->switch_components, (unsigned long long)o->switch_tasks, o->switch_refusal);
             /* a refusal falls back to the original for that frame: allowed, reported, and the final
                state is still compared with the original run */
             uint32_t ours = frames;
             if (o->switch_alternate)
                 for (uint32_t k = ours = 0; k < frames; ++k) ours += (k >> 1) & 1;
-            if (o->switch_frames + o->switch_fallbacks != ours) return 4;
+            if (o->switch_frames + o->switch_fallbacks != (shadow_fault_mode ? 1u : ours)) return 4;
         }
         if (o && o->shadow_every) {
             int clean = o->shadow_frames == frames && !o->shadow_bad_frames && !o->shadow_errors && restored;
@@ -568,6 +594,15 @@ static int run_cache(const char *scn_path, const char *res_path, const char *cap
                    (unsigned long long)o->shadow_mismatches, (unsigned long long)o->shadow_refs,
                    (unsigned long long)o->shadow_errors, (unsigned long long)o->shadow_components,
                    (unsigned long long)o->shadow_switch_frames, o->shadow_first);
+            if (shadow_fault_mode) {
+                clean = shadow_fault_calls == 1 && o->frames == 1 && o->switch_frames == 1 &&
+                        !o->switch_fallbacks && !o->armed && o->reason && restored &&
+                        o->shadow_bad_frames == (uint64_t)(shadow_fault_mode == 1) &&
+                        o->shadow_errors == (uint64_t)(shadow_fault_mode == 2);
+                printf("FAILCLOSED mode=%d checks=%u hook_frames=%llu switched=%llu restored=%d verdict=%s\n",
+                       shadow_fault_mode, shadow_fault_calls, (unsigned long long)o->frames,
+                       (unsigned long long)o->switch_frames, restored, clean ? "pass" : "fail");
+            }
             if (!clean) return 4;
             got = frames;
         }

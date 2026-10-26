@@ -25,30 +25,30 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use x4mp_transform::cache::{CacheTree, Event, NoGetters, NoSplit, Node, SpecEntry, Traversal};
 
-const C_ID: usize = 0x08;
-const C_REFS: usize = 0x40;
-const C_MODE: usize = 0x68;
-const C_PARENT: usize = 0x70;
-const C_ATTACH: usize = 0xa0;
-const C_LIVE: usize = 0xa8;
-const C_REGISTERED: usize = 0xd1;
-const C_SPEC: usize = 0xd8;
-const C_VC: usize = 0xe0;
-const VC_SIZE: usize = 0x80;
-const C_FLAGS: usize = 0x1e0;
-const C_MASK: usize = 0x1e4;
-const C_COUNT: usize = 0x1e8;
-const C_ATTENTION: usize = 0x1ec;
-const VC_PARENT: usize = 0x00;
-const VC_KIDS: usize = 0x10;
-const VC_ATT: usize = 0x38;
-const VC_DIRTY: usize = 0x3c;
-const SLOT_IS_CLASS: usize = 573;
-const CLASS_NONE: u32 = 0x79;
-const CLASS_SECTOR: u32 = 0x58;
-const MAX_STACK: usize = 99;
-const MAX_ENTRIES: usize = 64;
-const MAX_DEPTH: usize = 64;
+pub(crate) const C_ID: usize = 0x08;
+pub(crate) const C_REFS: usize = 0x40;
+pub(crate) const C_MODE: usize = 0x68;
+pub(crate) const C_PARENT: usize = 0x70;
+pub(crate) const C_ATTACH: usize = 0xa0;
+pub(crate) const C_LIVE: usize = 0xa8;
+pub(crate) const C_REGISTERED: usize = 0xd1;
+pub(crate) const C_SPEC: usize = 0xd8;
+pub(crate) const C_VC: usize = 0xe0;
+pub(crate) const VC_SIZE: usize = 0x80;
+pub(crate) const C_FLAGS: usize = 0x1e0;
+pub(crate) const C_MASK: usize = 0x1e4;
+pub(crate) const C_COUNT: usize = 0x1e8;
+pub(crate) const C_ATTENTION: usize = 0x1ec;
+pub(crate) const VC_PARENT: usize = 0x00;
+pub(crate) const VC_KIDS: usize = 0x10;
+pub(crate) const VC_ATT: usize = 0x38;
+pub(crate) const VC_DIRTY: usize = 0x3c;
+pub(crate) const SLOT_IS_CLASS: usize = 573;
+pub(crate) const CLASS_NONE: u32 = 0x79;
+pub(crate) const CLASS_SECTOR: u32 = 0x58;
+pub(crate) const MAX_STACK: usize = 99;
+pub(crate) const MAX_ENTRIES: usize = 64;
+pub(crate) const MAX_DEPTH: usize = 64;
 
 /// Engine functions the executor calls (C layout, filled by the probe).
 #[repr(C)]
@@ -58,34 +58,36 @@ pub struct EngineApi {
     pub propagate: unsafe extern "C" fn(c: *mut u8, idx: u32, flags: *const u32),
     /// `RemoveCacheSpecification` 0x3d5440.
     pub remove_spec: unsafe extern "C" fn(c: *mut u8, kind: i32),
+    /// The base cache flags 0x3d72b8c (read once per frame by the fast switch; ABI 3).
+    pub base_flags: *const u32,
 }
 
 /// A component address. Engine memory is only read while the MoveWorker waits for the load.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
-struct Ptr(usize);
+pub(crate) struct Ptr(pub(crate) usize);
 unsafe impl Send for Ptr {}
 unsafe impl Sync for Ptr {}
 
 impl Ptr {
-    fn null(self) -> bool {
+    pub(crate) fn null(self) -> bool {
         self.0 == 0
     }
-    unsafe fn at(self, off: usize) -> *const u8 {
+    pub(crate) unsafe fn at(self, off: usize) -> *const u8 {
         unsafe { (self.0 as *const u8).add(off) }
     }
-    unsafe fn u32(self, off: usize) -> u32 {
+    pub(crate) unsafe fn u32(self, off: usize) -> u32 {
         unsafe { std::ptr::read_unaligned(self.at(off) as *const u32) }
     }
-    unsafe fn u64(self, off: usize) -> u64 {
+    pub(crate) unsafe fn u64(self, off: usize) -> u64 {
         unsafe { std::ptr::read_unaligned(self.at(off) as *const u64) }
     }
-    unsafe fn ptr(self, off: usize) -> Ptr {
+    pub(crate) unsafe fn ptr(self, off: usize) -> Ptr {
         Ptr(unsafe { self.u64(off) } as usize)
     }
-    unsafe fn byte(self, off: usize) -> u8 {
+    pub(crate) unsafe fn byte(self, off: usize) -> u8 {
         unsafe { *self.at(off) }
     }
-    unsafe fn is_class(self, cls: u32) -> bool {
+    pub(crate) unsafe fn is_class(self, cls: u32) -> bool {
         unsafe {
             let vtbl = self.ptr(0);
             let f: unsafe extern "C" fn(*const u8, i32) -> u8 = std::mem::transmute(vtbl.u64(SLOT_IS_CLASS * 8) as usize);
@@ -95,7 +97,7 @@ impl Ptr {
 }
 
 /// Specification list: (entries, count). Inline when the capacity (+0x80) is 4.
-unsafe fn spec_entries(spec: Ptr) -> (Ptr, usize) {
+pub(crate) unsafe fn spec_entries(spec: Ptr) -> (Ptr, usize) {
     unsafe {
         let cap = spec.u64(0x80);
         let n = spec.u64(0x88) as usize;
@@ -103,7 +105,7 @@ unsafe fn spec_entries(spec: Ptr) -> (Ptr, usize) {
     }
 }
 
-unsafe fn read_entry(e: Ptr) -> SpecEntry {
+pub(crate) unsafe fn read_entry(e: Ptr) -> SpecEntry {
     unsafe {
         SpecEntry {
             kind: e.u32(0) as i32,
@@ -118,7 +120,7 @@ unsafe fn read_entry(e: Ptr) -> SpecEntry {
 
 /// Non-null entries of a bucketed component container; `attach` = the attachment form
 /// (iterated only when its count is non-zero, like 0x314fa0).
-unsafe fn container(cont: Ptr, attach: bool) -> Option<Vec<Ptr>> {
+pub(crate) unsafe fn container(cont: Ptr, attach: bool) -> Option<Vec<Ptr>> {
     if cont.null() {
         return None;
     }
@@ -449,12 +451,16 @@ pub struct BuildStats {
 
 /// The plan of one frame: refresh calls and list updates, in walk order.
 pub struct Plan {
-    steps: Vec<Step>,
-    stats: BuildStats,
+    pub(crate) steps: Vec<Step>,
+    pub(crate) stats: BuildStats,
 }
 
-enum Step {
+/// One engine call (or list update) of a plan.
+#[derive(Clone, Debug)]
+pub(crate) enum Step {
+    /// `PropagateCacheFlags(ptr, idx, &flags)`.
     Refresh { ptr: usize, flags: u32 },
+    /// End loop of `ptr`'s own list: timers of the kept entries, then removal of expired kinds.
     List { ptr: usize, keep: Vec<SpecEntry>, remove: Vec<i32> },
 }
 
@@ -530,7 +536,16 @@ pub unsafe fn plan(galaxy: usize, idx: usize, time: f64, threads: usize, drop_po
 /// On the MoveWorker, at the point where the original `BuildCache` would run, for the frame the
 /// plan was made for.
 pub unsafe fn execute(p: &Plan, idx: usize, api: &EngineApi) -> BuildStats {
-    for s in &p.steps {
+    unsafe { execute_steps(&p.steps, idx, api) };
+    p.stats
+}
+
+/// Executes steps in order (see [`execute`]).
+///
+/// # Safety
+/// As [`execute`].
+pub(crate) unsafe fn execute_steps(steps: &[Step], idx: usize, api: &EngineApi) {
+    for s in steps {
         match s {
             Step::Refresh { ptr, flags } => {
                 let f = *flags;
@@ -558,7 +573,6 @@ pub unsafe fn execute(p: &Plan, idx: usize, api: &EngineApi) -> BuildStats {
             }
         }
     }
-    p.stats
 }
 
 #[cfg(test)]
@@ -580,7 +594,7 @@ mod tests {
     impl Fake {
         fn new() -> Fake {
             let mut vtbl = Box::new([0usize; 640]);
-            vtbl[SLOT_IS_CLASS] = fake_is_class as usize;
+            vtbl[SLOT_IS_CLASS] = fake_is_class as *const () as usize;
             Fake { mem: Vec::new(), vtbl, lists: Vec::new() }
         }
         fn add(&mut self, parent: Option<usize>, classes: &[u32]) -> usize {
@@ -620,6 +634,22 @@ mod tests {
             self.set(i, vc + VC_KIDS, b);
             self.set(i, vc + VC_KIDS + 8, b + kids.len() as u64 * 8);
         }
+        /// One bucket in a live-child/attachment container, using the actual engine layout.
+        fn container(&mut self, i: usize, offset: usize, kids: &[usize]) {
+            let mut slots = Box::new([0u64; 64]);
+            for (k, &child) in kids.iter().enumerate() {
+                slots[k] = self.ptr(child);
+            }
+            let mut bucket = Box::new([0u64; 64]);
+            bucket[0] = slots.as_ptr() as u64;
+            bucket[1] = bucket[0] + 8 * kids.len() as u64;
+            let mut container = Box::new([0u64; 64]);
+            container[1] = bucket.as_ptr() as u64;
+            container[2] = container[1] + 0x20;
+            container[4] = kids.len() as u64;
+            self.set(i, offset, container.as_ptr() as u64);
+            self.lists.extend([slots, bucket, container]);
+        }
         /// one-entry inline specification list
         fn spec(&mut self, i: usize, kind: i32, flags: u32, class: u32) {
             let mut list = Box::new([0u64; 64]);
@@ -633,6 +663,95 @@ mod tests {
             self.lists.push(list);
             self.set(i, C_SPEC, b);
         }
+    }
+
+    /// Steps as comparable text; lists that change nothing are dropped (the fast plan omits them).
+    fn norm<'a>(steps: impl Iterator<Item = &'a Step>) -> Vec<String> {
+        steps
+            .filter_map(|s| match s {
+                Step::Refresh { ptr, flags } => Some(format!("R {ptr:x} {flags:#x}")),
+                Step::List { ptr, keep, remove } => {
+                    let k: Vec<String> =
+                        keep.iter().map(|e| format!("{}:{:x}:{:x}", e.kind, e.interval.to_bits(), e.last.to_bits())).collect();
+                    Some(format!("L {ptr:x} {k:?} {remove:?}"))
+                }
+            })
+            .collect()
+    }
+
+    #[test]
+    fn fast_walk_plans_like_the_copy() {
+        let mut f = Fake::new();
+        let g = f.add(None, &[0x2f]);
+        let cl = f.add(Some(g), &[0x0f]);
+        let s1 = f.add(Some(cl), &[0x58]);
+        let s2 = f.add(Some(cl), &[0x58]);
+        let z1 = f.add(Some(s1), &[0x6d]);
+        let z2 = f.add(Some(s2), &[0x6d]);
+        let a = f.add(Some(z1), &[0x49]);
+        let b = f.add(Some(z2), &[0x49]);
+        f.kids(g, 0, &[cl]);
+        f.kids(cl, 0, &[s1, s2]);
+        f.kids(s1, 0, &[z1]);
+        f.kids(s2, 0, &[z2]);
+        f.kids(z1, 0, &[a]);
+        f.kids(z2, 0, &[b]);
+        f.kids(a, 0, &[]);
+        f.kids(b, 0, &[]);
+        f.spec(g, 1, 0x6b, 0x58);
+        f.spec(z1, 3, 0x7f, CLASS_NONE);
+        f.spec(b, 7, 0x19, CLASS_NONE);
+        // b's one-shot: interval -1 counts down to -0.5, then expires next frame
+        let bl = f.mem[b][C_SPEC / 8] as usize;
+        unsafe { std::ptr::write_unaligned((bl + 0x10) as *mut u64, (-1.0f64).to_bits()) };
+        for (i, c) in [(g, 3), (cl, 3), (s1, 2), (s2, 1), (z1, 1), (z2, 1), (b, 1)] {
+            f.set32(i, C_COUNT, c);
+        }
+        for i in [g, cl, s1, s2, z1, z2, a, b] {
+            f.set32(i, C_VC + VC_DIRTY, 0x8);
+        }
+        for threads in [1usize, 2, 4] {
+            let copy = unsafe { plan(f.ptr(g) as usize, 0, 1.0, threads, true) }.expect("copy plan");
+            let fast = unsafe { crate::fast::plan(f.ptr(g) as usize, 0, 1.0, threads, 0) }.expect("fast plan");
+            assert_eq!(norm(fast.steps()), norm(copy.steps.iter()), "threads {threads}");
+            assert_eq!(fast.stats.tasks, if threads > 1 { 2 } else { 0 });
+            assert!(fast.stats.visits <= copy.stats.components);
+        }
+        // a component listed by a parent that is not its live parent, with an open gate: refused
+        f.kids(z1, 0, &[a, b]);
+        let r = unsafe { crate::fast::plan(f.ptr(g) as usize, 0, 1.0, 1, 0) };
+        assert_eq!(r.err(), Some("open component reached outside its live parent"));
+    }
+
+    #[test]
+    fn fast_walk_observes_child_vectors_rebuilt_by_earlier_attachments() {
+        let mut f = Fake::new();
+        let g = f.add(None, &[0x2f]);
+        let s = f.add(Some(g), &[CLASS_SECTOR]);
+        let a = f.add(Some(s), &[0x49]);
+        let b = f.add(Some(s), &[0x49]);
+        let old = f.add(Some(b), &[0x49]);
+        let new = f.add(Some(b), &[0x49]);
+        f.kids(g, 0, &[s]);
+        f.kids(s, 0, &[a, b]);
+        f.kids(b, 0, &[old]);
+        f.container(b, C_LIVE, &[new]);
+        f.container(a, C_ATTACH, &[b]);
+        f.spec(g, 1, 0x1, CLASS_NONE); // ordinary refresh does not rebuild child vectors
+        f.set32(g, C_COUNT, 1);
+        f.set32(b, C_VC + VC_DIRTY, 0x2); // a's attachment refresh rebuilds b before b is visited
+        for threads in [1usize, 2, 8] {
+            let copy = unsafe { plan(f.ptr(g) as usize, 0, 1.0, threads, true) }.unwrap();
+            let fast = unsafe { crate::fast::plan(f.ptr(g) as usize, 0, 1.0, threads, 0) }.unwrap();
+            assert_eq!(norm(fast.steps()), norm(copy.steps.iter()), "threads {threads}");
+            assert!(fast.steps().any(|step| matches!(step, Step::Refresh { ptr, .. } if *ptr == f.ptr(new) as usize)));
+            assert!(!fast.steps().any(|step| matches!(step, Step::Refresh { ptr, .. } if *ptr == f.ptr(old) as usize)));
+        }
+        // An attachment in the sequential part would change a task's inputs: fail closed
+        // rather than letting independently planned sectors observe an obsolete child vector.
+        f.container(g, C_ATTACH, &[b]);
+        assert_eq!(unsafe { crate::fast::plan(f.ptr(g) as usize, 0, 1.0, 2, 0) }.err(),
+                   Some("attachment vector rebuilt outside the walker's part of the tree"));
     }
 
     #[test]

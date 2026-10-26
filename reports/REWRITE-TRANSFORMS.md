@@ -258,7 +258,9 @@ state identical to the original run in 400 of 400 universes per seed and thread 
 well. The oracle needed one fix for this: its TLS swap now replaces only entry 0 of the thread's
 TLS array (the Rust DLL has its own implicit TLS slot).
 
-**Native (xform-003, queued):** A/B: plain frames alternate in pairs between the original and the
+**Native (xform-003, passed):** 1,001 shadow frames with zero mismatches, 2,504 switched frames with
+zero fallbacks; all six captures replay identically (three with exact visit/refresh traces).
+A/B: plain frames alternate in pairs between the original and the
 Rust build (the cache index flips every frame, so both paths build both caches), both timed; every
 5th frame a shadow check, alternating the same way, so the model is checked against the original
 and the Rust build against the model in the same run; 6 captures of the original for replay.
@@ -269,7 +271,44 @@ Expected cost: the copy reads the whole reachable superset (the capture walker t
 walk itself on engine memory (exact visits, sector tasks in parallel, refreshes in walk order on
 the MoveWorker), see section 3 option 1.
 
-## 7. Open questions
+## 7. Direct-memory walk (ABI 3; offline verified, native test pending)
+
+`ffi/src/fast.rs` plans the exact walk directly over engine memory, avoiding the copied superset
+of section 6. Sector tasks receive private specification/truncation stacks. The persistent
+worker pool returns plans in tree order; all engine refreshes and list changes still execute
+serially on the MoveWorker. Planning calls only the pure `IsClass` lookup on workers. It reads
+the original base-flags word, handles child vectors rebuilt by an earlier attachment refresh,
+and refuses open nodes reached outside their live parent or attachment rebuilds crossing task
+regions, as well as stack/depth limits and repeated specification kinds. Refusal executes
+nothing and invokes the original build for that frame. This remains a test-lane switch.
+
+Offline seed 9 (26 Oct, `.local/evidence-269-withheld`): 400 scenarios, 70,631
+components, 277,738 observed engine calls identical; 9,972 composed and 10,028 relative poses
+bit-identical. Both copy and direct-memory implementations built 2,480 frames at 1 and 8 threads,
+and 992 frames in 4-thread A/B mode, every frame shadow-checked with zero differences. Four
+synthetic universes with repeated kinds caused the expected 20 refusals (8 in A/B), falling back
+without changes. Final states matched the original in all 400 scenarios per configuration.
+750 captures replayed identically. Seed 8 also passed before continuation (400 scenarios).
+
+Additional regressions cover same-sector attachment-triggered child-vector rebuilds, rejection
+of cross-region rebuilds, deterministic helper panic reporting and waiting for helpers before
+a caller panic unwinds borrowed job data. Eight FFI unit tests pass. The standalone real-Lua
+ABI/argument/refusal checks pass against the built probe DLL.
+
+The probe now disables itself immediately when a shadow check mismatches or refuses a capture:
+subsequent hook entries use the original, and the Lua owner reports `FEATURE xform DISABLED`
+and restores the call site. Offline negative controls inject a mismatch and a checker refusal
+in the oracle executable only. Both prove exactly one shadow check/one switched frame, all
+subsequent frames original, identical final state, and restored pinned code bytes. The lane
+wrapper also validates completed-run counters instead of accepting a `done` marker alone;
+five tests reject missing/duplicate records, errors, fallbacks and insufficient successful work.
+
+Native direct-memory run `xform-004` is queued through the released lane tool (4 threads,
+6 captures, 1,000 shadow frames, 2,500 switched frames, A/B). No speedup is accepted yet.
+The earlier copied-model native run was slower than the original under contention; its timings
+are diagnostic, not an isolated performance result. A lead-granted quiet window is still needed.
+
+## 8. Open questions
 
 - Answered by the census: the start-of-game walk cost comes from one-shot kind-7 entries of
   owners the walk cannot reach (section 5).

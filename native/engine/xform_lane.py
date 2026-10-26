@@ -2,7 +2,7 @@
 
     python native/engine/xform_lane.py --zig <zig.exe> --label xform-001 [--count 6] [--first 20]
         [--every 30] [--trace 2] [--shadow N] [--shadow-frames 2000] [--switch THREADS] [--switch-ab 1]
-        [--switch-frames 5000] [--timeout 900] [--wait 3600] [--replay-only]
+        [--switch-frames 5000] [--switch-impl 2] [--timeout 900] [--wait 3600] [--replay-only]
 
 1. builds .local/engine/x4lan_xform_64.dll (native/engine/xform_probe.c, -Wall -Wextra -Werror);
 2. assembles the lane overlay .local/lane/overlays/xform-<label> (DLL, ui/xform_probe.lua, ui.xml.files,
@@ -18,6 +18,7 @@ Exit status: the lane runner's on failure, else 0 when every capture replays ide
 """
 import argparse
 import os
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -76,6 +77,24 @@ def replay(captures: Path, report: Path) -> int:
     return r.returncode
 
 
+def validate_run(log: str, captures: int, shadow_frames: int, switch_frames: int) -> list[str]:
+    """Completion is not acceptance: require the requested successful work and zero failures."""
+    errors = []
+    if 'FEATURE xform DISABLED' in log:
+        errors.append('probe disabled during run')
+    done = [line.split('XFORM done ', 1)[1] for line in log.splitlines() if 'XFORM done ' in line]
+    if len(done) != 1:
+        return errors + [f'expected one completion record, found {len(done)}']
+    fields = dict(re.findall(r'(\w+)=(\d+)\b', done[0]))
+    for name, target in (('captures', captures), ('shadowFrames', shadow_frames), ('switchFrames', switch_frames)):
+        if name not in fields or int(fields[name]) < target:
+            errors.append(f'{name}: expected at least {target}, found {fields.get(name, "missing")}')
+    for name in ('failures', 'foreignThread', 'shadowBad', 'shadowErrors', 'switchFallbacks'):
+        if name not in fields or int(fields[name]) != 0:
+            errors.append(f'{name}: expected zero, found {fields.get(name, "missing")}')
+    return errors
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument('--zig', required=True, type=Path)
@@ -89,6 +108,7 @@ def main() -> int:
     ap.add_argument('--switch', type=int, default=0, help='threads of the Rust build that replaces BuildCache (0 = off)')
     ap.add_argument('--switch-ab', type=int, choices=(0, 1), default=1, help='1: alternate with the original (A/B)')
     ap.add_argument('--switch-frames', type=int, default=5000)
+    ap.add_argument('--switch-impl', type=int, choices=(1, 2), default=2, help='1: copy + model, 2: exact walk')
     ap.add_argument('--timeout', type=int, default=900)
     ap.add_argument('--wait', type=int, default=0)
     ap.add_argument('--replay-only', action='store_true')
@@ -109,7 +129,7 @@ def main() -> int:
                '--lua', f'X4LAN_XFORM_TRACE={args.trace}',
                '--lua', f'X4LAN_XFORM_SHADOW={args.shadow}', '--lua', f'X4LAN_XFORM_SHADOW_FRAMES={args.shadow_frames}',
                '--lua', f'X4LAN_XFORM_SWITCH={args.switch}', '--lua', f'X4LAN_XFORM_SWITCH_AB={args.switch_ab}',
-               '--lua', f'X4LAN_XFORM_SWITCH_FRAMES={args.switch_frames}',
+               '--lua', f'X4LAN_XFORM_SWITCH_FRAMES={args.switch_frames}', '--lua', f'X4LAN_XFORM_SWITCH_IMPL={args.switch_impl}',
                '--until', r'\[X4LAN\] XFORM done', '--timeout', str(args.timeout),
                '--expect', r'\[X4LAN\] XFORM armed', '--fail-on', r'FEATURE xform DISABLED',
                '--collect', str(collect)]
@@ -121,6 +141,14 @@ def main() -> int:
             print(f'XFORM LANE runner exit {rc}; replaying whatever was captured', flush=True)
             replay(captures, runs / f'{args.label}-replay.txt')
             return rc
+        log = (collect / 'x4lan-debug.txt').read_text(encoding='utf-8', errors='replace')
+        errors = validate_run(log, args.count, args.shadow_frames if args.shadow else 0,
+                              args.switch_frames if args.switch else 0)
+        if errors:
+            print('XFORM ACCEPTANCE FAIL: ' + '; '.join(errors), flush=True)
+            replay(captures, runs / f'{args.label}-replay.txt')
+            return 1
+        print('XFORM ACCEPTANCE PASS: requested captures/shadow/switch counts, zero errors or fallbacks', flush=True)
     return replay(captures, runs / f'{args.label}-replay.txt')
 
 

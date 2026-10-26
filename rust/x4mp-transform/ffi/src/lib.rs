@@ -3,22 +3,28 @@
 //! `x4lan_xform_64.dll` (native/engine/xform_probe.c) loads this library with `LoadLibraryW`
 //! and, on shadow frames, hands it a complete in-memory capture (`X4XFCAP1`: everything the
 //! original `BuildCache` could read, then what it changed). The model replays the frame and
-//! compares every captured component. It has no hooks and never touches engine memory: it
-//! only reads the buffer it is given, on the calling thread.
+//! compares every captured component. It has no hooks of its own; the check only reads the
+//! buffer it is given, on the calling thread. The switch functions (called by the probe in place
+//! of `BuildCache`) read engine memory and call the engine functions in `EngineApi`.
 //!
 //! ```c
-//! uint32_t x4mp_xform_abi(void);   // 2
+//! uint32_t x4mp_xform_abi(void);   // 3
 //! int32_t  x4mp_xform_check(const uint8_t *capture, size_t len, XformCheck *out);
 //!          // 0 checked (out filled), -1 null argument, -2 unreadable capture, -3 internal panic
 //! int32_t  x4mp_xform_build(void *galaxy, uint32_t idx, double time, uint32_t threads,
 //!                           uint32_t drop_pose_blocks, const EngineApi *api, XformBuild *out);
 //!          // the switch: 0 executed; <0 nothing executed, run the original BuildCache
+//! int32_t  x4mp_xform_build_fast(void *galaxy, uint32_t idx, double time, uint32_t threads,
+//!                                const EngineApi *api, XformBuild *out);
+//!          // the fast switch (exact walk on engine memory, fast.rs); same results
 //! ```
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use x4mp_transform::capture::{replay, Capture, Field};
 
 pub mod engine;
+pub mod fast;
+mod pool;
 
 /// Result of [`x4mp_xform_build`] (C layout).
 #[repr(C)]
@@ -92,6 +98,59 @@ pub unsafe extern "C" fn x4mp_xform_build(
     0
 }
 
+/// `BuildCache(galaxy, idx, time)` done by the fast switch ([`fast`]): the exact walk on engine
+/// memory (sector subtrees on `threads` threads), then the planned calls in walk order. Returns
+/// as [`x4mp_xform_build`]: 0 executed; -1 null argument, -2 refused, -3 internal panic, in which
+/// cases nothing was executed and the caller must run the original `BuildCache`.
+///
+/// # Safety
+/// As [`x4mp_xform_build`]; `api.base_flags` must point at the engine's base flags 0x3d72b8c.
+#[no_mangle]
+pub unsafe extern "C" fn x4mp_xform_build_fast(
+    galaxy: *mut u8,
+    idx: u32,
+    time: f64,
+    threads: u32,
+    api: *const engine::EngineApi,
+    out: *mut XformBuild,
+) -> i32 {
+    if galaxy.is_null() || api.is_null() || out.is_null() || idx > 1 {
+        return -1;
+    }
+    let out = unsafe { &mut *out };
+    let api = unsafe { *api };
+    if api.base_flags.is_null() {
+        return -1;
+    }
+    let base = unsafe { std::ptr::read_volatile(api.base_flags) };
+    let t0 = std::time::Instant::now();
+    let planned = catch_unwind(AssertUnwindSafe(|| unsafe {
+        fast::plan(galaxy as usize, idx as usize, time, threads.max(1) as usize, base)
+    }));
+    let plan = match planned {
+        Ok(Ok(p)) => p,
+        Ok(Err(why)) => {
+            put_text(&mut out.message, why);
+            return -2;
+        }
+        Err(_) => {
+            put_text(&mut out.message, "internal panic while planning");
+            return -3;
+        }
+    };
+    let t1 = std::time::Instant::now();
+    let stats = unsafe { fast::execute(&plan, idx as usize, &api) };
+    out.components = stats.components as u64;
+    out.tasks = stats.tasks as u64;
+    out.refreshes = stats.refreshes as u64;
+    out.timers = stats.timers as u64;
+    out.removed = stats.removed as u64;
+    out.plan_us = (t1 - t0).as_secs_f64() * 1e6;
+    out.exec_us = t1.elapsed().as_secs_f64() * 1e6;
+    out.message[0] = 0;
+    0
+}
+
 fn put_text(buf: &mut [u8; 200], text: &str) {
     let b = text.as_bytes();
     let n = b.len().min(buf.len() - 1);
@@ -134,10 +193,10 @@ pub struct XformCheck {
     pub message: [u8; 200],
 }
 
-/// ABI version (2: adds `x4mp_xform_build`).
+/// ABI version (2: adds `x4mp_xform_build`; 3: `EngineApi.base_flags`, `x4mp_xform_build_fast`).
 #[no_mangle]
 pub extern "C" fn x4mp_xform_abi() -> u32 {
-    2
+    3
 }
 
 fn field_code(f: Field) -> u32 {

@@ -110,27 +110,58 @@ def main() -> int:
     # shadow-checks every frame, and the final state must equal the original run's. A refused frame
     # runs the original; the only expected refusal is the synthetic repeated kind. The A/B mode (as
     # in game) alternates the original and the Rust build frame by frame.
-    for threads, alternate in ((1, False), (8, False), (4, True)):
+    # impl 1 = copy + model (engine.rs), 2 = the exact walk on engine memory (fast.rs).
+    for impl, threads, alternate in ((1, 1, False), (1, 8, False), (1, 4, True), (2, 1, False), (2, 8, False), (2, 4, True)):
         switched = fallbacks = 0
-        env = dict(shadow_env, XFORM_ORACLE_SWITCH=str(threads), XFORM_ORACLE_ALTERNATE='1' if alternate else '0')
+        reasons = {}
+        env = dict(shadow_env, XFORM_ORACLE_SWITCH=str(threads), XFORM_ORACLE_ALTERNATE='1' if alternate else '0',
+                   XFORM_ORACLE_IMPL=str(impl))
+        tag = f'i{impl}w{threads}{"ab" if alternate else ""}'
         for p in sorted(cases.glob('*.scn'))[:args.switch]:
-            target = caps / f'{p.stem}-w{threads}{"ab" if alternate else ""}'
+            target = caps / f'{p.stem}-{tag}'
             target.mkdir()
-            res = caps / f'{p.stem}-switch{threads}{"ab" if alternate else ""}.res'
+            res = caps / f'{p.stem}-switch-{tag}.res'
             r = subprocess.run([str(exe), 'probe', str(args.x4), str(p), str(res), str(target)], capture_output=True, text=True,
                                env=env)
             sw = next((ln for ln in r.stdout.splitlines() if ln.startswith('SWITCH ')), '')
             sh = next((ln for ln in r.stdout.splitlines() if ln.startswith('SHADOW ')), '')
             fb = int(sw.split('fallbacks=')[1].split()[0]) if sw else -1
-            if (r.returncode != 0 or ' bad=0 ' not in sh or fb < 0
-                    or (fb and not sw.endswith('refusal=specification list with a repeated kind'))
+            why = sw.split('refusal=', 1)[1] if 'refusal=' in sw else ''
+            # expected refusals: synthetic repeated kinds (both), and for the walk the generator's
+            # stale child vectors (a component listed by a parent that is not its live parent)
+            allowed = ('specification list with a repeated kind',) + (
+                ('open component reached outside its live parent',
+                 'child vector rebuilt for a component reached outside its live parent') if impl == 2 else ())
+            if (r.returncode != 0 or ' bad=0 ' not in sh or fb < 0 or (fb and why not in allowed)
                     or final_state(res.read_bytes()) != final_state(p.with_suffix('.res').read_bytes())):
-                print(f'oracle switch {threads}{" A/B" if alternate else ""} {p.name} failed ({r.returncode}): {sw} {sh or r.stderr.strip()}')
+                print(f'oracle switch {tag} {p.name} failed ({r.returncode}): {sw} {sh or r.stderr.strip()}')
                 return 1
             switched += int(sw.split(' frames=')[1].split()[0])
             fallbacks += fb
-        print(f'switch threads={threads}{" A/B" if alternate else ""}: {switched} frames built by Rust (each shadow-checked, 0 differences), '
-              f'{fallbacks} refused (repeated kind), final state identical in {min(args.switch, len(list(cases.glob("*.scn"))))} scenarios')
+            if fb:
+                reasons[why] = reasons.get(why, 0) + 1
+        print(f'switch impl={impl} threads={threads}{" A/B" if alternate else ""}: {switched} frames built by Rust '
+              f'(each shadow-checked, 0 differences), {fallbacks} refused {reasons}, final state identical in '
+              f'{min(args.switch, len(list(cases.glob("*.scn"))))} scenarios')
+    # A bad or refused shadow check must stop the switch immediately. Subsequent frames use
+    # the original, and removing the hook must restore all pinned bytes. Faults exist only in
+    # this offline executable; no fault injection is built into the native DLL.
+    first = next(iter(sorted(cases.glob('*.scn'))), None)
+    if first is not None:
+        for fault in (1, 2):
+            target = caps / f'failclosed-{fault}'
+            target.mkdir()
+            res = caps / f'failclosed-{fault}.res'
+            env = dict(shadow_env, XFORM_ORACLE_SWITCH='4', XFORM_ORACLE_ALTERNATE='0',
+                       XFORM_ORACLE_IMPL='2', XFORM_ORACLE_SHADOW_FAULT=str(fault))
+            r = subprocess.run([str(exe), 'probe', str(args.x4), str(first), str(res), str(target)],
+                               capture_output=True, text=True, env=env)
+            line = next((ln for ln in r.stdout.splitlines() if ln.startswith('FAILCLOSED ')), '')
+            if (r.returncode != 0 or 'verdict=pass' not in line
+                    or final_state(res.read_bytes()) != final_state(first.with_suffix('.res').read_bytes())):
+                print(f'oracle fail-closed control {fault} failed ({r.returncode}): {r.stdout} {r.stderr}')
+                return 1
+            print(line)
     env = dict(os.environ, X4MP_XFORM_ORACLE_DIR=str(cases), X4MP_XFORM_CAPTURE_DIR=str(caps))
     r = subprocess.run(['cargo', 'test', '-q', '--release', '-p', 'x4mp-transform', '-p', 'x4mp-transform-ffi', '--test', 'oracle',
                         '--test', 'capture', '--lib', '--', '--nocapture'], cwd=rust, env=env, capture_output=True, text=True)

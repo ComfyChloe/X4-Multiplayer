@@ -10,7 +10,8 @@
 -- Switch: X4LAN_XFORM_SWITCH (threads of the Rust build that replaces BuildCache, 0/nil = off; same DLL),
 -- X4LAN_XFORM_SWITCH_AB (1 = default: plain and shadow frames alternate between the original and the
 -- Rust build; 0 = the Rust build on every plain frame), X4LAN_XFORM_SWITCH_FRAMES (stop after this many
--- frames built by Rust, default 5000).
+-- frames built by Rust, default 5000), X4LAN_XFORM_SWITCH_IMPL (1 = copy + model, 2 = default: exact walk
+-- on engine memory).
 if not X4LAN_CONFIG or X4LAN_CONFIG.test_profile~='45841' then return end
 if X4LAN_XFORM_PROBE then return end
 X4LAN_XFORM_PROBE=true
@@ -26,6 +27,7 @@ local shadowTarget=X4LAN_XFORM_SHADOW_FRAMES or 2000
 local switchThreads=X4LAN_XFORM_SWITCH or 0
 local switchAB=X4LAN_XFORM_SWITCH_AB or 1
 local switchTarget=X4LAN_XFORM_SWITCH_FRAMES or 5000
+local switchImpl=X4LAN_XFORM_SWITCH_IMPL or 2
 local owner,done
 local nextTry,nextLog,nextShadowLog,seen,lastSkip=0,0,0,0,nil
 local function shadowLine(s)
@@ -34,8 +36,8 @@ local function shadowLine(s)
   s.shadow_refreshes,s.shadow_ms_mean,s.shadow_ms_max,tostring(s.shadow_first or '-'))
 end
 local function switchLine(s)
- return string.format('[X4LAN] XFORM SWITCH threads=%d ab=%d frames=%d fallbacks=%d components=%d tasks=%d refreshes=%d planUs=%.0f execUs=%.0f planMaxUs=%.0f switchUs=%.0f/%d switchMaxUs=%.0f originalUs=%.0f/%d originalMaxUs=%.0f shadowSwitched=%d shadowSwitchBad=%d refusal=%s',
-  s.switch_threads,s.switch_alternate,s.switch_frames,s.switch_fallbacks,s.switch_components,s.switch_tasks,s.switch_refreshes,
+ return string.format('[X4LAN] XFORM SWITCH impl=%d threads=%d ab=%d frames=%d fallbacks=%d components=%d tasks=%d refreshes=%d planUs=%.0f execUs=%.0f planMaxUs=%.0f switchUs=%.0f/%d switchMaxUs=%.0f originalUs=%.0f/%d originalMaxUs=%.0f shadowSwitched=%d shadowSwitchBad=%d refusal=%s',
+  s.switch_impl,s.switch_threads,s.switch_alternate,s.switch_frames,s.switch_fallbacks,s.switch_components,s.switch_tasks,s.switch_refreshes,
   s.switch_plan_us_mean,s.switch_exec_us_mean,s.switch_plan_us_max,s.switch_us_mean,s.timed_switch,s.switch_us_max,
   s.original_us_mean,s.timed_original,s.original_us_max,s.shadow_switch_frames,s.shadow_switch_bad_frames,tostring(s.switch_refusal or '-'))
 end
@@ -71,8 +73,8 @@ SetScript('onUpdate',function()
   if capturesDone and shadowDone and switchDone then
    if shadowEvery>0 then DebugError(shadowLine(s)) end
    if switchThreads>0 then DebugError(switchLine(s)) end
-   DebugError(string.format('[X4LAN] XFORM done captures=%d failures=%d frames=%d loadingSkips=%d foreignThread=%d shadowFrames=%d shadowBad=%d switchFrames=%d switchFallbacks=%d',
-    s.captures,s.failures,s.frames,s.loading_skips,s.foreign_thread,s.shadow_frames,s.shadow_bad_frames,s.switch_frames,s.switch_fallbacks))
+   DebugError(string.format('[X4LAN] XFORM done captures=%d failures=%d frames=%d loadingSkips=%d foreignThread=%d shadowFrames=%d shadowBad=%d shadowErrors=%d switchFrames=%d switchFallbacks=%d',
+    s.captures,s.failures,s.frames,s.loading_skips,s.foreign_thread,s.shadow_frames,s.shadow_bad_frames,s.shadow_errors,s.switch_frames,s.switch_fallbacks))
    owner:stop();owner=nil;done=true
   end
   return
@@ -83,7 +85,7 @@ SetScript('onUpdate',function()
  local dll=X4LAN_XFORM_SHADOW_DLL or './extensions/x4_lan_lab/native/x4mp_transform_ffi.dll'
  if switchThreads>0 then
   result,why=native.start(X4LAN_XFORM_DIR,X4LAN_XFORM_FIRST or 20,X4LAN_XFORM_EVERY or 30,count,X4LAN_XFORM_TRACE or 2,
-   shadowEvery,dll,switchThreads,switchAB)
+   shadowEvery,dll,switchThreads,switchAB,switchImpl)
  elseif shadowEvery>0 then
   result,why=native.start(X4LAN_XFORM_DIR,X4LAN_XFORM_FIRST or 20,X4LAN_XFORM_EVERY or 30,count,X4LAN_XFORM_TRACE or 2,
    shadowEvery,dll)
@@ -92,7 +94,7 @@ SetScript('onUpdate',function()
  end
  if result then
   owner=result
-  DebugError('[X4LAN] XFORM armed call=0x9fe549 captures='..count..' shadowEvery='..shadowEvery..' switchThreads='..switchThreads..' switchAB='..switchAB..' dir='..X4LAN_XFORM_DIR)
+  DebugError('[X4LAN] XFORM armed call=0x9fe549 captures='..count..' shadowEvery='..shadowEvery..' switchThreads='..switchThreads..' switchAB='..switchAB..' switchImpl='..switchImpl..' dir='..X4LAN_XFORM_DIR)
   return
  end
  if why=='loading' then return end
