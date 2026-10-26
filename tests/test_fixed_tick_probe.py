@@ -27,7 +27,8 @@ class FixedTickProbeTests(unittest.TestCase):
           function package.loadlib(path,symbol)
             assert(symbol=='luaopen_x4lan_fixedtick')
             return function() return {start=function(...)
-              assert(select('#',...)<=1);modes[#modes+1]=(...) or 'probe';attempts=attempts+1
+              assert(select('#',...)<=2);modes[#modes+1]=(...) or 'probe';attempts=attempts+1
+              options=select(2,...)
               if refusal then return nil,refusal end
               return handle
             end} end
@@ -64,6 +65,51 @@ class FixedTickProbeTests(unittest.TestCase):
             s.multi_step_frames=3;s.dropped_ticks=0;s.last_steps=0;s.accumulator=.004;return s end
           ui();assert(modes[1]=='fixed60catchup')
           ui();assert(logs[2]:find('catchup=1 steps=120 zeroStep=200 multiStep=3 dropped=0 lastSteps=0 acc=0.004000',1,true))
+        ''')
+
+    def test_stage3_logs_counters_and_feature_line(self):
+        self.runtime().execute('''
+          X4LAN_FIXEDTICK_MODE='fixed60stage3';fixed=1
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.catchup=1;s.k_cap=2;s.capped_ticks=3;s.slow_frames=4
+            s.stage3=1;s.represent=1;s.represent_active=1;s.re_presents=12;s.would_represent=0;s.waits_ok=50
+            s.waits_timeout=20;s.waits_other=0;s.budget_skips=6;s.max_present_gap=.0185;s.index_changed=0
+            s.queue_count_changed=1;s.in_flight_changed=0;s.gate_summary='suspended:2';s.stalls_injected=1;return s end
+          ui();assert(modes[1]=='fixed60stage3');assert(options==nil)
+          assert(logs[2]:find('FEATURE fixedtick_stage3 ON represent=1 kCap=2',1,true))
+          ui();local line=logs[3]
+          assert(line:find('kCap=2 capped=3 slow=4 stalls=1',1,true))
+          assert(line:find('stage3=1 represent=1 active=1 rePresents=12 wouldRepresent=0 waitsOk=50 waitsTimeout=20',1,true))
+          assert(line:find('budgetSkips=6 maxPresentGap=0.018500 indexChanged=0 queueChanged=1 inFlightChanged=0 gates=suspended:2',1,true))
+        ''')
+
+    def test_stage3_options_and_represent_off_are_loud(self):
+        self.runtime().execute('''
+          X4LAN_FIXEDTICK_MODE='fixed60stage3';X4LAN_FIXEDTICK_OPTIONS='represent=0,stall_ms=100,stall_slot=7'
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.stage3=1;s.represent=0;return s end
+          ui();assert(modes[1]=='fixed60stage3');assert(options=='represent=0,stall_ms=100,stall_slot=7')
+          assert(logs[2]:find('FEATURE fixedtick_represent DISABLED reason=option represent=0',1,true))
+          ui();assert(logs[3]:find('gates=none',1,true))
+        ''')
+
+    def test_options_without_mode_use_probe(self):
+        self.runtime().execute('''
+          X4LAN_FIXEDTICK_OPTIONS='stall_ms=50';ui();assert(modes[1]=='probe');assert(options=='stall_ms=50')
+          ui();assert(not logs[2]:find('stage3=',1,true))
+        ''')
+
+    def test_stage3_refusal_and_disarm_log_feature_disabled(self):
+        lua = self.runtime()
+        with self.assertRaisesRegex(Exception, 'no slot page'):
+            lua.execute('''
+              X4LAN_FIXEDTICK_MODE='fixed60stage3';refusal='no slot page within 2 GB of the image';ui()
+            ''')
+        lua.execute('''assert(logs[1]=='[X4LAN] FEATURE fixedtick_stage3 DISABLED reason=no slot page within 2 GB of the image')''')
+        self.runtime().execute('''
+          X4LAN_FIXEDTICK_MODE='fixed60stage3';ui();armed=false;reason='stage3 call displacement changed';ui()
+          assert(logs[#logs-1]:find('disarmed: stage3 call displacement changed',1,true))
+          assert(logs[#logs]=='[X4LAN] FEATURE fixedtick_stage3 DISABLED reason=stage3 call displacement changed')
         ''')
 
     def test_fixed60_refusal_is_an_error(self):

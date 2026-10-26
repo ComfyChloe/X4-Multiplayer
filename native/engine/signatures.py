@@ -27,7 +27,19 @@ FIXEDTICK_SITES = {
     'physics_collision_steps': (0xBA8CE, 39, 'c667e74f191023745d6e737e530ba1753a9dcc02c8b5dc9e70247d8298f3ce8e'),
 }
 
-SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES}
+# Stage 3 (fixed60stage3): the main loop's 16 ms WaitForSingleObject(g_semSimDone) call
+# (mov edx / mov rcx / call [rip] / ... / cmp eax, WAIT_TIMEOUT), FrameTick's threaded
+# present tail that fixes the re-present sequence and its arguments, and the entries of
+# the three functions the wrapper calls. All RIP-relative; no base relocations in range.
+STAGE3_SITES = {
+    'main_loop_wait_call': (0x12AE889, 36, '473d2a6ad6b095ddf93ec5ac62883b8eb284e10d4349485555cfd51b5c9e4ccf'),
+    'frame_tick_present_tail': (0xFA343C, 50, '94ea2b527afbe4ef29abdb488102328da4013b371b1cb4001e6d28cfd6a9a032'),
+    'begin_threaded_render_frame': (0xFA23A0, 47, '3fbe4c720404ea5780ab03d1cc72dd496890800f64609cd291833d6f4abf70b6'),
+    'render_previous_frame': (0xF9FF40, 47, 'c9e1682c8c8fd329fe369ed1aaf6f217dad3be115c24525c51af3057bbc5a582'),
+    'present_and_frame_limit': (0xFA2BA0, 23, 'acbe4b2bf1b13ad0fc66fdab087a247a18d7778e304b7b9ec306c6f3af0a07c2'),
+}
+
+SITES = {**COMMON_SITES, **SIMTICK_SITES, **FIXEDTICK_SITES, **STAGE3_SITES}
 
 
 def c_header() -> str:
@@ -39,7 +51,8 @@ def c_header() -> str:
         f'#define X4_IMAGE_SIZE 0x{EXECUTABLE["image_size"]:x}u',
         'typedef struct { size_t rva; ULONG length; const char *sha; } x4_signature_check;',
     ]
-    for name, sites in [('common', COMMON_SITES), ('simtick', SIMTICK_SITES), ('fixedtick', FIXEDTICK_SITES)]:
+    for name, sites in [('common', COMMON_SITES), ('simtick', SIMTICK_SITES), ('fixedtick', FIXEDTICK_SITES),
+                        ('stage3', STAGE3_SITES)]:
         lines.append(f'static const x4_signature_check x4_{name}_checks[] = {{')
         for rva, length, sha in sites.values():
             lines.append(f'    {{0x{rva:x}, {length}, "{sha}"}},')

@@ -155,6 +155,131 @@ host game view, profile 45841, new custom_creative world, fixed60catchup):
 - Not measured: 144 fps (run interrupted to free the PC) and uncapped.
 - Evidence: .local/evidence-242-withheld, fps60-*.
 
+STAGE 3 - RE-PRESENT WHILE A SIMULATION FRAME IS LATE - 26 OCTOBER 2026 (OFFLINE ONLY)
+Design source: x4-re coord/reports/render-decouple.md (static analysis; labels
+render-decouple.tsv). Mode X4LAN_FIXEDTICK_MODE='fixed60stage3' = fixed60catchup plus the
+wait wrapper. Options X4LAN_FIXEDTICK_OPTIONS='key=value,...' (or the process environment
+variable of the same name when Lua passes none): kcap 1..4 (default 2), represent 0/1
+(default 1), shortwait 0/1 (default 1), stall_ms 0..1000 (default 0 = off), stall_every
+(default 120), stall_slot 5/7/12/13 (default 5).
+Hook point (verified by disassembly of the copied X4.exe): MainMessageLoop calls
+WaitForSingleObject(g_semSimDone 0x3d79108, 16) at 0x12ae895 as `call [rip+disp32]`
+through IAT slot 0x1bc14b0; EAX is compared with WAIT_TIMEOUT at 0x12ae8a8.
+Patch technique:
+- start() verifies five new pinned sites (hashes only): main_loop_wait_call 0x12ae889
+  (36 bytes, through the WAIT_TIMEOUT compare), frame_tick_present_tail 0xfa343c (50,
+  the threaded tail that fixes the re-present sequence and its arguments), and the
+  entries of 0xfa23a0 (47), 0xf9ff40 (47) and 0xfa2ba0 (23). No base relocations in any
+  range. The whole-file SHA-256 already pins every global address used below.
+- start() reserves one page at a free 64 KB-aligned address searched outward from the
+  image, accepts it only if a rel32 from 0x12ae89b reaches it, stores the wrapper's
+  address in its first 8 bytes and makes it read-only.
+- The first slot-5 callback (MoveWorker, between FrameTicks) rewrites only the call's
+  displacement so it reads the module's slot. The shared IAT entry is never written, so
+  no other WaitForSingleObject caller is affected. The displacement 0x12ae897..0x12ae89a
+  crosses an 8-byte boundary, so the aligned 16-byte window 0x12ae890..0x12ae89f (inside
+  the verified site, one cache line) is replaced with one `lock cmpxchg16b` against the
+  verified original bytes. Why this moment is safe: the main thread is then either in
+  FrameTick's render tail, in the message pump, or blocked inside this very wait (its
+  return address 0x12ae89b is outside the changed bytes); the atomic write means it can
+  only execute the complete old or the complete new call, and both have identical
+  caller-visible semantics. FlushInstructionCache and FlushProcessWriteBuffers (an IPI to
+  every core running the process: serialising, and only delivered between instructions)
+  follow every window write.
+- Disarm (any guard failure, stop, __gc) clears the wrapper's active flag, restores the
+  original window with the same compare-exchange, flushes, and only then frees the page.
+  If foreign bytes changed the window but the displacement still points at the slot,
+  nothing is written and the page is kept alive (never freed under a live reference).
+Wrapper wait_or_represent(HANDLE, DWORD), main thread:
+- Calls the real WaitForSingleObject (the IAT value, so third-party hooks still run) and
+  always returns its result unchanged. WAIT_OBJECT_0 marks that FrameTick's real present
+  follows; the next wrapper entry timestamps it.
+- On WAIT_TIMEOUT with every gate passing and at least one 1/60 s budget elapsed since
+  the last present (real or re-present), it runs FrameTick's threaded tail exactly:
+  0xfa23a0() (no register arguments), ok = 0xf9ff40(fs, 1) (rcx = FrameState
+  *(0x6cf1578), dl = 1; it spills r8 but its first access to that slot is a write, so
+  r8 is not an argument; 0 is passed), then 0xfa2ba0(fs, zero-extended ok, 0) (it
+  forwards rdx/r8 to 0x100c980 unchanged, as FrameTick passes them).
+- Never writes the semaphores, g_SimFrameInFlight 0x31c20cc, g_RenderReadIndex
+  0x6b66280, FrameState+0x1e8, gameTime/realTime or the frame QPC 0x6b60e80; it never
+  calls FrameTick and never releases or consumes a semaphore beyond the original wait.
+- shortwait (deviation from "same timeout", following the report's pseudo-code): once
+  the gates passed on the previous timeout, the timeout is shortened to the remaining
+  budget (minimum 1 ms, never longer than the caller's 16 ms). Without it a 16 ms
+  timeout lands just under the 16.7 ms budget and re-presents would come every ~32 ms.
+  The caller sees an ordinary WAIT_TIMEOUT and pumps messages as before. shortwait=0
+  restores the plain timeout.
+- represent=0 runs everything except the engine calls and counts would_represent.
+Re-present enabled by default in fixed60stage3: the three call signatures and arguments
+were verified from disassembly and are pinned; what remains unproven is runtime safety
+(report risks: render-list pointees +0x78/+0x90, loader-thread pool growth, TAA/DLSS
+history), which only the native experiment below can settle. A refusal or disarm logs
+`FEATURE fixedtick_stage3 DISABLED reason=...`; represent=0 logs
+`FEATURE fixedtick_represent DISABLED reason=option represent=0`.
+Gates (re-checked on every timeout; each failure counted by name as gate_<name>):
+thread (main thread, never the MoveWorker), handle (== g_semSimDone), patch_changed,
+not_in_flight (0x31c20cc == 1), suspended (0x38f52ee), loading (appState 0x6adf9fc bit 1
+or VbiTable+0x130), no_move_worker (0x38f4ee8), first_frame (0x31c2070, or no FrameTick
+completed since the patch), not_threaded (FrameState+0x1e4), graphics_pending
+(0x6adfbc0 != 0), movie_capture (0x6adfc58), streamline_reflex (*(0x6cf1908)+0x30 byte 0,
+the per-tick SL token / Reflex path), dlss_frame_generation (same state, bytes 3/4),
+fsr_frame_generation (*(0x6cf2bc8)+0x25e71a), saving (TimerBase tempPauseCount 0x6b60e70,
+held from RequestSaveGame until the save completes). Unreadable pointers fail closed.
+Guards (slot 5, every frame; failure disarms and restores everything, including the
+Stage 1/2 branch, capture frame time and collision steps): displacement still the
+module's, slot page still holds the wrapper, no violation recorded by the wrapper. A
+change of g_RenderReadIndex or g_SimFrameInFlight across a re-present is a violation.
+FrameState+0x1e8 is compared too but only counted (queue_count_changed): the MoveWorker's
+GetNewRenderQueue legitimately advances it while it produces; it must stay 0 while the
+stall injector holds the MoveWorker.
+Counters (stats() and the FRAMEPROBE line): re_presents, would_represent, waits_ok,
+waits_timeout, waits_other, budget_skips, max_present_gap (s; a real present is
+timestamped at the next wait entry, so it includes the message pump), index_changed,
+queue_count_changed, in_flight_changed, gate_<reason> and gate_summary, stalls_injected.
+Stage 2 adjustment (all catch-up modes): after a slow frame (wall time > 1.5 ticks) and
+while ticks deferred by that cap remain, k is capped at kcap (default 2). Capped ticks stay
+in the accumulator and are counted as capped_ticks, separately from dropped_ticks (still
+above 4 per frame). slow_frames counts slow frames. Steady 30 fps (k=2) is unaffected;
+sustained rates below 30 fps now run game time slower than wall time (kcap=4 restores the
+Stage 2 behaviour). Synthetic 1 s stall: 56 dropped, steps 2,2,2,1 with 3 capped.
+Stall injector (test tool, off by default): Sleep(stall_ms) every stall_every calls, in
+slot 5 (inside the probe callback) or from its own data-only handler in slot 7, 12 or 13
+(registered only if empty; refusal otherwise). Deviation: the report's "slot 11" is
+occupied by U::JobEngine; slot 12 is the first empty slot after the producer slot 10.
+Validation (offline, 26 October 2026):
+- Zig 0.15.2 -Werror: both DLLs and both synthetic test executables build and pass.
+  New synthetic tests: page within rel32 reach, only 4 displacement bytes change, IAT
+  untouched, call through [next_ip+disp] reaches the wrapper; WAIT_OBJECT_0 vs
+  WAIT_TIMEOUT; exact begin/render(fs,1)/present(fs,ok,0) order; protected globals
+  byte-identical across re-presents; budget rate limit and reset by a real frame; every
+  gate reason; represent=0; shortwait; inactive pass-through; read-index violation
+  disarms and restores; stop restores window, frees the page and restores Stage 1/2;
+  foreign displacement and foreign window bytes; install failure fails closed; k cap;
+  option parsing; stall injector in slot 5 and a separate slot.
+- check_hook_signatures.py on the copied X4.exe: executable and 15 sites PASS.
+- Actual lua51_64.dll ABI: PASS for both modules, including fixed60stage3 refusal on a
+  non-X4 process and option rejection. Real LuaJIT probe tests 12/12, simtick 6/6.
+- Not run: X4 itself. No native Stage 3 result is claimed.
+Native experiment (to run on a coordinated machine; X4 closed beforehand, profile 45841,
+new custom_creative world, autosave off, windowed/borderless, TAA on, DLSS/Reflex/FSR
+frame generation off, movie capture off, frame-rate limit 60, one instance):
+1. Baseline: mode fixed60stage3 with X4LAN_FIXEDTICK_OPTIONS=
+   'represent=0,stall_ms=100,stall_every=120,stall_slot=7'. Record 10 min: would_represent,
+   gates, game/wall ratio, steps, capped/dropped ticks.
+2. Run A (stall before the producer): 'stall_ms=100,stall_every=120,stall_slot=7'
+   (slot 7 must be free: no simtick network module).
+3. Run B (stall after the producer filled the write half): same with stall_slot=12.
+4. Optional: one run of each with the Khronos validation layer.
+Pass criteria: during each 100 ms stall about 5 re-presents (re_presents rising by ~5 per
+stalls_injected) and max_present_gap <= ~0.020 s; waits_ok equals FrameTicks (frames)
++-1; index_changed = in_flight_changed = 0 and queue_count_changed = 0; game time, steps
+and the game/wall ratio match step 1 (same stall pattern); no crash, Vulkan error or
+device loss over 10 minutes per placement; after stop/disarm the call displacement is
+restored (a later start() passes main_loop_wait_call again); a screenshot pair during a
+stall records TAA behaviour (smear expected, not a failure). A gate counter that blocks
+every timeout (for example streamline_reflex on an NVIDIA setup) means the configuration,
+not the hook, must change before the run counts.
+
 NEXT STAGES (unchanged plan): 3 render continues while simulation is held without
 semaphore misuse; 4 explicit input/UI/Lua cadence and pause/loading/SETA/save/load
 rules; 5 render-only interpolation without feedback into authoritative state.
@@ -167,4 +292,6 @@ callback. Probe mode measures cadence without changing frame time; fixed60 mode
 changes only the FrameTick dt branch and never releases semaphores.
 Offline implementation checks are complete except the pre-existing full-suite
 launcher failure above. The two-sandbox baseline and Stage 1 runs are recorded above.
-Next: native Stage 2 run (fixed60catchup at 30/60/144/uncapped), then Stage 3.
+Stage 2 native runs at 30 and 60 fps passed (above). Stage 3 (fixed60stage3) is
+implemented and verified offline only. Next: the coordinated Stage 3 native experiment
+(above), then the 144 fps/uncapped Stage 2 runs.

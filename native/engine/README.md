@@ -80,7 +80,14 @@ FrameTick/main-loop work. Stage 1: `X4LAN_FIXEDTICK_MODE='fixed60'` makes the lo
 `start('fixed60')`, which NOPs FrameTick's movie-capture branch (0xfa3302) and sets
 the capture frame time to 1/60; it requires and re-checks a 60 Hz frame-rate limit
 every frame and restores the original bytes on any disarm. Below 60 fps game time
-runs slow; catch-up scheduling (Stage 2) is not implemented.
+runs slow under Stage 1; Stage 2 (`fixed60catchup`) adds bounded catch-up. Stage 3
+(`fixed60stage3`) also redirects only the displacement of the main loop's
+`WaitForSingleObject(g_semSimDone, 16)` call (0x12ae895) to a module-owned slot near the
+image, whose wrapper re-presents the last completed frame on a gated timeout and
+returns the real wait result. Options come from `X4LAN_FIXEDTICK_OPTIONS`
+(`kcap`, `represent`, `shortwait`, `stall_ms`, `stall_every`, `stall_slot`). The
+offline signature check now covers 15 sites. Details, gates, counters and the native
+experiment: `reports/FIXED-SIM-SCHEDULER.txt`.
 
 ## Remaining patch tasks
 

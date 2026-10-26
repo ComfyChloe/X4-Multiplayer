@@ -34,6 +34,18 @@ def main():
           assert(not ok or result==nil)
           local handle,reason=module.start({argument})
           assert(handle==nil and reason=='unsupported executable or modified engine signatures',reason)
+          if "{args.symbol}"=='luaopen_x4lan_fixedtick' then
+            local h,why=module.start('fixed60stage3')
+            assert(h==nil and why=='unsupported executable or modified engine signatures',why)
+            h,why=module.start('fixed60stage3','kcap=2,represent=0,stall_ms=100,stall_slot=12')
+            assert(h==nil and why=='unsupported executable or modified engine signatures',why)
+            h,why=module.start('fixed60stage3','kcap=9')
+            assert(h==nil and why=='unsupported option',why)
+            h,why=module.start('fixed60stage3',5)
+            assert(h==nil and why=='unsupported option',why)
+            h,why=module.start('fixed60stage4')
+            assert(h==nil and why=='unsupported mode',why)
+          end
           local thread=coroutine.create(function()
             local h,why=module.start({argument})
             assert(h==nil and why=='main Lua thread required',why)
