@@ -47,7 +47,8 @@ local function report(s,now)
   s.ui_scenes_calls,s.ui_scenes_skipped,s.ui_render_calls,s.ui_render_skipped,s.camera_calls,s.camera_skipped,
   s.draw_owned,s.draw_set,s.draw_reapplied)..
   string.format(' elementsCalls=%d elementsSkipped=%d splitCalls=%d splitRenderSteps=%d commitMb=%.1f',s.ui_elements_calls or 0,
-  s.ui_elements_skipped or 0,s.split_calls or 0,s.split_render_steps or 0,s.commit_mb or 0))
+  s.ui_elements_skipped or 0,s.split_calls or 0,s.split_render_steps or 0,s.commit_mb or 0)..
+  string.format(' mainCpuMs=%.1f workerCpuMs=%.1f processCpuMs=%.1f',s.main_cpu_ms or 0,s.worker_cpu_ms or 0,s.process_cpu_ms or 0))
  if s.mode~='audit' then return end
  DebugError(string.format('[X4LAN] FRAMEDIET_FRAMES audited=%d rngSteps=%d rngUnknown=%d ids=%d',
   s.frame_audited or 0,s.frame_rng_steps or 0,s.frame_rng_unknown or 0,s.frame_ids or 0))

@@ -51,6 +51,7 @@
 #include <windows.h>
 #include <bcrypt.h>
 #include <psapi.h>
+#include <tlhelp32.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -167,6 +168,7 @@ static uint64_t fd_render_rng = FD_RENDER_RNG_SEED;
 static uint64_t fd_frame_rng, fd_frame_ids;   /* audit: values at the previous slot 2 entry */
 static int fd_frame_valid;
 static int fd_digest_row = -1;   /* statistics row whose region gets the digest this frame */
+static HANDLE fd_main_thread, fd_worker_thread;   /* CPU-time accounting (stats only) */
 static unsigned fd_rotation;
 static uint64_t fd_digest_cursor;
 
@@ -282,6 +284,44 @@ static int verify_image(void) {
     return verify_checks(x4_common_checks, sizeof(x4_common_checks) / sizeof(x4_common_checks[0])) &&
            verify_checks(x4_framediet_checks, sizeof(x4_framediet_checks) / sizeof(x4_framediet_checks[0])) &&
            readable(image + VBI_RVA, sizeof(void *), 0);
+}
+
+/* ---------------------------------------------------------------------------------------- */
+/* CPU time: the draw site saves main-thread time, which the MoveWorker probes cannot see. */
+
+static uint64_t filetime(const FILETIME *f) { return ((uint64_t)f->dwHighDateTime << 32) | f->dwLowDateTime; }
+
+/* The earliest-created thread of this process (X4's main thread runs WinMain and the render). */
+static HANDLE fd_find_main_thread(void) {
+    HANDLE snap = CreateToolhelp32Snapshot(TH32CS_SNAPTHREAD, 0), best = NULL;
+    uint64_t best_created = UINT64_MAX;
+    THREADENTRY32 te;
+    if (snap == INVALID_HANDLE_VALUE) return NULL;
+    te.dwSize = sizeof(te);
+    for (BOOL more = Thread32First(snap, &te); more; more = Thread32Next(snap, &te)) {
+        if (te.th32OwnerProcessID != GetCurrentProcessId()) continue;
+        HANDLE t = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, te.th32ThreadID);
+        FILETIME c, e, k, u;
+        if (t && GetThreadTimes(t, &c, &e, &k, &u) && filetime(&c) < best_created) {
+            if (best) CloseHandle(best);
+            best = t; best_created = filetime(&c);
+        } else if (t) {
+            CloseHandle(t);
+        }
+        te.dwSize = sizeof(te);
+    }
+    CloseHandle(snap);
+    return best;
+}
+
+static double thread_cpu_ms(HANDLE t) {
+    FILETIME c, e, k, u;
+    return t && GetThreadTimes(t, &c, &e, &k, &u) ? (double)(filetime(&k) + filetime(&u)) / 1e4 : 0.0;
+}
+
+static double process_cpu_ms(void) {
+    FILETIME c, e, k, u;
+    return GetProcessTimes(GetCurrentProcess(), &c, &e, &k, &u) ? (double)(filetime(&k) + filetime(&u)) / 1e4 : 0.0;
 }
 
 /* ---------------------------------------------------------------------------------------- */
@@ -846,6 +886,9 @@ static const char *fd_arm(uint64_t generation, int mode, int sites, int period, 
     fd_present = 0;
     fd_draw_owned = 0;
     fd_render_rng = FD_RENDER_RNG_SEED;
+    if (!fd_main_thread) fd_main_thread = fd_find_main_thread();
+    if (fd_worker_thread) CloseHandle(fd_worker_thread);
+    fd_worker_thread = OpenThread(THREAD_QUERY_LIMITED_INFORMATION, FALSE, GetCurrentThreadId());
     fd_frame_valid = 0;
     if (InterlockedCompareExchangePointer((void *volatile *)&table[VBI_SLOT], &fd_hook, NULL))
         return "VBI slot changed during registration";
@@ -988,6 +1031,9 @@ static int stats(lua_State *L) {
     number_field(L, "frame_rng_unknown", (double)o->frame_rng_unknown);
     number_field(L, "frame_ids", (double)o->frame_ids);
     number_field(L, "digest_max", o->digest_max);
+    number_field(L, "main_cpu_ms", thread_cpu_ms(fd_main_thread));
+    number_field(L, "worker_cpu_ms", thread_cpu_ms(fd_worker_thread));
+    number_field(L, "process_cpu_ms", process_cpu_ms());
     {
         /* Process commit (private bytes), to watch per-frame UI queues for growth while a site is skipped. */
         PROCESS_MEMORY_COUNTERS_EX m;

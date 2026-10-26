@@ -441,6 +441,18 @@ int main(void) {
     }
     puts("PASS: ui_elements call-site patch: near stub, skip/pass/audit, restore, foreign value kept, refusal");
 
+    /* CPU accounting: the main thread is the process's earliest thread; times are monotonic. */
+    {
+        HANDLE main_thread = fd_find_main_thread();
+        assert(main_thread && GetThreadId(main_thread) == GetCurrentThreadId());
+        double before = thread_cpu_ms(main_thread);
+        volatile double sink = 0;
+        for (int i = 0; i < 20000000; ++i) sink += i * 0.5;
+        assert(thread_cpu_ms(main_thread) > before && process_cpu_ms() >= thread_cpu_ms(main_thread));
+        CloseHandle(main_thread);
+    }
+    puts("PASS: main-thread lookup and CPU-time accounting");
+
     /* Histogram summary orders by count and lists at most six words. */
     {
         fd_stats s0;

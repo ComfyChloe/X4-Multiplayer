@@ -108,7 +108,8 @@ def audit(path: Path) -> tuple:
 
 
 COUNTERS = ('audited', 'rngCalls', 'rngSteps', 'rngUnknown', 'idCalls', 'ids', 'eventCalls', 'eventsUp',
-            'digests', 'components', 'changed', 'splitCalls', 'splitRenderSteps', 'frames')
+            'digests', 'components', 'changed', 'splitCalls', 'splitRenderSteps', 'frames', 't',
+            'mainCpuMs', 'workerCpuMs', 'processCpuMs', 'scenesSkipped', 'cameraSkipped', 'elementsSkipped')
 
 
 def audit_phases(path: Path) -> list:
@@ -227,6 +228,11 @@ def main(argv=None):
             for row, values in sorted(delta.items()):
                 shown = ' '.join(f'{k}={v:g}' for k, v in values.items() if v)
                 print(f'   {row:18s} {shown or "-"}')
+            stats = delta.get('stats', {})
+            if stats.get('t', 0) > 0:
+                wall = stats['t'] * 1000.0
+                print(f'   cpu per wall: main {stats.get("mainCpuMs", 0) / wall * 100:.1f} %, MoveWorker '
+                      f'{stats.get("workerCpuMs", 0) / wall * 100:.1f} %, process {stats.get("processCpuMs", 0) / wall * 100:.1f} %')
     elif args.cmd == 'audit':
         rows, last = audit(args.log)
         for name in ('ui_scenes', 'ui_render', 'camera', 'control'):
