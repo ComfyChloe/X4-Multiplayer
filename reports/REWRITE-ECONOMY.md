@@ -13,8 +13,8 @@ with the log path). Nothing in this report is a native economy result unless mar
 | stage | state |
 |---|---|
 | 1 data model crate `rust/x4mp-economy` | done: ef13948, da802ad |
-| 2 stress scenario + simprof on a lane | `stress2` [native, ended by an all-lanes stop at 13 min; scenario partly broken, see 2.2]; scenario fixed (220ce90); `stress3` stopped by the lead (PC memory pressure), partial; `stress4` queued |
-| 3 production capture/replay, exact | sampler + replay built and synthetic-tested; lab capture queued (`lab2` failed at launch: "Game is already running!", lane-side) |
+| 2 stress scenario + simprof on a lane | done [native]: `stress3` pass (160 clones, 306 station traders); economy ~2 % of MoveWorker, scales with trade activity (2.2; rewrite-coord/results/2026-10-26-economy-stress.md) |
+| 3 production capture/replay, exact | first native replay (stress3 capture, 896 catch-ups): all explained except 1 partial store (storage allocation not modelled, 9); lab capture `lab4` queued |
 | 4 trade offers + reservations with the barrier snapshot | reservations at the owner applied at the barrier, price curve, reservation totals (693712d) [synthetic]; UpdateTradeOffers structure (section 6.3) [static]; offer amounts next |
 | 5 shadow | not started |
 
@@ -52,15 +52,26 @@ with the log path). Nothing in this report is a native economy result unless mar
 | 8 high-attention sectors (lead, 2026-10-25, `X4-Multiplayer-fixed-tick/.local/evidence-239-withheld`) | ~1.5 % | 1.02 % | - | 0.26 % | 0.11 % | ~0 | AI phase |
 | lane `stress1`: plain custom_creative world (stress MD failed, no clones), game time 30-554 s, 53 windows; **cut short by the PC reservation, not a result**; other X4 instances ran | 1.95 % | 1.02 % | 0.48 % | 0.27 % | 0.24 % | 0.19 % | AI 1.37 %, events 0.25 %, walk 0.27 % |
 | lane `stress2` (b2): ~157 extra factory clones (+16 % of 983 factories), 314 station traders whose trade loop failed (no defence NPC: `trade.find.commander` "Failed to set null.$lookingfortrades"), game time 130-794 s, 67 windows; **ended by an all-lanes stop**; other X4 instances ran | 1.85 % | 0.90 % | 0.54 % | 0.22 % | 0.25 % | 0.19 % | AI 1.30 %, events 0.28 %, walk 0.22 % |
+| **lane `stress3` (b1): 160 factory clones, 160 managers and defence NPCs, 306 working station traders**, game time 90-538 s, 45 windows; **pass**; shares exclude the econcap sampler (slot 5, 26.6 %; fixed in 36750e5); other X4 instances ran | 2.65 % | 1.49 % | 0.69 % | 0.18 % | 0.35 % | 0.27 % | AI phase, events |
 
 All rows are [native] samples of MoveWorker time with untrustworthy timing (shares only). Census:
 `x4-re/scripts/rw-economy/econ_census.py` on the symbolized folded stacks
-(`.local/evidence-096-withheld`). **stress2 vs stress1:** 16 % more factories without
-working station traders leave the economy share flat (1.85 % vs 1.95 %; economy samples per second 17.6
-vs 19.4): idle clones cost almost nothing because production is lazy and their offers are refreshed by
-events only; the offer/price share rose slightly (0.48 to 0.54 %). `stress3` repeats the run with the
-fixed scenario (defence NPC and money for the clones; the Built/Done cues poll at a check interval), so
-the 314 traders trade.
+(`.local/evidence-096-withheld`). Economy samples **per wall second** (game time ran at
+wall time; economy work is per game second, so this is the comparable number):
+
+| function (inclusive) | stress1 /s | stress3 /s |
+|---|---|---|
+| trade search 0xb8f000 (core 0x7f2880, filter 0x894df0) | 10.2 (8.1, 2.6) | 10.9 (8.9, 3.0) |
+| offer refresh 0x4079e0 (ware prices 0x403a60) | 4.6 (1.6) | 5.0 (1.8) |
+| production catch-up 0x41a910 | 1.8 | 1.9 |
+| trade execution 0x10a90e0 / order creation 0xbb66d0 | 1.0 / 1.3 | 1.2 / 1.3 |
+| zone reservations 0x841720 | 2.7 | 1.3 |
+| economy union | 19.4 | 19.3 |
+
+16 % more factories with 306 more station traders added 7 % to the trade search and 9 % to the
+offer refreshes per second; the union stayed level (zone reservations fell). stress2 (clones without
+working traders) shows that idle stations cost almost nothing: production is lazy and their offers
+are refreshed by events only.
 
 **Reading:** the economy's engine-side cost today is dominated by the AI trade search, which runs inside
 `AIDirector::Move` (ai-driver/ai-orders own that loop); production itself is cheap because it is lazy.
