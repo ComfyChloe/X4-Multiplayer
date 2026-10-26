@@ -6,7 +6,7 @@ connect to one Linux server. Engine hooks are not used or required.
 
 Terminology: the dedicated X4 is the **server**; humans connect as **clients**
 (player 1 ... N, all equal). Older identifiers keep their names for compatibility:
-package roles `host`/`guest`/`guestK`, folders `-GuestK`, wire slot `p1` for the
+package roles `host`/`guest`/`guestK`, Windows folders `-GuestK`, wire slot `p1` for the
 server and MD/log strings such as `SetupHost`/`SetupGuest`.
 
 ## Players, slots and ships
@@ -78,16 +78,31 @@ Linux installation (Steam build 23660954). Build an internal package set:
 python3 distribution/build_packages.py /path/to/new-dedicated-set --dedicated     --max-players 4 --runtime-cache /path/to/internal-runtime-cache
 ```
 
-`--max-players` (default 3) counts the server slot: 4 builds the Linux server package
-plus `X4-LAN-*-Windows11` (player 2, profile 45841), `-Guest2` (player 3, profile
-45842) and `-Guest3` (player 4, profile 45843). Build into a Linux file system: the
-bundled runtime's terminfo tree does not fit a case-insensitive `/mnt/c` target.
-`--runtime-cache` is required by the CLI. The dedicated build compiles
-`x4lan-dedicated` and the Rust `x4lan-net` module. It does not use new C code.
+`--max-players` (default 3) counts the server slot. Every client slot gets a Windows
+and a Linux package with the same role and profile; use either one for that player.
+4 builds the Linux server package `X4-LAN-*-Linux` plus:
 
-Configure the Linux package as host (server) and each Windows package as a client
-(the launcher's `guest` choice). Send the same private `JOIN-SESSION.json` to every
-client. Do not publish session files or configured Lua.
+| Player | Role | Profile | Windows package | Linux package |
+| --- | --- | --- | --- | --- |
+| 2 | `guest` | 45841 | `X4-LAN-*-Windows11.zip` | `X4-LAN-*-Linux-Client.tar.xz` |
+| 3 | `guest2` | 45842 | `X4-LAN-*-Windows11-Guest2.zip` | `X4-LAN-*-Linux-Client2.tar.xz` |
+| 4 | `guest3` | 45843 | `X4-LAN-*-Windows11-Guest3.zip` | `X4-LAN-*-Linux-Client3.tar.xz` |
+
+All packages of one build share one `pair_id` and the same mod scripts; never mix
+packages from different builds. `PACKAGES-SHA256.txt` lists every archive.
+
+Build into a Linux file system: the bundled runtime's terminfo tree does not fit a case-insensitive `/mnt/c` target.
+`--runtime-cache` is required by the CLI. The dedicated build compiles
+`x4lan-dedicated` and the Rust `x4lan-net` module once; the server and every Linux
+client package load that `x4lan_net.so`. Windows clients keep `x4lan_net_64.dll`. It does
+not use new C code.
+
+01-INSTALL configures the server package as the server and every client package as a
+client (the launcher's `host`/`guest` roles) without asking; a client package refuses
+the server role. A Linux client needs native Linux X4 9.00 (build 23660954) and installs
+into `~/.config/EgoSoft/X4/<profile>` (or `$XDG_CONFIG_HOME/EgoSoft/X4/<profile>`;
+Flatpak Steam: `~/.var/app/com.valvesoftware.Steam/.config/EgoSoft/X4/<profile>`).
+Send the same private `JOIN-SESSION.json` to every client. Do not publish session files or configured Lua.
 
 ### Several clients on one test PC
 
