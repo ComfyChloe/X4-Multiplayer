@@ -90,8 +90,8 @@ pub enum Outcome {
 
 /// What the barrier needs from the world (serial access to every sector).
 pub trait BarrierWorld {
-    /// Live version of an offer, `None` when it is gone.
-    fn offer_version(&self, offer: TradeId) -> Option<u32>;
+    /// Live version of an offer of `owner`, `None` when it is gone.
+    fn offer_version(&mut self, owner: UniverseId, offer: TradeId) -> Option<u32>;
     /// The reservation list of a container, `None` when it is gone.
     fn reservations_mut(&mut self, owner: UniverseId) -> Option<&mut ReservationList>;
     /// A new version for every offer of `owner` for `ware` (its stock changed under them).
@@ -115,10 +115,20 @@ pub struct BarrierResult {
 pub fn apply_in_order(mut msgs: Vec<EconMsg>, world: &mut dyn BarrierWorld, env: &dyn ReservationEnv) -> BarrierResult {
     msgs.sort_by(|a, b| a.stamp.cmp(&b.stamp));
     debug_assert!(msgs.windows(2).all(|w| w[0].stamp != w[1].stamp), "duplicate stamps");
-    let mut out = BarrierResult { log: Vec::with_capacity(msgs.len()), refresh: Vec::new() };
+    apply_ordered(msgs.iter(), world, env)
+}
+
+/// Barrier step for messages already in the original order (x4mp-sim's barrier delivers them
+/// in its total order: order key, sector, emission seq).
+pub fn apply_ordered<'m>(
+    msgs: impl IntoIterator<Item = &'m EconMsg>,
+    world: &mut dyn BarrierWorld,
+    env: &dyn ReservationEnv,
+) -> BarrierResult {
+    let mut out = BarrierResult::default();
     for m in msgs {
-        let outcome = apply_one(&m, world, env, &mut out.refresh);
-        out.log.push((m, outcome));
+        let outcome = apply_one(m, world, env, &mut out.refresh);
+        out.log.push((m.clone(), outcome));
     }
     out
 }
@@ -130,7 +140,7 @@ fn apply_one(
     refresh: &mut Vec<UniverseId>,
 ) -> Outcome {
     if let Some((offer, seen)) = m.seen {
-        match world.offer_version(offer) {
+        match world.offer_version(m.op.owner(), offer) {
             None => return Outcome::Missing,
             Some(current) if current != seen => return Outcome::Conflict { seen, current },
             Some(_) => {}
@@ -175,8 +185,8 @@ mod tests {
     }
 
     impl BarrierWorld for World {
-        fn offer_version(&self, offer: TradeId) -> Option<u32> {
-            (offer == TradeId(1)).then_some(self.version)
+        fn offer_version(&mut self, owner: UniverseId, offer: TradeId) -> Option<u32> {
+            (owner == UniverseId(5) && offer == TradeId(1)).then_some(self.version)
         }
         fn reservations_mut(&mut self, owner: UniverseId) -> Option<&mut ReservationList> {
             (owner == UniverseId(5)).then_some(&mut self.list)

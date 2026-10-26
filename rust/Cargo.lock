@@ -31,6 +31,9 @@ dependencies = [
 [[package]]
 name = "x4mp-economy"
 version = "7.5.0"
+dependencies = [
+ "x4mp-sim",
+]
 
 [[package]]
 name = "x4mp-sim"

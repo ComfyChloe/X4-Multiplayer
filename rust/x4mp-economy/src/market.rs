@@ -178,6 +178,42 @@ impl OfferSnapshot {
     }
 }
 
+// x4mp-sim has no StableHash for SectorIx (its own column hashes skip it), so Offer's impls
+// are written out; the sector enters the hash as its index.
+impl x4mp_sim::hash::StableHash for Offer {
+    fn stable_hash(&self, h: &mut x4mp_sim::hash::Fnv64) {
+        self.id.stable_hash(h);
+        self.owner.stable_hash(h);
+        self.sector.0.stable_hash(h);
+        self.key.0.stable_hash(h);
+        self.list.stable_hash(h);
+        self.pos.stable_hash(h);
+        self.ware.stable_hash(h);
+        self.buy.stable_hash(h);
+        self.amount.stable_hash(h);
+        self.unit_price.stable_hash(h);
+        self.flags.stable_hash(h);
+        self.version.stable_hash(h);
+    }
+}
+impl x4mp_sim::shadow::Compare for Offer {
+    fn compare(&self, a: &Self, c: &mut x4mp_sim::shadow::Comparator) {
+        c.field("id", |c| self.id.compare(&a.id, c));
+        c.field("owner", |c| self.owner.compare(&a.owner, c));
+        c.field("sector", |c| self.sector.compare(&a.sector, c));
+        c.field("key", |c| self.key.compare(&a.key, c));
+        c.field("list", |c| self.list.compare(&a.list, c));
+        c.field("pos", |c| self.pos.compare(&a.pos, c));
+        c.field("ware", |c| self.ware.compare(&a.ware, c));
+        c.field("buy", |c| self.buy.compare(&a.buy, c));
+        c.field("amount", |c| self.amount.compare(&a.amount, c));
+        c.field("unit_price", |c| self.unit_price.compare(&a.unit_price, c));
+        c.field("flags", |c| self.flags.compare(&a.flags, c));
+        c.field("version", |c| self.version.compare(&a.version, c));
+    }
+}
+x4mp_sim::impl_fields!(OfferBook { offers });
+
 #[cfg(test)]
 mod tests {
     use super::*;

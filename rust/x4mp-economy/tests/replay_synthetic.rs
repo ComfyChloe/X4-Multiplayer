@@ -7,8 +7,8 @@ use x4mp_economy::ids::WareIx;
 use x4mp_economy::production::{
     update_production, ContainerTimes, Factors, Item, Method, Module, ProductionRng, State, StationEnv, WareAmount,
 };
-use x4mp_economy::sector::EconRng;
 use x4mp_economy::time::UNSET;
+use x4mp_sim::rng::EngineLcg;
 
 const ECELLS: WareIx = WareIx(0);
 const ORE: WareIx = WareIx(1);
@@ -162,7 +162,7 @@ fn capture_with(storage: Storage, stride: u64) -> String {
     let mut mods = vec![module(0x5000, &ms[0], f), module(0x4000, &ms[1], f)];
     let mut env = Env { cargo: vec![(ECELLS, 300), (ORE, 1500)], storage };
     let mut times = ContainerTimes::default();
-    let mut rng = EconRng(42);
+    let mut rng = EngineLcg(42);
     let index = |m: &Method| ms.iter().position(|x| x == m);
     for frame in 0..400u64 {
         let now = 3.0 + frame as f64 * 7.25;

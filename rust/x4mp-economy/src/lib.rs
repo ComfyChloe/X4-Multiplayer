@@ -17,16 +17,17 @@
 //! - [`msg`]: reservations at containers of other sectors as stamped messages, applied to the
 //!   owner's reservation list at the barrier in the original order, with stale-decision
 //!   detection and coalesced offer refreshes.
-//! - [`sector`]: the per-sector economy world and a deterministic parallel runner used by the
-//!   thread-invariance tests (a stand-in for `x4mp_sim::Universe::step` until x4mp-sim is
-//!   integrated).
+//! - [`sector`]: the economy as an x4mp-sim system (`economy`): station components
+//!   `EconStation` (sector-local) and `EconOffers` (published to the snapshot), production on
+//!   the entity's engine-generator stream, reservations as barrier messages.
 //! - [`capture`]: the `X4ECON` capture records written by the engine-side sampler
 //!   (native/engine/econcap.h) and the replay that compares them with [`production`].
 //!
 //! Stations, their storage and production are sector-local. Nothing in a sector job writes
-//! another sector's state: cross-sector effects are [`msg::EconMsg`]s.
+//! another sector's state: cross-sector effects are [`msg::EconMsg`]s. Ids, the engine
+//! generator, the scheduler and the bus are x4mp-sim's (rewrite-coord/interfaces.md v0.5).
 //!
-//! No third-party crates (workspace rule). Nothing here runs inside X4; every native claim
+//! No third-party crates (workspace rule; x4mp-sim is a workspace crate). Nothing here runs inside X4; every native claim
 //! (captures replayed against these models) is in the report with its evidence.
 
 // Negated float comparisons (`!(a > b)`) are deliberate: they keep the engine's NaN

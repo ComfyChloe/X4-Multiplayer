@@ -346,6 +346,9 @@ impl ReservationList {
     }
 }
 
+x4mp_sim::impl_fields!(Reservation { word, reserver, order, ware, amount, expiry });
+x4mp_sim::impl_fields!(ReservationList { entries });
+
 #[cfg(test)]
 mod tests {
     use super::*;

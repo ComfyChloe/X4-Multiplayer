@@ -954,3 +954,44 @@ mod tests {
         assert_eq!(q[0].2, 2);
     }
 }
+
+// Hashing and field-wise comparison for x4mp-sim components and shadow compare (floats are
+// compared and hashed by their bits).
+impl x4mp_sim::hash::StableHash for State {
+    fn stable_hash(&self, h: &mut x4mp_sim::hash::Fnv64) {
+        x4mp_sim::hash::StableHash::stable_hash(&(*self as i32), h);
+    }
+}
+impl x4mp_sim::shadow::Compare for State {
+    fn compare(&self, actual: &Self, c: &mut x4mp_sim::shadow::Comparator) {
+        x4mp_sim::shadow::Compare::compare(&(*self as i32), &(*actual as i32), c);
+    }
+}
+x4mp_sim::impl_fields!(Factors { time, product, primary, secondary, tertiary });
+x4mp_sim::impl_fields!(Method { time, product, amount, primary, secondary, tertiary, special });
+x4mp_sim::impl_fields!(Item {
+    ware,
+    method,
+    time_factor,
+    product_factor,
+    primary_factor,
+    secondary_factor,
+    tertiary_factor,
+    cycles,
+    repeat
+});
+x4mp_sim::impl_fields!(Module {
+    addr,
+    functional,
+    state,
+    start,
+    next,
+    paused_since,
+    paused_total,
+    item,
+    cycle,
+    factors,
+    items,
+    pending
+});
+x4mp_sim::impl_fields!(ContainerTimes { last_update, a28, a30, a4c });

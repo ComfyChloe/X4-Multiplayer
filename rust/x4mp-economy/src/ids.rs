@@ -1,21 +1,9 @@
 //! Identifiers used by the economy model.
 //!
-//! `UniverseId`, `SectorIx` and `OrderKey` mirror the ecs-core sketch of `x4mp_sim::id`
-//! (rewrite-coord/interfaces.md, 2026-10-26). They are local newtypes until x4mp-sim is
-//! integrated; the representation is identical, so switching to `pub use x4mp_sim::id::*`
-//! is a one-line change.
+//! `UniverseId`, `SectorIx` and `OrderKey` are the ecs-core types of `x4mp_sim::id`
+//! (rewrite-coord/interfaces.md v0.5); the economy adds ware indices, trade ids and stamps.
 
-/// Raw engine component id (bits 0..24 slot+1, 25..40 generation).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct UniverseId(pub u64);
-
-/// Dense sector index in engine tree order (galaxy -> cluster -> sector walk).
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct SectorIx(pub u32);
-
-/// Tree-order key of an entity inside its sector.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash, Default)]
-pub struct OrderKey(pub u64);
+pub use x4mp_sim::id::{OrderKey, SectorIx, UniverseId};
 
 /// Dense index into a [`crate::ware::WareTable`] (the engine keys wares by `WareClass*`;
 /// captures carry the ware id string and the table assigns the index).
@@ -60,3 +48,6 @@ pub struct Stamp {
     pub rank: u64,
     pub seq: u32,
 }
+
+x4mp_sim::impl_fields!(newtype WareIx);
+x4mp_sim::impl_fields!(newtype TradeId);

@@ -13,3 +13,7 @@ crate-type = ["rlib"]
 [[bin]]
 name = "x4mp-econ-replay"
 path = "src/bin/x4mp-econ-replay.rs"
+
+[dependencies]
+# Per-sector ECS core (ids, engine RNG, scheduler, bus, shadow compare): rewrite-coord/interfaces.md.
+x4mp-sim = { path = "../x4mp-sim" }
