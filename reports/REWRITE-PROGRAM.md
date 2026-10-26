@@ -75,7 +75,7 @@ incl), 0x1165ee0 (2.3%), 0x314fa0 (1.7%), 0x81c7a0 (1.2%), 0x1399c40 (7.5%, UI p
 | economy: production, storage, trade offers, prices | economy | contrib/ferrite-rw-economy | rust/x4mp-economy/, reports/REWRITE-ECONOMY.md | cost census + data model + capture |
 | AI phase census and per-sector AI driver (engine side) | ai-driver | contrib/ferrite-rw-ai-driver | native/engine/aidriver*, reports/REWRITE-AI-DRIVER.md | stage 0 census, stage 1 single-threaded rounds |
 | native AI order behaviours (Rust, per sector) | ai-orders | contrib/ferrite-rw-ai-orders | rust/x4mp-ai/, reports/REWRITE-AI-ORDERS.md | top orders by census, first behaviour in shadow |
-| component walk parallelism + deferred events | owned by the "Second sandbox" session (design: x4-re/coord/reports/parallel-walk-design.md) | | | |
+| component walk parallelism + deferred events (stages 0/1 of x4-re/coord/reports/parallel-walk-design.md; reviewer: the "Second sandbox" session, which wrote the design) | walk | contrib/ferrite-rw-walk | native/engine/walkpar*, reports/REWRITE-WALK.md | stage 0 census, stage 1 single-threaded deferred replay with normal-vs-replay comparison |
 | MD | stays serial on X4 (x4-re/coord/reports/sector-partition-scripts.md) | | | |
 
 Background reports to read before touching a system: `x4-re/coord/reports/parallel-sim.md`,
@@ -90,7 +90,7 @@ Background reports to read before touching a system: `x4-re/coord/reports/parall
   compare-exchange from the verified original, VBI slots) over code patches; any code patch is
   build-pinned, byte-verified before and after, and restored on disarm. Keep x4lan_net hook-free.
 - Register every hook site in `rewrite-coord/hooks.tsv` before using it. One owner per site.
-- Native tests only in your lane (profiles 45850/45851, game views under `X4Mods\lanes\`), through
+- The lead's timing runs use lane A (profile 45852). Native tests only in your lane (profiles 45850/45851, game views under `X4Mods\lanes\`), through
   `dev/x4lane.py` once the lane agent publishes it. Never use profiles 45841-45844 or another
   session's game view. Never load normal saves. Respect `rewrite-coord/quiet.lock`.
 - Distinguish native results from mocks/synthetic tests in every report; record the evidence path.
