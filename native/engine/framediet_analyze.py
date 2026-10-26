@@ -275,6 +275,14 @@ def main(argv=None):
                 shown = ' '.join(f'{k}={v:g}' for k, v in values.items() if v)
                 print(f'   {row:18s} {shown or "-"}')
             stats = delta.get('stats', {})
+            frames_row, camera = delta.get('frames', {}), delta.get('audit:camera', {})
+            if frames_row.get('audited', 0) > 0:
+                n = frames_row['audited']
+                per_frame = stats.get('frames', 0) or n
+                print(f'   rng per frame: simulation stream {frames_row.get("rngSteps", 0) / n:.1f}, '
+                      f'camera region {camera.get("rngSteps", 0) / per_frame:.1f}, '
+                      f'slot 10 render stream (rng_split) {stats.get("splitRenderSteps", 0) / per_frame:.1f}; '
+                      f'IDs per frame {frames_row.get("ids", 0) / n:.2f} (camera {camera.get("ids", 0) / per_frame:.2f})')
             if stats.get('t', 0) > 0:
                 wall = stats['t'] * 1000.0
                 print(f'   cpu per wall: main {stats.get("mainCpuMs", 0) / wall * 100:.1f} %, MoveWorker '
