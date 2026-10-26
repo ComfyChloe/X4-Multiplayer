@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 #include "fixedtick_signatures.h"
+#include "simprof.c"
 
 typedef struct lua_State lua_State;
 typedef int (*lua_CFunction)(lua_State *);
@@ -18,6 +19,8 @@ API(void, lua_pushvalue, (lua_State *, int));
 API(void, lua_pushnil, (lua_State *));
 API(void, lua_pushboolean, (lua_State *, int));
 API(void, lua_pushnumber, (lua_State *, double));
+API(double, lua_tonumber, (lua_State *, int));
+API(void, lua_rawseti, (lua_State *, int, int));
 API(void, lua_pushlstring, (lua_State *, const char *, size_t));
 API(void, lua_pushcclosure, (lua_State *, lua_CFunction, int));
 API(void, lua_getfield, (lua_State *, int, const char *));
@@ -55,6 +58,14 @@ API(void *, luaL_checkudata, (lua_State *, int, const char *));
 #define SIM_BEGIN_SLOT 0
 #define SIM_END_SLOT 15
 #define SIM_BUCKETS 128 /* 0.25 ms buckets up to 32 ms, last bucket = overflow */
+/* Profile mode: sampling profiler of the MoveWorker (simprof.c). U::MoveWorker::Run is pinned
+   by the move_worker_run signature; its slot call `call [rax+8]` (inside the vbi_dispatch
+   signature) returns to 0xef46b6 with the slot index in RBX. */
+#define RUN_RVA 0xef4400u
+#define SLOT_CALL_RETURN_RVA 0xef46b6u
+#define SLOT_REGISTER 3 /* Rbx in CONTEXT register order */
+#define LUA_TNIL 0
+#define LUA_TNUMBER 3
 #define LUA_TSTRING 4
 static const unsigned short branch_original = 0x0874; /* je +8 */
 static const unsigned short branch_patched = 0x9066;  /* 66 90 */
@@ -95,6 +106,8 @@ typedef struct {
     double win_sum_ms;
     double win_max_ms;
     uint32_t win_hist[SIM_BUCKETS];
+    int profile;
+    const char *profile_reason;
 } owner;
 typedef struct { void **vtable; } handler;
 static unsigned char *image;
@@ -299,6 +312,7 @@ static void unregister_sim_hooks(void) {
 }
 
 static void disarm_because(const char *reason) {
+    simprof_stop(); /* the sampler stops before anything is unregistered */
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
     unregister_sim_hooks();
@@ -314,12 +328,14 @@ static int sim_frame_ok(void) {
 
 static void sim_begin(handler *self) {
     (void)self;
+    simprof_loop(1);
     LARGE_INTEGER now;
     sim_begin_qpc = (sim_frame_ok() && qpc_read(&now)) ? now.QuadPart : 0;
 }
 
 static void sim_end(handler *self) {
     (void)self;
+    simprof_loop(2);
     owner *o = current;
     LARGE_INTEGER now;
     if (!sim_begin_qpc || !sim_frame_ok() || !qpc_read(&now) || qpc_frequency <= 0) return;
@@ -356,6 +372,7 @@ static void move(handler *self) {
     if (!o || !o->armed) return;
     if (GetCurrentThreadId() != owner_thread || !table_owned()) { disarm_because("callback ownership lost"); return; }
     if (*(int *)((unsigned char *)registered_table + 0x130)) { ++o->loading_skips; return; }
+    if (o->profile) simprof_note_slots(registered_table);
     LARGE_INTEGER now;
     if (!qpc_read(&now) || qpc_frequency <= 0) { disarm_because("QPC unavailable"); return; }
     if (o->fixed) {
@@ -439,6 +456,65 @@ static int stats(lua_State *L) {
     o->win_count = 0; o->win_sum_ms = 0.0; o->win_max_ms = 0.0;
     memset(o->win_hist, 0, sizeof(o->win_hist));
     if (o->reason) { p_lua_pushlstring(L, o->reason, strlen(o->reason)); p_lua_setfield(L, -2, "reason"); }
+    if (o->profile) {
+        const char *why = o->profile_reason ? o->profile_reason : (sp.state == 2 ? sp.reason : NULL);
+        number_field(L, "simprof", why ? 2 : (o == current && sp.state == 1));
+        if (why) { p_lua_pushlstring(L, why, strlen(why)); p_lua_setfield(L, -2, "simprof_reason"); }
+        number_field(L, "simprof_interval_us", sp.interval_us);
+        number_field(L, "simprof_depth", sp.depth);
+    }
+    return 1;
+}
+
+static void string_field(lua_State *L, const char *name, const char *value) {
+    p_lua_pushlstring(L, value, strlen(value));
+    p_lua_setfield(L, -2, name);
+}
+
+/* Closes the profile window: counters, phase shares and top-20 lists; queues the window's
+   folded stacks for folds(). nil when this owner is not profiling. */
+static int profile(lua_State *L) {
+    owner *o = p_luaL_checkudata(L, 1, META);
+    static sp_report rep;
+    if (o != current || !o->profile || !simprof_report(&rep)) { p_lua_pushnil(L); return 1; }
+    p_lua_createtable(L, 0, 24);
+    number_field(L, "seconds", rep.window_s);
+    number_field(L, "samples", (double)rep.samples);
+    number_field(L, "rate_hz", rep.rate_hz);
+    number_field(L, "depth_mean", rep.depth_mean);
+    number_field(L, "suspend_us_mean", rep.suspend_us_mean);
+    number_field(L, "suspend_us_max", rep.suspend_us_max);
+    number_field(L, "walk_us_mean", rep.walk_us_mean);
+    number_field(L, "overhead_pct", rep.overhead_pct);
+    number_field(L, "truncated", (double)rep.truncated);
+    number_field(L, "scanned", (double)rep.scanned);
+    number_field(L, "lost", (double)rep.lost);
+    number_field(L, "loading", (double)rep.loading);
+    number_field(L, "failures", (double)rep.failures);
+    number_field(L, "skipped", (double)rep.skipped);
+    number_field(L, "dropped_functions", (double)rep.dropped_fn);
+    number_field(L, "dropped_stacks", (double)rep.dropped_fold);
+    number_field(L, "fold_pending", rep.fold_pending);
+    string_field(L, "phases", rep.phases);
+    string_field(L, "self", rep.self_top);
+    string_field(L, "incl", rep.incl_top);
+    if (sp.state == 2 && sp.reason) string_field(L, "reason", sp.reason);
+    return 1;
+}
+
+/* Up to n queued folded stacks ("phase;root;...;leaf count"), as an array of strings. */
+static int folds(lua_State *L) {
+    owner *o = p_luaL_checkudata(L, 1, META);
+    int limit = p_lua_type(L, 2) == LUA_TNUMBER ? (int)p_lua_tonumber(L, 2) : 0;
+    if (limit < 0) limit = 0;
+    if (limit > 1000) limit = 1000;
+    p_lua_createtable(L, limit, 0);
+    if (o != current || !o->profile) return 1;
+    char line[1600];
+    for (int i = 1; i <= limit && simprof_next_fold(line, sizeof(line)); ++i) {
+        p_lua_pushlstring(L, line, strlen(line));
+        p_lua_rawseti(L, -2, i);
+    }
     return 1;
 }
 
@@ -449,14 +525,29 @@ static int failure(lua_State *L, const char *reason) {
 }
 
 static int start(lua_State *L) {
-    int fixed = 0;
-    if (p_lua_gettop(L) == 1 && p_lua_type(L, 1) == LUA_TSTRING) {
+    int fixed = 0, profiling = 0, top = p_lua_gettop(L);
+    unsigned interval_us = SP_DEFAULT_INTERVAL_US, depth = SP_DEFAULT_DEPTH;
+    if (top >= 1 && p_lua_type(L, 1) == LUA_TSTRING) {
         const char *mode = p_lua_tolstring(L, 1, NULL);
         if (!mode) return failure(L, "unsupported mode");
         if (!strcmp(mode, "fixed60")) fixed = 1;
         else if (!strcmp(mode, "fixed60catchup")) fixed = 2;
+        else if (!strcmp(mode, "profile")) profiling = 1;
         else return failure(L, "unsupported mode");
-    } else if (p_lua_gettop(L) != 0) return failure(L, "unsupported mode");
+        if (top > (profiling ? 3 : 1)) return failure(L, "unsupported mode");
+        /* profile[, interval_ms (0.5..10, default 1)[, max stack depth (8..64, default 32)]] */
+        if (top >= 2 && p_lua_type(L, 2) != LUA_TNIL) {
+            double ms = p_lua_type(L, 2) == LUA_TNUMBER ? p_lua_tonumber(L, 2) : -1.0;
+            if (!(ms >= 0.5 && ms <= 10.0)) return failure(L, "invalid profile interval");
+            interval_us = (unsigned)(ms * 1000.0 + 0.5);
+        }
+        if (top >= 3 && p_lua_type(L, 3) != LUA_TNIL) {
+            double d = p_lua_type(L, 3) == LUA_TNUMBER ? p_lua_tonumber(L, 3) : -1.0;
+            if (!(d >= SP_MIN_DEPTH && d <= SP_MAX_DEPTH) || d != (double)(unsigned)d)
+                return failure(L, "invalid profile depth");
+            depth = (unsigned)d;
+        }
+    } else if (top != 0) return failure(L, "unsupported mode");
     if (current) return failure(L, "an owner already exists; stop it first");
     int main_thread = p_lua_pushthread(L);
     p_lua_settop(L, -2);
@@ -529,6 +620,17 @@ static int start(lua_State *L) {
         }
     }
     o->armed = 1;
+    if (profiling) {
+        /* A sampler that cannot start leaves the probe running; stats() reports why. */
+        o->profile = 1;
+        sp_params params = {
+            .thread_id = owner_thread, .tib = (const NT_TIB *)NtCurrentTeb(),
+            .run_address = (uintptr_t)(image + RUN_RVA),
+            .slot_return = (uintptr_t)(image + SLOT_CALL_RETURN_RVA), .slot_register = SLOT_REGISTER,
+            .loading_flag = (const volatile int *)((unsigned char *)table + 0x130),
+            .interval_us = interval_us, .depth = depth};
+        o->profile_reason = simprof_start(&params);
+    }
     return 1;
 }
 
@@ -538,7 +640,7 @@ static int resolve_lua(void) {
 #define RESOLVE(name) p_##name = (void *)GetProcAddress(runtime, #name); if (!p_##name) return 0
     RESOLVE(lua_gettop); RESOLVE(lua_type); RESOLVE(lua_tolstring); RESOLVE(lua_settop); RESOLVE(lua_pushthread);
     RESOLVE(lua_pushvalue); RESOLVE(lua_pushnil); RESOLVE(lua_pushboolean);
-    RESOLVE(lua_pushnumber); RESOLVE(lua_pushlstring); RESOLVE(lua_pushcclosure);
+    RESOLVE(lua_pushnumber); RESOLVE(lua_tonumber); RESOLVE(lua_rawseti); RESOLVE(lua_pushlstring); RESOLVE(lua_pushcclosure);
     RESOLVE(lua_getfield); RESOLVE(lua_setfield); RESOLVE(lua_createtable);
     RESOLVE(lua_newuserdata); RESOLVE(lua_setmetatable); RESOLVE(luaL_newmetatable);
     RESOLVE(luaL_checkudata);
@@ -556,7 +658,16 @@ __declspec(dllexport) int luaopen_x4lan_fixedtick(lua_State *L) {
     p_lua_pushvalue(L, -1); p_lua_setfield(L, -2, "__index");
     method(L, "__gc", stop); method(L, "stop", stop);
     method(L, "active", active); method(L, "stats", stats);
+    method(L, "profile", profile); method(L, "folds", folds);
     p_lua_settop(L, -2);
     p_lua_createtable(L, 0, 1); method(L, "start", start);
     return 1;
+}
+
+/* The module is pinned while an owner exists, so detach means process exit: the loader lock
+   is held, so only ask the sampler to stop and never wait for it here. */
+BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved) {
+    (void)instance; (void)reserved;
+    if (reason == DLL_PROCESS_DETACH) simprof_signal_exit();
+    return TRUE;
 }

@@ -27,7 +27,8 @@ class FixedTickProbeTests(unittest.TestCase):
           function package.loadlib(path,symbol)
             assert(symbol=='luaopen_x4lan_fixedtick')
             return function() return {start=function(...)
-              assert(select('#',...)<=1);modes[#modes+1]=(...) or 'probe';attempts=attempts+1
+              local n=select('#',...);assert(n<=3);modes[#modes+1]=(...) or 'probe';attempts=attempts+1
+              args={n=n,...}
               if refusal then return nil,refusal end
               return handle
             end} end
@@ -72,6 +73,79 @@ class FixedTickProbeTests(unittest.TestCase):
           handle.stats=function(self) local s=base(self);s.sim_hooks=1;s.sim_win_frames=60
             s.sim_win_mean_ms=4.25;s.sim_win_p95_ms=6.5;s.sim_win_max_ms=9.125;return s end
           ui();ui();assert(logs[2]:find('simHooks=1 simFrames=60 simMeanMs=4.250 simP95Ms=6.50 simMaxMs=9.125',1,true))
+        ''')
+
+    def profile_runtime(self):
+        lua = self.runtime()
+        lua.execute('''
+          X4LAN_FIXEDTICK_MODE='profile';simprof=1;reports=0;foldQueue={}
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.simprof=simprof;s.simprof_reason=simprofReason
+            s.simprof_interval_us=1000;s.simprof_depth=32;return s end
+          handle.profile=function(self) reports=reports+1
+            return {seconds=10.02,samples=9990,rate_hz=997,depth_mean=17.25,suspend_us_mean=21.5,
+              suspend_us_max=180.25,walk_us_mean=2.5,overhead_pct=2.15,truncated=12,scanned=40,lost=13,
+              loading=0,failures=0,skipped=1,dropped_functions=0,dropped_stacks=0,fold_pending=3,
+              phases='slot3=61.0%(w4.0) idle=20.0%(w20.0)',self='9fdef0=5.0% [ext]=4.0%',
+              incl='ef4400=80.0% 122b360=61.0%'} end
+          handle.folds=function(self,n) local out={}
+            while #out<n and #foldQueue>0 do out[#out+1]=table.remove(foldQueue,1) end
+            return out end
+        ''')
+        return lua
+
+    def test_profile_mode_passes_options_and_logs_enabled(self):
+        self.profile_runtime().execute('''
+          X4LAN_SIMPROF_INTERVAL_MS=0.5;X4LAN_SIMPROF_DEPTH=48
+          ui();assert(modes[1]=='profile' and args.n==3 and args[2]==0.5 and args[3]==48)
+          assert(logs[1]:find('mode=profile',1,true))
+          assert(logs[2]=='[X4LAN] FEATURE simprof ENABLED intervalUs=1000 depth=32 reportS=10',logs[2])
+        ''')
+
+    def test_profile_defaults_pass_nil_options(self):
+        self.profile_runtime().execute('''
+          ui();assert(args.n==3 and args[2]==nil and args[3]==nil)
+        ''')
+
+    def test_profile_reports_every_interval_and_drains_folds(self):
+        self.profile_runtime().execute('''
+          X4LAN_SIMPROF_FOLD_LINES=2
+          ui();local before=#logs
+          now=5;ui();assert(reports==0)
+          now=10;foldQueue={'slot3;ef4400;122b360 5','idle;ef4400;ntdll!NtWaitForSingleObject 9','lost;[truncated];9fdef0 1'}
+          ui();assert(reports==1)
+          local text=table.concat(logs,'|',before+1)
+          assert(text:find('SIMPROF window seconds=10.02 samples=9990 rateHz=997 depthMean=17.2 suspendUsMean=21.5 suspendUsMax=180.2 walkUsMean=2.5 overheadPct=2.15',1,true),text)
+          assert(text:find('truncated=12 scanned=40 lost=13 loading=0 failures=0 skipped=1 droppedFunctions=0 droppedStacks=0 foldPending=3',1,true))
+          assert(text:find('[X4LAN] SIMPROF phases slot3=61.0%(w4.0) idle=20.0%(w20.0)',1,true))
+          assert(text:find('[X4LAN] SIMPROF self 9fdef0=5.0% [ext]=4.0%',1,true))
+          assert(text:find('[X4LAN] SIMPROF incl ef4400=80.0% 122b360=61.0%',1,true))
+          assert(text:find('[X4LAN] SIMPROF fold slot3;ef4400;122b360 5',1,true))
+          assert(not text:find('[truncated]',1,true))
+          now=10.1;ui();assert(logs[#logs]=='[X4LAN] SIMPROF fold lost;[truncated];9fdef0 1')
+          now=19;ui();assert(reports==1);now=20;ui();assert(reports==2)
+        ''')
+
+    def test_profile_disabled_is_logged_once(self):
+        self.profile_runtime().execute('''
+          ui();simprof=2;simprofReason='SuspendThread failed err=5'
+          now=10;ui();now=20;ui()
+          local n=0
+          for i=1,#logs do if logs[i]=='[X4LAN] FEATURE simprof DISABLED reason=SuspendThread failed err=5' then n=n+1 end end
+          assert(n==1)
+        ''')
+
+    def test_profile_start_failure_is_logged(self):
+        self.profile_runtime().execute('''
+          simprof=2;simprofReason='OpenThread failed'
+          ui();assert(logs[2]=='[X4LAN] FEATURE simprof DISABLED reason=OpenThread failed')
+          ui();assert(logs[3]:find('FRAMEPROBE frames=2',1,true))
+        ''')
+
+    def test_probe_mode_never_profiles(self):
+        self.runtime().execute('''
+          handle.profile=function() error('unexpected') end;handle.folds=function() error('unexpected') end
+          ui();now=30;ui();assert(args.n==0)
         ''')
 
     def test_fixed60_refusal_is_an_error(self):

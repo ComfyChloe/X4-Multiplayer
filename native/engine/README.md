@@ -82,6 +82,82 @@ the capture frame time to 1/60; it requires and re-checks a 60 Hz frame-rate lim
 every frame and restores the original bytes on any disarm. Below 60 fps game time
 runs slow; catch-up scheduling (Stage 2) is not implemented.
 
+## Simulation profiler (`profile` mode, simprof)
+
+`X4LAN_FIXEDTICK_MODE='profile'` arms the probe exactly like the default probe (no patches)
+and also starts a sampling profiler of the MoveWorker thread (`simprof.c`, included by
+`fixedtick.c`). Options: `X4LAN_SIMPROF_INTERVAL_MS` (0.5..10, default 1),
+`X4LAN_SIMPROF_DEPTH` (8..64 frames, default 32), `X4LAN_SIMPROF_REPORT_S` (default 10),
+`X4LAN_SIMPROF_FOLD_LINES` (folded stacks logged per frame, default 20). Lua API:
+`start('profile'[, interval_ms[, depth]])`, `handle:profile()` (closes a report window),
+`handle:folds(n)`; `stats()` adds `simprof` (1 running, 2 disabled) and `simprof_reason`.
+
+**Sampling.** A dedicated thread (time-critical priority, high-resolution waitable timer,
+absolute schedule with +-10% jitter) suspends the MoveWorker, reads its context
+(`CONTEXT_CONTROL|CONTEXT_INTEGER`; `GetThreadContext` also waits until the asynchronous
+`SuspendThread` has taken effect), walks the stack into a preallocated ring buffer, resumes,
+and only then aggregates. While the target is suspended the sampler calls only
+`GetThreadContext`, `QueryPerformanceCounter`, its own binary search over the in-memory
+`.pdata` and `RtlVirtualUnwind`; it allocates nothing, takes no lock, no loader or CRT call.
+`RtlLookupFunctionEntry` is not used: on a miss it walks the dynamic function table list under
+an SRW lock (older Windows also locks the inverted function table) that the suspended thread may
+hold. `RtlVirtualUnwind` is a pure function of image base, function entry and context. Stack
+reads stay in `[leaf Rsp, StackBase)`; a leaf Rsp below the TEB `StackLimit` skips the sample, so
+no guard page is touched. Unwindable modules are fixed at start: X4.exe, this DLL, ntdll,
+kernelbase, kernel32 and X4's static imports (lua51_64, OpenAL, ...), each held by a reference
+until stop. A leaf in other code (LuaJIT traces, drivers) is recovered by a bounded scan (4 KB)
+for a return address after a call instruction whose own frame also unwinds to one; frames after
+a scan get extra frame-pointer and frame-extent checks. The walk stops at `U::MoveWorker::Run`.
+
+**Phases.** When the stack reaches Run at its slot call (return address 0xef46b6, inside the
+`vbi_dispatch` signature) the unwinder has restored Run's RBX, which holds the slot index
+(0..16). After a scan, or elsewhere in Run, the frame below Run is matched against the slot
+handlers' `Move()` functions, which the probe snapshots on the MoveWorker every frame (tail
+calls and thunks then count as `frame`). `frame` is Run outside a slot, `idle` is Run waiting
+(for `g_semSimStart`), `loading` is not walked, `lost`/`lostout` did not reach Run (depth cap
+or unknown frame) inside/outside the slot 0/15 brackets. A sample is *waiting* when its leaf is
+in an ntdll wait syscall stub (`NtWaitForSingleObject`, `...MultipleObjects`, `NtDelayExecution`,
+`NtWaitForAlertByThreadId`, keyed events, I/O completion, `NtYieldExecution`).
+
+**Safety.** No engine memory is written. The sampler stops (thread joined, 2 s limit, tables
+leaked rather than freed if it does not exit) before any disarm step, on `stop()`/`__gc`;
+DLL process detach only signals it (loader lock held; the module is pinned while armed). Five
+consecutive `SuspendThread` or `GetThreadContext` failures (with 100..800 ms back-off) disable
+the sampler, logged once as `FEATURE simprof DISABLED reason=...`; the probe keeps running.
+A failed `ResumeThread` (after three retries) disables immediately.
+
+**Log format** (debug log, every report window):
+```
+[X4LAN] FEATURE simprof ENABLED intervalUs=1000 depth=32 reportS=10
+[X4LAN] SIMPROF window seconds=10.00 samples=9990 rateHz=999 depthMean=17.3 suspendUsMean=22.0 suspendUsMax=180.0 walkUsMean=2.5 overheadPct=2.20 truncated=12 scanned=40 lost=13 loading=0 failures=0 skipped=0 droppedFunctions=0 droppedStacks=0 foldPending=812
+[X4LAN] SIMPROF phases slot3=61.0%(w4.0) idle=12.0%(w12.0) slot6=9.0%(w0.0) ...   share (waiting share) of all samples
+[X4LAN] SIMPROF self 9fdef0=5.0% [ext]=4.0% ntdll!NtWaitForSingleObject=3.1% ...  top 20, share of samples
+[X4LAN] SIMPROF incl ef4400=88.0% 122b360=61.0% ...                                top 20
+[X4LAN] SIMPROF fold slot3;ef4400;122b360;9fdef0;3e4f40 17                         FlameGraph folded stack
+```
+`overheadPct` is the time the MoveWorker was held suspended, as a share of wall time. Frames:
+bare hex = X4.exe function-start RVA (cold fragments map to their parent), `module+offset`,
+`ntdll!Nt...` (wait stub), `[ext]` (unlisted code), `[truncated]`. Each window's folded stacks
+are drained from a snapshot over the following frames (the active table keeps accumulating);
+`dev/simprof_report.py` sums all windows. The drain runs in slot 6 (UI) and is visible there.
+
+```
+python dev/simprof_report.py x4lan-debug.txt --folded simprof.folded [--phase slot3] [--with-rva]
+```
+names RVAs from `../x4-re/labels/merged.tsv`, the other label TSVs and `symbols.csv` (`--x4re`),
+prints phase shares and top lists and writes FlameGraph input (`flamegraph.pl`, speedscope).
+
+**Synthetic validation** (`build.py --fixedtick --test`, `test_simprof.c`): a worker runs a fake
+Run with an assembly slot dispatcher shaped like the engine's (RBX index, `call [rax+8]`),
+a tail-called slot, a JIT leaf without unwind data, waits and an 80-deep recursion. Sampled
+phase shares match the worker's own QPC measurements within 4 points; self/inclusive, waits,
+scan recovery, truncation and folds are checked; injected `GetThreadContext`/`SuspendThread`
+failures disable with a reason and never leave the target suspended. Overhead on this PC
+(busy worker): at 1 ms the target is suspended 2.3-2.5% of wall time (about 23 us per sample,
+of which the unwind is about 1 us; the rest is the kernel suspend/context/resume; rare maxima
+up to 2 ms), throughput slowdown 1.6-3.9% (noisy, median of 7); 2 ms: 1.4% suspended; 0.5 ms:
+3.8-4.5% suspended. Native overhead is logged as `overheadPct`.
+
 ## Remaining patch tasks
 
 1. **H3:** zone attention alone does not establish high-attention NPC simulation.

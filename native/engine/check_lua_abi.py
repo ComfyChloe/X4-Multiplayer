@@ -26,7 +26,25 @@ def main():
         lua.luaL_openlibs(state)
         # Decimal byte escapes avoid treating paths as executable Lua text.
         path = ''.join('\\%03d' % b for b in str(args.module.resolve()).encode('utf-8'))
-        argument = '' if args.symbol == 'luaopen_x4lan_fixedtick' else 'function() end'
+        fixedtick = args.symbol == 'luaopen_x4lan_fixedtick'
+        argument = '' if fixedtick else 'function() end'
+        # Profile-mode arguments are validated before the executable check.
+        profile = '''
+          local function refused(expected, ...)
+            local h,why=module.start(...)
+            assert(h==nil and why==expected,tostring(why))
+          end
+          refused('invalid profile interval','profile',0.1)
+          refused('invalid profile interval','profile',11)
+          refused('invalid profile interval','profile','1')
+          refused('invalid profile depth','profile',1,4)
+          refused('invalid profile depth','profile',1,24.5)
+          refused('unsupported mode','profile',1,24,true)
+          refused('unsupported mode','fixed60',1)
+          refused('unsupported executable or modified engine signatures','profile')
+          refused('unsupported executable or modified engine signatures','profile',nil,nil)
+          refused('unsupported executable or modified engine signatures','profile',0.5,64)
+        ''' if fixedtick else ''
         source = f'''
           local module=assert(package.loadlib("{path}","{args.symbol}"))()
           assert(type(module.start)=='function')
@@ -39,6 +57,7 @@ def main():
             assert(h==nil and why=='main Lua thread required',why)
           end)
           assert(coroutine.resume(thread))
+          {profile}
         '''.encode('utf-8')
         result = lua.luaL_loadstring(state, source)
         if not result:
@@ -47,7 +66,8 @@ def main():
             raise RuntimeError(lua.lua_tolstring(state, -1, None).decode('utf-8', errors='replace'))
     finally:
         lua.lua_close(state)
-    print('PASS: actual Lua ABI, argument validation, coroutine rejection, non-X4 process rejection')
+    print('PASS: actual Lua ABI, argument validation' + (' (incl. profile mode)' if fixedtick else '') +
+          ', coroutine rejection, non-X4 process rejection')
 
 
 if __name__ == '__main__':

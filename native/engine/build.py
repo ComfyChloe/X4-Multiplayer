@@ -67,14 +67,16 @@ def main():
     if args.test:
         if os.name != 'nt':
             parser.error('--test executes a Windows binary and requires Windows')
-        name = 'fixedtick' if args.fixedtick else 'simtick'
-        test = out / f'test_{name}.exe'
-        subprocess.run([
-            str(args.zig.resolve()), 'cc', '-target', 'x86_64-windows-gnu',
-            '-std=c11', '-O1', '-Wall', '-Wextra', '-Werror', '-I', str(out),
-            str(root / f'native/engine/test_{name}.c'), '-lbcrypt', '-o', str(test),
-        ], check=True)
-        subprocess.run([str(test)], check=True)
+        # The sampler test (simprof) unwinds against the test executable's own .pdata.
+        names = ['fixedtick', 'simprof'] if args.fixedtick else ['simtick']
+        for name in names:
+            test = out / f'test_{name}.exe'
+            subprocess.run([
+                str(args.zig.resolve()), 'cc', '-target', 'x86_64-windows-gnu',
+                '-std=c11', '-O1', '-Wall', '-Wextra', '-Werror', '-I', str(out),
+                str(root / f'native/engine/test_{name}.c'), '-lbcrypt', '-o', str(test),
+            ], check=True)
+            subprocess.run([str(test)], check=True)
 
 
 if __name__ == '__main__':
