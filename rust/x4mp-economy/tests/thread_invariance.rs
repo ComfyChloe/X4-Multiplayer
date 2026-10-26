@@ -69,6 +69,7 @@ fn universe(sectors: u32, stations: u32) -> Universe {
                 capacity: 200_000 + (k as i64) * 10_000,
                 reservations: ReservationList::new(),
                 offers_dirty: true,
+                rng: None,
             };
             u.spawn(ix, uid, Bundle::new().with(st).with(EconOffers(OfferBook::new()))).expect("spawn");
         }

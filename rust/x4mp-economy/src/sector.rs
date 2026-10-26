@@ -8,8 +8,10 @@
 //! - [`EconOffers`]: the station's trade offers, **published**: other sectors' jobs read them
 //!   from the snapshot of the last barrier (`Snapshot::column`), never live.
 //!
-//! Production draws come from the entity's own engine-generator stream (x4mp-sim `RngState`,
-//! seeded `rng::entity_seed(session, uid, 0)` at spawn), so they do not depend on threads.
+//! Production draws come from the station's own engine-generator stream for the economy,
+//! `rng::entity_seed(session, uid, ECON_PURPOSE)` ('ECON'; seeded at the station's first run),
+//! separate from the generic x4mp-sim `RngState` stream so that other systems' draws on the
+//! same entity do not shift the economy's; nothing depends on threads.
 //!
 //! One frame of [`EconomySystem`] (x4mp-sim frame model):
 //! 1. **parallel phase** (`run_sector`): each sector job catches up production of its
@@ -31,8 +33,7 @@
 use std::collections::HashMap;
 use std::sync::Mutex;
 
-use x4mp_sim::comp::RngState;
-use x4mp_sim::rng::EngineLcg;
+use x4mp_sim::rng::{entity_seed, EngineLcg};
 use x4mp_sim::{BarrierCtx, Component, EntityId, SectorCtx, System, Target, Universe};
 
 use crate::ids::{OrderKey, SectorIx, Stamp, TradeId, UniverseId, WareIx};
@@ -81,8 +82,13 @@ pub struct EconStation {
     pub reservations: ReservationList,
     /// Offers must be refreshed in the next sector job.
     pub offers_dirty: bool,
+    /// Engine-generator state of the station's economy stream; `None` until its first run.
+    pub rng: Option<u64>,
 }
-x4mp_sim::impl_fields!(EconStation { times, modules, cargo, capacity, reservations, offers_dirty });
+x4mp_sim::impl_fields!(EconStation { times, modules, cargo, capacity, reservations, offers_dirty, rng });
+
+/// Purpose tag of the economy streams: `entity_seed(session, uid, ECON_PURPOSE)`.
+pub const ECON_PURPOSE: u32 = 0x4543_4f4e; // 'ECON'
 impl Component for EconStation {
     const NAME: &'static str = "econ_station";
 }
@@ -246,12 +252,14 @@ impl System for EconomySystem {
             let uid = ctx.world.uids()[row];
             let key = ctx.world.keys()[row];
             {
-                let (stations, offers, rngs) = ctx.world.cols_mut3::<EconStation, EconOffers, RngState>();
+                let session = ctx.session_seed;
+                let (stations, offers) = ctx.world.cols_mut::<EconStation, EconOffers>();
                 let st = &mut stations[row];
-                let rng = rngs[row].lcg();
+                let mut rng = EngineLcg(st.rng.unwrap_or_else(|| entity_seed(session, uid, ECON_PURPOSE)));
                 let mut storage =
                     SimpleStorage { cargo: &mut st.cargo, capacity: st.capacity, wares: &self.wares, refresh: false };
-                update_production(&mut st.times, now, false, &mut st.modules, &mut storage, rng);
+                update_production(&mut st.times, now, false, &mut st.modules, &mut storage, &mut rng);
+                st.rng = Some(rng.state());
                 if storage.refresh || st.offers_dirty {
                     refresh_offers(st, uid, key, sector, now, &self.wares, self.env.as_ref(), &mut offers[row].0);
                 }
@@ -386,15 +394,21 @@ mod tests {
     use x4mp_sim::{Bundle, WorldKind};
 
     #[test]
-    fn stations_draw_from_their_x4mp_sim_entity_stream() {
-        // interfaces.md v0.5 test vector, pinned here so a seeding change is noticed.
+    fn stations_draw_from_their_own_economy_stream() {
+        // interfaces.md v0.5 test vector of the seed function, pinned here.
         assert_eq!(entity_seed(0x1081d6b6, UniverseId(0x2000001), 0), 0x70b7_3a84_370b_21a0);
         let mut u = Universe::new(0x1081d6b6);
         register(&mut u);
         let s = u.add_sector(UniverseId(0x7000_0000), WorldKind::Sector);
         let e = u.spawn(s, UniverseId(0x2000001), Bundle::new().with(EconStation::default())).expect("spawn");
         u.commit();
-        assert_eq!(u.get::<RngState>(e).map(|r| r.0), Some(0x70b7_3a84_370b_21a0));
         assert!(u.get::<EconOffers>(e).is_some_and(|o| o.0.is_empty()));
+        let econ = EconomySystem::new(Wares::default(), None);
+        let pool = x4mp_sim::Pool::new(1);
+        u.step(&pool, &[&econ], &x4mp_sim::FrameInfo { frame: 1, game_time: 1.0, dt: 1.0 });
+        // No module drew, so the stream holds its seed: the 'ECON' stream, not RngState's.
+        let st = u.get::<EconStation>(e).expect("station");
+        assert_eq!(st.rng, Some(entity_seed(0x1081d6b6, UniverseId(0x2000001), ECON_PURPOSE)));
+        assert_ne!(st.rng, Some(0x70b7_3a84_370b_21a0));
     }
 }
