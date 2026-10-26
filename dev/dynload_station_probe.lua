@@ -87,8 +87,8 @@ SetScript('onUpdate', function()
     if GetCurRealTime() - began > 60 then error('station evidence timeout') end
     for _, p in ipairs(pending) do
       local age = GetCurRealTime() - p.t
-      if not p.first and age >= 0.1 then sample(p, 'early') end
-      if not p.done and p.first and age >= 5.2 then sample(p, 'late'); p.done = true end
+      if not p.first and age >= 0.1 then sample(p, 'early'); p.firstAt = GetCurRealTime() end
+      if not p.done and p.firstAt and GetCurRealTime() - p.firstAt >= 5 then sample(p, 'late'); p.done = true end
     end
     if #pending == #expected then
       for _, p in ipairs(pending) do if not p.done then return end end

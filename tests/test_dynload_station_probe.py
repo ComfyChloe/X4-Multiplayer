@@ -55,6 +55,16 @@ class StationProbeTests(unittest.TestCase):
         lua=self.runtime();lua.execute("moduleMacros[202]='module_c'");self.start(lua)
         self.assertIn('FAIL',self.log(lua));self.assertNotIn('DONE',self.log(lua))
 
+    def test_delayed_early_sample_still_requires_five_seconds(self):
+        lua=self.runtime()
+        lua.execute("tick();events['DLCOR.Station'](nil,'1|test_plan|0x65');now=10;tick()")
+        self.assertIn('phase=early',self.log(lua))
+        self.assertNotIn('phase=late',self.log(lua))
+        lua.execute('now=14.9;tick()')
+        self.assertNotIn('DONE',self.log(lua))
+        lua.execute('now=15;tick()')
+        self.assertIn('DONE',self.log(lua))
+
     def test_module_identity_change_is_failure(self):
         lua=self.runtime();self.start(lua)
         lua.execute('moduleIds[1]=203;now=8.3;tick()')
