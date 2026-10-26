@@ -139,6 +139,20 @@ they are known (`set_faction_known`), with name, colour, icon and relation.
   across save/load (docs recommend `{page,line}`) and personal logos on Linux.
 - Clients carry the same pool and map each player to the same slot number.
 
+### 7c. Sector and build-plot ownership per player
+
+- Sector ownership is a faction field (`set_owner object="$sector"`; vanilla
+  `md/setup.xml:987`), so pool factions can own sectors natively. Claiming depends on
+  the faction tag `claimspace` and the `willclaimspace` property
+  (`md/lib_generic.xml:1517`, `md/factionlogic.xml:1584/1918`); pool factions get the
+  same claim tags as `player`, without `economic`.
+- Build plots belong to the station, so its owner (the player's pool faction) owns the
+  plot; plot payment comes from that faction's account.
+- Sector ownership changes are mirrored with the same per-client mapping as ships
+  (own sectors appear as `player`, others as their pool faction).
+- Remaining host-only behaviour (engine C++ compares against the global player
+  faction) is covered by the planned context hooks.
+
 ### 7b. Hot join (decided: fork snapshots)
 
 Players join a running server without pausing the others:
