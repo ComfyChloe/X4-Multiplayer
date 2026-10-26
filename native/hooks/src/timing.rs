@@ -416,11 +416,7 @@ unsafe fn read_u32(address: usize) -> u32 {
 unsafe fn verify_sites() -> bool {
     IMAGE != 0
         && SITES.iter().all(|&(rva, length, expected)| {
-            readable((IMAGE + rva) as *const c_void, length, false)
-                && sha256(
-                    slice::from_raw_parts((IMAGE + rva) as *const u8, length),
-                    expected,
-                )
+            crate::site_matches(rva, length, expected)
         })
         && [
             GRAVIDAR_RVA,

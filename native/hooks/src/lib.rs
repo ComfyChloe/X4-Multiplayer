@@ -296,6 +296,52 @@ unsafe fn verify_file() -> bool {
 
 static mut IMAGE: usize = 0;
 
+/// X4.exe's preferred image base; vtable sites are pinned with pointers relative to it.
+const PREFERRED_BASE: usize = 0x1_4000_0000;
+
+/// True when `rva` lies in an executable section of the loaded image.
+unsafe fn executable_rva(rva: usize) -> bool {
+    let pe_offset = ptr::read((IMAGE + 0x3c) as *const u32) as usize;
+    if pe_offset > 4096 || !readable((IMAGE + pe_offset) as *const c_void, 24, false) {
+        return false;
+    }
+    let sections = ptr::read((IMAGE + pe_offset + 6) as *const u16) as usize;
+    let optional_size = ptr::read((IMAGE + pe_offset + 20) as *const u16) as usize;
+    let table = IMAGE + pe_offset + 24 + optional_size;
+    if sections > 96 || !readable(table as *const c_void, sections * 40, false) {
+        return false;
+    }
+    (0..sections).any(|index| {
+        let header = table + index * 40;
+        let size = ptr::read((header + 8) as *const u32) as usize;
+        let start = ptr::read((header + 12) as *const u32) as usize;
+        let flags = ptr::read((header + 36) as *const u32);
+        flags & 0x2000_0000 != 0 && rva >= start && rva < start + size
+    })
+}
+
+/// Compares a pinned site with its bytes in the executable file. Data sites (vtables)
+/// hold absolute pointers that the loader relocates under ASLR, so every aligned word
+/// pointing into the loaded image is moved back to the preferred base before hashing.
+/// Code sites are hashed exactly as loaded; none of the pinned ones contain relocations.
+unsafe fn site_matches(rva: usize, length: usize, expected: &str) -> bool {
+    if !readable((IMAGE + rva) as *const c_void, length, false) {
+        return false;
+    }
+    let bytes = slice::from_raw_parts((IMAGE + rva) as *const u8, length);
+    if length % 8 != 0 || executable_rva(rva) {
+        return sha256(bytes, expected);
+    }
+    let mut file = bytes.to_vec();
+    for word in file.chunks_exact_mut(8) {
+        let value = u64::from_le_bytes(word.try_into().unwrap()) as usize;
+        if value >= IMAGE && value < IMAGE + IMAGE_SIZE {
+            word.copy_from_slice(&((value - IMAGE + PREFERRED_BASE) as u64).to_le_bytes());
+        }
+    }
+    sha256(&file, expected)
+}
+
 unsafe fn verify_image() -> bool {
     IMAGE = GetModuleHandleW(ptr::null()) as usize;
     if !readable(IMAGE as *const c_void, 0x400, false) {
@@ -461,12 +507,7 @@ unsafe fn verify_image() -> bool {
         ),
     ];
     for &(rva, length, expected) in CHECKS {
-        if !readable((IMAGE + rva) as *const c_void, length, false)
-            || !sha256(
-                slice::from_raw_parts((IMAGE + rva) as *const u8, length),
-                expected,
-            )
-        {
+        if !site_matches(rva, length, expected) {
             return false;
         }
     }
@@ -1279,6 +1320,23 @@ pub unsafe extern "C-unwind" fn luaopen_x4lan_hooks(lua: *mut LuaState) -> c_int
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn data_sites_are_compared_at_the_preferred_base() {
+        unsafe {
+            let image = Box::leak(vec![0u8; IMAGE_SIZE].into_boxed_slice());
+            IMAGE = image.as_mut_ptr() as usize;
+            let rva = 0x2c0_0000;
+            ptr::write((IMAGE + rva) as *mut u64, (IMAGE + 0x1234) as u64);
+            ptr::write((IMAGE + rva + 8) as *mut u64, 7);
+            // SHA-256 of the file bytes: pointer 0x1_4000_1234 followed by the constant 7.
+            let expected = "20e49f1a0b73deb9b46f4eec424b706bf758684a87ea506b64a92f3257b11bb8";
+            assert!(site_matches(rva, 16, expected));
+            ptr::write((IMAGE + rva + 8) as *mut u64, 8);
+            assert!(!site_matches(rva, 16, expected));
+            assert!(!site_matches(rva, 12, expected));
+        }
+    }
+
 
     #[repr(C)]
     struct FakeLua {
