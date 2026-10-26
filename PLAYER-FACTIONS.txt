@@ -2,6 +2,15 @@ PLAYER FACTIONS (config flag player_factions) - INTERNAL
 Native status: engine behaviour verified in ONE real X4 (lane probe, below); a two-client session
 (client 1 + client 2 in one relay session) has NOT run yet.
 
+Two-client evidence must also pass:
+  python dev/validate_player_factions_session.py .local/lane/sessions/<label>
+The lane runner's independent regex hits alone are insufficient. This validator correlates each
+client with the OTHER human's identity/diplomacy entry, both simultaneously piloted ship owners,
+successful intent calls, and the ordered allied -> neutral -> hostile -> allied round trip.
+It requires final readback after 160 seconds, two launched native clients and lane cleanup;
+any feature failure/refusal is rejected even after DONE. It does not establish cargo, radar,
+save/load, sector ownership, or a dedicated-server session. Validator fixtures are synthetic.
+
 Each human gets an own faction. Data, MD and Lua only; no engine hooks. Source config is
 inert (player_factions = false); internal packages enable it (session_launcher.py).
 
