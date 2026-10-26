@@ -78,7 +78,9 @@ static const struct { uint32_t rva, length; const char *sha; } code_checks[] = {
     {0x3d46b0u, 976, "e51e1c65075e806dc17c7dcc5b1cb635b7df7b196083687d706be4c803892dd9"},  /* PropagateCacheFlags */
     {0x9fe500u, 128, "574034288966dd92debb9ac0010c7f3a0f58fb666531fffaaacb630f66c45b2a"},  /* call-site region */
     {0x3d55c0u, 64, "085614be5629e4fc13339376ca69adea5b643d7d14fdda9dc490bde5ba7b1c8c"},   /* count helpers */
+    {0x3d5440u, 373, "802f10fc00f188e16598771fcda681fbcfe288fc8a3123206f017a84520563de"},  /* RemoveCacheSpecification */
 };
+#define RVA_REMOVE_SPEC 0x3d5440u
 
 typedef struct {
     uint32_t rva, target;
@@ -107,6 +109,17 @@ typedef struct {
     uint64_t shadow_components, shadow_refreshes, shadow_first_frame;
     double shadow_ms_sum, shadow_ms_max;
     char shadow_first[200];
+    /* switch: our BuildCache (x4mp_xform_build) runs instead of the original; with switch_alternate
+       the plain frames and the shadow frames each alternate between the original and ours (A/B) */
+    uint32_t switch_threads, switch_alternate;
+    uint64_t switch_frames, switch_fallbacks, switch_components, switch_tasks, switch_refreshes;
+    double switch_plan_us_sum, switch_exec_us_sum, switch_plan_us_max;
+    char switch_refusal[200];
+    uint64_t plain_seq, shadow_seq;
+    uint64_t shadow_switch_frames, shadow_switch_bad_frames, shadow_switch_mismatches;
+    /* wall time of the plain frames (no capture, no shadow), per path */
+    uint64_t timed_original, timed_switch;
+    double original_us_sum, original_us_max, switch_us_sum, switch_us_max;
 } owner;
 
 /* x4mp_transform_ffi.dll (rust/x4mp-transform/ffi), same layout as its XformCheck. */
@@ -119,6 +132,17 @@ typedef struct {
 } xform_check;
 typedef int32_t (*shadow_check_fn)(const uint8_t *capture, size_t len, xform_check *out);
 typedef uint32_t (*shadow_abi_fn)(void);
+typedef struct {
+    void (*propagate)(void *c, unsigned idx, const uint32_t *flags);
+    void (*remove_spec)(void *c, int32_t kind);
+} engine_api;
+typedef struct {
+    uint64_t components, tasks, refreshes, timers, removed;
+    double plan_us, exec_us;
+    char message[200];
+} xform_build;
+typedef int32_t (*switch_build_fn)(void *galaxy, uint32_t idx, double time, uint32_t threads, uint32_t drop,
+                                   const engine_api *api, xform_build *out);
 
 /* The state is static so that the hook never reads Lua memory; the userdata is a handle. */
 static owner state;
@@ -145,6 +169,8 @@ static size_t trace_n, trace_cap;
 static int tracing;
 static int64_t qpc_freq;
 static shadow_check_fn shadow_check;
+static switch_build_fn switch_build;
+static engine_api switch_api;
 
 static int readable(const void *ptr, size_t length) {
     MEMORY_BASIC_INFORMATION m;
@@ -374,6 +400,31 @@ static void run_plain(void *galaxy, unsigned idx, double time, void *ctx) {
     original_build_cache(galaxy, idx, time);
 }
 
+/* Our BuildCache; the original runs whenever ours refuses (nothing executed then). */
+static void run_switch(void *galaxy, unsigned idx, double time, void *ctx) {
+    owner *o = ctx;
+    xform_build r;
+    memset(&r, 0, sizeof r);
+    int32_t rc = switch_build(galaxy, idx, time, o->switch_threads, image[XC_RVA_DROP_POSE] != 0, &switch_api, &r);
+    if (rc != 0) {
+        ++o->switch_fallbacks;
+        if (!o->switch_refusal[0]) {
+            memcpy(o->switch_refusal, r.message, sizeof o->switch_refusal);
+            o->switch_refusal[sizeof o->switch_refusal - 1] = 0;
+            if (!o->switch_refusal[0]) strcpy(o->switch_refusal, "refused");
+        }
+        original_build_cache(galaxy, idx, time);
+        return;
+    }
+    ++o->switch_frames;
+    o->switch_components = r.components;
+    o->switch_tasks = r.tasks;
+    o->switch_refreshes = r.refreshes;
+    o->switch_plan_us_sum += r.plan_us;
+    o->switch_exec_us_sum += r.exec_us;
+    if (r.plan_us > o->switch_plan_us_max) o->switch_plan_us_max = r.plan_us;
+}
+
 static void run_traced(void *galaxy, unsigned idx, double time, void *ctx) {
     int *ok = ctx;
     *ok = 1;
@@ -452,13 +503,23 @@ static void capture(owner *o, void *galaxy, unsigned idx, double time) {
     o->last_skip = NULL;
 }
 
+/* Does this frame run our build? A/B goes in pairs (2 original, 2 ours): the cache index flips every
+   frame, so each path builds both caches. The sequence advances only where it is consulted. */
+static int use_switch(owner *o, uint64_t *seq) {
+    if (!o->switch_threads || !switch_build) return 0;
+    return !o->switch_alternate || (((*seq)++ >> 1) & 1);
+}
+
 static void shadow(owner *o, void *galaxy, unsigned idx, double time) {
     xc_meta meta = {0xffffffffu, o->frames, 0};
-    int ran = 0;
+    int ran = 0, via_switch = use_switch(o, &o->shadow_seq);
     LARGE_INTEGER t0;
     QueryPerformanceCounter(&t0);
-    const char *why = xc_capture_frame(&cap, &buf, galaxy, idx, time, &meta, run_plain, NULL, &ran);
-    if (!ran) original_build_cache(galaxy, idx, time);
+    const char *why = xc_capture_frame(&cap, &buf, galaxy, idx, time, &meta, via_switch ? run_switch : run_plain, o, &ran);
+    if (!ran) {
+        if (via_switch) run_switch(galaxy, idx, time, o);
+        else original_build_cache(galaxy, idx, time);
+    }
     if (why) {
         ++o->shadow_errors;
         o->last_skip = why;
@@ -479,11 +540,16 @@ static void shadow(owner *o, void *galaxy, unsigned idx, double time) {
     o->shadow_components = r.components;
     o->shadow_refreshes = r.refreshes;
     o->shadow_refs += r.refs_only;
+    if (via_switch) ++o->shadow_switch_frames;
     if (r.mismatches) {
         ++o->shadow_bad_frames;
         o->shadow_mismatches += r.mismatches;
+        if (via_switch) {
+            ++o->shadow_switch_bad_frames;
+            o->shadow_switch_mismatches += r.mismatches;
+        }
         if (!o->shadow_first[0]) {
-            memcpy(o->shadow_first, r.message, sizeof o->shadow_first);
+            _snprintf(o->shadow_first, sizeof o->shadow_first, "%s%s", via_switch ? "[switch] " : "", r.message);
             o->shadow_first[sizeof o->shadow_first - 1] = 0;
             o->shadow_first_frame = o->frames;
         }
@@ -506,7 +572,22 @@ static void hook_build_cache(void *galaxy, unsigned idx, double time) {
         shadow(o, galaxy, idx, time);
         return;
     }
-    original_build_cache(galaxy, idx, time);
+    int via_switch = use_switch(o, &o->plain_seq);
+    uint64_t fallbacks = o->switch_fallbacks;
+    LARGE_INTEGER t0;
+    QueryPerformanceCounter(&t0);
+    if (via_switch) run_switch(galaxy, idx, time, o);
+    else original_build_cache(galaxy, idx, time);
+    double us = ms_since(t0) * 1000.0;
+    if (!via_switch) {
+        ++o->timed_original;
+        o->original_us_sum += us;
+        if (us > o->original_us_max) o->original_us_max = us;
+    } else if (o->switch_fallbacks == fallbacks) { /* a refused frame ran both: not timed */
+        ++o->timed_switch;
+        o->switch_us_sum += us;
+        if (us > o->switch_us_max) o->switch_us_max = us;
+    }
 }
 
 static void disarm(owner *o) {
@@ -518,15 +599,23 @@ static void disarm(owner *o) {
 
 /* Everything start() does after the Lua checks: verify, stub page, sites, arm, patch. */
 static const char *arm(double first_s, double every_s, uint32_t count, uint32_t trace_every, int with_file,
-                       uint32_t shadow_every, const WCHAR *shadow_path) {
+                       uint32_t shadow_every, const WCHAR *shadow_path, uint32_t switch_threads, uint32_t switch_alternate) {
     const char *why = verify_image(with_file);
     if (why) return why;
-    if (shadow_every) {
+    if (shadow_every || switch_threads) {
         HMODULE m = LoadLibraryW(shadow_path);
         if (!m) return "shadow library not found";
         shadow_abi_fn abi = (shadow_abi_fn)(void *)GetProcAddress(m, "x4mp_xform_abi");
         shadow_check = (shadow_check_fn)(void *)GetProcAddress(m, "x4mp_xform_check");
-        if (!abi || !shadow_check || abi() != 1) { shadow_check = NULL; return "shadow library ABI mismatch"; }
+        switch_build = (switch_build_fn)(void *)GetProcAddress(m, "x4mp_xform_build");
+        uint32_t version = abi ? abi() : 0;
+        if (!shadow_check || version < 1 || (switch_threads && (version < 2 || !switch_build))) {
+            shadow_check = NULL;
+            switch_build = NULL;
+            return "shadow library ABI mismatch";
+        }
+        switch_api.propagate = (void (*)(void *, unsigned, const uint32_t *))(void *)(image + RVA_PROPAGATE);
+        switch_api.remove_spec = (void (*)(void *, int32_t))(void *)(image + RVA_REMOVE_SPEC);
     }
     void **table = *(void ***)(image + VBI_RVA);
     if (table && *(int *)((unsigned char *)table + 0x130)) return "loading";
@@ -556,6 +645,8 @@ static const char *arm(double first_s, double every_s, uint32_t count, uint32_t 
     o->max_captures = count;
     o->trace_every = trace_every;
     o->shadow_every = shadow_every;
+    o->switch_threads = switch_threads;
+    o->switch_alternate = switch_alternate;
     owner_thread = GetCurrentThreadId();
     current = o;
     o->armed = 1;
@@ -641,18 +732,52 @@ static int stats(lua_State *L) {
         string_field(L, "shadow_first", o->shadow_first);
         number_field(L, "shadow_first_frame", (double)o->shadow_first_frame);
     }
+    number_field(L, "switch_threads", o->switch_threads);
+    number_field(L, "switch_frames", (double)o->switch_frames);
+    number_field(L, "switch_fallbacks", (double)o->switch_fallbacks);
+    number_field(L, "switch_components", (double)o->switch_components);
+    number_field(L, "switch_tasks", (double)o->switch_tasks);
+    number_field(L, "switch_refreshes", (double)o->switch_refreshes);
+    number_field(L, "switch_plan_us_mean", o->switch_frames ? o->switch_plan_us_sum / (double)o->switch_frames : 0.0);
+    number_field(L, "switch_exec_us_mean", o->switch_frames ? o->switch_exec_us_sum / (double)o->switch_frames : 0.0);
+    number_field(L, "switch_plan_us_max", o->switch_plan_us_max);
+    if (o->switch_refusal[0]) string_field(L, "switch_refusal", o->switch_refusal);
+    number_field(L, "switch_alternate", o->switch_alternate);
+    number_field(L, "shadow_switch_frames", (double)o->shadow_switch_frames);
+    number_field(L, "shadow_switch_bad_frames", (double)o->shadow_switch_bad_frames);
+    number_field(L, "shadow_switch_mismatches", (double)o->shadow_switch_mismatches);
+    number_field(L, "timed_original", (double)o->timed_original);
+    number_field(L, "original_us_mean", o->timed_original ? o->original_us_sum / (double)o->timed_original : 0.0);
+    number_field(L, "original_us_max", o->original_us_max);
+    number_field(L, "timed_switch", (double)o->timed_switch);
+    number_field(L, "switch_us_mean", o->timed_switch ? o->switch_us_sum / (double)o->timed_switch : 0.0);
+    number_field(L, "switch_us_max", o->switch_us_max);
     if (o->last_file[0]) string_field(L, "file", o->last_file);
     if (o->last_skip) string_field(L, "skip", o->last_skip);
     if (o->reason) string_field(L, "reason", o->reason);
     return 1;
 }
 
-/* start(dir, first_s, every_s, count, trace_every[, shadow_every, shadow_dll]) on the main Lua thread
-   (MoveWorker, slot 6). */
+/* start(dir, first_s, every_s, count, trace_every[, shadow_every, dll[, switch_threads[, alternate]]]) on
+   the main Lua thread (MoveWorker, slot 6). */
 static int start(lua_State *L) {
     int top = p_lua_gettop(L);
     WCHAR shadow_path[400] = L"";
-    uint32_t shadow_every = 0;
+    uint32_t shadow_every = 0, switch_threads = 0, switch_alternate = 0;
+    if (top == 9) {
+        double sa = p_lua_type(L, 9) == LUA_TNUMBER ? p_lua_tonumber(L, 9) : -1.0;
+        if (!(sa == 0 || sa == 1)) return failure(L, "invalid arguments");
+        switch_alternate = (uint32_t)sa;
+        p_lua_settop(L, 8);
+        top = 8;
+    }
+    if (top == 8) {
+        double st = p_lua_type(L, 8) == LUA_TNUMBER ? p_lua_tonumber(L, 8) : -1.0;
+        if (!(st >= 0 && st <= 64)) return failure(L, "invalid arguments");
+        switch_threads = (uint32_t)st;
+        p_lua_settop(L, 7);
+        top = 7;
+    }
     if (top == 7) {
         if (p_lua_type(L, 6) != LUA_TNUMBER || p_lua_type(L, 7) != LUA_TSTRING)
             return failure(L, "usage: start(dir, first_s, every_s, count, trace_every)");
@@ -682,7 +807,8 @@ static int start(lua_State *L) {
     HMODULE pinned;
     if (!GetModuleHandleExW(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_PIN, (LPCWSTR)&hook_build_cache, &pinned))
         return failure(L, "cannot pin module");
-    const char *why = arm(first_s, every_s, (uint32_t)count, (uint32_t)trace_every, 1, shadow_every, shadow_path);
+    const char *why = arm(first_s, every_s, (uint32_t)count, (uint32_t)trace_every, 1, shadow_every, shadow_path, switch_threads,
+                          switch_alternate);
     if (why) return failure(L, why);
     handle *h = p_lua_newuserdata(L, sizeof *h);
     h->generation = ++generation;

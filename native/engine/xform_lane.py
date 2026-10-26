@@ -1,11 +1,14 @@
 """Native view-cache capture in a test lane, then offline replay with the model.
 
     python native/engine/xform_lane.py --zig <zig.exe> --label xform-001 [--count 6] [--first 20]
-        [--every 30] [--trace 2] [--timeout 900] [--wait 3600] [--replay-only]
+        [--every 30] [--trace 2] [--shadow N] [--shadow-frames 2000] [--switch THREADS] [--switch-ab 1]
+        [--switch-frames 5000] [--timeout 900] [--wait 3600] [--replay-only]
 
 1. builds .local/engine/x4lan_xform_64.dll (native/engine/xform_probe.c, -Wall -Wextra -Werror);
 2. assembles the lane overlay .local/lane/overlays/xform-<label> (DLL, ui/xform_probe.lua, ui.xml.files,
-   and with --shadow N the Rust model x4mp_transform_ffi.dll, which checks every Nth frame in game);
+   and with --shadow N the Rust model x4mp_transform_ffi.dll, which checks every Nth frame in game;
+   with --switch THREADS the same DLL's Rust build replaces BuildCache, by default A/B: alternating with
+   the original on plain and on shadow frames, both timed and both shadow-checked);
 3. runs ONE lane through the released ../lanes/release/dev/x4lane.py (a new disposable world; rules in
    rewrite-coord/native-lane.md: lane profiles only, quiet.lock respected, <= 20 min), with the
    captures written to .local/lane/runs/<label>-captures;
@@ -83,6 +86,9 @@ def main() -> int:
     ap.add_argument('--trace', type=int, default=2)
     ap.add_argument('--shadow', type=int, default=0, help='check every Nth frame with the Rust model (0 = off)')
     ap.add_argument('--shadow-frames', type=int, default=2000)
+    ap.add_argument('--switch', type=int, default=0, help='threads of the Rust build that replaces BuildCache (0 = off)')
+    ap.add_argument('--switch-ab', type=int, choices=(0, 1), default=1, help='1: alternate with the original (A/B)')
+    ap.add_argument('--switch-frames', type=int, default=5000)
     ap.add_argument('--timeout', type=int, default=900)
     ap.add_argument('--wait', type=int, default=0)
     ap.add_argument('--replay-only', action='store_true')
@@ -94,7 +100,7 @@ def main() -> int:
         if collect.exists() or captures.exists():
             ap.error(f'{collect} or {captures} exists; pick a new --label')
         captures.mkdir(parents=True)
-        o = overlay(args.label, build(args.zig), build_shadow() if args.shadow else None)
+        o = overlay(args.label, build(args.zig), build_shadow() if args.shadow or args.switch else None)
         lua_dir = str(captures).replace('\\', '/')
         cmd = [sys.executable, str(LANE), 'run', '--agent', 'transforms', '--label', args.label, '--lane', 'auto',
                '--overlay', str(o),
@@ -102,6 +108,8 @@ def main() -> int:
                '--lua', f'X4LAN_XFORM_EVERY={args.every:g}', '--lua', f'X4LAN_XFORM_COUNT={args.count}',
                '--lua', f'X4LAN_XFORM_TRACE={args.trace}',
                '--lua', f'X4LAN_XFORM_SHADOW={args.shadow}', '--lua', f'X4LAN_XFORM_SHADOW_FRAMES={args.shadow_frames}',
+               '--lua', f'X4LAN_XFORM_SWITCH={args.switch}', '--lua', f'X4LAN_XFORM_SWITCH_AB={args.switch_ab}',
+               '--lua', f'X4LAN_XFORM_SWITCH_FRAMES={args.switch_frames}',
                '--until', r'\[X4LAN\] XFORM done', '--timeout', str(args.timeout),
                '--expect', r'\[X4LAN\] XFORM armed', '--fail-on', r'FEATURE xform DISABLED',
                '--collect', str(collect)]

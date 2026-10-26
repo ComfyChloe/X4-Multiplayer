@@ -169,15 +169,25 @@ static void tls_enter(double time) {
     *(int *)(fake_tls + 0x314) = 1;  /* MoveWorker role */
     memcpy(fake_tls + 0x300, &time, sizeof(time));
     memcpy(fake_tls + 0x328, &time, sizeof(time));
-    tls_array[0] = fake_tls;
+    /* Engine code reads ThreadLocalStoragePointer[0]. Swap only that entry (this executable's own
+       slot) so other modules' implicit TLS, e.g. the Rust library's, keeps working. */
     unsigned char *teb = (unsigned char *)__readgsqword(0x30);
-    saved_tls_pointer = *(void ***)(teb + 0x58);
-    *(void ***)(teb + 0x58) = tls_array;
+    void **array = *(void ***)(teb + 0x58);
+    if (array) {
+        saved_tls_pointer = (void **)array[0];
+        array[0] = fake_tls;
+    } else {
+        tls_array[0] = fake_tls;
+        saved_tls_pointer = NULL;
+        *(void ***)(teb + 0x58) = tls_array;
+    }
 }
 
 static void tls_leave(void) {
     unsigned char *teb = (unsigned char *)__readgsqword(0x30);
-    *(void ***)(teb + 0x58) = saved_tls_pointer;
+    void **array = *(void ***)(teb + 0x58);
+    if (array == tls_array) *(void ***)(teb + 0x58) = NULL;
+    else if (array) array[0] = saved_tls_pointer;
 }
 
 /* ---- fault and unexpected-call reporting ---- */
@@ -188,10 +198,16 @@ static LONG CALLBACK on_fault(EXCEPTION_POINTERS *e) {
         unsigned char *ip = (unsigned char *)e->ContextRecord->Rip;
         if (ip >= image && ip < image + image_size)
             fprintf(stderr, "xform_oracle: engine fault 0x%lx at rva 0x%llx\n", code, (unsigned long long)(ip - image));
-        else
-            fprintf(stderr, "xform_oracle: fault 0x%lx at %p (access %llu at %p)\n", code, (void *)ip,
-                    (unsigned long long)e->ExceptionRecord->ExceptionInformation[0],
+        else {
+            HMODULE m = NULL;
+            char name[MAX_PATH] = "?";
+            if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                                   (LPCSTR)ip, &m))
+                GetModuleFileNameA(m, name, sizeof name);
+            fprintf(stderr, "xform_oracle: fault 0x%lx at %p = %s+0x%llx (access %llu at %p)\n", code, (void *)ip, name,
+                    (unsigned long long)(ip - (unsigned char *)m), (unsigned long long)e->ExceptionRecord->ExceptionInformation[0],
                     (void *)e->ExceptionRecord->ExceptionInformation[1]);
+        }
         fflush(stderr);
         ExitProcess(4);
     }
@@ -273,11 +289,15 @@ static uint32_t block_idx(const float *block_field, size_t offset) {
     return *(const uint32_t *)((const unsigned char *)block_field - offset - 16 + 4);
 }
 
+static volatile LONG multithreaded_is_class;
+static DWORD oracle_thread;
 static unsigned char cb_is_class(void *self, int cls) {
     uint32_t n = tag_of(self);
     unsigned c = (unsigned)cls;
     int r = c < 64 ? (int)((info[n].classes_lo >> c) & 1) : c < 128 ? (int)((info[n].classes_hi >> (c - 64)) & 1) : 0;
-    log_event(1, n, c, (uint32_t)r);
+    /* parallel loading calls IsClass from worker threads (pure in the engine); log only on ours */
+    if (GetCurrentThreadId() == oracle_thread) log_event(1, n, c, (uint32_t)r);
+    else InterlockedIncrement(&multithreaded_is_class);
     return (unsigned char)r;
 }
 static void check_time(double t) {
@@ -461,10 +481,18 @@ static int run_cache(const char *scn_path, const char *res_path, const char *cap
     if (probe_dir) {
         if (!MultiByteToWideChar(CP_UTF8, 0, probe_dir, -1, capture_dir, sizeof capture_dir / sizeof capture_dir[0])) return 2;
         /* XFORM_ORACLE_SHADOW=<x4mp_transform_ffi.dll>: shadow every frame instead of capturing */
-        WCHAR shadow_path[400] = L"";
+        /* XFORM_ORACLE_SWITCH=<threads>: our BuildCache runs (with the shadow check every frame) */
+        WCHAR shadow_path[400] = L"", switch_text[16] = L"";
         DWORD sl = GetEnvironmentVariableW(L"XFORM_ORACLE_SHADOW", shadow_path, 400);
+        DWORD wl = GetEnvironmentVariableW(L"XFORM_ORACLE_SWITCH", switch_text, 16);
         int shadowing = sl > 0 && sl < 400;
-        const char *why = shadowing ? arm(1e300, 0.0, 1, 0, 0, 1, shadow_path) : arm(time0, 0.0, frames, 2, 0, 0, NULL);
+        uint32_t switch_threads = wl > 0 && wl < 16 ? (uint32_t)_wtoi(switch_text) : 0;
+        /* XFORM_ORACLE_ALTERNATE=1: frames alternate between the original and ours (the in-game A/B mode) */
+        WCHAR alternate_text[4] = L"";
+        DWORD al = GetEnvironmentVariableW(L"XFORM_ORACLE_ALTERNATE", alternate_text, 4);
+        uint32_t switch_alternate = al == 1 && alternate_text[0] == L'1';
+        const char *why = shadowing ? arm(1e300, 0.0, 1, 0, 0, 1, shadow_path, switch_threads, switch_alternate)
+                                    : arm(time0, 0.0, frames, 2, 0, 0, NULL, 0, 0);
         if (why) { fprintf(stderr, "xform_oracle: probe refused: %s\n", why); return 3; }
     }
     event_cap = 1u << 22;
@@ -522,12 +550,24 @@ static int run_cache(const char *scn_path, const char *res_path, const char *cap
                        !trace_sites[1].patched && !trace_sites[2].patched &&
                        sha256(image + 0x3d4a80u, 1792, d) && digest_matches(d, code_checks[0].sha) &&
                        sha256(image + 0x9fe500u, 128, d) && digest_matches(d, code_checks[2].sha);
+        if (o && o->switch_threads) {
+            printf("SWITCH threads=%u frames=%llu fallbacks=%llu components=%llu tasks=%llu refusal=%s\n", o->switch_threads,
+                   (unsigned long long)o->switch_frames, (unsigned long long)o->switch_fallbacks,
+                   (unsigned long long)o->switch_components, (unsigned long long)o->switch_tasks, o->switch_refusal);
+            /* a refusal falls back to the original for that frame: allowed, reported, and the final
+               state is still compared with the original run */
+            uint32_t ours = frames;
+            if (o->switch_alternate)
+                for (uint32_t k = ours = 0; k < frames; ++k) ours += (k >> 1) & 1;
+            if (o->switch_frames + o->switch_fallbacks != ours) return 4;
+        }
         if (o && o->shadow_every) {
             int clean = o->shadow_frames == frames && !o->shadow_bad_frames && !o->shadow_errors && restored;
-            printf("SHADOW frames=%llu bad=%llu mismatches=%llu refs=%llu errors=%llu components=%llu first=%s\n",
+            printf("SHADOW frames=%llu bad=%llu mismatches=%llu refs=%llu errors=%llu components=%llu switched=%llu first=%s\n",
                    (unsigned long long)o->shadow_frames, (unsigned long long)o->shadow_bad_frames,
                    (unsigned long long)o->shadow_mismatches, (unsigned long long)o->shadow_refs,
-                   (unsigned long long)o->shadow_errors, (unsigned long long)o->shadow_components, o->shadow_first);
+                   (unsigned long long)o->shadow_errors, (unsigned long long)o->shadow_components,
+                   (unsigned long long)o->shadow_switch_frames, o->shadow_first);
             if (!clean) return 4;
             got = frames;
         }
@@ -670,6 +710,7 @@ int main(int argc, char **argv) {
         return 2;
     }
     AddVectoredExceptionHandler(1, on_fault);
+    oracle_thread = GetCurrentThreadId();
     int rc = map_image(argv[2]);
     if (rc) return rc;
     if (capture) rc = run_cache(argv[3], argv[4], argv[5], NULL);

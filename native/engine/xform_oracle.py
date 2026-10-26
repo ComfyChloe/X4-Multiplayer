@@ -50,6 +50,7 @@ def main() -> int:
     ap.add_argument('--scenarios', type=int, default=400)
     ap.add_argument('--seed', type=int, default=1)
     ap.add_argument('--captures', type=int, default=60, help='scenarios also run through the capture core and the embedded probe')
+    ap.add_argument('--switch', type=int, default=60, help='scenarios also run with the Rust build in place of the original')
     args = ap.parse_args()
     if os.name != 'nt':
         ap.error('the oracle executes Windows x64 code and requires Windows')
@@ -105,6 +106,31 @@ def main() -> int:
             return 1
         shadow_frames += int(line.split('frames=')[1].split()[0])
     print(f'shadow: {shadow_frames} frames checked by the Rust model inside the embedded probe, 0 with differences')
+    # Switch: the embedded probe runs the Rust build (x4mp_xform_build) instead of the original,
+    # shadow-checks every frame, and the final state must equal the original run's. A refused frame
+    # runs the original; the only expected refusal is the synthetic repeated kind. The A/B mode (as
+    # in game) alternates the original and the Rust build frame by frame.
+    for threads, alternate in ((1, False), (8, False), (4, True)):
+        switched = fallbacks = 0
+        env = dict(shadow_env, XFORM_ORACLE_SWITCH=str(threads), XFORM_ORACLE_ALTERNATE='1' if alternate else '0')
+        for p in sorted(cases.glob('*.scn'))[:args.switch]:
+            target = caps / f'{p.stem}-w{threads}{"ab" if alternate else ""}'
+            target.mkdir()
+            res = caps / f'{p.stem}-switch{threads}{"ab" if alternate else ""}.res'
+            r = subprocess.run([str(exe), 'probe', str(args.x4), str(p), str(res), str(target)], capture_output=True, text=True,
+                               env=env)
+            sw = next((ln for ln in r.stdout.splitlines() if ln.startswith('SWITCH ')), '')
+            sh = next((ln for ln in r.stdout.splitlines() if ln.startswith('SHADOW ')), '')
+            fb = int(sw.split('fallbacks=')[1].split()[0]) if sw else -1
+            if (r.returncode != 0 or ' bad=0 ' not in sh or fb < 0
+                    or (fb and not sw.endswith('refusal=specification list with a repeated kind'))
+                    or final_state(res.read_bytes()) != final_state(p.with_suffix('.res').read_bytes())):
+                print(f'oracle switch {threads}{" A/B" if alternate else ""} {p.name} failed ({r.returncode}): {sw} {sh or r.stderr.strip()}')
+                return 1
+            switched += int(sw.split(' frames=')[1].split()[0])
+            fallbacks += fb
+        print(f'switch threads={threads}{" A/B" if alternate else ""}: {switched} frames built by Rust (each shadow-checked, 0 differences), '
+              f'{fallbacks} refused (repeated kind), final state identical in {min(args.switch, len(list(cases.glob("*.scn"))))} scenarios')
     env = dict(os.environ, X4MP_XFORM_ORACLE_DIR=str(cases), X4MP_XFORM_CAPTURE_DIR=str(caps))
     r = subprocess.run(['cargo', 'test', '-q', '--release', '-p', 'x4mp-transform', '-p', 'x4mp-transform-ffi', '--test', 'oracle',
                         '--test', 'capture', '--lib', '--', '--nocapture'], cwd=rust, env=env, capture_output=True, text=True)

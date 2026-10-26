@@ -3,8 +3,11 @@
 Owner: transforms agent, branch `contrib/ferrite-rw-transforms` (base `contrib/ferrite-rewrite-base`).
 Target: X4 9.00, Steam build 23660954 (X4.exe SHA-256 `19750a65...6891`). All addresses are Windows
 RVAs (VA = 0x140000000 + RVA). Labels: `x4-re/labels/rw-transforms.tsv` (merged, 0 conflicts).
-Method stage reached: **1 understand** done, **2 capture/replay** done offline against the original
-machine code (oracle, below); native capture is the next stage. No native result is claimed here.
+Stages: **1 understand** done; **2 capture/replay** done offline against the original machine code
+(oracle, section 4) and NATIVELY (lane run xform-002, section 5); **3 shadow** native (1,500 frames;
+rerun with the corrected rule in xform-003); **4 switch** (Rust build in place of `BuildCache`)
+proven offline (section 6), native A/B run xform-003 queued. Native results are functional only
+(other X4 instances on the PC).
 
 ## 1. Where the time goes (profile attribution)
 
@@ -182,7 +185,26 @@ allocates), pose-block release (0x200000), empty-list frees and NaN payloads.
 
 Run: `python native/engine/xform_oracle.py --zig <zig.exe> --x4 <copy of X4.exe> --scenarios 400`.
 
-## 5. Native capture and replay (next stage): probe design
+## 5. Native capture, replay and shadow
+
+**Result (NATIVE, lane b3, run xform-002, 6,011 frames, 350 s):** all 6 captures (8.6-158.8 s,
+391,512 -> 48,086 components; capture 0: 140,062 visits, 34,828 open, 7,032 refreshes) replay
+identically with the model, the traced ones (0, 2, 4) with identical refresh (component, flags) and
+visit sequences. Refcounts differ by 1-2 on 3 components (other threads take and drop references
+meanwhile); reported separately. Rule learnt natively: the attachment getter (vfunc 622) runs the
+animation timeline code, whose fragment 0x116a295 ORs 0x80000 into BOTH caches' dirty words and
+the clear mask of an animated component, so bits 0x80000/0x100000/0x400000 are getter-owned in both
+caches wherever the getter ran (first shadow run: 66 of 1,500 frames flagged before this rule).
+
+**Census (examples/census_capture.rs):** the walk is held open by one-shot kind-7 entries whose
+owners are never reached: at 8.6 s 251,475 kind-7 entries, 72 owners reached, 251,047 owners
+missing from their live parent's cached child vector (never visited, so their countdown never
+runs); their +0x1e8 counts hold 29,740 of the 34,828 open gates. They decay with the world
+(31,114 at 158.8 s), and the walk with them (140k -> 17k visits). No list holds a kind twice.
+
+Instrument cost (lane only): capture 39-329 ms, shadow 91-1,467 ms per checked frame.
+
+### Probe design
 
 Module `native/engine/xform_probe.c` -> `x4lan_xform_64.dll`, started by a lane overlay
 (`ui/xform_probe.lua`), never packaged. Verification before arming: X4.exe file SHA-256, PE
@@ -203,16 +225,54 @@ capture frame only, recording each (component, flags, dirty before/after). Offli
 capture becomes a scenario whose walk starts at `BuildCache(galaxy)`; the model must reproduce the
 final state of every captured component (and the call sequence in trace mode). The capture also
 gives the per-frame census section 3 needs (visits, open gates, refreshes with work, by
-specification kind). Shadow stage: run the model per frame against the snapshot and count
-mismatches; switch stage: the parallel walk, if the shadow is clean.
+specification kind). Shadow (9547439): every Nth frame the same capture is taken around the
+original and checked in process by the model (`x4mp_transform_ffi.dll`, `x4mp_xform_check`).
 
-Planned hook sites (registered in `rewrite-coord/hooks.tsv` as planned, owner transforms):
-0x9fe549 (call BuildCache in UniverseFrameUpdate); capture-frame only: 0x3d4d0a, 0x3d4ea6, 0x3d4d18.
+Hook sites (rewrite-coord/hooks.tsv, owner transforms): 0x9fe549 (call BuildCache in
+UniverseFrameUpdate); trace frames only: 0x3d4d0a, 0x3d4ea6, 0x3d4d18.
 
-## 6. Open questions
+## 6. Switch: the Rust build in place of `BuildCache`
 
-- Which specifications open which zones per frame, and does the start-of-game walk cost come from
-  one-shots (spawns, zone changes)? The capture census answers this.
+`x4mp_transform_ffi.dll` `x4mp_xform_build` (ABI 2, `ffi/src/engine.rs`), called by the probe
+instead of the original at 0x9fe549:
+1. **Load** (read-only): a compact copy of what the walk can reach (the capture core's superset
+   rules), sector subtrees on `threads` worker threads, merged by component address;
+2. **Plan**: the bit-exact model runs `BuildCache(galaxy)` on the copy: refresh calls in walk
+   order and every component's final specification list;
+3. **Execute** on the MoveWorker in walk order through the engine's own functions:
+   `PropagateCacheFlags` per refresh, and at a list's last end-of-subtree point the timer values
+   are written and expired kinds removed with `RemoveCacheSpecification` 0x3d5440 (SHA-pinned;
+   it does the count and kind-7 flag updates as the end loop does).
+Refusals (nothing executed, the original runs): stack overrun, a list with a repeated kind
+(entries are addressed by kind), a list change other than timers and removals, a component
+outside the copy. Getter side effects on dirty bits (0x116a295) cannot change the plan: whether a
+component is refreshed depends on the specification stack and its own +0x1e0, not on dirty bits.
+The walk's shape depends on counts and cached child vectors, which no getter wrote in the traced
+native captures (identical refresh and visit sequences); the A/B shadow keeps checking it.
+
+**Offline (oracle, original machine code):** seeds 5, 6 and 7, 400 universes each: 2,453-2,475
+frames per seed built by Rust at 1 and at 8 threads, every one shadow-checked by the model with 0
+differences, 25-47 frames refused (synthetic repeated kinds; native captures have none), final
+state identical to the original run in 400 of 400 universes per seed and thread count; A/B mode
+(as in game: pairs of original and Rust frames, 4 threads; seed 7: 982 Rust frames) identical as
+well. The oracle needed one fix for this: its TLS swap now replaces only entry 0 of the thread's
+TLS array (the Rust DLL has its own implicit TLS slot).
+
+**Native (xform-003, queued):** A/B: plain frames alternate in pairs between the original and the
+Rust build (the cache index flips every frame, so both paths build both caches), both timed; every
+5th frame a shadow check, alternating the same way, so the model is checked against the original
+and the Rust build against the model in the same run; 6 captures of the original for replay.
+
+Expected cost: the copy reads the whole reachable superset (the capture walker took 329 ms at
+391k components, single-threaded), far more than the original walk touches (~3 cache lines on
+140k visits, 3.7-6 ms). This switch proves the engine-side execution; a faster build needs the
+walk itself on engine memory (exact visits, sector tasks in parallel, refreshes in walk order on
+the MoveWorker), see section 3 option 1.
+
+## 7. Open questions
+
+- Answered by the census: the start-of-game walk cost comes from one-shot kind-7 entries of
+  owners the walk cannot reach (section 5).
 - Thread safety of the attachment refresh (vfunc 622, animation evaluation 0x1165ee0) and of the
   movement-controller getters on worker threads.
 - `Component::GetLocalTransform` 0x3db640 (components without a controller) and the controller

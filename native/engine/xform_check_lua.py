@@ -52,6 +52,13 @@ def main():
           refused('invalid arguments',"{folder}",1,2,3,4,-1,"x.dll")
           refused('invalid arguments',"{folder}",1,2,3,4,1001,"x.dll")
           refused('unsupported executable (PE header)',"{folder}",1,2,3,4,1,"x.dll")
+          refused('invalid arguments',"{folder}",1,2,3,4,1,"x.dll",-1)
+          refused('invalid arguments',"{folder}",1,2,3,4,1,"x.dll",65)
+          refused('invalid arguments',"{folder}",1,2,3,4,1,"x.dll","4")
+          refused('unsupported executable (PE header)',"{folder}",1,2,3,4,1,"x.dll",4)
+          refused('invalid arguments',"{folder}",1,2,3,4,1,"x.dll",4,2)
+          refused('invalid arguments',"{folder}",1,2,3,4,1,"x.dll",4,"1")
+          refused('unsupported executable (PE header)',"{folder}",1,2,3,4,0,"x.dll",4,1)
           local co=coroutine.create(function() refused('main Lua thread required',"{folder}",1,2,3,4) end)
           local ok,err=coroutine.resume(co)
           assert(ok,err)
@@ -65,7 +72,8 @@ def main():
                 raise RuntimeError(lua.lua_tolstring(state, -1, None).decode('utf-8', errors='replace'))
         finally:
             lua.lua_close(state)
-    print('PASS: real Lua ABI, argument validation, missing directory, coroutine rejection, non-X4 process rejection')
+    print('PASS: real Lua ABI, argument validation (capture, shadow and switch forms), missing directory, coroutine '
+          'rejection, non-X4 process rejection')
 
 
 if __name__ == '__main__':

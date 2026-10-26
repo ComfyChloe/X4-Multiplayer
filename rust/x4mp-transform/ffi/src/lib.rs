@@ -7,13 +7,97 @@
 //! only reads the buffer it is given, on the calling thread.
 //!
 //! ```c
-//! uint32_t x4mp_xform_abi(void);   // 1
+//! uint32_t x4mp_xform_abi(void);   // 2
 //! int32_t  x4mp_xform_check(const uint8_t *capture, size_t len, XformCheck *out);
 //!          // 0 checked (out filled), -1 null argument, -2 unreadable capture, -3 internal panic
+//! int32_t  x4mp_xform_build(void *galaxy, uint32_t idx, double time, uint32_t threads,
+//!                           uint32_t drop_pose_blocks, const EngineApi *api, XformBuild *out);
+//!          // the switch: 0 executed; <0 nothing executed, run the original BuildCache
 //! ```
 
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use x4mp_transform::capture::{replay, Capture, Field};
+
+pub mod engine;
+
+/// Result of [`x4mp_xform_build`] (C layout).
+#[repr(C)]
+pub struct XformBuild {
+    /// Components copied.
+    pub components: u64,
+    /// Sector tasks used while loading.
+    pub tasks: u64,
+    /// Refresh calls executed.
+    pub refreshes: u64,
+    /// Lists whose timers were written.
+    pub timers: u64,
+    /// Entries removed.
+    pub removed: u64,
+    /// Load and plan time.
+    pub plan_us: f64,
+    /// Execution time.
+    pub exec_us: f64,
+    /// Reason when refused, NUL-terminated.
+    pub message: [u8; 200],
+}
+
+/// `BuildCache(galaxy, idx, time)` done by us (the switch; see [`engine`]): loads a copy of what
+/// the build reads (`threads` > 1: sectors on worker threads), plans with the model, executes the
+/// plan through `api`. Returns 0 when executed; -1 null argument, -2 refused, -3 internal panic,
+/// in which cases nothing was executed and the caller must run the original `BuildCache`.
+///
+/// # Safety
+/// Only from the probe's hook on the MoveWorker, in place of the original call, with `api`
+/// pointing at the engine's verified `PropagateCacheFlags` and `RemoveCacheSpecification`.
+#[no_mangle]
+pub unsafe extern "C" fn x4mp_xform_build(
+    galaxy: *mut u8,
+    idx: u32,
+    time: f64,
+    threads: u32,
+    drop_pose_blocks: u32,
+    api: *const engine::EngineApi,
+    out: *mut XformBuild,
+) -> i32 {
+    if galaxy.is_null() || api.is_null() || out.is_null() || idx > 1 {
+        return -1;
+    }
+    let out = unsafe { &mut *out };
+    let api = unsafe { *api };
+    let t0 = std::time::Instant::now();
+    let planned = catch_unwind(AssertUnwindSafe(|| unsafe {
+        engine::plan(galaxy as usize, idx as usize, time, threads.max(1) as usize, drop_pose_blocks != 0)
+    }));
+    let plan = match planned {
+        Ok(Ok(p)) => p,
+        Ok(Err(why)) => {
+            put_text(&mut out.message, why);
+            return -2;
+        }
+        Err(_) => {
+            put_text(&mut out.message, "internal panic while planning");
+            return -3;
+        }
+    };
+    let t1 = std::time::Instant::now();
+    let stats = unsafe { engine::execute(&plan, idx as usize, &api) };
+    out.components = stats.components as u64;
+    out.tasks = stats.tasks as u64;
+    out.refreshes = stats.refreshes as u64;
+    out.timers = stats.timers as u64;
+    out.removed = stats.removed as u64;
+    out.plan_us = (t1 - t0).as_secs_f64() * 1e6;
+    out.exec_us = t1.elapsed().as_secs_f64() * 1e6;
+    out.message[0] = 0;
+    0
+}
+
+fn put_text(buf: &mut [u8; 200], text: &str) {
+    let b = text.as_bytes();
+    let n = b.len().min(buf.len() - 1);
+    buf[..n].copy_from_slice(&b[..n]);
+    buf[n] = 0;
+}
 
 /// Result of one shadow check (C layout).
 #[repr(C)]
@@ -50,10 +134,10 @@ pub struct XformCheck {
     pub message: [u8; 200],
 }
 
-/// ABI version.
+/// ABI version (2: adds `x4mp_xform_build`).
 #[no_mangle]
 pub extern "C" fn x4mp_xform_abi() -> u32 {
-    1
+    2
 }
 
 fn field_code(f: Field) -> u32 {
