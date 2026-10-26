@@ -429,7 +429,8 @@ impl Supervisor {
             &prepared.bubble,
             LeaseSource::Os,
         )?;
-        let relay = Relay::bind("127.0.0.1", prepared.port, session).map_err(|e| format!("cannot bind relay: {e}"))?;
+        let bind = relay_bind_address(std::env::var("X4LAN_RELAY_BIND").ok().as_deref())?;
+        let relay = Relay::bind(&bind, prepared.port, session).map_err(|e| format!("cannot bind relay: {e}"))?;
         let control_generation = fs::read_to_string(config.control())
             .unwrap_or_default()
             .split('|')
@@ -673,8 +674,29 @@ impl Drop for Supervisor {
     }
 }
 
+/// Relay listen address: loopback unless the operator opts in, e.g. `0.0.0.0` on a server
+/// whose firewall admits the session port. Only literal IP addresses are accepted.
+fn relay_bind_address(value: Option<&str>) -> Result<String, String> {
+    match value.map(str::trim) {
+        None | Some("") => Ok("127.0.0.1".into()),
+        Some(address) => address
+            .parse::<std::net::IpAddr>()
+            .map(|ip| ip.to_string())
+            .map_err(|_| format!("X4LAN_RELAY_BIND is not an IP address: {address}")),
+    }
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn relay_bind_defaults_to_loopback_and_accepts_only_ip_addresses() {
+        assert_eq!(super::relay_bind_address(None).unwrap(), "127.0.0.1");
+        assert_eq!(super::relay_bind_address(Some(" ")).unwrap(), "127.0.0.1");
+        assert_eq!(super::relay_bind_address(Some("0.0.0.0")).unwrap(), "0.0.0.0");
+        assert_eq!(super::relay_bind_address(Some("::")).unwrap(), "::");
+        assert!(super::relay_bind_address(Some("example.com")).is_err());
+    }
+
     use super::*;
 
     #[test]

@@ -82,3 +82,10 @@ Rust/Python/LuaJIT tests and synthetic p2/p3 peers do not establish native two-h
 play. A WSL smoke test with one native authority and synthetic guests is a separate,
 limited result. Two actual clients, multi-sector combat/attention behavior, long
 sessions, and persistent-world lifecycle require their own acceptance tests.
+
+## Relay listen address
+
+The relay listens on `127.0.0.1` by default. On a server whose firewall admits the
+session UDP port (default 45841), set `X4LAN_RELAY_BIND=0.0.0.0` (or a specific
+local IP) in the supervisor's environment so guests on other machines can reach it.
+Only literal IP addresses are accepted; anything else refuses to start.
