@@ -204,6 +204,15 @@ mod tests {
         assert_ne!(a, entity_seed(2, UniverseId(5), 0));
     }
 
+    /// Published in rewrite-coord/interfaces.md so placeholders in other crates can match.
+    #[test]
+    fn entity_seed_vectors() {
+        assert_eq!(entity_seed(0, UniverseId(0), 0), 0x1d96_6f94_f6ed_267a);
+        assert_eq!(entity_seed(0x1081_d6b6, UniverseId(0x0200_0001), 0), 0x70b7_3a84_370b_21a0);
+        assert_eq!(entity_seed(0x1081_d6b6, UniverseId(0x0200_0001), 0x4149_5343), 0xf884_40b3_b827_5ffc);
+        assert_eq!(role_seed(0x1081_d6b6, b"econ"), 0xefd3_8bd3_fd0c_2311);
+    }
+
     #[test]
     fn steps_between_recovers_counts() {
         let mut r = EngineLcg(99);
