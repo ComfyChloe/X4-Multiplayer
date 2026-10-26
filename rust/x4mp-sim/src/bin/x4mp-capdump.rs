@@ -6,6 +6,7 @@
 //! x4mp-capdump diff  <expected> <actual> [--tol COLUMN=ULPS]...  frame-by-frame field compare
 //! x4mp-capdump check <capture> <x4-debug-log> [--layout SHA256]  MIRRORCHECK validation
 //! x4mp-capdump kinematics <capture>                  Euler-step analysis of navigation poses
+//! x4mp-capdump tree <capture> [--frame N]            per-class subtree census (walk-pruning data)
 //! ```
 //! Exit status: 0 ok / equal / exact, 1 differences or failed check, 2 usage or read error.
 
@@ -346,6 +347,120 @@ fn check(cap: &str, log: &str, layout: Option<&str>) -> Result<ExitCode, String>
     Ok(if rep.exact() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
 
+/// Per-class census of one frame's component tree, for deciding which subtrees the mirror walk
+/// may skip. Meaningful on a capture recorded with flags 1 (every component): for each class,
+/// how many instances, how many descendants they have, and how many of those descendants are
+/// classes the default capture records (Object or Space). A class whose instances never have a
+/// recorded descendant is a pruning candidate for this world state (not a proof for others).
+fn tree(path: &str, frame: Option<u64>) -> Result<ExitCode, String> {
+    use std::collections::{BTreeMap, HashMap};
+    use x4mp_sim::comp::ClassFlags;
+    let (r, frames) = open(path)?;
+    let f = match frame {
+        Some(n) => frames.iter().find(|f| f.frame == n).ok_or_else(|| format!("frame {n} not in {path}"))?,
+        None => frames.last().ok_or_else(|| format!("{path}: no frames"))?,
+    };
+    struct Node {
+        class: u8,
+        parent: u64,
+        recorded: bool,
+    }
+    let mut nodes: HashMap<u64, Node> = HashMap::new();
+    for sec in &f.sectors {
+        let (Some(uid), Some(class), Some(parent)) = (
+            sec.column(col::UID).map(|c| c.u64s()),
+            sec.column(col::CLASS).map(|c| c.u8s()),
+            sec.column(col::PARENT).map(|c| c.u64s()),
+        ) else {
+            continue;
+        };
+        let cf = sec.column(col::CLASS_FLAGS).map(|c| c.u16s());
+        for i in 0..uid.len() {
+            let recorded = cf.as_ref().is_some_and(|v| v[i] & (ClassFlags::OBJECT | ClassFlags::SPACE) != 0);
+            nodes.insert(uid[i], Node { class: class[i], parent: parent[i], recorded });
+        }
+    }
+    #[derive(Default)]
+    struct Row {
+        rows: u64,
+        recorded_rows: u64,
+        with_recorded_desc: u64,
+        desc: u64,
+        recorded_desc: u64,
+    }
+    let mut by_class: BTreeMap<u8, Row> = BTreeMap::new();
+    let mut edges: BTreeMap<(u8, u8), u64> = BTreeMap::new();
+    // descendants and recorded descendants per node: walk every node's ancestor chain once
+    let mut desc: HashMap<u64, (u64, u64)> = HashMap::new();
+    for (uid, n) in &nodes {
+        let e = by_class.entry(n.class).or_default();
+        e.rows += 1;
+        e.recorded_rows += u64::from(n.recorded);
+        if let Some(p) = nodes.get(&n.parent) {
+            *edges.entry((p.class, n.class)).or_default() += 1;
+        }
+        let mut at = n.parent;
+        let mut guard = 0;
+        while let Some(a) = nodes.get(&at) {
+            let d = desc.entry(at).or_default();
+            d.0 += 1;
+            d.1 += u64::from(n.recorded);
+            at = a.parent;
+            guard += 1;
+            if guard > 256 {
+                return Err(format!("parent cycle at uid {uid:#x}"));
+            }
+        }
+    }
+    for (uid, n) in &nodes {
+        let (d, rd) = desc.get(uid).copied().unwrap_or_default();
+        let e = by_class.get_mut(&n.class).expect("counted");
+        e.desc += d;
+        e.recorded_desc += rd;
+        e.with_recorded_desc += u64::from(rd > 0);
+    }
+    let recorded = nodes.values().filter(|n| n.recorded).count();
+    out!(
+        "TREE frame={} rows={} recorded={} classes={} record_all={}",
+        f.frame,
+        nodes.len(),
+        recorded,
+        by_class.len(),
+        r.header().flags & 1 != 0
+    );
+    out!(
+        "{:<22} {:>8} {:>9} {:>12} {:>11} {:>13}  prune",
+        "class",
+        "rows",
+        "recorded",
+        "w/rec.desc",
+        "desc",
+        "rec.desc"
+    );
+    let mut order: Vec<(&u8, &Row)> = by_class.iter().collect();
+    order.sort_by_key(|(c, r)| (std::cmp::Reverse(r.rows + r.desc), **c));
+    for (c, r) in order {
+        let prune = r.recorded_rows == 0 && r.recorded_desc == 0;
+        out!(
+            "{:<22} {:>8} {:>9} {:>12} {:>11} {:>13}  {}",
+            class_name(*c),
+            r.rows,
+            r.recorded_rows,
+            r.with_recorded_desc,
+            r.desc,
+            r.recorded_desc,
+            if prune { "candidate" } else { "" }
+        );
+    }
+    let mut top: Vec<(&(u8, u8), &u64)> = edges.iter().collect();
+    top.sort_by_key(|(k, n)| (std::cmp::Reverse(**n), **k));
+    out!("edges (parent class -> child class), top 40:");
+    for ((p, c), n) in top.into_iter().take(40) {
+        out!("  {:<20} -> {:<20} {n}", class_name(*p), class_name(*c));
+    }
+    Ok(ExitCode::SUCCESS)
+}
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let flag = |name: &str| args.iter().position(|a| a == name).and_then(|i| args.get(i + 1)).cloned();
@@ -370,6 +485,7 @@ fn main() -> ExitCode {
         }
         Some("check") if args.len() >= 3 => check(&args[1], &args[2], flag("--layout").as_deref()),
         Some("kinematics") if args.len() >= 2 => kinematics(&args[1]),
+        Some("tree") if args.len() >= 2 => tree(&args[1], flag("--frame").and_then(|v| v.parse().ok())),
         _ => return usage(),
     };
     match result {
