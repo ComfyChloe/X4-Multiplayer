@@ -5,12 +5,14 @@
 --   MENU     the start menu is showing
 --   NEWGAME  NewGame(<gamestart>) was called from the start menu (start='menu', or the
 --            -module command line option did not start the world within menu_fallback_s)
---   SKIP     the start menu is still showing after menu_deadline_s; no further attempt
+--   SKIP     the start menu is still showing after menu_deadline_s of real time; no further attempt
 --   INGAME   a player exists outside the start menu (logged once per UI load)
 --   READY    game time advanced ready_gametime_s seconds since INGAME (simulation runs)
 --   ALIVE    every alive_s seconds in game: real time, game time, pause state
---   QUIT     quit_after_s seconds of process real time passed; QuitGame() (safety net when
---            the runner died; the runner normally closes X4 itself)
+--   QUIT     quit_after_s seconds of real time passed; QuitGame() (safety net when the runner
+--            died; the runner normally closes X4 itself)
+-- Real time is GetCurRealTime(); X4 restarts it near 0 when a new world starts, so both limits
+-- count from the latest world start.
 -- Settings: X4LANE_AUTOSTART in ui/settings.lua (written per run by dev/x4lane.py).
 local cfg = X4LANE_AUTOSTART
 if type(cfg) ~= 'table' or cfg.enabled ~= true then return end

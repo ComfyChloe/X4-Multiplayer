@@ -4,7 +4,8 @@ Owner: lane agent, branch `contrib/ferrite-rw-lane` (rewrite program, see `REWRI
 Own files: `dev/x4lane.py`, `dev/lane/`, this report, `C:\Users\developer\Documents\X4Mods\lanes\`,
 profiles 45850/45851. Live usage notes for the other agents: `rewrite-coord\native-lane.md`.
 
-Status: see "Validation" at the end. Evidence stays outside git (`.local/evidence-075-withheld`).
+Status: READY, validated natively on 26 October 2026 (see "Validation"). Evidence stays outside
+git (`.local/evidence-075-withheld`).
 
 ## What a lane is
 
@@ -57,11 +58,11 @@ writes `ui/settings.lua` for each run. It logs `[X4LANE] AUTOSTART` markers into
 | `INGAME gamestart=... expected=... match=true` | a player exists outside the start menu |
 | `READY` | game time advanced 5 s since INGAME (the simulation runs) |
 | `ALIVE realtime= gametime= paused=` | every `--alive` seconds (default 10, 0 = off) |
-| `QUIT reason=quit_after` | safety net: `QuitGame()` after timeout + settle + 270 s of process real time |
+| `QUIT reason=quit_after` | safety net: `QuitGame()` after timeout + settle + 270 s of real time since the world started |
 | `sound=off` | the instance was muted (`--sound` keeps sound) |
 
 `NewGame()` is only ever called while `IsStartmenu()` is true, at most once per UI state and only
-in the first 300 s of process real time, so a loading world is never started twice.
+in the first 300 s of real time, so a loading world is never started twice.
 
 ## run: what happens
 
@@ -132,6 +133,42 @@ any other X4 runs; `result.json` then reports `timing_trustworthy: true` only if
 seen during the whole run. Unfocused windows run at full rate because of `-nocputhrottle`
 (`x4-re/coord/reports/simtick.md`); minimizing or dragging an X4 window stops its simulation.
 
-## Validation
+## Validation (26 October 2026, Windows, X4 9.00 build 23660954)
 
-(filled in by the native validation runs)
+Offline: `tests/test_x4lane.py`, 35 tests under real LuaJIT (overlay copy/append/ui.xml order and
+tokens, offline config guard, path safety with real junctions and hardlinks, lock acquire/stale
+takeover/foreign locks, log watcher with partial and recreated logs, profile config/content files,
+autostart Lua state machine, make-overlay probe/attnload). Pass, no skips; `test_fixed_tick_probe` still passes.
+
+Native (evidence `X4-Multiplayer-rw-lane/.local/evidence-099-withheld`, result.json + logs per run). Every run
+had at least one other X4 running (a save-trim session X4 on 45843, or the other lane), so all
+numbers below are functional, not timing-grade. Overlay: fixed-tick probe built from this branch.
+
+| run | what | result |
+|---|---|---|
+| v1-b1-alone | b1, until 20 WALKPROF | pass; x4lock released the save-trim X4's lock (exit 0, placeholder installed); launch->INGAME 51 s, READY 61 s, until 101 s; WM_CLOSE exit 0 in 5.6 s |
+| v1-b2-alone | b2, same | pass; launch->INGAME 50 s, READY 60 s; WM_CLOSE 5.3 s |
+| v1-both-1/-2 | two runners `--lane auto` started together | both pass (b1, b2); the second launch released the first lane's lock; INGAME 67/68 s, 30 WALKPROF each; WM_CLOSE 5.6/5.0 s |
+| v1-b1-attnload | probe + `make-overlay attnload` (steps 0,8; 30/90 s) | pass: `HOOKS_READY ... profile=45850` (lane guard change works), 139 sectors ranked, step 0 then 8 proxy sectors, `ATTNLOAD done`; WALKPROF `sectorHook=chained` in all 140 lines; 8-sector ideal speedup 3.2-4.0 (cf. 3.96 in the lead's run) |
+| v1-b2-already-running | `--test-skip-release` while b1's X4 held the lock | box `Game is already running!` detected and closed, X4 exit 50, run failed cleanly (exit 7) in 2 s, lane restored |
+| v1-b2-crash-victim, v1-b2-after-crash | runner hard-killed after READY | the kill-on-close job ended its X4 at once; `status` showed the lock STALE (owner pid gone); the next run took it over, warned `lane was left in phase running`, restored, passed |
+| --timing | timing run with `--wait` | refusal path only: it waited while other X4 instances ran; not yet run holding quiet.lock (PC busy) |
+
+Peak commit per lane X4: 8.8-9.0 GB (fresh custom_creative world). No save files were written,
+no dialog other than the provoked one appeared, the foreground window stayed with the user's
+application while lane X4 instances started (SW_SHOWNOACTIVATE). The autostart's `GetCurRealTime()`
+restarts near 0 when the new world starts, so its 300 s menu deadline and the quit_after safety net
+count from the latest world start.
+
+## Open points
+
+- `--timing` with quiet.lock held: validate when the PC is quiet.
+- Pair runs (one joint multiplayer session over loopback, questions.md Q6): not in v1; lanes are
+  offline by design. A `pair` mode on the same code is possible if the lead assigns it.
+- Profile-path gates other than the attention hooks (seed/dedicated/universe adapters) still accept
+  only 45841/45842; owners decide whether lane profiles join them.
+- `native/engine/build.py --fixedtick --test`: the DLL and fixedtick tests pass; `test_simprof`'s
+  overhead assertion (suspended < 3.0 %) failed once at 3.25 % while this PC was busy (load-sensitive).
+- `dev/lane/x4lock` is the project's x4lock tool, vendored unchanged from
+  `X4-Multiplayer-fixed-tick/.local/evidence-243-withheld` (not in git there); it is built into
+  `X4Mods/lanes/tools/x4lock-target` by `setup` or the first run.
