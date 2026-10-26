@@ -295,6 +295,15 @@ Both C aidriver suites and 24 real LuaJIT probe tests pass; the fixed-tick DLL b
 errors. The new integrated walk adapter still requires validation against the walk owner's Q20 header
 and a later native test; these diagnostics do not change the unresolved RNG policy.
 
+03:20 update: the actual ai-driver adapter and walk commit `a60b058` buffer/header pass a joint
+synthetic test (`.local/evidence-065-withheld`, snapshot `.local/evidence-001-withheld`). Both inverted
+post/cancel cases, original-order three-source posting, the same-sector immediate-event hazard,
+and binding gates for off/census/replay/AI-only replay pass with zero dropped/degraded events.
+The readout returns zero for consumed operations, which are skipped (not counted as unknown).
+The snapshot compiles with warnings as errors except unused functions from the deliberately
+unattached native walk lifecycle. This tests the real buffer/adapter together on a fake engine;
+it neither installs native detours nor validates an integrated game build.
+
 
 - **Q4/Q7 (walk)**: answered — one buffer, `walkpar_api()` scopes + ordered replay; bound under
   `#ifdef X4LAN_WALKPAR_H`. **Q9 → walk** (open): an AI-only replay mode (WP_REPLAY also defers the walk) and

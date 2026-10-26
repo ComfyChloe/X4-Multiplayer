@@ -226,7 +226,7 @@ static int fb_op(size_t i, uint64_t *src, int *task, int *type) {
     return B[i].kind;
 }
 static int fb_event(size_t i, int *imm, void **event) {
-    if (i >= nb_ops || B[i].kind != AD_OP_POST) return 0;
+    if (i >= nb_ops || B[i].kind != AD_OP_POST || B[i].dead) return 0;
     *imm = B[i].imm; *event = &B[i]; return 1;
 }
 static const ad_event_buffer FB = {fb_scope_begin, fb_scope_end, fb_replay_tasks, fb_count, fb_op, NULL, NULL, fb_event};

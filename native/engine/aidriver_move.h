@@ -531,7 +531,7 @@ typedef struct {
     int (*buffer_op)(size_t i, uint64_t *src_id, int *task, int *type);   /* AD_OP_*; 0 = none */
     void (*set_order)(uint64_t key);    /* optional: key of the ops emitted from now on (0 = walk) */
     void (*replay_ordered)(void);       /* optional: replay all buffered ops by (key, emission) */
-    int (*buffer_event)(size_t i, int *immediate, void **event); /* optional Q9 readout, 1 = valid */
+    int (*buffer_event)(size_t i, int *immediate, void **event); /* optional Q9: kind, 0 = dead/absent */
 } ad_event_buffer;
 static const ad_event_buffer *ad_evbuf;
 enum { AD_OP_POST = 1, AD_OP_CANCEL = 2 };   /* walkpar WP_OP_POST / WP_OP_CANCEL */
@@ -635,9 +635,9 @@ static void ad_check_deferred_events(size_t ops) {
     for (size_t i = 0; i < ops; ++i) {
         uint64_t src; int task, type, immediate; void *event;
         if (ad_evbuf->buffer_op(i, &src, &task, &type) != AD_OP_POST) continue;
-        if (!ad_evbuf->buffer_event || !ad_evbuf->buffer_event(i, &immediate, &event)) {
+        if (!ad_evbuf->buffer_event) {
             unchecked = 1;
-        } else if (immediate) {
+        } else if (ad_evbuf->buffer_event(i, &immediate, &event) == AD_OP_POST && immediate) {
             ++ad.win.cmp_deferred_immediate;
             ad_rd.pass_dirty = 1;
         }
