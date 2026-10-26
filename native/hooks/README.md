@@ -10,8 +10,9 @@ an observer in MoveWorker VBI slot 12. Slot 7 remains available to the independe
 simtick work. The module never patches executable bytes on disk or in memory.
 Stage 0's only engine write was a verified-empty callback-slot pointer. Stage 1
 additionally reseeds the current MoveWorker TLS RNG stream from the session seed
-and the stable `MoveWorker` role at observer frame 0. Other streams, timestep,
-physics stepping, objects and orders are unchanged.
+and the stable `MoveWorker` role at observer frame 0; the RNG-streams step (below)
+also seeds the worker and job-thread streams once each. Timestep, physics stepping,
+objects and orders are unchanged.
 
 The shared-attention slice atomically replaces the verified ComputeAttention
 pointer in two Zone and seven Ship primary vtables. The wrappers call the original
@@ -66,6 +67,21 @@ registry, so removal or generation reuse withdraws remote attention. Registratio
 changes recompute the old and new proxy/Zone through SetAttention(1), including
 already-present proxies in low-attention Zones. The Lua adapter publishes the
 existing NAV2 proxy's current ID and does not change motion or relay messages.
+
+Role-keyed RNG streams (`src/rng.rs`, `reports/determinism-rng-streams.md`): at
+registration the module verifies 29 further pinned sites, seeds MoveWorker with the
+unchanged Stage 1 value and binds PathingManager, MassTraffic, RegionManager,
+Gravidar and every JobThread through their engine singletons and the thread object at
+TLS+0x320. Each of those streams is written once, to `H(session seed, role)`, at the
+first observer frame where its thread provably cannot draw (after the pathing join,
+under the worker's own handshake lock with `ready` set, or under the job-manager lock
+with an empty queue and no running job). Unbound roles are never written. Because the
+LCG step is a bijection, draw counts since seeding are exact. `module.rng_streams()`
+returns the per-role counters, MoveWorker phase split and per-frame MoveWorker draws;
+`module.rng_phases()` optionally places two read-only phase markers in verified-empty
+VBI slots 2 and 5 (`engine_rng_phases=false` disables them). The Lua adapter logs
+`RNGSTREAMS`/`RNGPOOL` with every sample and `dev/compare_divergence.py` reports the
+first role, phase and exact tick whose draw counts differ.
 
 `reports/determinism-stage-0.md` and `determinism-stage-1.md` record the native
 read-only launches and the limited seeded comparison. The initial RNG matches, but

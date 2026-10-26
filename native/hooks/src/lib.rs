@@ -6,6 +6,8 @@ use std::ptr::{addr_of, addr_of_mut};
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 
+mod rng;
+
 const REGISTRYINDEX: c_int = -10000;
 const META: &[u8] = b"x4lan.hooks.owner.v1\0";
 const VBI_RVA: usize = 0x6cf1570;
@@ -746,6 +748,7 @@ unsafe fn table_owned() -> bool {
 }
 
 unsafe fn disarm() {
+    rng::disarm();
     uninstall_attention();
     if !CURRENT.is_null() {
         (*CURRENT).armed = false;
@@ -845,6 +848,7 @@ extern "C" fn move_observer(_: *mut Handler) {
             return;
         }
         TICK += 1;
+        rng::tick(TICK);
         if TICK % CADENCE != 0 {
             return;
         }
@@ -888,6 +892,7 @@ extern "C" fn move_observer(_: *mut Handler) {
         let result = (functions.pcall.unwrap())(lua, 5, 0, 0);
         (functions.settop.unwrap())(lua, top);
         INSIDE_CALLBACK = false;
+        rng::after_callback();
         if CURRENT == calling {
             if result != 0 {
                 disarm();
@@ -1050,10 +1055,16 @@ unsafe extern "C-unwind" fn start(lua: *mut LuaState) -> c_int {
         return failure(lua, "shared-attention vtable registration refused");
     }
     let session_seed = ptr::read((IMAGE + SESSION_SEED_RVA) as *const u64);
-    ptr::write(
-        tls.add(0x318) as *mut u64,
-        role_seed(session_seed, b"MoveWorker"),
-    );
+    if let Err(reason) = rng::arm(session_seed) {
+        disarm();
+        CURRENT = ptr::null_mut();
+        STATE = ptr::null_mut();
+        CALLBACK_REF = -2;
+        TICK = 0;
+        CADENCE = 1;
+        (functions.unref.unwrap())(lua, REGISTRYINDEX, reference);
+        return failure(lua, reason);
+    }
     (*owner).armed = true;
     1
 }
@@ -1267,6 +1278,7 @@ pub unsafe extern "C-unwind" fn luaopen_x4lan_hooks(lua: *mut LuaState) -> c_int
     method(lua, b"walltime\0", Some(walltime));
     method(lua, b"hash\0", Some(hash));
     method(lua, b"set_remote_attention\0", Some(set_remote_attention));
+    rng::register_lua(lua);
     1
 }
 

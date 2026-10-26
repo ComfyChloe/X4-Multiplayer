@@ -3,11 +3,17 @@
 Usage:
   python dev/compare_divergence.py HOST.log GUEST.log [--csv ticks.csv]
          [--summary-csv summary.csv] [--report report.txt] [options]
-  python dev/compare_divergence.py HOST.log GUEST.log --statehash [--report report.txt]
+  python dev/compare_divergence.py HOST.log GUEST.log --statehash [--derive-rng-steps] [--report report.txt]
+  python dev/compare_divergence.py HOST.log GUEST.log --rng [--report report.txt]
 
 DIV1 logs come from extension/x4_lan_lab/ui/divergence_probe.lua and align by
 SCHEDULED saved-game time. With --statehash, observer frames from engine_hooks.lua
-are aligned instead and the first differing bucket is reported.
+are aligned instead and the first differing bucket is reported. When both logs also
+contain RNGSTREAMS lines (native/hooks/src/rng.rs), the first role, MoveWorker VBI
+phase and exact tick whose RNG draw counts differ are appended; --rng reports only
+that. --derive-rng-steps recovers MoveWorker draw counts from the STATEHASH rng field
+of Stage 1+ logs, which seed MoveWorker from (session seed, "MoveWorker") at
+registration; the LCG step is a bijection, so counts are exact or reported unknown.
 
 Ship matching, per aligned sample and only over sectors completely sampled in both logs:
  1. id:   equal native component ID AND equal macro AND (equal idcode when both have one).
@@ -540,6 +546,299 @@ def statehash_report(result):
     return '\n'.join(lines) + '\n'
 
 
+RNG_MARKER = '[X4LAN] RNGSTREAMS '
+RNG_POOL_MARKER = '[X4LAN] RNGPOOL '
+RNG_ROLES = ('mw', 'path', 'mt', 'rm', 'grav')
+RNG_ROLE_NAMES = {'mw': 'MoveWorker', 'path': 'PathingManager', 'mt': 'MassTraffic', 'rm': 'RegionManager',
+                  'grav': 'Gravidar'}
+RNG_PHASES = ('a', 'b', 'c', 'o', 'x')
+RNG_PHASE_NAMES = {'a': 'slots 13-16 + pre-pass + slots 0-1 (Ticker)',
+                   'b': 'slots 3-4 (GameClient::Move/universe update, input)',
+                   'c': 'slots 6-11 (UI, animation, sound, render prep, JobEngine)',
+                   'o': 'observer callback (this module)', 'x': 'unattributed (phase markers unavailable)'}
+RNG_TOKEN = re.compile(r'(\d{1,20}):([0-9a-f]{16}):(\d{1,20}):([upqb]l?):(\d{1,20})\Z')
+LCG_MULTIPLIER = 0x5851F42D4C957F2D
+LCG_INCREMENT = 0x14057B7EF767814F
+MASK64 = (1 << 64) - 1
+
+
+def lcg_step(state):
+    state = (state * LCG_MULTIPLIER + LCG_INCREMENT) & MASK64
+    return ((state >> 30) | (state << 34)) & MASK64
+
+
+def lcg_steps_between(start, target, cap):
+    """Exact X4 TLS-RNG draws turning start into target (the step is a bijection), else None."""
+    state, multiplier, increment, mask = start, LCG_MULTIPLIER, LCG_INCREMENT, MASK64
+    for count in range(cap + 1):
+        if state == target:
+            return count
+        state = (state * multiplier + increment) & mask
+        state = ((state >> 30) | (state << 34)) & mask
+    return None
+
+
+def role_seed(session_seed, role):
+    """FNV-1a over the little-endian session seed and role, as native/hooks role_seed."""
+    value = 0xCBF29CE484222325
+    for byte in session_seed.to_bytes(8, 'little') + role.encode('ascii'):
+        value = ((value ^ byte) * 0x100000001B3) & MASK64
+    return value
+
+
+def _rng_fields(line, marker):
+    if len(line) > MAX_LINE:
+        raise ProbeLogError('RNGSTREAMS line exceeds limit')
+    fields = {}
+    for token in line[line.find(marker) + len(marker):].strip().split():
+        key, separator, value = token.partition('=')
+        if not separator or not re.fullmatch(r'[a-z0-9_]+', key) or key in fields:
+            raise ProbeLogError('invalid RNGSTREAMS field')
+        fields[key] = value
+    return fields
+
+
+def _rng_roles(fields, roles):
+    for key, value in fields.items():
+        if key in RNG_ROLES or re.fullmatch(r'j\d\d', key):
+            match = RNG_TOKEN.fullmatch(value)
+            if not match:
+                raise ProbeLogError(f'invalid RNGSTREAMS role {key}')
+            steps, state, passes, flag, seeded = match.groups()
+            roles[key] = dict(steps=int(steps), state=state, passes=int(passes), flag=flag, seed_frame=int(seeded))
+
+
+def parse_rng_pool_line(line):
+    """RNGPOOL carries the JobThread tokens split from the RNGSTREAMS line of the same frame."""
+    if RNG_POOL_MARKER not in line:
+        return None
+    fields = _rng_fields(line, RNG_POOL_MARKER)
+    if not {'run', 'session', 'frame', 'pool', 'pool_steps'} <= fields.keys() or not all(
+            fields[key].isdigit() for key in ('frame', 'pool', 'pool_steps')):
+        raise ProbeLogError('incomplete RNGPOOL record')
+    roles = {}
+    _rng_roles({k: v for k, v in fields.items() if re.fullmatch(r'j\d\d', k)}, roles)
+    return dict(run=fields['run'], session=fields['session'], frame=int(fields['frame']), pool=int(fields['pool']),
+                pool_steps=int(fields['pool_steps']), roles=roles)
+
+
+def parse_rng_line(line):
+    at = line.find(RNG_MARKER)
+    if at < 0:
+        return None
+    fields = _rng_fields(line, RNG_MARKER)
+    if not {'run', 'session', 'observer'} <= fields.keys() or not fields['observer'].isdigit():
+        raise ProbeLogError('incomplete RNGSTREAMS record')
+    record = dict(run=fields['run'], session=fields['session'], observer=int(fields['observer']))
+    if fields.get('unavailable') == '1':
+        record.update(unavailable=True, reason=unquote(fields.get('reason', '')))
+        return record
+    if fields.get('v') != '1' or not fields.get('frame', '').isdigit() or not HASH16.fullmatch(fields.get('seed', '')):
+        raise ProbeLogError('unsupported RNGSTREAMS version or header')
+    record.update(unavailable=False, frame=int(fields['frame']), seed=fields['seed'], roles={}, phases={})
+    _rng_roles(fields, record['roles'])
+    if 'mw' not in record['roles']:
+        raise ProbeLogError('RNGSTREAMS without MoveWorker')
+    for phase in RNG_PHASES:
+        value = fields.get('mw_' + phase)
+        if value is None or not value.isdigit():
+            raise ProbeLogError('invalid RNGSTREAMS phase counter')
+        record['phases'][phase] = int(value)
+    if not fields.get('phases', '').isdigit() or any(
+            key in fields and not fields[key].isdigit() for key in ('pool', 'pool_steps')):
+        raise ProbeLogError('invalid RNGSTREAMS phases or pool')
+    record.update(pool=int(fields.get('pool', 0)), pool_steps=int(fields.get('pool_steps', 0)),
+                  phase_markers=fields['phases'] == '1')
+    record['ticks'] = []
+    if 'mw_ticks' in fields:
+        if not fields.get('mw_tick0', '').isdigit() or not re.fullmatch(r'\d{1,20}(,\d{1,20}){0,63}', fields['mw_ticks']):
+            raise ProbeLogError('invalid RNGSTREAMS tick history')
+        first = int(fields['mw_tick0'])
+        record['ticks'] = [(first + index, int(value)) for index, value in enumerate(fields['mw_ticks'].split(','))]
+    record['ticks_dropped'] = fields.get('mw_ticks_dropped') == '1'
+    return record
+
+
+def read_rngstreams(path):
+    records, identity, previous, unavailable, pools = [], None, 0, 0, {}
+    with open(path, encoding='utf-8', errors='replace') as stream:
+        for line in stream:
+            if RNG_POOL_MARKER in line:
+                pool = parse_rng_pool_line(line)
+                if pool['frame'] in pools:
+                    raise ProbeLogError('duplicate RNGPOOL frame')
+                pools[pool['frame']] = pool
+                continue
+            if RNG_MARKER not in line:
+                continue
+            record = parse_rng_line(line)
+            if record['unavailable']:
+                unavailable += 1
+                continue
+            current = (record['run'], record['session'], record['seed'])
+            if identity is None:
+                identity = current
+            elif current != identity:
+                raise ProbeLogError('mixed run, session or seed in RNGSTREAMS log')
+            if record['frame'] <= previous:
+                raise ProbeLogError('duplicate or regressing RNGSTREAMS frame')
+            previous = record['frame']
+            records.append(record)
+    for record in records:
+        pool = pools.get(record['frame'])
+        if pool:
+            if (pool['run'], pool['session']) != (record['run'], record['session']):
+                raise ProbeLogError('RNGPOOL run or session differs from RNGSTREAMS')
+            record.update(pool=pool['pool'], pool_steps=pool['pool_steps'])
+            record['roles'].update(pool['roles'])
+    return dict(records=records, unavailable=unavailable)
+
+
+def _counted(entry):
+    return entry is not None and entry['flag'][0] in 'qb' and 'l' not in entry['flag']
+
+
+def compare_rngstreams(host_log, guest_log):
+    host, guest = host_log['records'], guest_log['records']
+    if not host or not guest:
+        raise ProbeLogError('a log contains no available RNGSTREAMS records')
+    if (host[0]['run'], host[0]['session'], host[0]['seed']) != (guest[0]['run'], guest[0]['session'], guest[0]['seed']):
+        raise ProbeLogError('RNGSTREAMS run, session or seed differs')
+    host_by, guest_by = {r['frame']: r for r in host}, {r['frame']: r for r in guest}
+    frames = sorted(host_by.keys() & guest_by.keys())
+    roles = sorted({key for r in host + guest for key in r['roles']}, key=lambda k: (k not in RNG_ROLES, k))
+    stats = {role: dict(first=None, differences=0, compared=0, busy=0, lost=False, state_mismatch=None)
+             for role in roles}
+    first, previous, ticks, phase_first = None, None, None, None
+    host_ticks = dict(t for r in host for t in r['ticks'])
+    guest_ticks = dict(t for r in guest for t in r['ticks'])
+    for frame in frames:
+        h, g = host_by[frame], guest_by[frame]
+        for role in roles:
+            a, b = h['roles'].get(role), g['roles'].get(role)
+            if a and b and ('l' in a['flag'] or 'l' in b['flag']):
+                stats[role]['lost'] = True
+            if not (_counted(a) and _counted(b)):
+                continue
+            stats[role]['compared'] += 1
+            stats[role]['busy'] += a['flag'][0] == 'b' or b['flag'][0] == 'b'
+            if a['steps'] != b['steps']:
+                stats[role]['differences'] += 1
+                if stats[role]['first'] is None:
+                    prior = None
+                    if previous is not None:
+                        pa, pb = host_by[previous]['roles'].get(role), guest_by[previous]['roles'].get(role)
+                        if _counted(pa) and _counted(pb):
+                            prior = (a['steps'] - pa['steps'], b['steps'] - pb['steps'])
+                    stats[role]['first'] = dict(frame=frame, host=a['steps'], guest=b['steps'], window=prior,
+                                                since=previous)
+                    if first is None:
+                        first = dict(frame=frame, role=role, since=previous)
+            elif a['state'] != b['state'] and stats[role]['state_mismatch'] is None:
+                stats[role]['state_mismatch'] = frame
+        if phase_first is None and any(h['phases'][p] != g['phases'][p] for p in RNG_PHASES):
+            phase_first = dict(frame=frame, phases=[p for p in RNG_PHASES if h['phases'][p] != g['phases'][p]],
+                               host={p: h['phases'][p] for p in RNG_PHASES},
+                               guest={p: g['phases'][p] for p in RNG_PHASES})
+        previous = frame
+    mw = stats.get('mw', {}).get('first')
+    if mw:
+        low = (mw['since'] or 0) + 1
+        for tick in range(low, mw['frame'] + 1):
+            if tick in host_ticks and tick in guest_ticks and host_ticks[tick] != guest_ticks[tick]:
+                ticks = dict(frame=tick, host=host_ticks[tick], guest=guest_ticks[tick])
+                break
+    seed_frames = {role: (host[-1]['roles'].get(role, {}).get('seed_frame'), guest[-1]['roles'].get(role, {}).get('seed_frame'))
+                   for role in roles}
+    return dict(frames=len(host_by.keys() | guest_by.keys()), compared=len(frames), first=first, stats=stats,
+                phase_first=phase_first, tick=ticks, pool=(host[-1]['pool'], guest[-1]['pool']),
+                pool_steps=(host[-1]['pool_steps'], guest[-1]['pool_steps']), seed_frames=seed_frames,
+                unavailable=(host_log['unavailable'], guest_log['unavailable']),
+                markers=(all(r['phase_markers'] for r in host), all(r['phase_markers'] for r in guest)))
+
+
+def rng_report(result):
+    lines = ['RNG STREAMS (exact TLS-RNG draw counts since role seeding; offline comparison)',
+             f"{result['compared']} shared RNGSTREAMS frames of {result['frames']}"]
+    first = result['first']
+    if first:
+        name = RNG_ROLE_NAMES.get(first['role'], 'JobThread/' + first['role'][1:])
+        lines.append('FIRST DRAW DIVERGENCE frame=%d role=%s (%s) after frame %s' %
+                     (first['frame'], first['role'], name, first['since'] if first['since'] is not None else 'start'))
+    else:
+        lines.append('No draw-count divergence in shared counted frames')
+    phase = result['phase_first']
+    if phase:
+        for key in phase['phases']:
+            lines.append('PHASE mw_%s first=%d host=%d guest=%d  %s' %
+                         (key, phase['frame'], phase['host'][key], phase['guest'][key], RNG_PHASE_NAMES[key]))
+    if result['tick']:
+        lines.append('EXACT MoveWorker tick=%d host_draws=%d guest_draws=%d' %
+                     (result['tick']['frame'], result['tick']['host'], result['tick']['guest']))
+    for role, stats in result['stats'].items():
+        initial = stats['first']
+        detail = ''
+        if initial:
+            detail = ' host=%d guest=%d' % (initial['host'], initial['guest'])
+            if initial['window']:
+                detail += ' window_draws=%d/%d' % initial['window']
+        lines.append('ROLE %s first=%s differences=%d/%d busy=%d%s%s%s' %
+                     (role, initial['frame'] if initial else 'none', stats['differences'], stats['compared'], stats['busy'],
+                      detail, ' LOST' if stats['lost'] else '',
+                      (' STATE_MISMATCH_AT_EQUAL_COUNT frame=%d' % stats['state_mismatch']) if stats['state_mismatch'] else ''))
+    if result['pool'][0] != result['pool'][1]:
+        lines.append('WARNING JobThread pool sizes differ host=%d guest=%d; per-worker roles are not comparable' % result['pool'])
+    lines.append('POOL total draws host=%d guest=%d' % result['pool_steps'])
+    different = {r: f for r, f in result['seed_frames'].items() if f[0] != f[1]}
+    if different:
+        lines.append('WARNING roles seeded at different observer frames: ' +
+                     ', '.join('%s=%s/%s' % (r, *f) for r, f in different.items()))
+    if not all(result['markers']):
+        lines.append('WARNING phase markers missing in at least one log; MoveWorker draws are unattributed (mw_x)')
+    if any(result['unavailable']):
+        lines.append('WARNING unavailable RNGSTREAMS records host=%d guest=%d' % result['unavailable'])
+    return '\n'.join(lines) + '\n'
+
+
+def derive_moveworker_steps(samples, cap=5_000_000):
+    """MoveWorker draws since the Stage 1 role seed, recovered from STATEHASH rng/seed fields."""
+    rows, state, total = [], None, 0
+    for sample in samples:
+        if sample['complete'] != '1' or 'seed' not in sample:
+            continue
+        target = int(sample['rng'], 16)
+        if state is None:
+            state = role_seed(int(sample['seed'], 16), 'MoveWorker')
+        steps = lcg_steps_between(state, target, cap)
+        if steps is None:
+            rows.append((sample['frame'], None))
+            state, total = target, None
+            continue
+        state = target
+        total = None if total is None else total + steps
+        rows.append((sample['frame'], total))
+    return rows
+
+
+def derived_report(host_rows, guest_rows):
+    host, guest = dict(host_rows), dict(guest_rows)
+    lines = ['DERIVED MoveWorker draws from STATEHASH rng (requires the Stage 1+ registration seed)']
+    first = None
+    for frame in sorted(host.keys() & guest.keys()):
+        if host[frame] is None or guest[frame] is None:
+            continue
+        if host[frame] != guest[frame] and first is None:
+            first = frame
+            lines.append('FIRST DERIVED DIVERGENCE frame=%d host=%d guest=%d' % (frame, host[frame], guest[frame]))
+    if first is None:
+        lines.append('No derived MoveWorker draw divergence in shared frames')
+    unknown = sum(v is None for v in list(host.values()) + list(guest.values()))
+    if unknown:
+        lines.append('WARNING %d samples not reachable from the role seed within the walk cap' % unknown)
+    lines.append('frame host guest: ' + ' '.join('%d:%s/%s' % (f, host[f], guest[f]) for f in sorted(host.keys() & guest.keys())[:40]))
+    return '\n'.join(lines) + '\n'
+
+
 TICK_COLUMNS = ('gt', 'elapsed_s', 'bucket', 'sector', 'category', 'player', 'host_ships', 'guest_ships', 'matched_id',
                 'matched_code', 'matched_pose', 'host_only', 'guest_only', 'id_conflicts', 'skew_s', 'pos_median', 'pos_p90',
                 'pos_max', 'pose_match_median', 'skew_floor_median', 'hull_mismatch', 'hull_max', 'shield_mismatch',
@@ -578,15 +877,33 @@ def main(argv=None):
     parser.add_argument('--include-player-owned', action='store_true', help='also compare player-owned ships')
     parser.add_argument('--run', type=int, default=-1, help='run index when a log restarted its game clock (default last)')
     parser.add_argument('--statehash', action='store_true', help='compare STATEHASH frames/buckets instead of DIV1 samples')
+    parser.add_argument('--rng', action='store_true', help='compare RNGSTREAMS draw counters only')
+    parser.add_argument('--derive-rng-steps', action='store_true',
+                        help='with --statehash: recover MoveWorker draw counts from the rng/seed fields')
+    parser.add_argument('--walk-cap', type=int, default=5_000_000, help='max draws walked between samples (default 5e6)')
     args = parser.parse_args(argv)
     if not (0 < args.pose_tolerance <= 100000) or not (0 <= args.hull_tolerance <= 100):
         parser.error('tolerance outside bounds')
-    if args.statehash and (args.csv or args.summary_csv):
-        parser.error('DIV1 CSV outputs are unavailable with --statehash')
+    if not 1 <= args.walk_cap <= 10**9:
+        parser.error('walk cap outside bounds')
+    if (args.statehash or args.rng) and (args.csv or args.summary_csv):
+        parser.error('DIV1 CSV outputs are unavailable with --statehash/--rng')
+    if args.derive_rng_steps and not args.statehash:
+        parser.error('--derive-rng-steps requires --statehash')
     try:
-        if args.statehash:
-            result = compare_statehash(read_statehash(args.host), read_statehash(args.guest))
+        if args.rng:
+            result = compare_rngstreams(read_rngstreams(args.host), read_rngstreams(args.guest))
+            text = rng_report(result)
+        elif args.statehash:
+            host_samples, guest_samples = read_statehash(args.host), read_statehash(args.guest)
+            result = compare_statehash(host_samples, guest_samples)
             text = statehash_report(result)
+            host_rng, guest_rng = read_rngstreams(args.host), read_rngstreams(args.guest)
+            if host_rng['records'] and guest_rng['records']:
+                text += '\n' + rng_report(compare_rngstreams(host_rng, guest_rng))
+            if args.derive_rng_steps:
+                text += '\n' + derived_report(derive_moveworker_steps(host_samples, args.walk_cap),
+                                              derive_moveworker_steps(guest_samples, args.walk_cap))
         else:
             result = compare(read_log(args.host), read_log(args.guest), args.pose_tolerance, args.hull_tolerance,
                              args.include_player_owned, args.run)

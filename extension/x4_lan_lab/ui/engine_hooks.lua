@@ -1,4 +1,4 @@
--- Default-enabled STATEHASH, MoveWorker seed and shared ship/zone attention; no network changes.
+-- Default-enabled STATEHASH, role-keyed RNG stream seeding/counters and shared ship/zone attention; no network changes.
 local cfg=X4LAN_CONFIG
 if not cfg or cfg.engine_hooks~=true then return end
 local ffi=require('ffi');local C=ffi.C
@@ -157,12 +157,28 @@ local function hashCost(frame,complete,stats,started)
  out('HASHCOST',string.format('frame=%d fresh=%d complete=%d scanned=%d ships=%d capture_ms=%.3f hash_ms=%.3f total_ms=%.3f max_ms=%.3f cumulative_ms=%.3f captures=%d completed=%d failed=%d budget_ms=%.3f cadence=%d',
   frame,complete and 1 or 0,complete and 1 or 0,stats.scanned,stats.ships,stats.captureMs,stats.hashMs,totalMs,cost.maxMs,cost.totalMs,cost.captures,cost.completed,cost.failed,settings.budgetMs,settings.cadence))
 end
+-- Role-keyed RNG stream draw counters (native/hooks/src/rng.rs); diagnostic, logged with every sample.
+local function rngStreams(frame)
+ if not native.rng_streams then return end
+ local ok,text,reason=pcall(native.rng_streams)
+ if ok and type(text)=='string' and #text<=3800 and text:match('^v=1 frame=%d+ ')then
+  -- JobThread tokens go on their own line so neither line approaches debug-log length limits.
+  local main,pool=text:match('^(.-) (pool=.*)$')
+  local prefix=string.format('run=%s session=%s observer=%d ',esc(settings.run),esc(settings.session),frame)
+  out('RNGSTREAMS',prefix..(main or text))
+  if pool then out('RNGPOOL',prefix..'frame='..text:match('^v=1 frame=(%d+)')..' '..pool)end
+ else
+  out('RNGSTREAMS',string.format('run=%s session=%s observer=%d unavailable=1 reason=%s',esc(settings.run),esc(settings.session),frame,
+   esc(ok and (reason or 'invalid summary') or text)))
+ end
+end
 local function safeSample(frame,gameTime,dt,rng,sessionSeed)
  if M.failed then return end
  local started=native.walltime()
  local ok,result,reason,stats=pcall(sample,frame,gameTime,dt,rng,sessionSeed)
  if not ok then disabled(result);return end
  if not result then incomplete(frame,gameTime,dt,reason,sessionSeed,stats)end
+ rngStreams(frame)
  hashCost(frame,result and true or false,stats,started)
 end
 local function syncAttention()
@@ -183,6 +199,11 @@ function M.start()
  M.owner=owner;M.attentionProxy='0'
  if not syncAttention()then return end
  out('HOOKS_READY',string.format('slot=12 cadence=%d run=%s session=%s maxships=%d budget_ms=%.3f',settings.cadence,esc(settings.run),esc(settings.session),settings.maxShips,settings.budgetMs))
+ if native.rng_phases and cfg.engine_rng_phases~=false then
+  local ok,installed,reason=pcall(native.rng_phases)
+  if ok and installed then out('RNGPHASES','installed=1 slots=2,5')
+  else out('RNGPHASES','installed=0 reason='..esc(ok and reason or installed))end
+ end
 end
 RegisterEvent('X4LAN.Loaded',M.start)
 local nextProbe=0
