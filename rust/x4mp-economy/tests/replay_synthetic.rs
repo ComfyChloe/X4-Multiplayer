@@ -2,7 +2,7 @@
 //! must classify every transition as exact; a corrupted record must be reported with its
 //! first difference. This checks the format and the replay pipeline, not the engine.
 
-use x4mp_economy::capture::{replay, write_method, write_station, Allocation, Capture, StationRecord};
+use x4mp_economy::capture::{replay, write_method, write_station, Allocation, Capture, StationRecord, StorageRecord};
 use x4mp_economy::ids::WareIx;
 use x4mp_economy::production::{
     update_production, ContainerTimes, Factors, Item, Method, Module, ProductionRng, State, StationEnv, WareAmount,
@@ -26,6 +26,10 @@ enum Storage {
     /// fits); refined metals get the limit, energy cells a large one; the capture writes the
     /// allocation record.
     Allocation(i32),
+    /// Large allocations, but one container storage module of this volume holds energy cells
+    /// and refined metals (physical check 0x356010); ore sits in an unlimited solid module.
+    /// The capture writes the allocation, the storage modules and the ware tags.
+    Physical(i64),
 }
 
 struct Env {
@@ -34,6 +38,22 @@ struct Env {
 }
 
 const ECELLS_ALLOCATION: i32 = 1_000_000;
+
+/// Ware volumes of the synthetic capture (W records).
+fn ware_volume(w: WareIx) -> i64 {
+    match w {
+        ECELLS => 1,
+        ORE => 10,
+        _ => 14,
+    }
+}
+
+impl Env {
+    /// Volume used in the container module (energy cells and refined metals).
+    fn container_volume(&self) -> i64 {
+        self.cargo.iter().filter(|e| e.0 != ORE).map(|&(w, a)| a as i64 * ware_volume(w)).sum()
+    }
+}
 
 fn alloc_of(metal_cap: i32, w: WareIx) -> i32 {
     match w {
@@ -64,6 +84,17 @@ impl StationEnv for Env {
             Storage::Unlimited => true,
             Storage::Threshold(cap) => !p.iter().any(|&(w, a)| w == METAL && a > 0 && self.amount(METAL) >= cap),
             Storage::Allocation(cap) => p.iter().all(|&(w, a)| alloc_of(cap, w) - self.amount(w) >= a),
+            Storage::Physical(volume) => {
+                let mut used = self.container_volume();
+                p.iter().all(|&(w, a)| {
+                    if w == ORE {
+                        return true;
+                    }
+                    let fits = (volume - used).max(0) / ware_volume(w) >= a as i64;
+                    used += a as i64 * ware_volume(w);
+                    fits
+                })
+            }
         }
     }
     fn store_fitting(&mut self, p: &[WareAmount], t: f64) -> Vec<WareAmount> {
@@ -75,6 +106,18 @@ impl StationEnv for Env {
                     (take > 0).then_some((w, take))
                 })
                 .collect(),
+            Storage::Physical(volume) => {
+                let mut used = self.container_volume();
+                p.iter()
+                    .filter_map(|&(w, a)| {
+                        let take = if w == ORE { a } else { a.min(((volume - used).max(0) / ware_volume(w)) as i32) };
+                        if w != ORE {
+                            used += take as i64 * ware_volume(w);
+                        }
+                        (take > 0).then_some((w, take))
+                    })
+                    .collect()
+            }
             _ => p.to_vec(),
         };
         self.store(&fits, t)
@@ -154,7 +197,8 @@ fn synthetic_capture() -> String {
 /// `stride`: the station is read every `stride` frames of 7.25 s.
 fn capture_with(storage: Storage, stride: u64) -> String {
     let ms = methods();
-    let mut out = String::from("X4ECON 1 build=23660954\nW energycells 1\nW ore 10\nW refinedmetals 14\n");
+    // Ware tags: 7 = container, 8 = solid (as WareClass+0x100 holds them).
+    let mut out = String::from("X4ECON 1 build=23660954\nW energycells 1 1 7\nW ore 10 1 8\nW refinedmetals 14 1 7\n");
     for (i, m) in ms.iter().enumerate() {
         write_method(&mut out, i, m);
     }
@@ -183,7 +227,28 @@ fn capture_with(storage: Storage, stride: u64) -> String {
                 Storage::Allocation(cap) => {
                     Some(Allocation { valid: true, amounts: vec![(ECELLS, ECELLS_ALLOCATION), (METAL, cap)] })
                 }
+                Storage::Physical(_) => Some(Allocation {
+                    valid: true,
+                    amounts: vec![(ECELLS, ECELLS_ALLOCATION), (ORE, 1_000_000), (METAL, ECELLS_ALLOCATION)],
+                }),
                 _ => None,
+            },
+            storage: match storage {
+                Storage::Physical(volume) => vec![
+                    StorageRecord {
+                        addr: 0x9000,
+                        capacity: volume as i32,
+                        tags: vec![7],
+                        contents: env.cargo.iter().copied().filter(|e| e.0 != ORE).collect(),
+                    },
+                    StorageRecord {
+                        addr: 0x9100,
+                        capacity: i32::MAX,
+                        tags: vec![8],
+                        contents: env.cargo.iter().copied().filter(|e| e.0 == ORE).collect(),
+                    },
+                ],
+                _ => Vec::new(),
             },
         };
         write_station(&mut out, &rec, &index);
@@ -299,5 +364,24 @@ fn allocation_record_makes_storage_decisions_exact() {
         assert_eq!(rep.mismatched, 0, "stride {stride}: {rep:?}");
         assert_eq!(rep.exact_with_storage_decision, 0, "stride {stride}: {rep:?}");
         assert!(rep.exact + rep.exact_with_recorded_draws > 0, "stride {stride}: {rep:?}");
+    }
+}
+
+#[test]
+fn physical_storage_decisions_are_exact() {
+    // One container module of 1600 volume for energy cells (1 each) and refined metals (14
+    // each): it fills up and both modules block on physical space; with the storage and tag
+    // records the replay must decide that itself.
+    for stride in [1, 3] {
+        let text = capture_with(Storage::Physical(1600), stride);
+        assert!(text.lines().any(|l| l.starts_with("S 0x123 0x9000 1600 1 7 ")), "storage record written");
+        let rep = replay(&Capture::parse(&text).expect("parse"));
+        assert_eq!(rep.mismatched, 0, "stride {stride}: {rep:?}");
+        assert_eq!(rep.exact_with_storage_decision, 0, "stride {stride}: {rep:?}");
+        // Read every 21.75 s, a blocked module retries several times per catch-up: those
+        // transitions are undecidable from two snapshots, the rest must be exact.
+        if stride == 1 {
+            assert!(rep.exact + rep.exact_with_recorded_draws > 0, "stride {stride}: {rep:?}");
+        }
     }
 }

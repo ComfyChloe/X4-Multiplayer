@@ -21,7 +21,10 @@
  *     from bucket 8, storage modules from bucket 10, iteration continues into later buckets
  *     with a class filter), +0xa18 last UpdateProduction time, +0xa28/+0xa30 f64, +0xa4c u8.
  *   Module: +0x68 u32 component state (0 = operational).
- *   StorageModule: +0x360 ware amount list (station cargo = sum over operational modules).
+ *   StorageModule: +0x360 ware amount list (station cargo = sum over operational modules),
+ *     +0x60 macro -> +0x18 storage defaults: +0x9c0 capacity (i32 volume), +0x9c8 cargo tags.
+ *   WareClass: +0xc0 volume, +0x100 tags (sorted u32 vector; a storage module accepts a ware when
+ *     their tag sets intersect, 0x806e10).
  *   ProductionModule: +0x388 start, +0x390 next, +0x398 paused since, +0x3a0 paused total (f64),
  *     +0x3a8 item, +0x3ac cycle (i32), +0x3b0..+0x3d8 factors (5 x f64), +0x3d8/+0x3e0 item
  *     vector (0x60 each), +0x3f0 state, +0x3f8 pending ware amount list.
@@ -223,6 +226,18 @@ static int econ_list(const unsigned char *list, econ_wa *out, int max) {
     return (int)n;
 }
 
+/* Sorted u32 tag vector (inline capacity 4: data at +0 when +0x10 == 4, else a pointer at +0;
+   count at +0x18), as WareClass+0x100 and the storage defaults +0x9c8 hold them (the engine's
+   any-intersection test 0xcb100 walks two such vectors). Returns the count, -1 on failure. */
+static int econ_tags(const unsigned char *vec, uint32_t *out, int max) {
+    int ok = 1;
+    uint64_t cap = econ_q(vec + 0x10, &ok), n = econ_q(vec + 0x18, &ok);
+    if (!ok || n > (uint64_t)max) return -1;
+    const unsigned char *data = cap == 4 ? vec : (const unsigned char *)(uintptr_t)econ_q(vec, &ok);
+    if (!ok || (n && (!data || !econ_read(data, out, (size_t)n * 4)))) return -1;
+    return (int)n;
+}
+
 /* Ware id string (MSVC std::string at ware+0x10) into buf; returns 0 on failure. */
 static int econ_ware_id(uintptr_t ware, char *buf, size_t cap) {
     int ok = 1;
@@ -302,8 +317,11 @@ static int econ_ware_index(uintptr_t ware) {
     memcpy(saved, econ.line, keep);
     int ok = 1;
     int32_t volume = (int32_t)econ_d((const unsigned char *)ware + 0xc0, &ok);
+    uint32_t tags[16];
+    int nt = econ_tags((const unsigned char *)ware + 0x100, tags, 16);
     econ.len = 0;
-    econ_put("W %s %d", id, ok ? volume : 0);
+    econ_put("W %s %d %d", id, ok ? volume : 0, nt < 0 ? 0 : nt);
+    for (int i = 0; i < nt; ++i) econ_put(" %u", tags[i]);
     econ_end_line();
     memcpy(econ.line, saved, keep);
     econ.len = keep;
@@ -437,12 +455,32 @@ static int econ_station(econ_watch_entry *w, int force) {
             }
         }
     }
+    /* Storage modules: capacity (storage defaults +0x9c0, defaults = *(*(module+0x60)+0x18), as
+       0x85cb80 returns them for storage macros), cargo tags (+0x9c8) and own contents (+0x360). */
+    static int32_t sto_cap[ECON_MAX_MODULES];
+    static uint32_t sto_tags[ECON_MAX_MODULES][8];
+    static int sto_ntags[ECON_MAX_MODULES], sto_n[ECON_MAX_MODULES];
+    static econ_wa sto_list[ECON_MAX_MODULES][ECON_MAX_LIST];
+    for (int m = 0; m < ns; ++m) {
+        uint64_t macro = econ_q(storage[m] + 0x60, &ok);
+        uint64_t defaults = ok && macro ? econ_q((const unsigned char *)(uintptr_t)macro + 0x18, &ok) : 0;
+        if (!ok || !defaults) return 0;
+        sto_cap[m] = (int32_t)econ_d((const unsigned char *)(uintptr_t)defaults + 0x9c0, &ok);
+        sto_ntags[m] = econ_tags((const unsigned char *)(uintptr_t)defaults + 0x9c8, sto_tags[m], 8);
+        sto_n[m] = econ_list(storage[m] + 0x360, sto_list[m], ECON_MAX_LIST);
+        if (!ok || sto_ntags[m] < 0 || sto_n[m] < 0) return 0;
+    }
     /* Change detection over everything the record contains. */
     uint64_t h = 0xcbf29ce484222325ull;
     h = econ_hash_bytes(h, &last, 8);
     h = econ_hash_bytes(h, &a28, 8);
     h = econ_hash_bytes(h, &a30, 8);
     h = econ_hash_wa(h, cargo, nc);
+    for (int m = 0; m < ns; ++m) {
+        h = econ_hash_bytes(h, &sto_cap[m], 4);
+        h = econ_hash_bytes(h, sto_tags[m], (size_t)sto_ntags[m] * 4);
+        h = econ_hash_wa(h, sto_list[m], sto_n[m]);
+    }
     unsigned char raw[ECON_MAX_MODULES][0x70];
     for (int m = 0; m < np; ++m) {
         if (!econ_read(prod[m] + 0x388, raw[m], 0x70)) return 0; /* +0x388..+0x3f8 */
@@ -519,6 +557,14 @@ static int econ_station(econ_watch_entry *w, int force) {
     econ_put("A 0x%llx %d", (unsigned long long)w->uid, alloc_valid ? 1 : 0);
     if (!econ_put_list(alloc, na)) { econ.len = 0; return 0; }
     econ_end_line();
+    for (int m = 0; m < ns; ++m) {
+        econ.len = 0;
+        econ_put("S 0x%llx 0x%llx %d %d", (unsigned long long)w->uid, (unsigned long long)(uintptr_t)storage[m],
+                 sto_cap[m], sto_ntags[m]);
+        for (int k = 0; k < sto_ntags[m]; ++k) econ_put(" %u", sto_tags[m][k]);
+        if (!econ_put_list(sto_list[m], sto_n[m])) { econ.len = 0; return 0; }
+        econ_end_line();
+    }
     for (int i = 0; i < no; ++i) {
         const unsigned char *t = offers[i];
         uint64_t q28, q30, seller, buyer;

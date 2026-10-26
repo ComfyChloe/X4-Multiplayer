@@ -40,7 +40,7 @@ static void put_inline_list(unsigned char *list, int n, const uintptr_t *wares, 
 }
 
 static uintptr_t make_ware(const char *id) {
-    unsigned char *w = alloc(0x80);
+    unsigned char *w = alloc(0x140);
     size_t len = strlen(id);
     if (len < 16) {
         memcpy(w + 0x10, id, len + 1);
@@ -65,6 +65,15 @@ static void set_vtable(unsigned char *object, uint32_t rva) {
 }
 
 static void put_f64(unsigned char *p, double v) { memcpy(p, &v, 8); }
+
+/* Inline (capacity marker 4) sorted u32 tag vector with one tag. */
+static void put_tags(unsigned char *vec, uint32_t tag) {
+    memset(vec, 0, 0x20);
+    memcpy(vec, &tag, 4);
+    uint64_t cap = 4, n = 1;
+    memcpy(vec + 0x10, &cap, 8);
+    memcpy(vec + 0x18, &n, 8);
+}
 static void put_i32(unsigned char *p, int32_t v) { memcpy(p, &v, 4); }
 static void put_ptr(unsigned char *p, const void *v) { uintptr_t x = (uintptr_t)v; memcpy(p, &x, 8); }
 
@@ -113,6 +122,9 @@ int main(void) {
     put_i32((unsigned char *)ecells + 0xc0, 6); /* WareClass+0xc0 volume */
     put_i32((unsigned char *)ore + 0xc0, 10);
     put_i32((unsigned char *)metal + 0xc0, 14);
+    put_tags((unsigned char *)ecells + 0x100, 7); /* WareClass+0x100 tags: 7 container, 8 solid */
+    put_tags((unsigned char *)ore + 0x100, 8);
+    put_tags((unsigned char *)metal + 0x100, 7);
 
     /* Method: refinedmetals from energycells + ore. */
     unsigned char *method = alloc(0x200);
@@ -160,6 +172,12 @@ int main(void) {
     put_inline_list(sto1 + 0x360, 2, rw, c1);
     uint32_t c2[2] = {5, 5};
     put_inline_list(sto2 + 0x360, 2, rw, c2);
+    /* Storage defaults of the operational module: capacity 50000, cargo tag 7 (container). */
+    unsigned char *smacro = alloc(0x40), *sdefaults = alloc(0xa80);
+    put_ptr(sto1 + 0x60, smacro);
+    put_ptr(smacro + 0x18, sdefaults);
+    put_i32(sdefaults + 0x9c0, 50000);
+    put_tags(sdefaults + 0x9c8, 7);
 
     /* Station with a child container: bucket 8 = production, bucket 10 = storage. */
     unsigned char *st = alloc(0xa60);
@@ -264,7 +282,11 @@ int main(void) {
     assert(n >= 6);
     assert(!strncmp(lines[0], "X4ECON 1 build=23660954", 23));
     assert(count_prefix(lines, n, "W ") == 3);
-    assert(count_prefix(lines, n, "W energycells 6") == 1 && count_prefix(lines, n, "W refinedmetals 14") == 1);
+    assert(count_prefix(lines, n, "W energycells 6 1 7") == 1 && count_prefix(lines, n, "W refinedmetals 14 1 7") == 1);
+    assert(count_prefix(lines, n, "W ore 10 1 8") == 1);
+    assert(count_prefix(lines, n, "S 0x") == 1);
+    for (int i = 0; i < n; ++i)
+        if (!strncmp(lines[i], "S ", 2)) assert(strstr(lines[i], " 50000 1 7 2 0 810 1 2160"));
     assert(count_prefix(lines, n, "A 0x") == 1);
     for (int i = 0; i < n; ++i)
         if (!strncmp(lines[i], "A ", 2)) assert(strstr(lines[i], " 1 1 2 500"));
@@ -309,9 +331,9 @@ int main(void) {
     put_inline_list(sto1 + 0x360, 2, rw, c3);
     econcap_frame(160.0, 102, 0x1);
     n = drain(lines, 256);
-    assert(n == 7 && !strncmp(lines[0], "F 102 ", 6) && !strncmp(lines[1], "C ", 2) && !strncmp(lines[2], "A ", 2) &&
-           !strncmp(lines[3], "O ", 2) && !strncmp(lines[4], "V ", 2) && !strncmp(lines[5], "V ", 2) &&
-           !strncmp(lines[6], "M ", 2));
+    assert(n == 8 && !strncmp(lines[0], "F 102 ", 6) && !strncmp(lines[1], "C ", 2) && !strncmp(lines[2], "A ", 2) &&
+           !strncmp(lines[3], "S ", 2) && !strncmp(lines[4], "O ", 2) && !strncmp(lines[5], "V ", 2) &&
+           !strncmp(lines[6], "V ", 2) && !strncmp(lines[7], "M ", 2));
     assert(strstr(lines[1], " 0 720 1 1920") != NULL);
 
     /* Station destroyed (generation changed): dropped once, counted, no partial record. */

@@ -5,11 +5,13 @@
      cargo changes only through production, and hands them to the econcap sampler
      (native/engine/econcap.h, enabled by X4LAN_ECONCAP=true in the probe loader):
        - operational clones of NPC factories, placed away from the original, trade offers
-         disabled, no traders; after their modules exist, resources half full (3 of 4) or nearly
-         empty (1 of 4, so modules wait for resources and retry);
+         disabled, no traders; after their modules exist, each resource filled to 1 % (1 of 4:
+         modules wait for resources and retry), 50 % (1 of 4: two such wares fill a storage, so
+         products block on physical space) or 25 % (2 of 4) of what fits;
        - every lab station is raised as 'X4MP.EconWatch' to the Lua side (one sampler watch each);
        - two reader cues read cargo (which runs the engine's lazy production catch-up) of the
-         even lab stations every 7 s and of the odd ones every 61 s: short and long lazy gaps;
+         even lab stations every 3 s (mostly one retry per catch-up, so recorded draws decide)
+         and of the odd ones every 61 s: short and long lazy gaps;
        - ECONLAB done after $Duration.
      Cues with only non-event conditions poll at a checkinterval (without one the engine rejects
      them: "event condition required"). -->
@@ -75,8 +77,11 @@
                       <do_if value="$i % 4 == 0">
                         <add_cargo object="$C" ware="$W" exact="[$Max / 100, 1].max" />
                       </do_if>
-                      <do_else>
+                      <do_elseif value="$i % 4 == 1">
                         <add_cargo object="$C" ware="$W" exact="$Max / 2" />
+                      </do_elseif>
+                      <do_else>
+                        <add_cargo object="$C" ware="$W" exact="$Max / 4" />
                       </do_else>
                     </do_if>
                   </do_for_each>
@@ -89,7 +94,7 @@
             <set_value name="parent.$Phase" exact="'run'" />
           </actions>
         </cue>
-        <cue name="ReadEven" checkinterval="7s" instantiate="true">
+        <cue name="ReadEven" checkinterval="3s" instantiate="true">
           <conditions>
             <check_value value="@parent.$Phase == 'run'" />
           </conditions>
