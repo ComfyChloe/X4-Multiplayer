@@ -172,6 +172,21 @@ Players join a running server without pausing the others:
    engine serializer cannot run that way, fall back to quiescing before the fork or
    to a custom serializer reading the copied memory.
 6. Windows clients load a save produced on Linux; compatibility (XML) to be verified.
+7. **Fast entry, then progressive loading.** X4 always loads a complete world and
+   load time grows with object count, so the per-client save is also *trimmed*:
+   - the joining player's sector and its neighbours keep full detail;
+   - elsewhere only persistent state stays (stations, modules, plots, gates,
+     highways, sector ownership, factions/relations, economy, all of the player's
+     own assets and mission targets);
+   - unreferenced dynamic objects in distant sectors (NPC ships, traffic, wrecks,
+     projectiles) are dropped.
+   The trimmer works by reference closure: anything referenced from a kept object
+   (missions, fleets, orders, trade offers) is kept. After loading, the server
+   streams the dropped sectors' dynamic objects over the sector channels in order
+   of jump distance, the event log since the snapshot frame is applied, and the
+   client runs in puppet mode so it spawns no NPCs of its own.
+8. Measure first: full vs trimmed save load time, and dynamic vs persistent object
+   counts per sector.
 
 ## 8. Intents
 
