@@ -277,9 +277,10 @@ zero preflight refusals, bad callers or loop logs. No event buffer was bound (`e
 `.local/evidence-091-withheld`; timing is untrustworthy. The existing chain next runs battle-400.
 
 Every one of the 481 non-initial hash samples was `d852dcb87b6f12a3`: exactly this implementation's hash
-of three zero vector lengths. The post-phase context vector at director+0x148 and the two wake
-vectors therefore supplied no contexts in this workload. Its earlier label "AI state hash" overstated
-coverage; equality of these hashes proves nothing about active script state. The RemoveContext helper
+of three zero vector lengths. This strongly indicates that the post-phase context vector at
+director+0x148 and the two wake vectors supplied no contexts; direct count instrumentation was not
+in that overlay. Its earlier label "AI state hash" overstated coverage; equality of these hashes
+proves nothing about active script state. The RemoveContext helper
 uses +0x148, but complete live-context enumeration remains unresolved; no new offset is guessed.
 New diagnostics report `hashValid`, `hashContexts`, `hashWakeContexts`, and `hashEmptyFrames`, and emit
 `hash=unavailable` when coverage is empty. Synthetic tests distinguish empty/populated contexts,
