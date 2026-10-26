@@ -913,3 +913,42 @@ fn blocking_delivery_without_debug_does_not_draw_and_a_duplicate_is_ignored() {
     b.irend(vec![("outcome", k("block"))]);
     check(&b.t);
 }
+
+#[test]
+fn unported_input_modes_refuse_before_any_draw_or_effect() {
+    use x4mp_ai::orders::movegeneric::MoveGeneric;
+    use x4mp_ai::replay::FactStore;
+    use x4mp_ai::rng::Stream;
+    use x4mp_ai::runtime::Wake;
+    use x4mp_ai::world::{Answer, Cx, Effect, Io, Query, Stop, R};
+
+    struct NoIo;
+    impl Io for NoIo {
+        fn roll(&mut self, _: Uid, _: u32, _: f32, _: bool) -> R<()> {
+            panic!("draw before refusal")
+        }
+        fn rnd(&mut self, _: Uid, _: u32, _: f64) -> R<()> {
+            panic!("range before refusal")
+        }
+        fn query(&mut self, _: Uid, _: u32, _: &Query, _: &mut Stream) -> R<Answer> {
+            panic!("query before refusal")
+        }
+        fn effect(&mut self, _: Uid, _: u32, _: &Effect, _: &mut Stream) -> R<()> {
+            panic!("effect before refusal")
+        }
+    }
+    for (param, value) in [
+        ("rotation", k("rotation")),
+        ("lookat", Val::Pos(Pos::default())),
+        ("relativemovement", bv(true)),
+        ("stayatrelativemovement", bv(true)),
+    ] {
+        let mut frame = MoveGeneric::new(vec![("destination".into(), c(ZT)), (param.into(), value)], S);
+        let facts = FactStore::default();
+        let mut io = NoIo;
+        let mut rng = Stream::from_state(0x1234);
+        let result = frame.resume(&mut Cx { ent: P, facts: &facts, io: &mut io, rng: &mut rng }, Wake::Start);
+        assert!(matches!(result, Err(Stop::Unsupported { script: "move.generic", .. })), "{param}: {result:?}");
+        assert_eq!(rng.state(), 0x1234, "{param}");
+    }
+}

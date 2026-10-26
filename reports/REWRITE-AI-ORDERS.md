@@ -10,7 +10,7 @@ M2a **native**: two bracket captures of Patrol job ships (section 9a) confirm th
 contradiction (51/51 wait wake times bit-exact over both runs, constant draw counts per bracket class);
 `lib.target.selection` is native too (section 6a). The measured census (section 1.3) puts the AI time in
 move.generic, trade.find.free and fight.attack.object.fighter; **M3 = move.generic** (lead, 26 Oct), then
-trade.find.free. M3 now has a resumable `move.generic` port and nine synthetic replay/regression tests
+trade.find.free. M3 now has a resumable `move.generic` port and ten synthetic replay/regression tests
 (section 9b); no live M3 switch or native value-replay acceptance yet. Everything else below is offline
 unless marked native.
 
@@ -317,7 +317,7 @@ Cross-sector reads are facts from the frame-start snapshot.
 
 ## 9. Tests (offline)
 
-`cargo test -p x4mp-ai`: 47 tests pass (Windows 11, Rust 1.94.1);
+`cargo test -p x4mp-ai`: 48 tests pass (Windows 11, Rust 1.94.1);
 `cargo clippy -p x4mp-ai --all-targets -- -D warnings` passes. The original test breakdown below
 is historical M1/M2; M3 additions are described in section 9b.
 
@@ -382,7 +382,10 @@ The probe armed twice at game start (UI reload), so the log holds two sessions: 
 states. Parameters keep the XML defaults. Supported paths include ordinary zone/sector/cluster and
 object destinations, safe-position reservations, long/short movement, gate calls (the `move.gate`
 callee remains opaque), stagger waits, path retries, cleanup and selected global/blocking interrupts.
-The module-level comment lists unsupported branches. Those return `Stop::Unsupported`; this is
+Rotation, look-at and relative-movement modes are conservatively rejected during parameter resolution,
+before any draw or engine effect, even when a particular early finish might avoid the mode. Other
+unsupported branches listed in the module-level comment stop when reached. They return
+`Stop::Unsupported`; this is
 replay-stage behavior, not a transactional live fallback. Prior supported actions in the same run
 may already have emitted effects before a later unsupported branch. Do not enable a production
 switch or replay those effects against a live ship without a proven engine-state handoff.
@@ -396,7 +399,7 @@ outside this check. The Tide handler checks its event selector first, so unrelat
 silently suppress RNG validation. The per-entity stream design is unchanged; no approval of altered
 vanilla roll sequences or live parallel RNG behavior is inferred.
 
-Nine **SYNTHETIC**, manually constructed replay/regression tests cover:
+Ten **SYNTHETIC**, manually constructed replay/regression tests cover:
 - small-ship inter-sector movement with a blocking zone-change interrupt;
 - capital-ship gate call, opaque gate execution, planned sector change, then short movement;
 - gravidar target -> immediate Attack order and abort cleanup;
@@ -405,7 +408,8 @@ Nine **SYNTHETIC**, manually constructed replay/regression tests cover:
 - unrelated global delivery with correct and deliberately changed post-delivery RNG;
 - destination destruction: non-consuming handler followed by cleanup;
 - expired reservation: clear it and do not cancel it again on abort;
-- blocking delivery with debugging off, then duplicate ignored without another draw.
+- blocking delivery with debugging off, then duplicate ignored without another draw;
+- all four unsupported input modes refuse without any query/effect/draw and preserve RNG state.
 
 Each trace compares effects, query arguments, yield/interrupt outcomes, action-level draw records
 and bracket-end RNG states. These fixtures do not establish complete script coverage, native value

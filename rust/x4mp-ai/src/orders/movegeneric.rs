@@ -13,8 +13,9 @@
 //! gravidar targets (Attack order, `stopondetect`), destination moved, docked/undocked,
 //! `SectorChangeHandler` and `LostReservationHandler`.
 //!
-//! Refused with [`Stop::Unsupported`] before the branch's first side effect: rotation and lookat
-//! targets, relative movement, `traveltoend` checks on a strict path, moves without a position
+//! Rotation/lookat targets and relative movement are refused at parameter resolution, before any
+//! draw or effect. Other unported branches stop with [`Stop::Unsupported`] when reached:
+//! `traveltoend` checks on a strict path, moves without a position
 //! (highway destinations, L1072), objects in local highways (L561), strict blacklists without a path
 //! (L859), the job-ship recovery warp (L821), adjacent-zone checks of player ships (L894), the cleanup
 //! of recalled subordinates' orders (L1336/L1392), debug-only position output (L1030), and the
@@ -334,6 +335,20 @@ impl MoveGeneric {
             return Ok(());
         }
         let mut p = MgParams::from_params(&self.raw, f, self.ship)?;
+        // These modes require unported state even if an early finish could avoid using it.
+        // Reject the whole mode conservatively before any engine effect or RNG draw.
+        if p.rotation {
+            return Err(unsupported(1251, "move with a target rotation"));
+        }
+        if p.lookat {
+            return Err(unsupported(1225, "lookat orientation"));
+        }
+        if p.relativemovement {
+            return Err(unsupported(1205, "relativemovement"));
+        }
+        if p.stayatrelativemovement {
+            return Err(unsupported(1315, "stayatrelativemovement"));
+        }
         if p.targetclasses.is_empty() {
             p.targetclasses = ["class.ship_s", "class.ship_m", "class.ship_l", "class.ship_xl", "class.station"]
                 .iter()
