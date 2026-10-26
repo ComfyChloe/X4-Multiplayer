@@ -11,6 +11,10 @@ Anyone may fork and change their own copy. Only the owner and invited
 collaborators can push to this original repository or merge changes here;
 visitors can propose changes through pull requests.
 
+Existing contributors: read the [history migration notes](PUBLICATION-NOTES.txt)
+before pushing from an older checkout. The project owner is Lith7ium; Ferrite
+leads technical development.
+
 Experimental two-player co-op for X4 Foundations 9.00, Steam build 23660954.
 The host prepares a native starting save and transfers it to the guest. Selected
 live gameplay is synchronized; full ongoing universe authority and campaign

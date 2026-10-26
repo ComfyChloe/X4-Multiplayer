@@ -11,6 +11,10 @@ or sealed test packages; they are not checksums of this sanitized publication.
 Privacy edits do not turn pending or failed tests into passing results. Development
 branches remain experimental unless the current project documentation says otherwise.
 
+The previous repository, including its issues, pull requests and reviews, is now
+kept in a private archive. Historical PR/issue numbers and links in reports refer
+to that archive; they do not identify new issues or PRs in this repository.
+
 Contributors with an older checkout must preserve local work and clone this history
 into a separate directory. Reapply only reviewed, sanitized patches for unpushed
 work. Do not merge or push old history into this repository: that would restore
