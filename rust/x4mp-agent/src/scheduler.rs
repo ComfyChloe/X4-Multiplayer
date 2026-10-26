@@ -238,8 +238,11 @@ pub trait Engine {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Slot13 {
-    /// Decision written (when it changed) and pacing done.
-    Stepped { decision: Decision, waited_ns: u64 },
+    /// Decision written (when it changed) and pacing done. `written` is the value now in
+    /// force for the next `FrameTick`; with lookahead, `prep_next` is the decision for the
+    /// `FrameTick` after that, i.e. whether the next simulation frame must prepare render
+    /// lists (slot 10 runs before slot 13).
+    Stepped { decision: Decision, waited_ns: u64, written: bool, prep_next: bool },
     /// The main thread stayed inside `FrameTick` for the whole timeout. Nothing was
     /// written: the next `FrameTick` keeps the previous decision.
     WaitTimeout { waited_ns: u64 },
@@ -254,6 +257,11 @@ pub enum Slot13 {
 /// cannot enter `FrameTick` before this frame releases semSimDone), so it never changes
 /// inside one `FrameTick` and the write happens-before the read through the semaphore.
 /// `last_written` tracks the value this scheduler owns.
+///
+/// With `ahead = Some(pending)` decisions are pipelined by one frame: this call writes the
+/// decision made in the previous call (`*pending`) and stores the new one, so slot 10 of
+/// the next simulation frame knows whether the `FrameTick` that will consume its render
+/// lists renders. On a wait timeout the caller should force `*pending = true`.
 pub fn slot13_step(
     sched: &mut Scheduler,
     engine: &impl Engine,
@@ -261,6 +269,7 @@ pub fn slot13_step(
     loading: bool,
     temp_paused: bool,
     wait_timeout_ns: u64,
+    ahead: Option<&mut bool>,
 ) -> Slot13 {
     let start = engine.now_ns();
     while !engine.main_parked() {
@@ -276,14 +285,22 @@ pub fn slot13_step(
         return Slot13::ForeignFlagWrite;
     }
     let decision = sched.step(Inputs { now_ns: now, loading, temp_paused });
-    if decision.render != *last_written {
-        engine.set_render_decision(decision.render);
-        *last_written = decision.render;
+    let (written, prep_next) = match ahead {
+        Some(pending) => {
+            let write = *pending;
+            *pending = decision.render;
+            (write, decision.render)
+        }
+        None => (decision.render, decision.render),
+    };
+    if written != *last_written {
+        engine.set_render_decision(written);
+        *last_written = written;
     }
     if let Some(t) = decision.sleep_until_ns {
         engine.sleep_until(t);
     }
-    Slot13::Stepped { decision, waited_ns }
+    Slot13::Stepped { decision, waited_ns, written, prep_next }
 }
 
 // ----------------------------------------------------------------------------------
@@ -386,6 +403,12 @@ pub struct SchedSnapshot {
     /// Longest wait for the main thread to leave FrameTick (≈ render time), window.
     pub max_wait_ns: u64,
     pub wait_timeouts: u64,
+    /// Render-prep skip: slot-10 calls that prepared / skipped, slot-10 calls whose RNG
+    /// draws were rolled back, FrameTicks that rendered an unprepared (empty) half.
+    pub prep_kept: u64,
+    pub prep_skipped: u64,
+    pub rng_isolated: u64,
+    pub empty_renders: u64,
 }
 
 pub fn sched_line(state: &str, prev: &SchedSnapshot, cur: &SchedSnapshot, wall_ms: u64) -> String {
@@ -396,7 +419,7 @@ pub fn sched_line(state: &str, prev: &SchedSnapshot, cur: &SchedSnapshot, wall_m
     let ratio = dgame / wall_s;
     let per_speed = if cur.speed > 0.0 { ratio / cur.speed } else { 0.0 };
     format!(
-        "X4MP_AGENT SCHED state={state} hz={} sps={:.2} rps={:.2} game_wall={:.4} game_wall_per_speed={:.4} speed={:.3} max_lag_steps={} skip_run={} max_skip_run={} dropped_ms={:.1} ddropped_ms={:.1} forced_steps={} forced_gap={} rebaselines={} loading_steps={} exact={} irregular={} max_wait_ms={:.1} wait_timeouts={} steps={} renders={} wall_ms={}",
+        "X4MP_AGENT SCHED state={state} hz={} sps={:.2} rps={:.2} game_wall={:.4} game_wall_per_speed={:.4} speed={:.3} max_lag_steps={} skip_run={} max_skip_run={} dropped_ms={:.1} ddropped_ms={:.1} forced_steps={} forced_gap={} rebaselines={} loading_steps={} exact={} irregular={} max_wait_ms={:.1} wait_timeouts={} prep_keep_ps={:.2} prep_skip_ps={:.2} prep_skipped={} rng_isolated={} empty_renders={} steps={} renders={} wall_ms={}",
         cur.hz,
         dsteps as f64 / wall_s,
         drenders as f64 / wall_s,
@@ -416,6 +439,11 @@ pub fn sched_line(state: &str, prev: &SchedSnapshot, cur: &SchedSnapshot, wall_m
         cur.irregular_steps,
         cur.max_wait_ns as f64 / 1e6,
         cur.wait_timeouts,
+        cur.prep_kept.saturating_sub(prev.prep_kept) as f64 / wall_s,
+        cur.prep_skipped.saturating_sub(prev.prep_skipped) as f64 / wall_s,
+        cur.prep_skipped,
+        cur.rng_isolated,
+        cur.empty_renders,
         cur.stats.steps,
         cur.stats.renders,
         wall_ms,
@@ -697,5 +725,10 @@ mod tests {
         let line = sched_line("armed", &a, &b, 1000);
         assert!(line.starts_with("X4MP_AGENT SCHED state=armed hz=30 sps=30.00 rps=2.00 game_wall=1.0000"), "{line}");
         assert!(line.contains(" skip_run=7 ") && line.contains(" ddropped_ms=5.0 "), "{line}");
+        let mut c = b;
+        c.prep_kept = 1;
+        c.prep_skipped = 19;
+        let line = sched_line("armed", &a, &c, 1000);
+        assert!(line.contains(" prep_keep_ps=1.00 prep_skip_ps=19.00 prep_skipped=19 "), "{line}");
     }
 }

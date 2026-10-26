@@ -26,6 +26,7 @@ use std::time::{Duration, Instant};
 use crate::agent::{covered, epoch_ns, read_f64, read_i32, read_u64, readable_ranges, LiveImage};
 use crate::config::Sched;
 use crate::pinned;
+use crate::renderprep;
 use crate::scheduler::{
     check_step, fixed_dt, slot13_step, Engine, SchedSnapshot, Scheduler, Slot13, StallWatch, StepCheck, TimeSample,
 };
@@ -85,6 +86,9 @@ pub enum Fault {
     StatePoisoned,
     Stall,
     RenderFlagChanged,
+    RenderPrepArm,
+    RenderPrepGuard,
+    RenderPrepMissed,
 }
 
 impl Fault {
@@ -109,6 +113,9 @@ impl Fault {
             StatePoisoned,
             Stall,
             RenderFlagChanged,
+            RenderPrepArm,
+            RenderPrepGuard,
+            RenderPrepMissed,
         ]
         .get(code as usize)
         .copied()
@@ -134,6 +141,9 @@ impl Fault {
             Fault::StatePoisoned => "scheduler_state_poisoned",
             Fault::Stall => "simulation_stalled",
             Fault::RenderFlagChanged => "engine_render_flag_changed",
+            Fault::RenderPrepArm => "renderprep_arm_failed",
+            Fault::RenderPrepGuard => "renderprep_guard",
+            Fault::RenderPrepMissed => "renderprep_slot10_not_called",
         }
     }
 }
@@ -175,10 +185,15 @@ static ST_MAX_WAIT_NS: AtomicU64 = AtomicU64::new(0);
 static ST_TIMEOUTS: AtomicU64 = AtomicU64::new(0);
 static ST_GAME: AtomicU64 = AtomicU64::new(0);
 static ST_SPEED: AtomicU64 = AtomicU64::new(0);
+static ST_EMPTY_RENDERS: AtomicU64 = AtomicU64::new(0);
 
 struct Live {
     sched: Scheduler,
     prev: Option<TimeSample>,
+    /// Render-prep lookahead: decision to write at the next slot-13 call.
+    pending: bool,
+    rp_calls_prev: u64,
+    rp_missed: u32,
 }
 
 static STATE: Mutex<Option<Live>> = Mutex::new(None);
@@ -213,7 +228,8 @@ fn set_fault(f: Fault, phase: Phase) {
 /// Called once by the worker before the slot is registered.
 pub fn init(cfg: Sched) {
     if CONFIG.set(cfg).is_ok() {
-        *STATE.lock().unwrap_or_else(|e| e.into_inner()) = Some(Live { sched: Scheduler::new(cfg.policy), prev: None });
+        *STATE.lock().unwrap_or_else(|e| e.into_inner()) =
+            Some(Live { sched: Scheduler::new(cfg.policy), prev: None, pending: true, rp_calls_prev: 0, rp_missed: 0 });
         PHASE.store(Phase::Pending as u32, Ordering::SeqCst);
     }
 }
@@ -240,6 +256,11 @@ pub fn snapshot() -> SchedSnapshot {
     s.wait_timeouts = ST_TIMEOUTS.load(Ordering::Relaxed);
     s.game_time = f64::from_bits(ST_GAME.load(Ordering::Relaxed));
     s.speed = f64::from_bits(ST_SPEED.load(Ordering::Relaxed));
+    let (kept, skipped, isolated) = renderprep::counters();
+    s.prep_kept = kept;
+    s.prep_skipped = skipped;
+    s.rng_isolated = isolated;
+    s.empty_renders = ST_EMPTY_RENDERS.load(Ordering::Relaxed);
     s
 }
 
@@ -396,6 +417,7 @@ fn apply_patches(load_patched: u64) -> Result<(), Fault> {
 /// state is a valid FrameTick, and nothing reads the decision byte once the compare is
 /// back to the engine's render flag.
 fn restore_all(note: u32) {
+    let rp = renderprep::disarm();
     let cas = |va: u64, from: u64, to: u64| {
         let _ = qword(va).compare_exchange(from, to, Ordering::SeqCst, Ordering::SeqCst);
     };
@@ -424,7 +446,7 @@ fn restore_all(note: u32) {
             }
         }
     }
-    if cmp || dt {
+    if cmp || dt || rp {
         RESTORE_NOTE.store(note, Ordering::SeqCst);
     }
 }
@@ -441,6 +463,7 @@ pub fn restore_from_worker() {
     if !CMP_PATCHED.load(Ordering::SeqCst)
         && !DT_PATCHED.load(Ordering::SeqCst)
         && !DECISION_OWNED.load(Ordering::SeqCst)
+        && !renderprep::armed()
     {
         if phase() == Phase::Pending {
             PHASE.store(Phase::Restored as u32, Ordering::SeqCst);
@@ -627,6 +650,14 @@ fn admit(live: &mut Live) -> Result<bool, Fault> {
         std::ptr::write_volatile(byte, 1);
         DECISION_VALUE.store(true, Ordering::SeqCst);
         apply_patches(q(load_patched))?;
+        if cfg.skip_renderprep {
+            let table = read_u64(pinned::VBI_TABLE_GLOBAL);
+            let client = read_u64(table + 8 * pinned::GAME_CLIENT_SLOT as u64);
+            renderprep::arm(table, client).map_err(|_| Fault::RenderPrepArm)?;
+            live.pending = true;
+            live.rp_calls_prev = renderprep::calls();
+            live.rp_missed = 0;
+        }
         live.prev = None;
         Ok(true)
     }
@@ -747,18 +778,52 @@ fn frame_inner(live: &mut Live, p: Phase, loading: bool) -> Result<(), Fault> {
     ST_GAME.store(sample.game.to_bits(), Ordering::Relaxed);
     ST_SPEED.store(sample.speed.to_bits(), Ordering::Relaxed);
 
+    let rp = config().is_some_and(|c| c.skip_renderprep);
+    if rp {
+        // Consistency guard: the wrapper is still in slot 10, has not faulted, and ran
+        // exactly once since the previous slot-13 call (slot 10 may be skipped while the
+        // VBI loading flag is set).
+        if renderprep::fault() != 0 || !renderprep::slot_holds_wrapper() {
+            return Err(Fault::RenderPrepGuard);
+        }
+        let calls = renderprep::calls();
+        let delta = calls.wrapping_sub(live.rp_calls_prev);
+        live.rp_calls_prev = calls;
+        if !loading && delta != 1 {
+            live.rp_missed += 1;
+            if live.rp_missed >= 3 {
+                return Err(Fault::RenderPrepMissed);
+            }
+        } else {
+            live.rp_missed = 0;
+        }
+    }
+
     let engine = LiveEngine { decision: (fs + pinned::FRAME_STATE_DECISION_BYTE) as *mut u8 };
     let mut last = DECISION_VALUE.load(Ordering::SeqCst);
     let wait_ns = wait_budget().as_nanos() as u64;
-    let outcome = slot13_step(&mut live.sched, &engine, &mut last, loading || no_advance, temp_paused, wait_ns);
+    let ahead = if rp { Some(&mut live.pending) } else { None };
+    let outcome = slot13_step(&mut live.sched, &engine, &mut last, loading || no_advance, temp_paused, wait_ns, ahead);
     match outcome {
-        Slot13::Stepped { decision, waited_ns } => {
+        Slot13::Stepped { decision, waited_ns, written, prep_next } => {
             ST_MAX_WAIT_NS.fetch_max(waited_ns, Ordering::Relaxed);
             ST_MAX_LAG.fetch_max(decision.lag_steps, Ordering::Relaxed);
+            if rp {
+                // The next FrameTick renders this frame's slot-10 output.
+                if written && !renderprep::last_prep() {
+                    ST_EMPTY_RENDERS.fetch_add(1, Ordering::Relaxed);
+                }
+                renderprep::set_prep_next(prep_next);
+            }
         }
         Slot13::WaitTimeout { waited_ns } => {
             ST_MAX_WAIT_NS.fetch_max(waited_ns, Ordering::Relaxed);
             ST_TIMEOUTS.fetch_add(1, Ordering::Relaxed);
+            if rp {
+                // Decision unknown for the next FrameTick: prepare and render next.
+                live.pending = true;
+                renderprep::set_prep_next(true);
+            }
         }
         Slot13::ForeignFlagWrite => return Err(Fault::ForeignDecisionWrite),
     }

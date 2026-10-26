@@ -292,3 +292,140 @@ branch. Port: retarget only read #2 (0xfa3446 `cmp byte [rdi+0x1e4],0`) to a
 FrameState padding byte that is verified unused; never touch +0x1e4. In the slot-5
 callback, wait (bounded) for [0x31c20cc] == 1, write the decision, and pace with the
 same scheduler. Not implemented: it needs its own padding audit, FFI and a native run.
+
+11. SERVER OPTIMISATIONS (26 OCTOBER 2026): UI SCENE SKIP AND RENDER-PREP SKIP
+Input: perf --call-graph dwarf of the VPS Movement worker, slot attribution via the
+return address 0x1212675. Slot 3 62%, slot 6 UI 21% (CXAnarkController::Move 15.6%,
+of that 0x23333b0 68%, 0xa587e0 29%), slot 10 9.8%. Frame-diet (Windows) findings were
+cross-checked on Linux.
+
+11a. X4MP_UI_SCENE=skip: NOT IMPLEMENTED. The requested path cannot be separated.
+CXAnarkController::Move 0xa2b0a0 (CXAnark+0x10 = UI::XAnark::AnarkGameface, vtable
+0x3c4f6e8) calls, once per pass:
+  0xa2b55a  Gameface vfunc +0x70 = 0x2314bd0 -> 0x23333b0: for every presentation,
+            Anark::CPresentation::Update (vtable 0x3bafb88 +0x10 = 0x2338f80)
+  0xa2b5a2  Gameface vfunc +0x78 = 0x2314670 -> SceneManager(+0x5b8) vfunc +0x20 =
+            UI::XAnark::AnarkSceneManager::UpdateScriptEngines 0xa587e0      [H]
+CPresentation::Update 0x2338f80 runs, in order: clock tick 0x233caa0, ..., the
+active-element walk 0x2331e10 -> 0x23319e0, then presentation+0x40 vfunc ->
+UI::XAnark::AnarkLuaEngine::Update 0xa7e1c0 -> Anark CLuaEngine dispatch 0x231b030.
+0x231b030 calls the element script handlers by name through the table 0x3d90870
+(onSlideEnter, onSlideExit, onUpdate, onDeactivate, onActivate, onInitialize) for
+the elements in the element manager's per-frame vector (+0x60/+0x70). That vector is
+filled by the walk 0x23319e0, which also sets the per-frame active flag
+(vfunc +0xa8, 0x1000) and computes time-context local times.                [H]
+The game's Lua confirms the chain: widget_fullscreen.lua `self:onUpdate()` (an Anark
+element behaviour) calls CallUpdateScripts(), which runs every SetScript("onUpdate")
+handler, the mod's included. Perf samples: under 0x2338f80, 0x23319e0 132, 0xa7e1c0
+18 (plus the LuaJIT time that does not unwind).
+=> The "0x23333b0 path" is the Lua onUpdate path itself. Skipping it, or only its walk,
+stops onUpdate and the element activation/deactivation events, so mod timing and
+script events break. Stopped as instructed.
+Separable alternative (not implemented; proposal):
+- The AnarkScene layer walk. UpdateScriptEngines 0xa587e0 calls AnarkScene::Update
+  0x2322ec0, which first resets its scene lists (vfunc +0x68, 0x232b3c0(+0x90)) and
+  then tail-calls vfunc +0x70 = 0xa7e250 -> 0xa5d840. That is a tree visitor (enter
+  0x2322cf0: layer transforms node+0x48, pushes to scene lists +0x50/+0x90; leave
+  0x2322d70).
+- It is 64 of 1466 samples (about 4.4% of the thread) and matches frame-diet's
+  behaviour-identical Windows "ui_scenes" diet.
+- Skipping it leaves the lists empty (they are reset first), so there are no stale
+  pointers. Element layer transforms go stale: read by the UI render and hit-testing.
+  No Lua read of them was found, but that is not exhaustively proven.
+- A one-qword `ret` patch at 0xa7e250 would do it, with about 4% to gain. Needs the
+  lead's go and a native audit.
+
+11b. X4MP_SCHED_SKIP_RENDERPREP=1 (implemented, src/renderprep.rs)
+Slot 10 = X4::GameRender (embedded in GameClient at +0x1e8, vtable 0x3ab1270). Its Move
+0xfb0180 calls Render (vfunc +0x18) of render-bank slots 0..3 (UI, characters,
+GameClient camera) when GameRender+8 is set, then always fclose(*(0x4533d10)). [H]
+Mechanism:
+- The slot-10 pointer is swapped for a wrapper (compare-exchange; restored by
+  compare-exchange on every disarm path). The wrapper checks every frame that slot 3
+  still holds the armed GameClient and that both vtables are pinned (otherwise it
+  does not touch the objects, faults and disarms), and that it runs on the Movement
+  worker.
+- Prepare frames: forward to GameRender::Move unchanged.
+- Skip frames: clear GameRender+8 (byte compare-exchange), forward, set it back. Only
+  the render-bank loop is skipped; the rest of Move runs.
+- One-frame lookahead: slot 10 of frame N fills the half that FrameTick N+1 renders,
+  but slot 13 runs after slot 10. So slot 13 writes the decision it made one frame
+  earlier and passes the new one to the next slot 10 (slot13_step `ahead`). Prep runs
+  exactly in the frames whose output gets rendered.
+- Consistency: every render-list half and view slot is emptied when consumed (flip
+  0x218e2c0, finalize 0x20965c0 reset the consumed half), so a skipped frame leaves an
+  empty half, never a stale one. The AnarkScene lists the UI render reads are rebuilt
+  by slot 6 every frame (11a), so skipping their consumer cannot grow them.
+- A FrameTick rendering an unprepared half (after a wait timeout or at disarm) renders
+  an empty half; it is counted as empty_renders. A wait timeout forces "prepare and
+  render" for the next frame.
+- Guards (fault, then full restore and disarm):
+    * the wrapper still in slot 10, no wrapper fault;
+    * exactly one wrapper call per slot-13 call outside loading (3 misses in a row
+      fault);
+    * the scheduler's existing guards and stall watchdog.
+RNG and ID side effects (coordinator request, verified on Linux):
+- The camera render draws the MoveWorker TLS RNG. The Linux counterparts of U::Scene
+  vfunc693 helper (0x1f48560), SpawnEffect (0x17976b0) and the effect creator
+  (0x1ecefd0) all call Random 0x1a491c0. The TLS stream state is the qword at
+  fs:[-0x2720], read by Random::* 0x1a490a0..0x1a491c0 (Windows TLS+0x318). [H for the
+  calls, M for reachability from slot 10: virtual dispatch; paired with frame-diet's
+  Windows result]
+- The wrapper saves fs:[-0x2720] before slot 10 and restores it afterwards, on every
+  frame, prepare or skip. The simulation's RNG stream is therefore identical whether
+  render prep runs or not (rng_isolated counts the frames where slot 10 drew). Note:
+  this differs from an unmodified rendering client, by design.
+- NOT equalised: the camera render spawns effect objects (mass-traffic welding:
+  WeldingMassTrafficBehavior vfunc16, Linux pair 0x11d1da0 (low) -> CreateEffectObjectCreator
+  0x1796ba0) that allocate UniverseIDs and ConnectTo the universe. With the skip they
+  are not created on skipped frames, so ID allocation diverges from a rendering client.
+  Treat them as client-local; parity/shadow comparisons must run without this switch
+  or ignore effect IDs. Opt-in only.
+Cross-checks with frame-diet (rewrite-coord/questions.md Q10/Q11):
+- UI render bank (CUIController::Render 0xa60520 -> CXAnarkController 0xa0e590 ->
+  AnarkRenderEngine begin 0xa10840 GetNewRenderQueue / end 0xa10a00
+  AddRenderQueueToTarget). It is self-contained per frame: it allocates a queue and
+  hands it to a render-target half, which the consumer empties. Skipping it leaves
+  nothing to grow.                                                          [M-H]
+- Camera view-cache bit 0x100000 (Q11, transforms): skipping the camera render stops
+  attachment-pose refreshes (vc+0x30) of previously rendered components on skip frames.
+  The only known reader is the render helper; a simulation reader is not proven absent
+  (open; transforms offered a native capture). Risk, not equalised by RNG isolation.
+- Q10 item 1 names Linux AnarkScene slot 13 (+0x68 = 0x23230a0) as the layer walk.
+  On Linux +0x68 is a per-frame list preparation; the walk is +0x70 = 0xa7e250 ->
+  0xa5d840 (perf: 64 samples under 0xa587e0 -> 0xa5d840; the only caller of 0xa5d840
+  is 0xa7e250). Slot 14 in frame-diet's numbering.
+Gain (static estimate from the profile):
+- Slot 10 is 9.8% of the Movement worker. At fixed20 with interval 1000 about 1 in 20
+  frames prepares, so about 9.3% of the worker's time is saved.
+- At 20 sps that is roughly 8 percentage points less Movement worker CPU (82% -> about
+  74% of a core), or about 10% more step budget (33 ms -> about 30 ms per step, which
+  makes fixed30 less marginal).
+Harness (tests/sim_harness.rs, 11 tests):
+- Prepare-skip scenarios (fixed20 and fixed30; interval, never, never+gap, client):
+  zero unprepared renders, prepares == renders (+-2), zero RNG divergence, lists bounded.
+- Negative controls fail as they must: without the lookahead, unprepared renders
+  occur; without the isolation, the RNG stream diverges.
+
+11c. NATIVE PROCEDURE FOR 11b (lead session, VPS)
+Base settings that passed natively: X4MP_SCHED=fixed20 X4MP_RENDER_INTERVAL_MS=1000
+X4MP_SCHED_MAX_RENDER_GAP_MS=2000.
+ 1) Baseline, 10 min, perf as before (same method: return address 0x1212675).
+ 2) Add X4MP_SCHED_SKIP_RENDERPREP=1. 10 min, then perf again, then 30 min with a client.
+ 3) Optional: X4MP_SCHED=fixed30 with the switch. 10 min.
+Expected log lines:
+  X4MP_AGENT VERIFIED ... sites=29
+  X4MP_AGENT SCHED CONFIG mode=fixed20 ... skip_renderprep=1
+  X4MP_AGENT SCHED ARMED ... renderprep_skip=slot10_wrapped+rng_isolated
+  and every second: SCHED ... prep_keep_ps (about rps) prep_skip_ps (about hz - rps)
+    prep_skipped=... rng_isolated=... empty_renders=0
+Pass criteria:
+  - no FAULT/STALL, heartbeat alive, no "out of space" in the native log;
+  - prep_keep_ps tracks rps (one prepare per render), prep_skip_ps is about sps - rps,
+    empty_renders stays 0 (a few only after a wait timeout or at disarm);
+  - perf: the slot-10 share drops from 9.8% to about 1% or less (only prepare frames),
+    Movement worker CPU at 20 sps drops by about 7-9 points; with fixed30, sps closer
+    to 30;
+  - clients still see the world; MD/Lua heartbeat unaffected; a save still works.
+Disarm: touch <work>/engine-agent.log.disarm. Expect `DISARMED ... sched=restored
+restore=worker`. Slot 10 then holds GameRender again (prepares every frame).

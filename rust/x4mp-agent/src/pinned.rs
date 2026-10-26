@@ -104,7 +104,33 @@ pub const SITES: &[Site] = &[
     Site { name: "rodata_one_sixtieth", va: 0x2e24578, len: 8, sha256: "c6c9a57771f2313713756c05b0b8a1413e5ef99d747cabf716952b4f6137f34b" },
     // Read-only double 1/20 in .rodata (dt for fixed20).
     Site { name: "rodata_one_twentieth", va: 0x2e270c0, len: 8, sha256: "7f925b2036e92fe2f1f0697c3aedfff74d719c1ee2cb6b739d7c30484e75972c" },
+    // --- Render-prep skip (src/renderprep.rs) ---
+    // X4::GameRender::Move (VBI slot 10): if enabled (+8) call Render (+0x18) of render-bank
+    // slots 0..3 (table +0x110..+0x128: UI, characters, GameClient camera); then always
+    // fclose(*(0x4533d10)) when set.
+    Site { name: "game_render_move", va: 0xfb0180, len: 0x68, sha256: "2c17bfa1a1d24be0f8a0e604f06d1eccb5c83641b9ba10be88d756ad6f1ff1af" },
+    // GameRender typeinfo pointer + vtable (dtor, dtor, Move, Render).
+    Site { name: "game_render_vtable", va: 0x3ab1268, len: 0x28, sha256: "5cbb380fe26d64dabb0d303bc63b54bc778cd188e7362c40f66a6c77fab24e6f" },
+    // GameRender is embedded in the GameClient object at +0x1e8 (main 0x73046a).
+    Site { name: "game_client_game_render_ctor", va: 0x73045d, len: 0x14, sha256: "dd8ad3548bc12474c48605a4daeed56d15e1ba3e8017e6122bfbbd77873053b2" },
+    // Random::U64 (TLS stream): state is the qword at fs:[-0x2720].
+    Site { name: "random_u64_tls", va: 0x1a490a0, len: 0x3c, sha256: "ea9675c8327ceaf174712164b6c523ffbe1ed96ac183aad58250932c97cf6874" },
 ];
+
+// --- Render-prep skip (all inside the sites above) ---
+
+/// VBI slot of X4::GameRender (render-list preparation).
+pub const GAME_RENDER_SLOT: usize = 10;
+/// GameRender object inside the GameClient (the object in [`GAME_CLIENT_SLOT`]).
+pub const GAME_RENDER_IN_CLIENT: u64 = 0x1e8;
+/// GameRender primary vtable (Move at +0x10).
+pub const GAME_RENDER_VTABLE: u64 = 0x3ab1270;
+/// `bool` GameRender+8: GameRender::Move runs the render bank only when set. GameClient
+/// methods (0xff61b0, 0xff6610, 0xff9630, 0xff9700) set it to 1; nothing clears it.
+pub const GAME_RENDER_ENABLED: u64 = 0x8;
+/// Per-thread RNG state (u64) of the executable's static TLS, read by every Random::*
+/// stream function (0x1a490a0..0x1a491c0). Windows equivalent: TLS block +0x318.
+pub const TLS_RNG_STATE: i32 = -0x2720;
 
 // --- Fixed-step scheduler data (all inside the sites above) ---
 

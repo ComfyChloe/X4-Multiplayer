@@ -9,6 +9,10 @@
 //!   first flag read, drained by the render) never overflows, because the flip runs on
 //!   every frame. The legacy variant, which cleared the flip flag too, reproduces the
 //!   native freeze of 25 Oct 2026 (overflow, then ever slower renders);
+//! - with render-prep skip (slot 10 only on frames before a render, one-frame lookahead)
+//!   no FrameTick ever renders an unprepared half, and with the RNG save/restore around
+//!   slot 10 the simulation's RNG stream is identical whether render prep runs or not;
+//!   variants without the lookahead or without the isolation are shown to fail;
 //! - game time tracks wall time with infrequent, expensive renders; renders happen at
 //!   least every `max_render_gap_ms`; the spiral-of-death guard drops time instead of
 //!   diverging when rendering cannot keep up.
@@ -64,6 +68,8 @@ impl Sem {
 #[derive(Default)]
 struct RenderLists {
     halves: [u64; 2],
+    /// Slot 10 prepared this half since it was last consumed (finalize clears it).
+    prepared: [bool; 2],
     producer: usize,
     overflows: u64,
     max_fill: u64,
@@ -92,6 +98,12 @@ struct Shared {
     torn_decisions: AtomicU64,
     unparked_writes: AtomicU64,
     lists: Mutex<RenderLists>,
+    /// Render-prep skip: decision for the next slot-10 call, and its results.
+    prep_next: AtomicBool,
+    prep_kept: AtomicU64,
+    prep_skipped: AtomicU64,
+    unprepared_renders: AtomicU64,
+    rng_mismatches: AtomicU64,
 }
 
 struct FakeEngine {
@@ -136,12 +148,37 @@ struct Scenario {
     sim_ms: u64,
     run_ms: u64,
     legacy: bool,
+    /// X4MP_SCHED_SKIP_RENDERPREP: slot 10 runs only when `prep_next` says so.
+    skip_prep: bool,
+    /// Pipeline decisions one frame ahead (the real design). `false` = naive variant.
+    lookahead: bool,
+    /// Save/restore the RNG around slot 10 (the real design).
+    isolate_rng: bool,
 }
 
 impl Scenario {
     fn new(policy: SchedConfig, render_ms: u64, sim_ms: u64, run_ms: u64) -> Self {
-        Scenario { policy, render_ms, render_us_per_item: 0, sim_ms, run_ms, legacy: false }
+        Scenario {
+            policy,
+            render_ms,
+            render_us_per_item: 0,
+            sim_ms,
+            run_ms,
+            legacy: false,
+            skip_prep: false,
+            lookahead: false,
+            isolate_rng: false,
+        }
     }
+    fn with_prep_skip(mut self) -> Self {
+        (self.skip_prep, self.lookahead, self.isolate_rng) = (true, true, true);
+        self
+    }
+}
+
+/// The engine's per-thread RNG step (Random::U64State, 0x1a490a0).
+fn rng_step(state: u64) -> u64 {
+    state.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407).rotate_right(30)
 }
 
 struct Outcome {
@@ -168,6 +205,8 @@ fn run(sc: Scenario) -> Outcome {
     s.legacy.store(sc.legacy, Ordering::SeqCst);
     s.in_flight.store(true, Ordering::SeqCst); // .data initial value of 0x3d8d97b: the first
                                                // wait consumes semSimDone's initial count
+    s.prep_next.store(true, Ordering::SeqCst);
+    s.lists.lock().unwrap().prepared = [true, true]; // vanilla frames before arming
     let start = Arc::new(Sem::new(0));
     let done = Arc::new(Sem::new(1)); // initial count 1, like g_semSimDone
     let t0 = Instant::now();
@@ -180,10 +219,14 @@ fn run(sc: Scenario) -> Outcome {
         let (s, start, done) = (s.clone(), start.clone(), done.clone());
         let policy = sc.policy;
         let sim_ms = sc.sim_ms;
+        let (skip_prep, lookahead, isolate_rng) = (sc.skip_prep, sc.lookahead, sc.isolate_rng);
         thread::spawn(move || {
             let engine = FakeEngine { s: s.clone(), t0 };
             let mut sched = Scheduler::new(policy);
             let mut last = true;
+            let mut pending = true;
+            // TLS RNG of the MoveWorker, and the stream the simulation alone would see.
+            let (mut rng, mut sim_only) = (0x1234_5678_9abc_def0u64, 0x1234_5678_9abc_def0u64);
             let (mut prev, mut exact, mut checked) = (None::<TimeSample>, 0u64, 0u64);
             loop {
                 start.wait();
@@ -195,8 +238,16 @@ fn run(sc: Scenario) -> Outcome {
                     s.max_sim_frames_in_one_render.fetch_max(n, Ordering::SeqCst);
                 }
                 thread::sleep(Duration::from_millis(sim_ms)); // slots 0..9
-                {
-                    // slot 10: GameRender::Move pushes this frame's render data
+                rng = rng_step(rng); // a simulation draw (e.g. slot 3)
+                sim_only = rng_step(sim_only);
+                // slot 10: GameRender::Move (wrapped when skip_prep)
+                let saved = rng;
+                let prep = !skip_prep || s.prep_next.load(Ordering::SeqCst);
+                if prep {
+                    // camera render draws the TLS RNG (zones, effects)
+                    for _ in 0..3 {
+                        rng = rng_step(rng);
+                    }
                     let mut l = s.lists.lock().unwrap();
                     let p = l.producer;
                     if l.halves[p] + ITEMS_PER_FRAME > LIST_CAPACITY {
@@ -204,7 +255,21 @@ fn run(sc: Scenario) -> Outcome {
                     } else {
                         l.halves[p] += ITEMS_PER_FRAME;
                     }
+                    l.prepared[p] = true;
                     l.max_fill = l.max_fill.max(l.halves[p]);
+                    s.prep_kept.fetch_add(1, Ordering::SeqCst);
+                } else {
+                    s.prep_skipped.fetch_add(1, Ordering::SeqCst);
+                }
+                if isolate_rng {
+                    rng = saved;
+                }
+                // slot 11: JobEngine draws; must see the simulation-only stream
+                rng = rng_step(rng);
+                sim_only = rng_step(sim_only);
+                if rng != sim_only {
+                    s.rng_mismatches.fetch_add(1, Ordering::SeqCst);
+                    rng = sim_only; // count each divergence once
                 }
                 let cur = TimeSample { game: f(&s.game_bits), real: f(&s.real_bits), speed: 1.0 };
                 if let Some(p) = prev {
@@ -215,8 +280,13 @@ fn run(sc: Scenario) -> Outcome {
                     }
                 }
                 prev = Some(cur);
-                match slot13_step(&mut sched, &engine, &mut last, false, false, 5_000_000_000) {
-                    Slot13::Stepped { .. } => {}
+                let ahead = if lookahead { Some(&mut pending) } else { None };
+                match slot13_step(&mut sched, &engine, &mut last, false, false, 5_000_000_000, ahead) {
+                    Slot13::Stepped { prep_next, decision, .. } => {
+                        // naive variant: prepare according to the decision just made,
+                        // which applies to the FrameTick after the next prep
+                        s.prep_next.store(if lookahead { prep_next } else { decision.render }, Ordering::SeqCst);
+                    }
                     other => panic!("slot13 {other:?}"),
                 }
                 done.post();
@@ -248,6 +318,7 @@ fn run(sc: Scenario) -> Outcome {
             let mut l = s.lists.lock().unwrap();
             let consumed = 1 - l.producer;
             l.halves[consumed] = 0;
+            l.prepared[consumed] = false; // finalize empties the half
             l.producer = consumed;
         }
         start.post(); // semSimStart
@@ -258,6 +329,9 @@ fn run(sc: Scenario) -> Outcome {
         if render {
             let items = {
                 let l = s.lists.lock().unwrap();
+                if !l.prepared[1 - l.producer] {
+                    s.unprepared_renders.fetch_add(1, Ordering::SeqCst);
+                }
                 l.halves[1 - l.producer]
             };
             s.sim_frames_during_render.store(0, Ordering::SeqCst);
@@ -401,4 +475,69 @@ fn overload_is_bounded_and_drops_time_instead_of_spiralling() {
     assert!(o.max_skip_run <= 10, "skip run {}", o.max_skip_run);
     let ratio = o.game / o.wall_s;
     assert!(ratio < 0.9, "game/wall {ratio}");
+}
+
+// ----------------------------------------------------------------------------------
+// X4MP_SCHED_SKIP_RENDERPREP
+
+fn prep_count(o: &Outcome) -> (u64, u64) {
+    (o.shared.prep_kept.load(Ordering::SeqCst), o.shared.prep_skipped.load(Ordering::SeqCst))
+}
+
+#[test]
+fn renderprep_skip_prepares_exactly_before_renders() {
+    // fixed20 server: render every 1000 ms, steps cost 10 ms.
+    let o =
+        run(Scenario::new(policy(20, RenderPolicy::IntervalMs(1000), 600, 2000, 1000), 40, 10, 4000).with_prep_skip());
+    common_invariants(&o);
+    lists_bounded(&o);
+    assert_eq!(o.shared.unprepared_renders.load(Ordering::SeqCst), 0, "rendered an unprepared half");
+    let (kept, skipped) = prep_count(&o);
+    assert!(skipped > 5 * kept, "kept {kept} skipped {skipped}");
+    // Every prep is followed by a render: kept == renders (+1 for the frame in flight).
+    assert!(kept.abs_diff(o.renders) <= 2, "kept {kept} renders {}", o.renders);
+    assert_eq!(o.shared.rng_mismatches.load(Ordering::SeqCst), 0, "slot 10 leaked into the RNG stream");
+    let ratio = o.game / o.wall_s;
+    assert!(ratio > 0.93 && ratio < 1.05, "game/wall {ratio}");
+}
+
+#[test]
+fn renderprep_skip_with_never_and_client_policies_stays_consistent() {
+    for (render, gap) in [(RenderPolicy::Never, 0), (RenderPolicy::Never, 500), (RenderPolicy::IntervalMs(0), 5000)] {
+        let o = run(Scenario::new(policy(30, render, 120, gap, 1000), 20, 5, 2000).with_prep_skip());
+        common_invariants(&o);
+        lists_bounded(&o);
+        assert_eq!(o.shared.unprepared_renders.load(Ordering::SeqCst), 0, "{render:?} gap {gap}");
+        assert_eq!(o.shared.rng_mismatches.load(Ordering::SeqCst), 0, "{render:?} gap {gap}");
+        let (kept, _) = prep_count(&o);
+        assert!(kept.abs_diff(o.renders) <= 2, "{render:?} gap {gap}: kept {kept} renders {}", o.renders);
+    }
+}
+
+#[test]
+fn renderprep_skip_without_lookahead_renders_unprepared_halves() {
+    // Negative control: deciding prep from the decision just made (one frame late) makes
+    // FrameTicks render halves whose prep was skipped.
+    let mut sc =
+        Scenario::new(policy(20, RenderPolicy::IntervalMs(300), 600, 2000, 1000), 20, 10, 2500).with_prep_skip();
+    sc.lookahead = false;
+    let o = run(sc);
+    assert!(o.shared.unprepared_renders.load(Ordering::SeqCst) > 0, "naive variant did not fail");
+}
+
+#[test]
+fn renderprep_without_rng_isolation_changes_the_simulation_stream() {
+    // Negative control: without the save/restore, every prep shifts the RNG stream the
+    // simulation sees, so prep-on and prep-off runs diverge.
+    let mut sc =
+        Scenario::new(policy(20, RenderPolicy::IntervalMs(300), 600, 2000, 1000), 20, 10, 2000).with_prep_skip();
+    sc.isolate_rng = false;
+    let o = run(sc);
+    assert!(o.shared.rng_mismatches.load(Ordering::SeqCst) > 0, "no divergence without isolation");
+    // And with prep on every frame (vanilla) but isolation on, the stream is clean.
+    let o = run(Scenario {
+        isolate_rng: true,
+        ..Scenario::new(policy(20, RenderPolicy::IntervalMs(0), 120, 5000, 1000), 5, 5, 1000)
+    });
+    assert_eq!(o.shared.rng_mismatches.load(Ordering::SeqCst), 0);
 }

@@ -163,6 +163,11 @@ fn epoch() -> &'static Instant {
     EPOCH.get_or_init(Instant::now)
 }
 
+/// True on the thread that owns the slot-13 callback (the Movement worker).
+pub(crate) fn on_owner_thread() -> bool {
+    IS_OWNER.with(Cell::get)
+}
+
 /// Monotonic ns since the agent epoch.
 pub(crate) fn epoch_ns() -> u64 {
     epoch().elapsed().as_nanos() as u64
@@ -416,14 +421,15 @@ fn worker(config: Config) {
     }
     if let Some(sched) = config.sched {
         log.line(&format!(
-            "X4MP_AGENT SCHED CONFIG mode=fixed{} render={:?} max_catchup_steps={} max_render_gap_ms={} max_lag_ms={} wait_ms={} stall_ms={}",
+            "X4MP_AGENT SCHED CONFIG mode=fixed{} render={:?} max_catchup_steps={} max_render_gap_ms={} max_lag_ms={} wait_ms={} stall_ms={} skip_renderprep={}",
             sched.policy.hz,
             sched.policy.render,
             sched.policy.max_catchup_steps,
             sched.policy.max_render_gap_ms,
             sched.policy.max_lag_ms,
             sched.wait_ms,
-            sched.stall_ms
+            sched.stall_ms,
+            u8::from(sched.skip_renderprep)
         ));
         sched_live::init(sched);
     }
@@ -518,14 +524,15 @@ fn log_phase(log: &mut Log, phase: sched_live::Phase) {
     use sched_live::Phase;
     match phase {
         Phase::Active => log.line(&format!(
-            "X4MP_AGENT SCHED ARMED dt=1/{} step_const=0x{:x} patch=0x{:x},0x{:x},0x{:x} decision=FrameState+0x{:x} flip_flag=FrameState+0x{:x}(untouched)",
+            "X4MP_AGENT SCHED ARMED dt=1/{} step_const=0x{:x} patch=0x{:x},0x{:x},0x{:x} decision=FrameState+0x{:x} flip_flag=FrameState+0x{:x}(untouched) renderprep_skip={}",
             sched_live::config().map(|c| c.policy.hz).unwrap_or(0),
             sched_live::step_constant(),
             pinned::DECISION_CMP_VA,
             pinned::DT_LOAD_VA,
             pinned::DT_MIN_VA,
             pinned::FRAME_STATE_DECISION_BYTE,
-            pinned::FRAME_STATE_RENDER_FLAG
+            pinned::FRAME_STATE_RENDER_FLAG,
+            if sched_live::config().is_some_and(|c| c.skip_renderprep) { "slot10_wrapped+rng_isolated" } else { "off" }
         )),
         Phase::Refused => {
             log.line(&format!("X4MP_AGENT SCHED REFUSED reason={} restore={}", sched_live::fault().reason(), sched_live::restore_note()))

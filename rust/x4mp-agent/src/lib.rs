@@ -14,4 +14,6 @@ pub mod sha256;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod agent;
 #[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+mod renderprep;
+#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
 mod sched_live;

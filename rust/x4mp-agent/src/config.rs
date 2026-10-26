@@ -22,6 +22,9 @@ pub const ENV_SCHED_MAX_RENDER_GAP_MS: &str = "X4MP_SCHED_MAX_RENDER_GAP_MS";
 /// Stall watchdog: no simulation step for this long outside loading restores and disarms.
 pub const ENV_SCHED_STALL_MS: &str = "X4MP_SCHED_STALL_MS";
 
+/// `1` skips slot-10 render-list preparation on frames the scheduler will not render.
+pub const ENV_SCHED_SKIP_RENDERPREP: &str = "X4MP_SCHED_SKIP_RENDERPREP";
+
 /// Hard cap on consecutive no-render steps (`X4MP_SCHED_MAX_CATCHUP` upper bound).
 pub const MAX_CATCHUP_CAP: u64 = 3600;
 
@@ -34,6 +37,8 @@ pub struct Sched {
     pub wait_ms: u64,
     /// Stall watchdog limit. 1000..=600000 ms, default 10000.
     pub stall_ms: u64,
+    /// Skip slot-10 render prep on frames that will not be rendered (with RNG isolation).
+    pub skip_renderprep: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -96,6 +101,11 @@ fn parse_sched(get: &impl Fn(&str) -> Option<String>) -> Result<Option<Sched>, S
     let max_lag_ms = bounded(get(ENV_SCHED_MAX_LAG_MS), ENV_SCHED_MAX_LAG_MS, 1000, 50, 60_000)?;
     let wait_ms = bounded(get(ENV_SCHED_WAIT_MS), ENV_SCHED_WAIT_MS, 5000, 100, 60_000)?;
     let stall_ms = bounded(get(ENV_SCHED_STALL_MS), ENV_SCHED_STALL_MS, 10_000, 1000, 600_000)?;
+    let skip_renderprep = match get(ENV_SCHED_SKIP_RENDERPREP).as_deref() {
+        None | Some("0") => false,
+        Some("1") => true,
+        Some(_) => return Err(format!("{ENV_SCHED_SKIP_RENDERPREP} must be 0 or 1")),
+    };
     if wait_ms >= stall_ms {
         return Err(format!("{ENV_SCHED_WAIT_MS} must be below {ENV_SCHED_STALL_MS}"));
     }
@@ -103,6 +113,7 @@ fn parse_sched(get: &impl Fn(&str) -> Option<String>) -> Result<Option<Sched>, S
         policy: SchedConfig { hz, render, max_catchup_steps, max_render_gap_ms, max_lag_ms },
         wait_ms,
         stall_ms,
+        skip_renderprep,
     }))
 }
 
@@ -179,7 +190,10 @@ mod tests {
         let Parsed::Enabled(c) = with(&[(ENV_SCHED, "off")]) else { panic!() };
         assert_eq!(c.sched, None);
         let Parsed::Enabled(c) = with(&[(ENV_SCHED, "fixed60")]) else { panic!() };
-        assert_eq!(c.sched, Some(Sched { policy: SchedConfig::default(), wait_ms: 5000, stall_ms: 10_000 }));
+        assert_eq!(
+            c.sched,
+            Some(Sched { policy: SchedConfig::default(), wait_ms: 5000, stall_ms: 10_000, skip_renderprep: false })
+        );
         let Parsed::Enabled(c) = with(&[
             (ENV_SCHED, "fixed30"),
             (ENV_RENDER_INTERVAL_MS, "500"),
@@ -202,7 +216,12 @@ mod tests {
                 max_lag_ms: 250
             }
         );
-        assert_eq!((s.wait_ms, s.stall_ms), (3000, 20_000));
+        assert_eq!((s.wait_ms, s.stall_ms, s.skip_renderprep), (3000, 20_000, false));
+        let Parsed::Enabled(c) = with(&[(ENV_SCHED, "fixed20"), (ENV_SCHED_SKIP_RENDERPREP, "1")]) else { panic!() };
+        assert!(c.sched.unwrap().skip_renderprep);
+        // Without X4MP_SCHED the render-prep switch does nothing.
+        let Parsed::Enabled(c) = with(&[(ENV_SCHED_SKIP_RENDERPREP, "1")]) else { panic!() };
+        assert_eq!(c.sched, None);
         let Parsed::Enabled(c) = with(&[(ENV_SCHED, "fixed20")]) else { panic!() };
         assert_eq!(c.sched.unwrap().policy.hz, 20);
         let Parsed::Enabled(c) = with(&[(ENV_SCHED, "fixed60"), (ENV_RENDER_INTERVAL_MS, "never")]) else { panic!() };
@@ -213,6 +232,7 @@ mod tests {
             vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_STALL_MS, "999")],
             vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_WAIT_MS, "10000"), (ENV_SCHED_STALL_MS, "10000")],
             vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_MAX_RENDER_GAP_MS, "x")],
+            vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_SKIP_RENDERPREP, "yes")],
             vec![(ENV_SCHED, "fixed60"), (ENV_RENDER_INTERVAL_MS, "-1")],
             vec![(ENV_SCHED, "fixed60"), (ENV_RENDER_INTERVAL_MS, "600001")],
             vec![(ENV_SCHED, "fixed60"), (ENV_SCHED_MAX_CATCHUP, "0")],
