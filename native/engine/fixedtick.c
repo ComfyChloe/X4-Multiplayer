@@ -233,6 +233,7 @@ static handler hook_end = {end_vtable};
 static int64_t sim_begin_qpc;
 #include "walkprof.h"
 #include "econcap.h"
+#include "mirror.h"
 
 static void **table_now(void) {
     return image ? *(void ***)(image + VBI_RVA) : NULL;
@@ -318,6 +319,7 @@ static void unregister_sim_hooks(void) {
 
 static void disarm_because(const char *reason) {
     simprof_stop(); /* the sampler stops before anything is unregistered */
+    mirror_stop();
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
     walk_uninstall();
@@ -411,6 +413,7 @@ static void move(handler *self) {
     o->speed = speed;
     ++o->frames;
     econcap_frame(game, o->frames, econ_tls_rng());
+    mirror_frame(o->frames);
 }
 
 static int stop(lua_State *L) {
@@ -724,6 +727,8 @@ __declspec(dllexport) int luaopen_x4lan_fixedtick(lua_State *L) {
     method(L, "active", active); method(L, "stats", stats);
     method(L, "profile", profile); method(L, "folds", folds);
     method(L, "econ_watch", econ_watch); method(L, "econ_lines", econ_lines);
+    method(L, "mirror", l_mirror); method(L, "mirror_stats", l_mirror_stats);
+    method(L, "mirror_sample", l_mirror_sample); method(L, "mirror_stop", l_mirror_stop);
     p_lua_settop(L, -2);
     p_lua_createtable(L, 0, 1); method(L, "start", start);
     return 1;

@@ -86,7 +86,7 @@ SetScript('onUpdate',function()
  if owner then
   if not owner:active() then
    DebugError('[X4LAN] FRAMEPROBE disarmed: '..tostring(owner:stats().reason or 'unknown'))
-   owner:stop();owner=nil;return
+   owner:stop();owner=nil;X4LAN_FIXEDTICK_OWNER=nil;return
   end
   if now>=nextLog then logStats(now) end
   if profiling then
@@ -108,6 +108,7 @@ SetScript('onUpdate',function()
  if not ok then error(result) end
  if result then
   owner=result;nextLog=0
+  X4LAN_FIXEDTICK_OWNER=owner -- shared with dev/mirror_probe.lua
   DebugError('[X4LAN] FRAMEPROBE armed in MoveWorker slot 5 mode='..(X4LAN_FIXEDTICK_MODE or 'probe'))
   if X4LAN_ECONCAP and not econWatchRegistered then
    econWatchRegistered=true
