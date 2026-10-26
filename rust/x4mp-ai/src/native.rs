@@ -75,6 +75,9 @@ pub fn extract(log: &str) -> String {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Bracket {
     pub ent: Uid,
+    /// Capture-local engine context address. Identifies recursive calls of the same script;
+    /// never a durable entity id. Older synthetic records may omit it.
+    pub context: Option<u64>,
     pub irq: bool,
     pub script: String,
     pub t: f64,
@@ -144,6 +147,7 @@ pub fn parse(text: &str) -> Result<Capture, String> {
                 top.insert(r.ent.0, r.name.clone());
                 let b = Bracket {
                     ent: r.ent,
+                    context: r.get("ctx").and_then(|v| v.as_u64()),
                     irq: r.tag == "irun",
                     script: r.name.clone(),
                     t: f(r, "t")?,
@@ -321,17 +325,22 @@ pub fn check(c: &Capture) -> NativeReport {
         ..Default::default()
     };
     // previous end per (entity, script frame)
-    let mut prev: BTreeMap<(u64, String), String> = BTreeMap::new();
+    let mut prev: BTreeMap<(u64, Option<u64>, String), String> = BTreeMap::new();
     let mut next_resupply: BTreeMap<u64, f64> = BTreeMap::new();
     for b in &c.brackets {
-        let key = (b.ent.0, b.script.clone());
+        let key = (b.ent.0, b.context, b.script.clone());
         let end = end_label(b);
         // A fresh instance (start wake at pc 0) has no previous yield.
         let fresh = !b.irq && b.pc_in == 0 && b.mask & 1 != 0;
         let before =
-            if fresh { "start".to_string() } else { prev.get(&key).cloned().unwrap_or_else(|| "start".into()) };
+            if fresh { "start".to_string() } else { prev.get(&key).cloned().unwrap_or_else(|| "unknown".into()) };
         if !b.irq {
-            prev.insert(key, end.clone());
+            if b.yielded {
+                prev.insert(key, end.clone());
+            } else {
+                // Context addresses can be reused. A return ends the known lifetime.
+                prev.remove(&key);
+            }
         }
         let class = format!("{} {}{} -> {}", b.script, if b.irq { "irq " } else { "" }, before, end);
         if let Some(n) = b.steps {
@@ -497,6 +506,42 @@ mod tests {
         assert!(r.first_wait_mismatch.is_some());
         assert_eq!(wait_rule("move.generic", 616), None);
         assert_eq!(wait_rule("move.generic", 1022), None);
+    }
+
+    #[test]
+    fn recursive_script_contexts_keep_separate_predecessors() {
+        let mut c = parse(&synthetic()).unwrap();
+        let mut outer = c.brackets[0].clone();
+        outer.script = "move.generic".into();
+        outer.context = Some(10);
+        outer.kw = kw::RUN_SCRIPT;
+        outer.line = 984;
+        let mut inner = outer.clone();
+        inner.context = Some(20);
+        inner.kw = kw::WAIT;
+        inner.line = 382;
+        inner.until = inner.t + 0.001;
+        let mut inner_return = inner.clone();
+        inner_return.mask = 2;
+        inner_return.pc_in = 10;
+        inner_return.yielded = false;
+        let mut outer_resume = outer.clone();
+        outer_resume.mask = 0x20;
+        outer_resume.pc_in = 20;
+        outer_resume.kw = kw::WAIT;
+        outer_resume.line = 616;
+        c.brackets = vec![outer, inner, inner_return, outer_resume.clone()];
+        let r = check(&c);
+        assert!(r.classes.contains_key("move.generic run_script@984 -> wait@616"));
+        assert!(!r.classes.contains_key("move.generic wait@382 -> wait@616"));
+        assert!(!r.classes.contains_key("move.generic return -> wait@616"));
+
+        // A first observation after an unobserved start, or a reused completed context,
+        // must not be labelled as a known start/continuation.
+        outer_resume.context = Some(20);
+        c.brackets.push(outer_resume);
+        let r = check(&c);
+        assert!(r.classes.contains_key("move.generic unknown -> wait@616"));
     }
 
     #[test]

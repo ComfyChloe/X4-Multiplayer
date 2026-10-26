@@ -317,7 +317,7 @@ Cross-sector reads are facts from the frame-start snapshot.
 
 ## 9. Tests (offline)
 
-`cargo test -p x4mp-ai`: 51 tests pass (Windows 11, Rust 1.94.1);
+`cargo test -p x4mp-ai`: 52 tests pass (Windows 11, Rust 1.94.1);
 `cargo clippy -p x4mp-ai --all-targets -- -D warnings` passes. The original test breakdown below
 is historical M1/M2; M3 additions are described in section 9b.
 
@@ -439,7 +439,13 @@ multi-session file is explicitly excluded from wait validation; it is allowed be
 re-arm during startup. Only a file with no complete brackets fails the coverage check. Other unmatched records and draw histograms remain reported diagnostics; an exit
 0 is not full equivalence acceptance. Rechecking existing native patrol-capture-002 with the new M3
 wait rules finds five move.generic L382 waits, **5/5 bit-exact** (in addition to the historical Patrol
-checks), with 149 complete brackets and zero unmatched records across its two sessions. It deliberately does not predict L616 (highway
+checks), with 149 complete brackets and zero unmatched records across its two sessions.
+Draw-class predecessor tracking uses the captured context address as well as entity and script, so
+recursive calls to the same script do not overwrite each other's predecessor. State is local to one
+capture session, resets on an explicit start, and is removed on return; an initial non-start bracket
+is labelled `unknown`. Older synthetic records without `ctx` retain the entity/script fallback and
+cannot establish recursive-frame classification. A synthetic nested-frame regression covers this;
+rechecking patrol-capture-002 leaves its move.generic classes and 5/5 fixed waits unchanged. It deliberately does not predict L616 (highway
 state) or L1022 (ship class/pilot skill) from a bracket that lacks those inputs. A new wider capture
 using `filter=move.generic` is the next validation step; full value capture M2b remains outstanding.
 
