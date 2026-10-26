@@ -6,6 +6,8 @@ use std::ptr::{addr_of, addr_of_mut};
 use std::slice;
 use std::sync::atomic::{AtomicBool, AtomicPtr, AtomicU64, Ordering};
 
+mod timing;
+
 const REGISTRYINDEX: c_int = -10000;
 const META: &[u8] = b"x4lan.hooks.owner.v1\0";
 const VBI_RVA: usize = 0x6cf1570;
@@ -746,6 +748,7 @@ unsafe fn table_owned() -> bool {
 }
 
 unsafe fn disarm() {
+    timing::disarm();
     uninstall_attention();
     if !CURRENT.is_null() {
         (*CURRENT).armed = false;
@@ -1261,12 +1264,15 @@ pub unsafe extern "C-unwind" fn luaopen_x4lan_hooks(lua: *mut LuaState) -> c_int
     method(lua, b"active\0", Some(active));
     method(lua, b"frames\0", Some(frames));
     (functions.settop.unwrap())(lua, -2);
-    (functions.createtable.unwrap())(lua, 0, 5);
+    (functions.createtable.unwrap())(lua, 0, 8);
     method(lua, b"start\0", Some(start));
     method(lua, b"inspect\0", Some(inspect));
     method(lua, b"walltime\0", Some(walltime));
     method(lua, b"hash\0", Some(hash));
     method(lua, b"set_remote_attention\0", Some(set_remote_attention));
+    method(lua, b"timing_start\0", Some(timing::lua_start));
+    method(lua, b"timing_stop\0", Some(timing::lua_stop));
+    method(lua, b"timing_stats\0", Some(timing::lua_stats));
     1
 }
 

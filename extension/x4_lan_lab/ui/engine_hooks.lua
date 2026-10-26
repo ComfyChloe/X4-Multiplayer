@@ -47,11 +47,15 @@ local ok,err=pcall(function()
   sectors=cfg.engine_hash_sectors or {'cluster_14_sector001_macro','cluster_01_sector001_macro'},
   run=cfg.engine_hash_run or 'default',session=cfg.build or 'disabled'}
  assert(atom(settings.run) and #settings.run<=32,'invalid engine hash run')
+ -- Opt-in thread-timing mode: nil/false (off), 'observe' (counters only) or 'join' (frame-boundary joins).
+ settings.timing=cfg.engine_timing or nil;settings.timingTimeout=integer(cfg.engine_timing_timeout_ms,1,1000,50)
+ assert(settings.timing==nil or settings.timing=='observe' or settings.timing=='join','engine_timing must be observe or join')
  assert(type(settings.sectors)=='table' and #settings.sectors<=16,'engine_hash_sectors must have at most 16 entries')
  local wanted={};for _,sector in ipairs(settings.sectors)do assert(atom(sector),'invalid engine hash sector');wanted[sector]=true end
  settings.wanted=wanted
  local load,message=package.loadlib(X4LAN_HOOKS_PATH or './extensions/x4_lan_lab/native/x4lan_hooks_64.dll','luaopen_x4lan_hooks')
  assert(load,message);native=load();assert(native and native.start and native.inspect and native.walltime and native.hash and native.set_remote_attention,'invalid hooks module')
+ assert(not settings.timing or (native.timing_start and native.timing_stats),'hooks module lacks timing mode')
 end)
 if not ok then disabled(err);return end
 
@@ -157,6 +161,12 @@ local function hashCost(frame,complete,stats,started)
  out('HASHCOST',string.format('frame=%d fresh=%d complete=%d scanned=%d ships=%d capture_ms=%.3f hash_ms=%.3f total_ms=%.3f max_ms=%.3f cumulative_ms=%.3f captures=%d completed=%d failed=%d budget_ms=%.3f cadence=%d',
   frame,complete and 1 or 0,complete and 1 or 0,stats.scanned,stats.ships,stats.captureMs,stats.hashMs,totalMs,cost.maxMs,cost.totalMs,cost.captures,cost.completed,cost.failed,settings.budgetMs,settings.cadence))
 end
+local function timingLine(frame,gameTime)
+ if not M.timing then return end
+ local line,active=native.timing_stats()
+ out('TIMING',string.format('run=%s session=%s frame=%d gt=%.9f %s',esc(settings.run),esc(settings.session),frame,gameTime,line))
+ if not active then M.timing=false;out('TIMING_DISABLED','reason=disarmed')end
+end
 local function safeSample(frame,gameTime,dt,rng,sessionSeed)
  if M.failed then return end
  local started=native.walltime()
@@ -164,6 +174,7 @@ local function safeSample(frame,gameTime,dt,rng,sessionSeed)
  if not ok then disabled(result);return end
  if not result then incomplete(frame,gameTime,dt,reason,sessionSeed,stats)end
  hashCost(frame,result and true or false,stats,started)
+ timingLine(frame,gameTime)
 end
 local function syncAttention()
  if not M.owner then return true end
@@ -183,6 +194,12 @@ function M.start()
  M.owner=owner;M.attentionProxy='0'
  if not syncAttention()then return end
  out('HOOKS_READY',string.format('slot=12 cadence=%d run=%s session=%s maxships=%d budget_ms=%.3f',settings.cadence,esc(settings.run),esc(settings.session),settings.maxShips,settings.budgetMs))
+ if settings.timing then
+  local started,why=native.timing_start(settings.timing,settings.timingTimeout)
+  M.timing=started==true
+  if M.timing then out('TIMING_READY',string.format('mode=%s timeout_ms=%d slots=0,15',settings.timing,settings.timingTimeout))
+  else out('TIMING_DISABLED','reason='..esc(why or 'refused'))end
+ end
 end
 RegisterEvent('X4LAN.Loaded',M.start)
 local nextProbe=0

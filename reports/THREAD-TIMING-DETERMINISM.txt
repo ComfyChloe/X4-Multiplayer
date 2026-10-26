@@ -1,0 +1,241 @@
+X4 MULTIPLAYER - THREAD-TIMING DETERMINISM (OBSERVE / JOIN MODE)
+25 October 2026 | INTERNAL DEVELOPMENT | NOT NATIVE EVIDENCE YET
+
+TASK AND SCOPE
+Branch contrib/ferrite-thread-timing (worktree X4-Multiplayer-thread-timing),
+based on origin/contrib/ferrite-engine-hooks 4b2458f. Goal: remove places where
+simulation results depend on wall-clock thread timing, so two games stepping the
+same frames get the same results. Windows X4 9.00, Steam build 23660954 only.
+Static analysis of the copied x4-re/bin/X4.exe (capstone; no Ghidra writes).
+No game was launched; every result below is static or synthetic.
+Complements the separate fixed-dt work (X4-Multiplayer-fixed-tick, fixed60):
+a fixed dt makes step sizes equal, it does not join worker threads.
+
+FRAME TIMELINE (high, MoveWorker::Run 0xef4400)
+  P   0xef45d9  Gravidar publish (swap + kick next pass only if done)
+      0xef45ea  wait g_semSimStart (main thread advanced gameTime before release)
+      0xef4614  kick pathing pass (PathingManager+0x88=0, release +0x18)
+      SyncThreadGameTime, universe pre-pass (Universe+0x2c0, 0x97a160)
+  S0  VBI slot 0  <- new timing frame_start (empty slot)
+      slot 3 GameClient::Move -> UniverseFrameUpdate: ProcessDueEvents (flushes
+      the deferred queue), component tree, MD, AI, pathing join 0xeac170,
+      Jolt step
+  S15 VBI slot 15 <- new timing frame_end (empty slot)
+      0xef4771  release g_semSimDone (main thread may now run FrameTick)
+      0xef4777  kick MassTraffic and RegionManager (only if their pass is done)
+Existing VBI owners: 5 fixedtick probe, 7 simtick, 12 observer. Timing claims 0
+and 15 and refuses to start if either (or its loading-bank twin) is occupied.
+
+PATH 1 - GRAVIDAR (mechanism high, consumer medium)
+Gravidar::Run 0x10ae0e0: loop head sets done (+0x6988) under CS +0x6960,
+signals the single waiter {+0x6990 flag, +0x6998 event}, then waits for the kick
+event +0x69a8. A pass syncs TLS game time, skips work when paused (Sleep 5) and
+posts FogOfWarChanged into its own queue +0x69b0. PublishResults 0x10b12c0 runs
+at P every iteration: if done, it flips the buffer indices 0x38f5260/0x2f4b99c,
+drains +0x69b0 into the global deferred queue, clears done and kicks the next
+pass; if not done it keeps the old results. Pass length is wall-clock, so the
+radar/visibility lag in frames is timing-dependent.
+Consumers: readers of the published index 0x2f4b99c/0x38f5260 (query functions
+0x10b34c0, 0x10b60d0, 0x10b7730, 0x10b77f0, 0x10b9c10, ...) and 95 functions that
+use the Gravidar singleton 0x6cf1650 (script find_gravidar_contact etc.), all on
+the MoveWorker.
+Fix (implemented, join): at S0 wait for done. The pass kicked at P therefore
+always finishes before the frame's simulation, and the next P always publishes:
+constant one-frame lag. Diagnostic grav_lag1/grav_lagN/grav_lagmax from flips of
+0x2f4b99c observed at S0.
+Residual: the pass still runs between P and S0, concurrently with the MassTraffic
+and RegionManager passes and the universe pre-pass.
+
+PATH 2 - MASSTRAFFIC (mechanism high, consumer medium)
+MassTrafficUpdateTask::Run 0x8c06d0 uses the same protocol (CS +0x60, done +0x88,
+waiter +0x90/+0x98, idle +0xa0, kick +0xa8, state +0xc8). Kicked at 0xef4777 only
+when done and ((+0x18==0 && +0x1c==0) || +0x20). Its pass walks galaxy ->
+cluster -> sector -> zone and, per zone, holds g_MassTrafficLock 0x3949b28 while
+updating the zone traffic object (+0x4f0) via 0x82ed50/0x82f110/0x831440;
+0x831440 also posts deferred events. Zone::Move 0x834950 only TryEnters the same
+lock (0x834c6e) and skips its whole traffic sub-update (0x82d680, 0x831390,
+0x82f110, 0x8be450, 0x8acd40) when the worker holds it.
+Consumers: the zone traffic objects read by Zone::Move and the traffic actors.
+Fix (implemented, join): at S0 wait for done, so the worker is idle during the
+simulation and the TryEnter cannot fail. Diagnostic mt_skip counts real failures
+at the Zone::Move call site through the import wrapper (return address 0x834c74);
+grav_nolock counts the Gravidar 'no lock (Run)' site (0x10aef17).
+
+PATH 3 - REGIONMANAGER (mechanism high, consumer medium)
+RegionManager::Run 0xef30b0 (object = Run this - 0x20): CS +0x118, done +0x140,
+waiter +0x148/+0x150, idle +0x158, kick +0x160, state +0x180, thread +0x170.
+Kicked at 0xef47f1 when (+0xf8 || +0xfc) && +0x144==0 && done. Work: 0xef2e90
+and 0xeea8a0 (region object generation, including the PCG candidate 0xee7290).
+Consumers (MoveWorker): Sector::vfunc557 0x785120 -> 0xeeee60 copies the region
+instance list under the manager lock and reads each instance's generated data
+(+0x8e0 under +0x8f0) while the worker may still be writing it; also
+Zone::vfunc693 0x8429a0 -> 0xeeb650 and Region::vfunc624. Not waited for by the
+engine during play (only NotifyGameReset/Load/Shutdown wait).
+Fix (implemented, join): at S0 wait for done; consumers then always see a
+complete pass. Diagnostics rm_busy0 (still running at S0) and rm_busy15 (running
+during the simulation, observe mode only).
+
+PATH 4 - DEFERRED EVENTS FROM PATHING JOBS (mechanism high)
+Correction to the earlier summary: the pathing thread itself does not post. Its
+pass (0xeae3c0) queues one JobThreadManager job per agent batch
+(QueueJob 0x14bc2d0 at 0xeae942/0xeae9a0, job body 0xeaeb60) and waits for all.
+Each job builds a private command list (flight controller 0xeaecc0 -> 0xe8f250,
+0xe8d850, 0xea2c40: TargetInvalid, Start/StopBoost, StopTravelMode, Formation*,
+Transition, Warp events) and splices it at the tail of the global command list
+0x39943a8 under CS 0x398a558. Batch order in the queue is job completion order,
+which depends on worker count and timing. Node layout (0x998430, 0x99a720):
+next, prev, kind u32 +0x10, source id +0x18, event +0x20, time +0x28.
+Second effect: the pass is kicked before S0 and joined only after slot 3's
+ProcessDueEvents, so whether a batch is flushed in frame N or N+1 is also
+timing-dependent. MassTraffic (0x831440) and Gravidar (via publish) post too.
+Consumer: EventSystem_FlushCommandQueue 0x99abe0 / ProcessDueEvents 0x99bb50 ->
+per-source time-ordered queues; same-time ties keep insertion order.
+Fix (implemented, join): at S0 peek the pathing semaphore (acquire with timeout,
+release immediately; WaitAndSwapBuffers still consumes exactly one count), so all
+batches are spliced before ProcessDueEvents. Then stable-sort the payloads of the
+commands appended since the S15 snapshot by (source id, time). Relative order of
+the same source/time is preserved (an agent's own events stay in program order);
+segments containing other command kinds are left untouched (ev_mixed). Hashes:
+ev_raw (order before sorting), ev_ord (after), ev_set (order-independent sum).
+Residual: same-source, same-time events from different batches (formation
+leader/wingman cross-posts) keep completion order (ev_groups is an upper bound);
+events posted by job threads between slot 3 and S15 (physics callbacks, not
+traced) are hashed but not reordered.
+
+PATH 5 - JOLT / JOBTHREADMANAGER (count high, determinism low/unverified)
+Worker count = physical cores (GetLogicalProcessorInformation,
+RelationProcessorCore) - 2, clamped 4..32, stored at manager+0x528
+(0x14bd0a6..0x14bd0de), created in WinMain before any mod code. CPU affinity does
+not change it. Jolt runs on this pool through XPhys::XJobSystem (0xc5a80); pathing
+batches (path 4) share the same FIFO queue.
+Designed only: (a) admission - both peers must log the same jobs= value (logged in
+every TIMING line; compare_timing flags a mismatch); (b) a fixed count needs a
+launch-time pin (import hook before WinMain), outside this in-memory/Lua-loaded
+module; (c) native check: run two games with different counts and compare physics
+STATEHASH. Jolt upstream intends thread-count-independent determinism for
+identical call order, but this build and X4's job wrapper were not verified.
+
+IMPLEMENTATION (native/hooks/src/timing.rs; lib.rs: mod line, disarm call,
+three Lua methods)
+- timing_start(mode, timeoutMs): needs the armed observer on its MoveWorker
+  thread, IMAGE verified by the observer, and all 16 timing_* signatures (also in
+  signatures.json as separate entries). Registers slots 0/15 by compare-exchange
+  from null and swaps the TryEnterCriticalSection import (RVA 0x1bc14c8) only if
+  it equals kernel32's resolved address. The wrapper (global_asm with SEH unwind
+  info) returns the original result.
+- Waits use the engine's own single-waiter flag/event exactly like
+  NotifyGameReset, with the configured timeout; the flag is reset after every
+  wait; an engaged foreign waiter is never touched. Pathing uses the semaphore peek.
+- Timeouts: counted (grav_to, mt_to, rm_to, path_to), frame continues unjoined;
+  30 consecutive timeouts disable that join (disabled bitmask, reason). Queue
+  integrity failures disable reordering.
+- Disarm (observer disarm/stop/__gc, timing_stop, foreign thread, lost slots or
+  context): restores both slots and the import by compare-exchange (foreign
+  replacements are left alone). Loading frames do nothing.
+- Worker clock read (mt_old/mt_new, rm_old/rm_new): after a pass the worker TLS
+  time (+0x300, via NtQueryInformationThread -> TEB) is compared with the
+  MoveWorker's previous/current frame time. Read-only.
+- Lua: engine_timing = 'observe' | 'join' (off when unset), timeout
+  engine_timing_timeout_ms (1..1000, default 50). TIMING_READY / TIMING_DISABLED;
+  one TIMING line per STATEHASH cadence, logged after HASHCOST with the same
+  frame and gt. Refusal never disables STATEHASH.
+
+TIMING LINE FIELDS (window since the previous line)
+frames, grav_pub, grav_lag1, grav_lagN, grav_lagmax, grav_busy0, grav_to,
+grav_wait_us (max), grav_nolock, mt_skip, mt_busy0, mt_busy15, mt_old, mt_new,
+mt_to, mt_wait_us, rm_busy0, rm_busy15, rm_old, rm_new, rm_to, rm_wait_us,
+path_to, path_wait_us, ev_n (queue length at S0), ev_seg, ev_moved, ev_groups,
+ev_mixed, ev_skip, ev_raw/ev_ord/ev_set (rolling hashes), jobs, disabled, reason.
+
+DESIGNED, NOT IMPLEMENTED
+1. Serialize mode (removes the remaining worker clock race and the overlap of
+   the worker passes with each other): at S15 clear done of idle MassTraffic,
+   RegionManager and Gravidar workers so the engine skips the frame-end kicks and
+   the publish at P; at S0 kick them one after another with the engine's own
+   predicates and wait. Not implemented because the engine relies on done during
+   teardown: MassTraffic stop 0x8c0e00 and RegionManager stop 0xef3360 wake the
+   worker only when done != 0, and NotifyGameReset waits INFINITE for done. A
+   missed S0 (MoveWorker exit after S15) would hang shutdown/reset unless a
+   watchdog thread emulated the done/wake protocol on objects that may be about
+   to be freed. Needs a separate review before any native use.
+2. Canonicalizing the whole queue (not only the S15->S0 segment) if native runs
+   show ev_set equal but ev_ord different with ev_moved = 0 (physics posts).
+3. Jolt worker-count pin (path 5).
+
+OFFLINE VALIDATION (25 October 2026, this PC, synthetic)
+- python native/hooks/build.py --test: 10 Rust tests PASS (4 existing, 6 new:
+  import wrapper site counting, worker join/timeout/foreign waiter, semaphore
+  peek preserves one count, queue canonical order independent of completion
+  order with mixed-kind refusal, time classification, slot/import lifecycle with
+  loading, timeout, foreign-thread disarm and observe mode). Release DLL built;
+  exports only luaopen_x4lan_hooks; wrapper has .pdata unwind info.
+- python dev/check_hook_signatures.py ../x4-re/bin/X4.exe: PASS, exact build and
+  43 signatures (27 existing + 16 timing_*). No relocations inside timing sites.
+- tests/test_engine_hooks.py (real LuaJIT via lupa 2.8): 17 PASS, 3 new.
+  tests/test_compare_timing.py: 3 PASS.
+- Full suite on Windows: 707 run; the 35 failures/errors are identical to the
+  unchanged base (701 run) and are the known Windows-only symlink/Linux-starter
+  cases; the documented full-suite workflow is WSL/Linux and was not rerun.
+None of this is native evidence.
+
+NATIVE TEST PROCEDURE (to be run by the owner; not performed here)
+Preconditions: X4 closed; isolated test installations only (the two-sandbox
+setup used for fixed-tick Stage 0/1: GameAgent3 host, GameAgent2 guest); profile
+45841; new disposable worlds; autosave off; never load or overwrite normal saves.
+Prefer fixed60 from the fixed-tick module in both games so dt is equal.
+1. Build: python native/hooks/build.py --test; copy .local/evidence-053-withheld
+   into each test installation's extensions/x4_lan_lab/native/.
+2. Offline guard per installation:
+   python dev/check_hook_signatures.py "<installation>\X4.exe" -> PASS 43.
+3. Run A (baseline): in each test config.lua (untracked copy) set
+   engine_hooks=true, engine_hash_cadence=30, engine_hash_run='timing-observe',
+   engine_timing='observe'. Start both from the same pristine start; confirm
+   HOOKS_READY and TIMING_READY mode=observe timeout_ms=50 slots=0,15.
+   5 min idle at speed 1, then 2 min flying through a highway/traffic zone and an
+   asteroid field (same route both games), then quit to menu and exit X4.
+   Expect natively: grav_lagN or grav_busy0 > 0, mt_skip > 0 in traffic zones,
+   rm_busy15 > 0 near fields, ev_ord differing between games where ev_set agrees.
+4. Run B: same with engine_timing='join', engine_hash_run='timing-join'.
+   Expect: grav_lagN=0 and grav_lagmax=1 (when unpaused), mt_skip=0,
+   mt_busy15=0, rm_busy15=0, *_to=0, ev_mixed=0, disabled=0; exit without hang.
+5. Compare each run: python dev/compare_timing.py host.log guest.log --strict
+   and the existing python dev/compare_divergence.py --statehash ... for STATEHASH.
+   'TIMING CLEAN' plus equal ev_ord is the acceptance target; record mt_old/new,
+   rm_old/new mixes (worker clock race, path 1-3 residual), jobs= values and
+   remaining ev_ord-only windows.
+6. Cost: record fps for A vs B and the *_wait_us maxima; note hitches when
+   entering sectors with asteroid fields (RegionManager).
+7. Fallback check: engine_timing_timeout_ms=1 in one short run; expect *_to
+   counts, then disabled bits after 30 consecutive timeouts, no hang, STATEHASH
+   continues. Also quit to menu and start another new disposable world: expect
+   disarm, then TIMING_READY again after HOOKS_READY.
+Keep logs and notes under .local/evidence-261-withheld<run>/; do not commit
+them.
+
+PERFORMANCE / STABILITY RISK PER CHANGE
+- Gravidar join: adds the part of the pass that extends past S0 to the frame
+  (previously overlapped up to several frames); grows with object count. While
+  paused the worker sleeps 5 ms per pass, so paused frames can wait ~5 ms. Risk
+  medium.
+- MassTraffic join: pass over all traffic zones moves onto the critical path when
+  it outlasts the main-thread FrameTick gap. Risk low-medium.
+- RegionManager join: generation bursts when entering sectors with fields can take
+  tens of ms -> hitches or timeouts (that frame becomes non-deterministic and is
+  counted). Highest risk; consider a larger timeout only after measurement.
+- Pathing peek: the pathing pass no longer overlaps slots 1-3 (component tree,
+  MD, AI); cost up to min(pass, slots 1-3) per frame in busy sectors. The engine
+  join still runs; the semaphore count is preserved. Risk medium.
+- Queue reordering: O(n log n) on the segment plus two O(n) hash walks of the
+  whole queue under the queue lock. Changes delivery order only among different
+  sources at equal time (previously arbitrary); semantic risk low, not zero.
+- Import wrapper: every X4 TryEnterCriticalSection call passes through it (a few
+  ns); restored on disarm. Risk low.
+- Deadlocks: none by construction (no lock held while waiting; every wait bounded;
+  engine joins unchanged). Shutdown/reset paths are untouched in join mode.
+
+COORDINATION
+VBI slots 0 and 15 are claimed for this mode; agents needing them must coordinate.
+New code lives in timing.rs; lib.rs gains 8 lines (one changed). A sibling helper in the
+shared scratchpad overwrote a local script during this work; the resulting stray
+entries were removed before the final commit (no foreign worktree edits).
+CONTINUE-HERE.txt was not changed (branch-local work, not integrated).

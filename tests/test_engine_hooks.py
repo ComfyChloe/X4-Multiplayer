@@ -258,6 +258,54 @@ class EngineHookTests(unittest.TestCase):
         lua.eval("events['X4LAN.Loaded']")()
         self.assertEqual(lua.eval("#captures"), 0)
 
+    TIMING_NATIVE = """
+     timingStarts={}
+     native.timing_start=function(mode,timeout) timingStarts[#timingStarts+1]={mode,timeout};return true end
+     timingActive=true
+     native.timing_stats=function() return 'mode=join frames=30 grav_lagN=0 mt_skip=0 ev_ord=0123456789abcdef',timingActive end
+    """
+
+    def test_timing_is_off_by_default_and_never_enabled_in_source_config(self):
+        lua = self.runtime(self.TIMING_NATIVE)
+        lua.eval("events['X4LAN.Loaded']")()
+        lua.eval("callback")(1, 100.0, 1 / 60, "0123456789abcdef", "0011223344556677")
+        self.assertEqual(lua.eval("#timingStarts"), 0)
+        self.assertFalse([line for line in self.logs(lua) if "TIMING" in line])
+        config = (ROOT / "extension/x4_lan_lab/ui/config.lua").read_text()
+        self.assertNotIn("engine_timing", config)
+
+    def test_timing_join_logs_counters_next_to_statehash(self):
+        lua = self.runtime(self.TIMING_NATIVE + "X4LAN_CONFIG.engine_timing='join';X4LAN_CONFIG.engine_timing_timeout_ms=40")
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertEqual((lua.eval("timingStarts[1][1]"), lua.eval("timingStarts[1][2]")), ("join", 40))
+        self.assertIn("TIMING_READY mode=join timeout_ms=40", "\n".join(self.logs(lua)))
+        lua.eval("callback")(30, 100.5, 1 / 60, "0123456789abcdef", "0011223344556677")
+        logs = self.logs(lua)
+        kinds = [line.split()[1] for line in logs[-3:]]
+        self.assertEqual(kinds, ["STATEHASH", "HASHCOST", "TIMING"])
+        timing = self.fields(logs[-1], "TIMING")
+        self.assertEqual((timing["frame"], timing["gt"], timing["mode"]), ("30", "100.500000000", "join"))
+        self.assertEqual((timing["mt_skip"], timing["ev_ord"]), ("0", "0123456789abcdef"))
+        lua.execute("timingActive=false")
+        lua.eval("callback")(60, 101.0, 1 / 60, "0123456789abcdef", "0011223344556677")
+        self.assertIn("TIMING_DISABLED reason=disarmed", self.logs(lua)[-1])
+        lua.eval("callback")(90, 101.5, 1 / 60, "0123456789abcdef", "0011223344556677")
+        self.assertEqual(len([line for line in self.logs(lua) if " TIMING " in line]), 2)
+        self.assertEqual(len(self.state_lines(lua)), 3)
+
+    def test_timing_refusal_keeps_statehash_and_bad_mode_disables(self):
+        lua = self.runtime(self.TIMING_NATIVE + "X4LAN_CONFIG.engine_timing='observe';"
+                           "native.timing_start=function() return false,'timing signatures do not match this executable' end")
+        lua.eval("events['X4LAN.Loaded']")()
+        self.assertIn("TIMING_DISABLED reason=timing%20signatures", self.logs(lua)[-1])
+        lua.eval("callback")(1, 100.0, 1 / 60, "0123456789abcdef", "0011223344556677")
+        self.assertEqual(len(self.state_lines(lua)), 1)
+        self.assertFalse([line for line in self.logs(lua) if " TIMING " in line])
+        lua = self.runtime(self.TIMING_NATIVE + "X4LAN_CONFIG.engine_timing='fast'")
+        self.assertIn("HOOKS_DISABLED", self.logs(lua)[-1])
+        lua = self.runtime("X4LAN_CONFIG.engine_timing='join'")
+        self.assertIn("lacks%20timing%20mode", self.logs(lua)[-1])
+
     def test_lua_has_no_gameplay_writes_or_transport(self):
         text = SOURCE.read_text()
         for forbidden in ("SetObjectSectorPos", "RemoveComponent", "SpawnObject", "ActivateObject",

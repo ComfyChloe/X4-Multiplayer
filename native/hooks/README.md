@@ -72,3 +72,31 @@ read-only launches and the limited seeded comparison. The initial RNG matches, b
 draw sequences diverge again at frame 2; this is not full Stage 1 acceptance.
 Linux RVAs, hook behavior and acceptance are a separate later task; none of these
 Windows addresses may be reused on the Linux executable.
+
+## Opt-in thread-timing mode (`src/timing.rs`)
+
+Off unless the isolated test configuration sets `engine_timing = 'observe'` or
+`'join'` (the tracked `config.lua` never sets it). After `HOOKS_READY`, the Lua
+adapter calls `module.timing_start(mode, timeoutMs)` (`engine_timing_timeout_ms`,
+1..1000, default 50). It verifies 16 separate `timing_*` signatures, then
+registers empty MoveWorker VBI slots 0 (frame start) and 15 (frame end) and
+wraps the `TryEnterCriticalSection` import with a counter that returns the
+original result. Occupied slots, a foreign import pointer or any signature
+mismatch refuse with `TIMING_DISABLED`; STATEHASH continues.
+
+- `observe` only counts: Gravidar publish lag, MassTraffic skips in
+  `Zone::Move`, MassTraffic/RegionManager passes still running at frame start
+  and end, the worker clock read (previous or current frame time), and
+  order/set hashes of the deferred event command queue.
+- `join` additionally waits at frame start (bounded, engine single-waiter
+  protocol) for the Gravidar, MassTraffic and RegionManager passes and peeks the
+  pathing pass semaphore, then stable-sorts the deferred event commands appended
+  since the previous frame end by (source id, event time).
+
+Each timeout is counted and that frame continues unjoined; 30 consecutive
+timeouts disable that join only. Observer disarm, `timing_stop()`, foreign
+threads or lost slots restore both slots and the import. `module.timing_stats()`
+returns one line of window counters, logged as `TIMING` after `HASHCOST` with
+the same frame. Compare two games with `python dev/compare_timing.py a.log b.log`.
+Mechanisms, residual timing dependence and the native procedure are in
+`reports/THREAD-TIMING-DETERMINISM.txt`.

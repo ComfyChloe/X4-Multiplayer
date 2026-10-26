@@ -36,6 +36,22 @@
     {"name": "ship_l_vtable_attention", "rva": 45733360, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
     {"name": "ship_m_vtable_attention", "rva": 45627960, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
     {"name": "ship_s_vtable_attention", "rva": 45618352, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
-    {"name": "space_suit_vtable_attention", "rva": 45588392, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"}
+    {"name": "space_suit_vtable_attention", "rva": 45588392, "length": 8, "sha256": "13abb71be0dba16645b4a165a28fa302611a0ad23692a31389567286a3ce43e1"},
+    {"name": "timing_move_worker_frame_start", "rva": 15680976, "length": 74, "sha256": "62e76fb7327bd69feeb7c2e8ad6a2181f3abd7ad57b2154b40fc7c254300007d"},
+    {"name": "timing_move_worker_frame_end", "rva": 15681399, "length": 199, "sha256": "b83c04896534d19e2f29ff5eef56b9cde1787ed92a29293900142ba0ba58510b"},
+    {"name": "timing_gravidar_publish", "rva": 17502912, "length": 317, "sha256": "89362a2325ff0149e2e41e08628ad92eb2405e592c3dfc6f3e3e148667399daa"},
+    {"name": "timing_gravidar_loop", "rva": 17490368, "length": 173, "sha256": "b7dde5defd0c7b65f572af8957fde23c192e30433350caae7a1f50d3b532ed6b"},
+    {"name": "timing_mass_traffic_loop", "rva": 9176944, "length": 204, "sha256": "90b6e5dbbfdd4be1f048d66ad5fb6e92da5202521a26cc1bf4fa4d70e0d01f17"},
+    {"name": "timing_region_loop", "rva": 15675723, "length": 179, "sha256": "bdee3e531fd5ddf05ba217a97b52c806f5d0985b1f0b70fb0f845ad4e22445a5"},
+    {"name": "timing_mass_traffic_stop", "rva": 9178624, "length": 178, "sha256": "c741511c1d27beb04a45df5ac2edc6b281301590cdd4b3e1afa36c48e37b910e"},
+    {"name": "timing_region_stop", "rva": 15676256, "length": 192, "sha256": "c252a597f5a898735e0d6b3b9e4e2f7efb70f5d06657cef03c7447ec17cebb08"},
+    {"name": "timing_zone_traffic_try", "rva": 8604761, "length": 35, "sha256": "2a71006d46148aff08b5a2285249e319e389c519e76a4d85a95fd4ef3a1ee100"},
+    {"name": "timing_pathing_join", "rva": 15384944, "length": 48, "sha256": "bad63742cdef1987a87cfd3a02d2df6bb10f98fe6aaa3b8a72d126944bf2f89b"},
+    {"name": "timing_pathing_job_queue", "rva": 15395124, "length": 19, "sha256": "2878e41070af43b475e97ea75292171210006ecf70a333bed2783778616fe0d6"},
+    {"name": "timing_pathing_job_splice", "rva": 15395680, "length": 231, "sha256": "ee638427aaa77e88cb409f062831f7dde7512baec968f2f5a9633319806f2437"},
+    {"name": "timing_post_deferred", "rva": 10069930, "length": 73, "sha256": "2aae55cc2fd700ea4d19502c09bf83d3c2e1366e6904888f2727223713bcdaa8"},
+    {"name": "timing_queue_append", "rva": 10060848, "length": 123, "sha256": "449d0bb0bffbf44f1a11f34be34d77731e26d70da48918b9e7a12e3474befbf3"},
+    {"name": "timing_queue_flush_swap", "rva": 10071111, "length": 78, "sha256": "4020a3eea47b63416ac7660f0c742a5ff64c07a12978298fd9772ce456e5738b"},
+    {"name": "timing_job_count", "rva": 21745857, "length": 31, "sha256": "9ff96323e029bfa37bdd99d5926b2504d0b4cf47a1b744981a98eebf5fdd0366"}
   ]
 }
