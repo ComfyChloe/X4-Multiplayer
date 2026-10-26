@@ -18,10 +18,20 @@ if not cfg or cfg.player_factions~=true then return end
 local ffi=require('ffi');local C=ffi.C
 pcall(ffi.cdef,[[bool DropCargo(UniverseID,const char*,uint32_t);void SetLootMagnetActive(bool);const char* GetPlayerName(void);]])
 local function log(v) DebugError('[X4LAN] PFSESSION '..v) end
-local other=cfg.slot=='p1' and 'p2' or 'p1'
-local steps=cfg.slot=='p1' and {{80,'hostile'},{120,'allied'}} or {{40,'neutral'}}
+-- 7.x: client 1 (p1, authority) and client 2 (p2). Dedicated server: the clients are p2 and p3 and
+-- every relation change is a request to the server (p1 has no human).
+local dedicated=cfg.dedicated_session==true
+local other
+if dedicated then other=cfg.slot=='p2' and 'p3' or 'p2' else other=cfg.slot=='p1' and 'p2' or 'p1' end
+local late=dedicated and 'p3' or 'p1'
+local steps=cfg.slot==late and {{80,'hostile'},{120,'allied'}} or {{40,'neutral'}}
+local function otherShipIndex(c)
+ for i=1,2 do if c and c.pilots and c.pilots[i]==other then return i end end
+ if dedicated then return other=='p3' and 1 or 2 end
+ return other=='p1' and 1 or 2
+end
 local nextLog,done,stepIndex=0,false,1
-local named,seeded,dropped,magnetOn,magnetOff
+local named,seeded,dropped,magnetOn,magnetOff,otherAt
 local function shipText(i,ship,pilot)
  if not ship or ship==0 then return i..':none' end
  local ok,owner,ownername=pcall(GetComponentData,X4LAN_BUBBLE_API.id(ship),'owner','ownername')
@@ -40,14 +50,15 @@ local function report(now,readyAt)
  for i=1,2 do ships[i]=shipText(i,c and c.ships[i],c and c.pilots[i]) end
  log(string.format('slot=%s t=%.0f other=%s faction=%s name=%s short=%s diplomacy_list=%s uirelation=%s ships=%s;%s',
   cfg.slot,now-readyAt,other,tostring(f),tostring(okd and name),tostring(okd and short),listed,tostring(okr and rel),ships[1],ships[2]))
- local otherShip=c and c.ships[other=='p1' and 1 or 2]
+ local otherIndex=otherShipIndex(c)
+ local otherShip=c and c.ships[otherIndex]
  if otherShip and otherShip~=0 then
   local id=X4LAN_BUBBLE_API.id(otherShip)
   local okc,known,radar,owner,ownername=pcall(GetComponentData,id,'isknown','isradarvisible','owner','ownername')
   local header='unavailable'
   local okt,details=pcall(GetTargetMonitorDetails,id,'',false)
   if okt and details and details.header and details.header.text then header=details.header.text end
-  log(string.format('RADAR slot=%s other_ship=%s known=%s radar=%s owner=%s ownername=%s header=%s',cfg.slot,other=='p1' and 1 or 2,
+  log(string.format('RADAR slot=%s other_ship=%s known=%s radar=%s owner=%s ownername=%s header=%s',cfg.slot,otherIndex,
    tostring(okc and known),tostring(okc and radar),tostring(okc and owner),tostring(okc and ownername),tostring(header)))
  end
  local okn,me=pcall(function() return ffi.string(C.GetPlayerName()) end)
@@ -74,14 +85,19 @@ SetScript('onUpdate',function()
   local P=X4LAN_PLAYERS
   local st=P and P.state
   if done or not st or not st.ready or st.failed then return end
-  local now=GetCurRealTime();local t=now-st.readyAt
+  local now=GetCurRealTime()
+  -- The timeline starts once the other client is in the roster (it may join later).
+  local roster=st.core and st.core.roster
+  if not otherAt and roster and roster[tonumber(other:sub(2))] then otherAt=now;log('OTHER_PRESENT slot='..cfg.slot..' other='..other) end
+  if not otherAt then if now>=nextLog then nextLog=now+10;report(now,st.readyAt) end;return end
+  local t=now-otherAt
   if cfg.slot=='p1' and not seeded and t>=15 then seeded=true;AddUITriggeredEvent('X4LAN_PFSession','Seed') end
-  if cfg.slot=='p2' and not dropped and t>=25 then
+  if cfg.slot==(dedicated and 'p3' or 'p2') and not dropped and t>=25 then
    dropped=true;local ship=C.GetPlayerControlledShipID()
-   log('CARGO_DROP slot=p2 ship='..tostring(ship)..' native='..tostring(C.DropCargo(ship,'energycells',10)))
+   log('CARGO_DROP slot='..cfg.slot..' ship='..tostring(ship)..' native='..tostring(C.DropCargo(ship,'energycells',10)))
   end
-  if cfg.slot=='p2' and not magnetOn and t>=35 then magnetOn=true;C.SetLootMagnetActive(true);log('MAGNET on slot=p2') end
-  if cfg.slot=='p2' and magnetOn and not magnetOff and t>=55 then magnetOff=true;C.SetLootMagnetActive(false);log('MAGNET off slot=p2') end
+  if cfg.slot==(dedicated and 'p3' or 'p2') and not magnetOn and t>=35 then magnetOn=true;C.SetLootMagnetActive(true);log('MAGNET on slot='..cfg.slot) end
+  if cfg.slot==(dedicated and 'p3' or 'p2') and magnetOn and not magnetOff and t>=55 then magnetOff=true;C.SetLootMagnetActive(false);log('MAGNET off slot='..cfg.slot) end
   local step=steps[stepIndex]
   if step and t>=step[1] then
    local okr,how=P.setRelation(other,step[2])

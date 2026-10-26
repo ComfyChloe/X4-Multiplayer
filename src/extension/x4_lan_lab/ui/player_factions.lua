@@ -68,7 +68,8 @@ local function coopFrame()
   local want=core.coopOwner(c.pilots[i] or '0')
   if pf.coopSent[i]~=want then
    pf.coopSent[i]=want
-   io.md('CoopOwner',{ship=i,faction=want})
+   local object=c.ships and c.ships[i]
+   io.md('CoopOwner',{ship=i,faction=want,object=object and object~=0 and A.id(object) or nil})
    log('PLAYER_FACTIONS COOP_PILOT ship='..i..' pilot='..tostring(c.pilots[i] or '0')..' want='..want)
   end
  end

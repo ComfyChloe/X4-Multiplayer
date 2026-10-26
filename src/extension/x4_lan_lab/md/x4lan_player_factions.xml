@@ -23,7 +23,7 @@
     <!-- Applied human-pair relations (guarded against drift), assigned pool factions (relation
          mirror) and the wanted owner per shared co-op ship (pilot faction). -->
     <set_value name="$desired" exact="table[]"/><set_value name="$assigned" exact="[]"/>
-    <set_value name="$coopWant" exact="['player','player']"/>
+    <set_value name="$coopWant" exact="['player','player']"/><set_value name="$coopShip" exact="[null,null]"/>
     <set_value name="$ready" exact="$pool == 16"/>
     <debug_text text="'[X4LAN] PLAYER_FACTIONS MD_READY pool=%s factions=%s'.[$pool,lookup.faction.count]"/>
     <raise_lua_event name="'X4LAN_PlayerFactions.Ready'" param="$pool"/>
@@ -141,6 +141,9 @@
       <set_value name="$a" exact="event.param3"/>
       <do_if value="($a.$ship == 1 or $a.$ship == 2) and ($a.$faction == 'player' or @Setup.$isPool.{'$' + $a.$faction})">
        <set_value name="Setup.$coopWant.{$a.$ship}" exact="$a.$faction"/>
+       <!-- Lua's ship numbering (coop AUTH) is not the arena list order on every slot (dedicated p3):
+            the exact object comes from Lua. -->
+       <do_if value="$a.$object? and @$a.$object.isoperational"><set_value name="Setup.$coopShip.{$a.$ship}" exact="$a.$object"/></do_if>
       </do_if>
       <do_else><raise_lua_event name="'X4LAN_PlayerFactions.Refused'" param="'coop|%s|%s'.[$a.$ship,$a.$faction]"/></do_else>
      </actions>
@@ -150,10 +153,11 @@
      <actions>
       <set_value name="$arena" exact="md.X4LAN_Bubble.Arena"/>
       <do_all exact="2" counter="$i">
-       <set_value name="$ship" exact="$arena.$ships.{$i}"/>
-       <do_if value="$ship.isoperational">
+       <set_value name="$ship" exact="if @Setup.$coopShip.{$i}.isoperational then Setup.$coopShip.{$i} else $arena.$ships.{$i}"/>
+       <set_value name="$k" exact="$arena.$ships.indexof.{$ship}"/>
+       <do_if value="$ship.isoperational and $k gt 0">
         <set_value name="$want" exact="Setup.$coopWant.{$i}"/>
-        <do_if value="$want != 'player' and ($ship == player.occupiedship or $ship == player.controlled or $ship.dock or $ship.assigneddock or @$arena.$docking.{$i} or @$arena.$dead.{$i} or @$arena.$busy)">
+        <do_if value="$want != 'player' and ($ship == player.occupiedship or $ship == player.controlled or $ship.dock or $ship.assigneddock or @$arena.$docking.{$k} or @$arena.$dead.{$k} or @$arena.$busy)">
          <set_value name="$want" exact="'player'"/>
         </do_if>
         <set_value name="$f" exact="if $want == 'player' then faction.player else @Setup.$byId.{'$' + $want}"/>
