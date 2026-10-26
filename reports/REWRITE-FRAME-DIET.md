@@ -433,3 +433,26 @@ this walk presentation-only. Its output is an input to Lua scheduling. A future 
 list membership, order and activation/deactivation/slide events before it can skip any cosmetic calculation;
 blindly keeping the old list is unsafe when elements change. Current code keeps the whole original walk.
 Private listings remain in x4-re/work/rw-frame-diet/out/; no engine source/listing is committed here.
+
+
+## 13. Safe-site native stability after correction (26 Oct 2026, 03:31)
+
+`codex-safe-stability-001` used the b75b3bf native/loader correction with frozen overlay
+`.local/evidence-066-withheld` (DLL SHA-256
+7f5ca1b011fd555e378346042547d66169da9f09b5ad87fe0b93af72441033a6).
+The released lane tool ran a new disposable world on b6/profile45856 and collected logs at
+`.local/evidence-081-withheld`.
+
+Sequence: server,rng_split at t10.045, pass at 70.057, server,rng_split at 130.077, pass at 190.082,
+then server,rng_split at 250.095. There are 29 UI reports through t250.301 (240.256s covered),
+10,616 frames, maximum report gap 10.0s, zero watchdog stalls, zero requested/actual mode drift and
+zero FEATURE DISABLED lines. Scene walk calls: 42,556 total  / 22,552 skipped; draw bit acquired 3 times.
+Render RNG split remained active across all phases: 10,616 calls /1,595,552 measured draws.
+The new strict `stability --check --min-duration 240 --max-gap 15` passes the collected log.
+
+X4 exited through WM_CLOSE (exit 0), and the lane tool reports lane_restored=true. This establishes
+safe-site UI liveness for this interval, not whole-gameplay equivalence or long-run memory stability.
+The run shared the PC with up to 6 X4 processes; available memory reached 4.9 GB and page-fault load was
+high. timing_trustworthy=false: no performance saving is inferred. The log's other error-like lines
+are the missing optional signature, a resource-area message and vanilla trade failures; no Lua error
+or frame-diet disabled marker appears. Quiet-window timing remains pending the lead's scheduling.
