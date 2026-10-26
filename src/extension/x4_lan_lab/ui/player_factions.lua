@@ -1,6 +1,6 @@
 -- Player factions: engine glue for player_factions_core.lua (config flag player_factions).
 -- Off in the inert source config, on in internal packages (distribution/session_launcher.py).
--- Data/MD/Lua only: the engine still treats only `player` as the player (see PLAYER-FACTIONS.txt).
+-- Data/MD/Lua only: the engine still treats only `player` as the player (see docs/PLAYER-FACTIONS.txt).
 local cfg=X4LAN_CONFIG
 if not cfg or not cfg.enabled or cfg.player_factions~=true then return end
 local function log(v) DebugError('[X4LAN] '..v) end

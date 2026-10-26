@@ -203,7 +203,7 @@ def session_config(session, slot, host, dedicated=False, control_path=None, prof
                npc_motion_diagnostics=1, motion_diagnostics=1,
                projectile_visuals=True, shot_undo=False,
                frame_profile=True, net_probe=True,  # On by default in internal packages (dev rule); set false only if they break.
-               player_factions=True,  # Own faction per human (pool x4lan_playerN); see PLAYER-FACTIONS.txt.
+               player_factions=True,  # Own faction per human (pool x4lan_playerN); see docs/PLAYER-FACTIONS.txt.
                slot=slot, mode='proxy', proxy_macro='ship_arg_s_scout_01_a_macro')
     if dedicated:
         cfg.update(dedicated_session=True, local_ship=local_ship(slot), dedicated=slot == 'p1')

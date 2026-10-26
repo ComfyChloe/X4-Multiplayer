@@ -276,3 +276,44 @@ tools/dev/player_factions_session_probe.{lua,xml}; strict validator success; log
 - Not covered: docking/trade and handoff under player factions, visual colours, the target-monitor
   header, and ships bought by client 2 mid-session (client-only new ships are not replicated to the
   authority in the 7.x model, so they cannot appear on client 1 at all). See MANUAL CHECKLIST.
+
+DEDICATED SERVER (VPS) EVIDENCE (26 October 2026 14:13-14:35 EDT, internal test build 7.6.50:
+player factions + Linux dedicated server + the Rust relay PF* routing now on dev; Linux server
+p1 on the VPS (x4lan-dedicated), two Windows clients on one PC: p2 "Alpha Tester" (profile 45843),
+p3 "Bravo Tester" (45844); logs in .local/vps/evidence/, not committed)
+Run 2 (after two fixes below), all observed natively on server and both clients:
+- Server role: PLAYER_FACTIONS READY local=none (server) authority=true; it sends no identity and
+  assigns p2 -> x4lan_player2 "Alpha Tester", p3 -> x4lan_player3 "Bravo Tester".
+- Each client is its own player (SELF player_name, ASSIGN ... faction=player) and sees the other as
+  its pool faction with the right name in the diplomacy list source and faction data.
+- Relations, both directions, all as requests to the server: p2 neutral, p3 hostile, p3 allied ->
+  server RELATION ... source=request:p2/p3, both clients apply 0.75 -> 0 -> -0.5 -> 0.75 (UI 28/0/-27/28).
+- Ship owners: on the server both co-op ships are owned by the flying client's pool faction
+  (COOP_OWNER_APPLIED 2 -> x4lan_player2, 1 -> x4lan_player3) and return to player when the pilot
+  leaves. On p2 the ship p3 flies is x4lan_player3 "Bravo Tester"; on p3 the ship p2 flies is
+  x4lan_player2 "Alpha Tester"; each own ship is player.
+- Radar: each client sees the other's ship known and radar-visible with the right pool owner/name.
+- Cargo drop/magnet: NOT measured. Co-op ships start empty and only the server can add cargo
+  (no server-side fixture in this package; native DropCargo returned false).
+- No "native log overflow or truncation" in this package's logs.
+Fixed during the test:
+1. The 7.6.50 test build's ui/client.lua refused slot p3 ("slot must be p1 or p2"); fixed there.
+   Not needed on dev: its 8-player client already accepts p3..p8.
+2. Co-op owner switch on p3 targeted the wrong ship: Lua's AUTH ship numbering differs from the MD
+   arena list on dedicated p3. CoopOwner now carries the ship object from Lua.
+Also observed: p2's UI reloaded once after 340 s in run 1 (cause unknown); the seed gate then
+stopped the bubble ("snapshot already contains multiplayer fixtures"), as designed for reloads.
+WHAT BREAKS WITHOUT A HUMAN `player` (input for the context hooks)
+Observed in logs:
+- Vanilla md.NPC_Agent.Faction_ActivationStateChanged errors on set_faction_active of a pool
+  faction (md.Diplomacy.Start.$DiplomacyFactionTable has no entry), on the server and clients.
+- Vanilla md.PlayerReputation.PromotionInstant errors on clients when the relation to a pool faction
+  rises (md.$FactionData has no entry; "Failed to remove null.$PromotionActive").
+- On the server the flying clients' ships are not player-owned: isplayerowned and every C++
+  GetTrueOwner()==player test treat them as allied NPC ships while flown.
+Present in code, not exercised in this run (no trade, mission or kill happened):
+- Co-op trade/money: src/extension/x4_lan_lab/md/x4lan_trade.xml debits/credits faction.player on the authority, which on
+  the server is the observer's account; client wallets mirror that one balance.
+- Shared mission rewards are paid by the stock GM to the server's player (observer).
+- Every faction.player / player.occupiedship reference in vanilla AI/MD (RE report: 2,078
+  faction.player, 592 isplayerowned) refers to the observer on the server.
