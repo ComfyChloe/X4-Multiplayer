@@ -216,9 +216,20 @@ def handwritten():
         s.send(.2, P2, "WALK", 1, lease(2), 1, "04", 1, 2, 3, 359, 0, -360)
         s.send(.2, P2, "WALK", 1, lease(2), 2, 5, 1, 2, 3, 0, 0, 0)
         s.send(.2, P1, "WALK", 1, lease(1), 1, 0, 10001, 2, 3, 0, 0, 0)
+        st = ("station", 0, "cluster_14_sector001_macro", "ABC-123", "station_gen_factory_base_01_macro", "room_a_macro")
+        s.send(.2, P2, "WALK2", 1, lease(2), 1, 1, *st, 1.5, 0, -2, 90, 1.4, 5.25, 0)
+        s.send(.2, P2, "WALK2", 1, lease(2), 1, 1, *st, 9, 0, -2, 90, 1.4, 5.25, 0)            # duplicate seq
+        s.send(.2, P2, "WALK2", 1, lease(2), 2, 1, "ship", 3, "-", "-", "-", "-", 0, 0, 0, 0, 0, 1, 0)  # ship 3
+        s.send(.2, P2, "WALK2", 1, lease(2), 2, 1, "none", 0, "-", "-", "-", "-", 0, 0, 0, 0, 0, 1, 0)
+        s.send(.2, P2, "WALK2", 1, lease(2), 2, 1, "station", 0, "-", "A", "m", "-", 0, 0, 0, 0, 0, 1, 0)
+        s.send(.2, P2, "WALK2", 1, lease(2), 2, 1, *st, " 1", "1_0", "-0", 360, 100, 1e9, 2)
+        s.send(.2, P1, "WALK2", 1, lease(1), 1, 0, "none", 0, "-", "-", "-", "-", 0, 0, 0, 0, 0, 0, 0)
+        s.send(.2, P1, "WALK2", 1, lease(1), 2, 1, "ship", 2, "-", "-", "-", "x" * 97, 0, 0, 0, 0, 0, 0, 0)
+        s.send(.2, P1, "WALK2", 1, lease(1), 3, 1, "ship", 1, "-", "-", "-", "-", "nan", 0, 0, 0, 0, 0, 0)
+        s.send(.25, P2, "WALK2", 1, lease(2), 3, 1, *st, 2, 0, -2, 90, 1.4, 5.5, 0)
         s.send(.3, P1, "FIRE", 1, lease(1), 7).send(.3, P1, "FIRE", 1, lease(1), 6)
         s.send(.3, P1, "SUITKILL", 1, lease(1), 3).send(.3, P2, "SUITKILL", 1, lease(2), 3)
-        for t in (.31, .7, .9, 1.25, 1.4):
+        for t in (.21, .26, .31, .45, .5, .7, .9, 1.25, 1.4):
             s.snap(t)
 
     for level in ("economy", "coop", "dock", "universe"):
@@ -437,7 +448,7 @@ class Fuzzer:
         r, L, lvl = self.r, self.lease(slot), self.level
         kinds = ["HELLO", "STATE", "IDLE", "PING", "RESUME"]
         if lvl != "base":
-            kinds += ["WORLD", "ACTION", "DONE", "FIRE", "BODY", "WALK", "SUITKILL"]
+            kinds += ["WORLD", "ACTION", "DONE", "FIRE", "BODY", "WALK", "WALK2", "SUITKILL"]
         if lvl not in ("base", "bubble"):
             kinds += ["ECON*", "ORDER", "ORDER_DONE", "DOCKSTATE"]
         if lvl in ("coop", "dock", "universe"):
@@ -490,6 +501,14 @@ class Fuzzer:
                      r.choice([0, 1, 2, 3]), *self.pose()]]
         if kind == "WALK":
             return [["WALK", 1, L, self.next_seq(("walk", slot)), r.randint(0, 5), *self.pose(100)]]
+        if kind == "WALK2":
+            state = r.choice([0, 1, 1, 1, 2])
+            kind2 = r.choice(["ship", "station", "none", "ship", "deck"])
+            ship = r.choice([0, 1, 2, 3]) if kind2 == "ship" else r.choice([0, 0, 1])
+            context = ["-", "-", "-"] if kind2 != "station" or r.random() < .1 else [SECTOR, "ABC-123", "station_macro"]
+            return [["WALK2", 1, L, self.next_seq(("walk2", slot)), state, kind2, ship, *context,
+                     r.choice(["room_a_macro", "-", "bad room"]), *self.pose(120000)[:3], self.num(-400, 400),
+                     self.num(-1, 110), self.t + r.choice([0, 0, 2e9]), r.choice([0, 1, 2])]]
         if kind == "SUITKILL":
             return [["SUITKILL", 1, L, r.choice([0, 1, 2, 3])]]
         if kind == "ECON*":

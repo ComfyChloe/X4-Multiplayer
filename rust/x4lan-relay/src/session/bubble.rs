@@ -10,9 +10,17 @@ use std::net::{IpAddr, SocketAddr};
 use super::{Fields, Level, Packet, Session};
 use crate::ordmap::OrderedMap;
 use crate::pynum::fmt_g;
-use crate::wire::{bounded, float, seq, uint, Hex32, Parsed, Reject, Ship, Slot};
+use crate::wire::{bounded, float, seq, uint, Atom, Hex32, Parsed, Reject, Ship, Slot};
 
 pub const WORLD_FIELDS: usize = 17;
+/// bubble.py `WALK2_FIELDS`: `WALK2|1|lease|seq|state|kind|ship|sector|code|macro|room|
+/// x|y|z|yaw|speed|stime|transfers` (walk_game.lua), an on-foot pose relative to a
+/// context (shared ship index or station identity) every client resolves identically.
+pub const WALK2_FIELDS: usize = 18;
+/// A WALK2 pose is forwarded while younger than this (seconds).
+pub const WALK2_FRESH: f64 = 1.0;
+/// An unchanged WALK2 pose is repeated to a receiver at most this often (seconds).
+pub const WALK2_REPEAT: f64 = 0.2;
 /// Seconds between forwarded `XSHIP` rows per ship and peer (5 Hz; health is slow).
 pub const XSHIP_INTERVAL: f64 = 0.2;
 
@@ -150,6 +158,46 @@ pub struct Walker {
     pose: Vec<String>,
 }
 
+/// The latest WALK2 of a lease: `fields` keep the validated sender text from `seq` on.
+#[derive(Clone, Debug)]
+pub struct Walker2 {
+    seq: u32,
+    at: f64,
+    fields: Vec<String>,
+}
+
+/// bubble.py `walk2`: validate WALK2 fields 3.. against the session's ship count.
+fn walk2(f: &[&str], ship_count: u8) -> Parsed<u32> {
+    let (sequence, state, ship, _transfers) = (seq(f[3])?, seq(f[4])?, seq(f[6])?, seq(f[17])?);
+    let kind = f[5];
+    if state > 1 || !matches!(kind, "none" | "ship" | "station") || ship > u32::from(ship_count) {
+        return Err(Reject);
+    }
+    for text in &f[7..11] {
+        Atom::parse(text)?;
+    }
+    if (state == 1) == (kind == "none") || (kind == "ship") != (ship > 0) {
+        return Err(Reject);
+    }
+    if kind == "station" && f[7..10].contains(&"-") {
+        return Err(Reject);
+    }
+    let mut v = [0.0; 6];
+    for (i, text) in f[11..17].iter().enumerate() {
+        v[i] = float(text)?;
+    }
+    let [x, y, z, yaw, speed, stime] = v;
+    if !v.iter().all(|n| n.is_finite())
+        || x.abs().max(y.abs()).max(z.abs()) > 100_000.0
+        || yaw.abs() > 360.0
+        || !(0.0..=100.0).contains(&speed)
+        || !(0.0..=1e9).contains(&stime)
+    {
+        return Err(Reject);
+    }
+    Ok(sequence)
+}
+
 #[derive(Default)]
 pub struct Bubble {
     /// The host's 17-value world snapshot.
@@ -161,6 +209,9 @@ pub struct Bubble {
     pub bodies: OrderedMap<Hex32, Body>,
     pub suit_kills: OrderedMap<Hex32, (Hex32, u32)>,
     walkers: OrderedMap<Hex32, Walker>,
+    walkers2: OrderedMap<Hex32, Walker2>,
+    /// Last WALK2 (seq, time) forwarded per (receiver, sender) lease pair.
+    walk2_sent: OrderedMap<(Hex32, Hex32), (u32, f64)>,
     /// Ships 3.. (dedicated N-player sessions only); cleared with the host's world.
     pub extra: OrderedMap<Ship, ExtraShip>,
     pub extra_owner: Option<Hex32>,
@@ -189,6 +240,8 @@ impl Session {
         b.suit_kills.retain(|lease, _| retained.contains(lease));
         b.fire.retain(|lease, _| live.contains(lease));
         b.walkers.retain(|lease, _| live.contains(lease));
+        b.walkers2.retain(|lease, _| live.contains(lease));
+        b.walk2_sent.retain(|(to, from), _| live.contains(to) && live.contains(from));
         for cmd in b.commands.values_mut() {
             if !live.contains(&cmd.lease) && cmd.result == CommandResult::Pending {
                 cmd.result = CommandResult::Cancelled;
@@ -213,7 +266,7 @@ impl Session {
         if f[0] == "ACTION" && f.len() == 7 {
             return self.action(f, address, now).into_iter().collect();
         }
-        if !matches!(f[0], "WORLD" | "FIRE" | "DONE" | "BODY" | "SUITKILL" | "WALK" | "XSHIP") {
+        if !matches!(f[0], "WORLD" | "FIRE" | "DONE" | "BODY" | "SUITKILL" | "WALK" | "WALK2" | "XSHIP") {
             return self.receive_core(raw, address, now);
         }
         let _ = self.bubble_update(&fields, address, now);
@@ -273,6 +326,13 @@ impl Session {
         let ship_count = self.core.ship_count;
         let b = &mut self.bubble;
         match (f[0], f.len()) {
+            ("WALK2", WALK2_FIELDS) => {
+                let sequence = walk2(f, ship_count)?;
+                if b.walkers2.get(&lease).is_some_and(|old| sequence <= old.seq) {
+                    return Err(Reject);
+                }
+                b.walkers2.insert(lease, Walker2 { seq: sequence, at: now, fields: fields.tail(3) });
+            }
             ("WALK", 11) => {
                 let sequence = seq(f[3])?;
                 let context = seq(f[4])?;
@@ -390,6 +450,7 @@ impl Session {
         let b = &self.bubble;
         let host = self.core.peers.get(&Slot::P1);
         let publish_extra = now >= b.next_extra && !b.extra.is_empty();
+        let mut walk2_sent = Vec::new();
         for (slot, peer) in self.core.peers.iter() {
             if let (Some(world), Some(host)) = (&b.world, host) {
                 let payload: Vec<String> = world.iter().map(|v| fmt_g(*v, 9)).collect();
@@ -403,11 +464,26 @@ impl Session {
                     out.push((peer.address, packet.into_bytes()));
                 }
             }
-            for (_, other) in self.others(*slot) {
+            for (other_slot, other) in self.others(*slot) {
                 if let Some(w) = b.walkers.get(&other.lease).filter(|w| now - w.at < 1.0) {
                     let packet =
                         format!("WALK|1|{}|{}|{}|{}|{}", peer.lease, other.lease, w.seq, w.context, w.pose.join("|"));
                     out.push((peer.address, packet.into_bytes()));
+                }
+                if let Some(w) = b.walkers2.get(&other.lease).filter(|w| now - w.at < WALK2_FRESH) {
+                    let key = (peer.lease, other.lease);
+                    let repeat = b.walk2_sent.get(&key).is_some_and(|(s, at)| *s == w.seq && now - at < WALK2_REPEAT);
+                    if !repeat {
+                        walk2_sent.push((key, (w.seq, now)));
+                        let packet = format!(
+                            "WALK2|1|{}|{}|{}|{}",
+                            peer.lease,
+                            other.lease,
+                            other_slot.as_str(),
+                            w.fields.join("|")
+                        );
+                        out.push((peer.address, packet.into_bytes()));
+                    }
                 }
                 // Co-op replaces legacy BODY/FIRE with BODY2/FIRE2.
                 if let Some(body) = b.bodies.get(&other.lease).filter(|_| !coop) {
@@ -430,6 +506,9 @@ impl Session {
         }
         if publish_extra {
             self.bubble.next_extra = now + XSHIP_INTERVAL;
+        }
+        for (key, sent) in walk2_sent {
+            self.bubble.walk2_sent.insert(key, sent);
         }
         let b = &self.bubble;
         if let Some(host) = host {

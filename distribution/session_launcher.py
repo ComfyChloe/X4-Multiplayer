@@ -192,7 +192,8 @@ def session_package_id(session, slot):
 
 def session_config(session, slot, host, dedicated=False, control_path=None, profile=PROFILE):
     cfg = dict(enabled=True, interaction_test=False, bubble_actions=True, trading=True,
-               walking_avatars=False, test_profile=profile, host=host, port=PORT,
+               walking_avatars=True,  # Internal: on-foot avatars (walk_game.lua); fail closed with WALK_* diagnostics.
+               test_profile=profile, host=host, port=PORT,
                token=session['token'], build=session['build'], bubble=session['bubble'], coop=True, fire2=True,
                world_sync=True, world_mode='replica',
                ship_macro='ship_ter_s_xperimental_01_a_macro', ship_loadout='x4lan_coop_xperimental', ship_weapons=6,

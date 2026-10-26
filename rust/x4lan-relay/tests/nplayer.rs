@@ -383,3 +383,70 @@ fn projectile_births_reach_every_other_client_not_only_the_server() {
     }
     assert_eq!((counts[1], counts[3]), (2, 2), "repeats per recipient");
 }
+
+fn walk2(s: &mut Session, lease: &str, slot: u16, seq: u32, context: &str, x: f64, now: f64) {
+    let packet = format!("WALK2|1|{lease}|{seq}|{context}|room_a_macro|{x}|0|2|90|1.5|{}|0", 10.0 + f64::from(seq));
+    s.receive(packet.as_bytes(), addr(slot), now);
+}
+
+/// WALK2 rows to `to` as (sender slot, seq, x).
+fn walk_rows(packets: &[(SocketAddr, Vec<u8>)], to: SocketAddr) -> Vec<(String, u32, String)> {
+    let mut rows: Vec<(String, u32, String)> = text(packets, to)
+        .iter()
+        .filter(|p| p.starts_with("WALK2|"))
+        .map(|p| {
+            let f: Vec<&str> = p.split('|').collect();
+            (f[4].to_owned(), f[5].parse().unwrap(), f[13].to_owned())
+        })
+        .collect();
+    rows.sort();
+    rows
+}
+
+#[test]
+fn walk_poses_reach_every_other_client_with_the_sender_slot() {
+    let station = "1|station|0|cluster_14_sector001_macro|ABC-123|station_gen_factory_base_01_macro";
+    let (mut s, l) = four(Level::Coop);
+    walk2(&mut s, &l[1], 2, 1, station, 20.0, 0.1);
+    walk2(&mut s, &l[2], 3, 1, "1|ship|3|-|-|-", 30.0, 0.1);
+    walk2(&mut s, &l[3], 4, 1, "0|none|0|-|-|-", 0.0, 0.1);
+    let snap = s.snapshots(0.15);
+    let rows = |slot: u16| walk_rows(&snap, addr(slot)).into_iter().map(|r| r.0).collect::<Vec<_>>();
+    assert_eq!(rows(1), ["p2", "p3", "p4"], "the server receives every client");
+    assert_eq!(rows(2), ["p3", "p4"]);
+    assert_eq!(rows(3), ["p2", "p4"]);
+    assert_eq!(rows(4), ["p2", "p3"]);
+    let to_p3 = text(&snap, addr(3));
+    let row = to_p3.iter().find(|p| p.starts_with("WALK2|") && p.contains("|p2|")).unwrap();
+    assert_eq!(
+        row,
+        &format!("WALK2|1|{}|{}|p2|1|{station}|room_a_macro|20|0|2|90|1.5|11|0", l[2], l[1]),
+        "verbatim sender fields after lease and slot"
+    );
+
+    // An unchanged pose repeats at most every 0.2 s; a new sequence goes out at once.
+    assert!(walk_rows(&s.snapshots(0.2), addr(2)).is_empty(), "no repeat within 0.2 s");
+    walk2(&mut s, &l[2], 3, 2, "1|ship|3|-|-|-", 31.0, 0.21);
+    assert_eq!(walk_rows(&s.snapshots(0.22), addr(2)), [("p3".to_owned(), 2, "31".to_owned())]);
+    assert_eq!(walk_rows(&s.snapshots(0.36), addr(2)).len(), 1, "p4 repeats after 0.2 s, p3 not yet");
+    assert_eq!(walk_rows(&s.snapshots(0.43), addr(2)).len(), 1, "p3 repeats after 0.2 s");
+
+    // Older/duplicate sequences, ships beyond the session and malformed contexts are dropped.
+    walk2(&mut s, &l[2], 3, 2, "1|ship|3|-|-|-", 99.0, 0.4);
+    walk2(&mut s, &l[2], 3, 3, "1|ship|4|-|-|-", 99.0, 0.4);
+    walk2(&mut s, &l[2], 3, 4, "1|station|0|-|ABC-123|m_macro", 99.0, 0.4);
+    walk2(&mut s, &l[2], 3, 5, "1|none|0|-|-|-", 99.0, 0.4);
+    walk2(&mut s, &l[2], 3, 6, "0|ship|1|-|-|-", 99.0, 0.4);
+    walk2(&mut s, &l[1], 3, 7, "1|ship|1|-|-|-", 99.0, 0.4); // p2's lease from p3's address
+    let snap = s.snapshots(0.6);
+    assert!(walk_rows(&snap, addr(2)).iter().all(|r| r.2 != "99"), "{:?}", walk_rows(&snap, addr(2)));
+
+    // Stale after 1 s: nothing is forwarded; a departed client's walk is forgotten.
+    assert!(walk_rows(&s.snapshots(1.3), addr(2)).is_empty());
+    walk2(&mut s, &l[1], 2, 2, station, 21.0, 1.4);
+    walk2(&mut s, &l[3], 4, 2, "1|ship|1|-|-|-", 5.0, 1.4);
+    assert_eq!(walk_rows(&s.snapshots(1.45), addr(3)).len(), 2);
+    s.expire(32.0);
+    let snap = s.snapshots(32.0);
+    assert!(walk_rows(&snap, addr(3)).is_empty(), "every lease expired");
+}

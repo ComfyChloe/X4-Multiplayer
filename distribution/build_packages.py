@@ -103,7 +103,7 @@ def build(destination: Path, runtime_cache: Path | None = None, dedicated=False,
         shutil.copy2(SOURCE / 'VERSIONING.txt', root / 'VERSIONING.txt')
         if dedicated: shutil.copy2(SOURCE / 'DEDICATED-SERVER.md', root / 'DEDICATED-SERVER.md')
         shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', root / 'WORLD-SYNC-TEST.txt')
-        for name in ('HUMAN-DAMAGE-TEST.txt','HUMAN-DOCK-TEST.txt','HUMAN-NPC-MISSION-TEST.txt','HUMAN-TEST-RESULT.txt'):
+        for name in ('HUMAN-DAMAGE-TEST.txt','HUMAN-DOCK-TEST.txt','HUMAN-NPC-MISSION-TEST.txt','HUMAN-TEST-RESULT.txt','HUMAN-WALK-TEST.txt'):
             document(DIST / name, root / name, release)
         (root / 'reports').mkdir()
         shutil.copy2(reports[1], root / 'reports/RELEASE-CHECKS.txt')
@@ -165,7 +165,7 @@ def build(destination: Path, runtime_cache: Path | None = None, dedicated=False,
         archives.append(archive)
     write(destination / 'PACKAGES-SHA256.txt', ''.join(hashlib.sha256(p.read_bytes()).hexdigest() + '  ' + p.name + '\n' for p in sorted(archives)))
     for name in ('INSTALL.html', 'README.txt', 'NEXT-TEST.txt', 'HUMAN-NPC-MISSION-TEST.txt',
-                 'HUMAN-DAMAGE-TEST.txt', 'HUMAN-DOCK-TEST.txt', 'HUMAN-TEST-RESULT.txt'):
+                 'HUMAN-DAMAGE-TEST.txt', 'HUMAN-DOCK-TEST.txt', 'HUMAN-TEST-RESULT.txt', 'HUMAN-WALK-TEST.txt'):
         document(DIST / name, destination / ('00-START-HERE.html' if name == 'INSTALL.html' else name), release)
     shutil.copy2(DIST / 'WORLD-SYNC-TEST.txt', destination / 'WORLD-SYNC-TEST.txt')
     shutil.copy2(SOURCE / 'VERSIONING.txt', destination / 'VERSIONING.txt')
