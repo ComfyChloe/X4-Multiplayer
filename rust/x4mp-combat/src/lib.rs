@@ -5,7 +5,7 @@
 //! behaviour of X4 build 23660954 (`IKValue_RotateToward`, RVA 0xe1f840), with
 //!
 //! * [`capture`]: a capture/replay format for the original's inputs and outputs,
-//! * [`batch`]: per-sector batched steps whose results do not depend on the thread count,
+//! * [`sim`]: the step as an x4mp-sim system (per-sector worlds, any thread count, same bits),
 //! * [`oracle`] (Windows x64): the original machine code of the local pinned `X4.exe`
 //!   mapped into this process, used by the tests as the reference,
 //! * [`game`] (Windows x64): the in-game recorder/shadow (`luaopen_x4mp_combat` in the
@@ -15,7 +15,6 @@
 //! `reports/REWRITE-COMBAT.md`. No game code is copied here; the Rust follows the
 //! documented behaviour, operation order included.
 
-pub mod batch;
 pub mod capture;
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 pub mod game;
@@ -24,4 +23,5 @@ pub mod ikjoint;
 pub mod mxcsr;
 #[cfg(all(target_os = "windows", target_arch = "x86_64"))]
 pub mod oracle;
+pub mod sim;
 pub mod testrng;

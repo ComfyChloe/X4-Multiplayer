@@ -134,6 +134,13 @@ pub enum Outcome {
 
 /// [`rotate_toward`] plus the [`Outcome`] that says which fields and calls it produced.
 pub fn step(joint: &mut JointState, cmd: &JointCommand, clock: FrameClock) -> (bool, Outcome) {
+    step_with_dt(joint, cmd, clock.now, (clock.now - clock.previous) as f32)
+}
+
+/// [`step`] with the frame's step length given: `dt` must be `(now - previous) as f32`, the
+/// f64 difference of the two TLS clocks converted once (x4mp-sim's `FrameInfo::dt` is that
+/// difference).
+pub fn step_with_dt(joint: &mut JointState, cmd: &JointCommand, now: f64, dt: f32) -> (bool, Outcome) {
     let target = if joint.wrap { wrap_target(cmd.target, joint.value) } else { cmd.target };
     joint.target = target;
     if cmd.snap || !((target - joint.value).abs() >= EPSILON) {
@@ -147,7 +154,7 @@ pub fn step(joint: &mut JointState, cmd: &JointCommand, clock: FrameClock) -> (b
         joint.velocity = velocity;
         return (true, Outcome::Snapped);
     }
-    if !(clock.now > joint.time) {
+    if !(now > joint.time) {
         return (false, Outcome::Waiting);
     }
     let goal = joint.target;
@@ -159,7 +166,6 @@ pub fn step(joint: &mut JointState, cmd: &JointCommand, clock: FrameClock) -> (b
         braking = -braking;
     }
     let velocity = joint.velocity;
-    let dt = (clock.now - clock.previous) as f32;
     let accel_dt = cmd.accel * dt;
     let wanted = dt * cmd.feed_forward + braking;
     let capped = if wanted > cmd.max_speed { cmd.max_speed } else { wanted };
@@ -192,7 +198,7 @@ pub fn step(joint: &mut JointState, cmd: &JointCommand, clock: FrameClock) -> (b
         reached = true;
     }
     joint.value = position;
-    joint.time = clock.now;
+    joint.time = now;
     (reached, Outcome::Stepped)
 }
 

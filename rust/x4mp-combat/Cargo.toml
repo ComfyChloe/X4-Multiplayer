@@ -12,6 +12,7 @@ crate-type = ["rlib", "cdylib"]
 
 [dependencies]
 x4mp-core = { path = "../x4mp-core" }
+x4mp-sim = { path = "../x4mp-sim" }
 
 [[bin]]
 name = "x4mp-combat-replay"

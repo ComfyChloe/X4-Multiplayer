@@ -22,6 +22,7 @@ name = "x4mp-combat"
 version = "7.5.0"
 dependencies = [
  "x4mp-core",
+ "x4mp-sim",
 ]
 
 [[package]]

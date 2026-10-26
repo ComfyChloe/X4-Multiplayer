@@ -176,8 +176,16 @@ the call temporarily points the thread's ThreadLocalStoragePointer at a private 
 leaf code can be called this way (an import, the CRT error path or the game allocator would fault).
 
 **MXCSR.** X4 sets flush-to-zero on its main thread (0x14dd0e0 from GameClient::Init); worker threads start
-with 0x1f80. The MoveWorker's value must be read natively (the recorder stores it). Rust workers set the
-recorded MXCSR (`batch::step_all`), because FTZ changes results with subnormal intermediates.
+with 0x1f80. Natively the MoveWorker runs with 0x1fbf (default control bits, only sticky exception flags set;
+no FTZ/DAZ), so x4mp-sim worker threads, which start with 0x1f80, compute the same bits; FTZ would change
+results with subnormal intermediates.
+
+**As an x4mp-sim system** (`src/sim.rs`): components `combat.joint` (the joint fields), `combat.joint_input`
+(this frame's command, written by the engine-side aim logic) and `combat.joint_output` (return value and
+outcome); `TurretJointSystem` (`combat.turret_joint`) steps every active joint of a sector with
+`ikjoint::step_with_dt(now = FrameInfo::game_time, dt = FrameInfo::dt as f32)`, the same operations as the
+original. It sends no messages. Tests: 12 sectors x 40 entities, 60 frames with changing commands give the same
+`state_hash` on 1, 2, 4 and 16 threads, and every joint equals the plain serial step bitwise.
 
 ## 5. Targeting and the intercept solver
 
