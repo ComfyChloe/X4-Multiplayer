@@ -4,8 +4,10 @@
 -- 'profile' measures like the default probe and samples the MoveWorker stack (simprof):
 -- X4LAN_SIMPROF_INTERVAL_MS (0.5..10, default 1), X4LAN_SIMPROF_DEPTH (8..64, default 32),
 -- X4LAN_SIMPROF_REPORT_S (default 10), X4LAN_SIMPROF_FOLD_LINES (folded stacks logged per frame, default 20).
--- X4LAN_PHYSICS_MODE='joltwait' runs Jolt's jobs with X4's schedule minus the per-job Sleep(0) (identical
--- results); 'ab' alternates 'original' and 'joltwait' every X4LAN_PHYSICS_AB_S seconds (default 20).
+-- Jolt's jobs run in joltwait mode by default: X4's schedule minus the per-job Sleep(0), identical results
+-- (FEATURE joltwait ENABLED once applied; FEATURE joltwait DISABLED reason=... on any refusal, sticky).
+-- X4LAN_PHYSICS_MODE='original' keeps X4's own barrier; 'ab' alternates 'original' and 'joltwait' every
+-- X4LAN_PHYSICS_AB_S seconds (default 20).
 if not X4LAN_CONFIG or X4LAN_CONFIG.test_profile~='45841' then return end
 if X4LAN_FIXEDTICK_PROBE then return end
 X4LAN_FIXEDTICK_PROBE=true
@@ -89,12 +91,15 @@ local function setPhysicsMode(mode,now)
 end
 local function applyPhysicsMode(now)
  if not owner.physics_mode or physMode=='refused' then return end
- if X4LAN_PHYSICS_MODE=='joltwait' then
-  if not physMode then physMode='joltwait';setPhysicsMode('joltwait',now) end
- elseif X4LAN_PHYSICS_MODE=='ab' and now>=nextPhysMode then
-  nextPhysMode=now+(X4LAN_PHYSICS_AB_S or 20)
-  physMode=(physMode=='joltwait') and 'original' or 'joltwait'
-  setPhysicsMode(physMode,now)
+ local setting=X4LAN_PHYSICS_MODE or 'joltwait'
+ if setting=='ab' then
+  if now>=nextPhysMode then
+   nextPhysMode=now+(X4LAN_PHYSICS_AB_S or 20)
+   physMode=(physMode=='joltwait') and 'original' or 'joltwait'
+   setPhysicsMode(physMode,now)
+  end
+ elseif setting~='original' and not physMode then
+  physMode=setting;setPhysicsMode(setting,now)   -- an unknown setting is refused by the DLL, loudly
  end
 end
 local function checkProfileDisabled()
@@ -131,7 +136,7 @@ SetScript('onUpdate',function()
    owner:stop();owner=nil;return
   end
   if now>=nextLog then logStats(now) end
-  if X4LAN_PHYSICS_MODE then applyPhysicsMode(now) end
+  applyPhysicsMode(now)
   if profiling then
    if now>=nextProfile then logProfile(now) end
    drainFolds()

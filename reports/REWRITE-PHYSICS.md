@@ -185,7 +185,8 @@ Included by `fixedtick.c` (like walkprof.h) in every mode with the slot 0/15 bra
   busy workers while the MoveWorker is inside a Jolt step, pathing pass (batch phase) duration, and the slack
   between the end of the batch phase and the MoveWorker's join (+0x88).
 - Log: `[X4LAN] PHYSPROF ...` once per second (dev/fixed_tick_probe.lua); refusal `FEATURE physprof DISABLED`.
-- Mode `owner:physics_mode('joltwait'|'original')` (Lua `X4LAN_PHYSICS_MODE='joltwait'|'ab'`): the call only
+- Mode `owner:physics_mode('joltwait'|'original')`; dev/fixed_tick_probe.lua requests joltwait by default
+  (lead approval 26 Oct; `X4LAN_PHYSICS_MODE='original'` keeps X4's barrier, `'ab'` alternates): the call only
   queues the request; the owner thread switches at its next frame end, when no Jolt update is in flight
   (X4 loads the UI script twice at game start and the first instance calls from another thread). A refusal or
   anomaly is latched (`joltwait_reason`, `FEATURE joltwait DISABLED`); `modeFrames` per window tells pure

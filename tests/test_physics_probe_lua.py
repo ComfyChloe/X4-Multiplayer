@@ -98,6 +98,35 @@ class PhysicsProbeLuaTests(unittest.TestCase):
           assert(n==1)
         ''')
 
+    def test_joltwait_is_default_on(self):
+        self.runtime().execute('''
+          calls={}
+          handle.physics_mode=function(self,m) calls[#calls+1]=m;return true end
+          ui();ui();now=30;ui();ui()
+          assert(#calls==1 and calls[1]=='joltwait')
+        ''')
+
+    def test_original_setting_requests_nothing(self):
+        self.runtime().execute('''
+          X4LAN_PHYSICS_MODE='original';calls={}
+          handle.physics_mode=function(self,m) calls[#calls+1]=m;return true end
+          ui();ui();now=30;ui()
+          assert(#calls==0)
+          for _,l in ipairs(logs) do assert(not l:find('joltwait',1,true)) end
+        ''')
+
+    def test_unknown_setting_is_refused_loudly(self):
+        self.runtime().execute('''
+          X4LAN_PHYSICS_MODE='fast';calls={}
+          handle.physics_mode=function(self,m) calls[#calls+1]=m
+            if m=='fast' then return nil,'unsupported physics mode' end;return true end
+          ui();ui();now=30;ui()
+          assert(#calls==1)
+          local n=0
+          for _,l in ipairs(logs) do if l:find('FEATURE joltwait DISABLED reason=unsupported physics mode',1,true) then n=n+1 end end
+          assert(n==1)
+        ''')
+
     def test_old_dll_without_physics_mode_is_ignored(self):
         self.runtime().execute('''
           X4LAN_PHYSICS_MODE='joltwait'
