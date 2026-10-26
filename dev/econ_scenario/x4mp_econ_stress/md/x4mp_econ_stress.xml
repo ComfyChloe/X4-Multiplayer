@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Economy stress scenario for the engine rewrite program (economy agent).
+     Runs only in a NEW game (event_game_started; never on load) and only when this extension is
+     installed, which dev/x4lane.py does for lane runs (profiles 45850/45851). It builds economic
+     load on top of the normal custom_creative universe:
+       1. census of stations, factories and production modules (log line ECONSTRESS census);
+       2. operational clones of NPC factory stations next to their originals (same owner, same
+          construction sequence), created in batches;
+       3. after the clones have their modules: half-full resource storage, a manager, and
+          station traders (TradeRoutine + AssignCommander, as factionlogic_economy does);
+       4. a counter line every 60 s, then ECONSTRESS done after $Duration.
+     All numbers are logged with the prefix [X4MP] ECONSTRESS so lane runs can wait for them.
+     Parameters: $CloneLimit, $TradersPerClone, $Duration, $Batch (cue Setup). -->
+<mdscript name="X4MP_EconStress" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <cue name="Start">
+      <conditions>
+        <event_game_started />
+      </conditions>
+      <actions>
+        <set_value name="$Phase" exact="'wait'" />
+      </actions>
+      <cues>
+        <cue name="Setup">
+          <delay exact="15s" />
+          <actions>
+            <set_value name="parent.$CloneLimit" exact="160" />
+            <set_value name="parent.$TradersPerClone" exact="2" />
+            <set_value name="parent.$Duration" exact="8min" />
+            <set_value name="parent.$Batch" exact="8" />
+            <find_station name="$Stations" space="player.galaxy" multiple="true" />
+            <set_value name="parent.$Factories" exact="[]" />
+            <set_value name="$ModuleCount" exact="0" />
+            <do_for_each name="$S" in="$Stations">
+              <find_object_component name="$PM" object="$S" class="class.production" multiple="true" />
+              <set_value name="$ModuleCount" operation="add" exact="@$PM.count" />
+              <do_if value="$S.products.count gt 0 and not $S.isshipyard and not $S.iswharf and not $S.isequipmentdock and not $S.isdefencestation and $S.owner != faction.player and $S.owner != faction.xenon and $S.owner != faction.khaak and $S.isoperational and $S.constructionsequence">
+                <append_to_list name="parent.$Factories" exact="$S" />
+              </do_if>
+            </do_for_each>
+            <debug_text text="'[X4MP] ECONSTRESS census phase=start time=%s stations=%s factories=%s productionmodules=%s'.[player.age, $Stations.count, parent.$Factories.count, $ModuleCount]" filter="general" />
+            <shuffle_list list="parent.$Factories" />
+            <set_value name="parent.$Index" exact="1" />
+            <set_value name="parent.$Clones" exact="[]" />
+            <set_value name="parent.$Failed" exact="0" />
+            <set_value name="parent.$Phase" exact="'clone'" />
+          </actions>
+        </cue>
+        <cue name="CloneStep" checkinterval="500ms" instantiate="true">
+          <conditions>
+            <check_value value="@parent.$Phase == 'clone'" />
+          </conditions>
+          <actions>
+            <do_all exact="parent.$Batch">
+              <do_if value="parent.$Index le parent.$Factories.count and parent.$Clones.count lt parent.$CloneLimit">
+                <set_value name="$T" exact="parent.$Factories.{parent.$Index}" />
+                <set_value name="parent.$Index" operation="add" />
+                <do_if value="$T.exists">
+                  <create_station name="$C" macro="$T.macro" constructionplan="$T.constructionsequence" owner="$T.owner" sector="$T.sector" state="componentstate.operational">
+                    <safepos object="$T" exact="35km" radius="10km" includeplotbox="true" />
+                  </create_station>
+                  <do_if value="$C.exists">
+                    <append_to_list name="parent.$Clones" exact="$C" />
+                  </do_if>
+                  <do_else>
+                    <set_value name="parent.$Failed" operation="add" />
+                  </do_else>
+                </do_if>
+              </do_if>
+            </do_all>
+            <do_if value="parent.$Index gt parent.$Factories.count or parent.$Clones.count ge parent.$CloneLimit">
+              <set_value name="parent.$Phase" exact="'settle'" />
+              <set_value name="parent.$SettleUntil" exact="player.age + 10s" />
+              <set_value name="parent.$FillIndex" exact="1" />
+              <set_value name="parent.$Traders" exact="0" />
+              <set_value name="parent.$Managers" exact="0" />
+              <set_value name="parent.$NoProduction" exact="0" />
+            </do_if>
+          </actions>
+        </cue>
+        <cue name="FillStep" checkinterval="500ms" instantiate="true">
+          <conditions>
+            <check_value value="@parent.$Phase == 'settle' and player.age ge parent.$SettleUntil" />
+          </conditions>
+          <actions>
+            <do_all exact="parent.$Batch">
+              <do_if value="parent.$FillIndex le parent.$Clones.count">
+                <set_value name="$C" exact="parent.$Clones.{parent.$FillIndex}" />
+                <set_value name="parent.$FillIndex" operation="add" />
+                <do_if value="$C.exists">
+                  <do_if value="not $C.assignedcontrolentity.{controlpost.manager}">
+                    <create_control_entity object="$C" post="controlpost.manager">
+                      <select faction="$C.owner" tags="controlpost.manager.tag" />
+                    </create_control_entity>
+                    <do_if value="$C.assignedcontrolentity.{controlpost.manager}">
+                      <set_value name="parent.$Managers" operation="add" />
+                    </do_if>
+                  </do_if>
+                  <set_value name="$Resources" exact="@$C.resources.list" />
+                  <set_value name="$Products" exact="@$C.products.list" />
+                  <do_if value="not $Products or $Products.count == 0">
+                    <set_value name="parent.$NoProduction" operation="add" />
+                  </do_if>
+                  <do_if value="$Resources">
+                    <do_for_each name="$W" in="$Resources">
+                      <set_value name="$Max" exact="$C.cargo.{$W}.max" />
+                      <do_if value="$Max gt 0">
+                        <add_cargo object="$C" ware="$W" exact="$Max / 2" />
+                      </do_if>
+                    </do_for_each>
+                  </do_if>
+                  <do_all exact="parent.$TradersPerClone">
+                    <create_ship name="$F" sector="$C.sector">
+                      <select faction="$C.owner" tags="[tag.trader, tag.container]" size="class.ship_m" required="false" />
+                      <owner exact="$C.owner" overridenpc="true" />
+                      <safepos object="$C" exact="8km" radius="2km" />
+                    </create_ship>
+                    <do_if value="$F.exists and $F.pilot">
+                      <set_value name="$Basket" exact="[]" />
+                      <do_if value="$Products">
+                        <do_for_each name="$W" in="$Products">
+                          <do_if value="$F.cargo.{$W}.max gt 0">
+                            <append_to_list name="$Basket" exact="$W" />
+                          </do_if>
+                        </do_for_each>
+                      </do_if>
+                      <do_if value="$Resources">
+                        <do_for_each name="$W" in="$Resources">
+                          <do_if value="$F.cargo.{$W}.max gt 0 and not $Basket.indexof.{$W}">
+                            <append_to_list name="$Basket" exact="$W" />
+                          </do_if>
+                        </do_for_each>
+                      </do_if>
+                      <create_order id="'TradeRoutine'" object="$F" default="true">
+                        <param name="warebasket" value="$Basket" />
+                        <param name="range" value="$C.sector" />
+                        <param name="maxbuy" value="3" />
+                        <param name="maxsell" value="3" />
+                      </create_order>
+                      <create_order id="'AssignCommander'" object="$F" immediate="true">
+                        <param name="commander" value="$C" />
+                        <param name="assignment" value="assignment.trade" />
+                        <param name="cancelorders" value="false" />
+                      </create_order>
+                      <set_value name="parent.$Traders" operation="add" />
+                    </do_if>
+                    <do_elseif value="$F.exists">
+                      <destroy_object object="$F" />
+                      <set_value name="parent.$Failed" operation="add" />
+                    </do_elseif>
+                  </do_all>
+                </do_if>
+              </do_if>
+            </do_all>
+            <do_if value="parent.$FillIndex gt parent.$Clones.count">
+              <set_value name="parent.$Phase" exact="'built'" />
+            </do_if>
+          </actions>
+        </cue>
+        <cue name="Built">
+          <conditions>
+            <check_value value="@parent.$Phase == 'built'" />
+          </conditions>
+          <delay exact="5s" />
+          <actions>
+            <find_station name="$Stations2" space="player.galaxy" multiple="true" />
+            <set_value name="$ModuleCount2" exact="0" />
+            <do_for_each name="$S" in="$Stations2">
+              <find_object_component name="$PM" object="$S" class="class.production" multiple="true" />
+              <set_value name="$ModuleCount2" operation="add" exact="@$PM.count" />
+            </do_for_each>
+            <set_value name="$Sample" exact="[parent.$Clones.count, 6].min" />
+            <set_value name="$SampleOffers" exact="0" />
+            <do_all exact="$Sample" counter="$i">
+              <find_buy_offer result="$B" buyer="parent.$Clones.{$i}" multiple="true" />
+              <find_sell_offer result="$Se" seller="parent.$Clones.{$i}" multiple="true" />
+              <set_value name="$SampleOffers" operation="add" exact="$B.count + $Se.count" />
+            </do_all>
+            <debug_text text="'[X4MP] ECONSTRESS built time=%s clones=%s managers=%s traders=%s failed=%s noproduction=%s stations=%s productionmodules=%s sampleclones=%s sampleoffers=%s'.[player.age, parent.$Clones.count, parent.$Managers, parent.$Traders, parent.$Failed, parent.$NoProduction, $Stations2.count, $ModuleCount2, $Sample, $SampleOffers]" filter="general" />
+            <set_value name="parent.$MeasureStart" exact="player.age" />
+            <set_value name="parent.$Phase" exact="'measure'" />
+          </actions>
+        </cue>
+        <cue name="Tick" checkinterval="60s" instantiate="true">
+          <conditions>
+            <check_value value="@parent.$Phase == 'measure'" />
+          </conditions>
+          <actions>
+            <set_value name="$Subs" exact="0" />
+            <do_for_each name="$C" in="parent.$Clones">
+              <do_if value="$C.exists">
+                <set_value name="$Subs" operation="add" exact="$C.subordinates.count" />
+              </do_if>
+            </do_for_each>
+            <debug_text text="'[X4MP] ECONSTRESS tick time=%s cloneSubordinates=%s'.[player.age, $Subs]" filter="general" />
+          </actions>
+        </cue>
+        <cue name="Done">
+          <conditions>
+            <check_value value="@parent.$Phase == 'measure' and player.age ge parent.$MeasureStart + parent.$Duration" />
+          </conditions>
+          <actions>
+            <set_value name="$Sample" exact="[parent.$Clones.count, 6].min" />
+            <set_value name="$SampleOffers" exact="0" />
+            <do_all exact="$Sample" counter="$i">
+              <find_buy_offer result="$B" buyer="parent.$Clones.{$i}" multiple="true" />
+              <find_sell_offer result="$Se" seller="parent.$Clones.{$i}" multiple="true" />
+              <set_value name="$SampleOffers" operation="add" exact="$B.count + $Se.count" />
+            </do_all>
+            <debug_text text="'[X4MP] ECONSTRESS done time=%s sampleoffers=%s'.[player.age, $SampleOffers]" filter="general" />
+            <set_value name="parent.$Phase" exact="'done'" />
+          </actions>
+        </cue>
+      </cues>
+    </cue>
+  </cues>
+</mdscript>

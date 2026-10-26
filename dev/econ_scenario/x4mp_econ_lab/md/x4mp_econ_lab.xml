@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Production capture lab for the engine rewrite program (economy agent).
+     Runs only in a NEW game (event_game_started; never on load) and only when this extension is
+     installed, which dev/x4lane.py does for lane runs. It creates isolated "lab" factories whose
+     cargo changes only through production, and hands them to the econcap sampler
+     (native/engine/econcap.h, enabled by X4LAN_ECONCAP=true in the probe loader):
+       - operational clones of NPC factories, placed away from the original, trade offers
+         disabled, no traders; after their modules exist, resources half full (3 of 4) or nearly
+         empty (1 of 4, so modules wait for resources and retry);
+       - every lab station is raised as 'X4MP.EconWatch' to the Lua side (one sampler watch each);
+       - two reader cues read cargo (which runs the engine's lazy production catch-up) of the
+         even lab stations every 7 s and of the odd ones every 61 s: short and long lazy gaps;
+       - ECONLAB done after $Duration. -->
+<mdscript name="X4MP_EconLab" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="md.xsd">
+  <cues>
+    <cue name="Start">
+      <conditions>
+        <event_game_started />
+      </conditions>
+      <actions>
+        <set_value name="$Phase" exact="'wait'" />
+      </actions>
+      <cues>
+        <cue name="Setup">
+          <delay exact="15s" />
+          <actions>
+            <set_value name="parent.$LabLimit" exact="40" />
+            <set_value name="parent.$Duration" exact="9min" />
+            <find_station name="$Stations" space="player.galaxy" multiple="true" />
+            <set_value name="$Factories" exact="[]" />
+            <do_for_each name="$S" in="$Stations">
+              <do_if value="$S.products.count gt 0 and not $S.isshipyard and not $S.iswharf and not $S.isequipmentdock and not $S.isdefencestation and $S.owner != faction.player and $S.owner != faction.xenon and $S.owner != faction.khaak and $S.isoperational and $S.constructionsequence">
+                <append_to_list name="$Factories" exact="$S" />
+              </do_if>
+            </do_for_each>
+            <shuffle_list list="$Factories" />
+            <set_value name="parent.$Lab" exact="[]" />
+            <set_value name="parent.$Failed" exact="0" />
+            <do_all exact="[parent.$LabLimit, $Factories.count].min" counter="$i">
+              <set_value name="$T" exact="$Factories.{$i}" />
+              <create_station name="$C" macro="$T.macro" constructionplan="$T.constructionsequence" owner="$T.owner" sector="$T.sector" state="componentstate.operational">
+                <safepos object="$T" exact="60km" radius="10km" includeplotbox="true" />
+              </create_station>
+              <do_if value="$C.exists">
+                <set_tradeoffers_enabled object="$C" enabled="false" />
+                <append_to_list name="parent.$Lab" exact="$C" />
+              </do_if>
+              <do_else>
+                <set_value name="parent.$Failed" operation="add" />
+              </do_else>
+            </do_all>
+            <set_value name="parent.$Phase" exact="'settle'" />
+          </actions>
+        </cue>
+        <cue name="Fill">
+          <conditions>
+            <check_value value="@parent.$Phase == 'settle'" />
+          </conditions>
+          <delay exact="10s" />
+          <actions>
+            <set_value name="$NoProduction" exact="0" />
+            <do_all exact="parent.$Lab.count" counter="$i">
+              <set_value name="$C" exact="parent.$Lab.{$i}" />
+              <do_if value="$C.exists">
+                <set_value name="$Resources" exact="@$C.resources.list" />
+                <do_if value="not @$C.products.count">
+                  <set_value name="$NoProduction" operation="add" />
+                </do_if>
+                <do_if value="$Resources">
+                  <do_for_each name="$W" in="$Resources">
+                    <set_value name="$Max" exact="$C.cargo.{$W}.max" />
+                    <do_if value="$Max gt 0">
+                      <do_if value="$i % 4 == 0">
+                        <add_cargo object="$C" ware="$W" exact="[$Max / 100, 1].max" />
+                      </do_if>
+                      <do_else>
+                        <add_cargo object="$C" ware="$W" exact="$Max / 2" />
+                      </do_else>
+                    </do_if>
+                  </do_for_each>
+                </do_if>
+                <raise_lua_event name="'X4MP.EconWatch'" param="$C" />
+              </do_if>
+            </do_all>
+            <debug_text text="'[X4MP] ECONLAB built time=%s lab=%s failed=%s noproduction=%s'.[player.age, parent.$Lab.count, parent.$Failed, $NoProduction]" filter="general" />
+            <set_value name="parent.$Start" exact="player.age" />
+            <set_value name="parent.$Phase" exact="'run'" />
+          </actions>
+        </cue>
+        <cue name="ReadEven" checkinterval="7s" instantiate="true">
+          <conditions>
+            <check_value value="@parent.$Phase == 'run'" />
+          </conditions>
+          <actions>
+            <do_all exact="parent.$Lab.count" counter="$i">
+              <do_if value="$i % 2 == 0 and parent.$Lab.{$i}.exists">
+                <set_value name="$Read" exact="parent.$Lab.{$i}.cargo.{ware.energycells}.count" />
+              </do_if>
+            </do_all>
+          </actions>
+        </cue>
+        <cue name="ReadOdd" checkinterval="61s" instantiate="true">
+          <conditions>
+            <check_value value="@parent.$Phase == 'run'" />
+          </conditions>
+          <actions>
+            <do_all exact="parent.$Lab.count" counter="$i">
+              <do_if value="$i % 2 == 1 and parent.$Lab.{$i}.exists">
+                <set_value name="$Read" exact="parent.$Lab.{$i}.cargo.{ware.energycells}.count" />
+              </do_if>
+            </do_all>
+          </actions>
+        </cue>
+        <cue name="Done">
+          <conditions>
+            <check_value value="@parent.$Phase == 'run' and player.age ge parent.$Start + parent.$Duration" />
+          </conditions>
+          <actions>
+            <debug_text text="'[X4MP] ECONLAB done time=%s'.[player.age]" filter="general" />
+            <set_value name="parent.$Phase" exact="'done'" />
+          </actions>
+        </cue>
+      </cues>
+    </cue>
+  </cues>
+</mdscript>

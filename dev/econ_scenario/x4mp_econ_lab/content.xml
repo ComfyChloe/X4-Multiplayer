@@ -1,0 +1,4 @@
+<?xml version="1.0" encoding="utf-8"?>
+<content id="x4mp_econ_lab" name="X4MP economy capture lab (lane test only)" description="Rewrite-program test extension for the production capture/replay. Installed only by dev/x4lane.py (--extension) into a lane game view for a new custom_creative world. Never install into a normal profile." author="X4 Multiplayer rewrite program" version="1" date="2026-10-26" save="false" enabled="true">
+  <dependency version="900" />
+</content>

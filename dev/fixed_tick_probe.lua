@@ -4,6 +4,8 @@
 -- 'profile' measures like the default probe and samples the MoveWorker stack (simprof):
 -- X4LAN_SIMPROF_INTERVAL_MS (0.5..10, default 1), X4LAN_SIMPROF_DEPTH (8..64, default 32),
 -- X4LAN_SIMPROF_REPORT_S (default 10), X4LAN_SIMPROF_FOLD_LINES (folded stacks logged per frame, default 20).
+-- X4LAN_ECONCAP=true also enables the economy capture (econcap.h): MD raises the Lua event
+-- 'X4MP.EconWatch' with a station, and its X4ECON records are logged as '[X4LAN] ECONCAP <record>'.
 if not X4LAN_CONFIG or X4LAN_CONFIG.test_profile~='45841' then return end
 if X4LAN_FIXEDTICK_PROBE then return end
 X4LAN_FIXEDTICK_PROBE=true
@@ -65,6 +67,16 @@ local function logProfile(now)
  end
  checkProfileDisabled()
 end
+local econWatchRegistered
+local function econWatch(_,station)
+ if not owner or not owner.econ_watch then return end
+ local id=ConvertStringTo64Bit(tostring(station))
+ if not owner:econ_watch(tonumber(id)) then DebugError('[X4LAN] ECONCAP watch refused '..tostring(id)) end
+end
+local function drainEcon()
+ local lines=owner:econ_lines(400)
+ for i=1,#lines do DebugError('[X4LAN] ECONCAP '..lines[i]) end
+end
 local function drainFolds()
  local lines=owner:folds(foldLines)
  for i=1,#lines do DebugError('[X4LAN] SIMPROF fold '..lines[i]) end
@@ -81,6 +93,7 @@ SetScript('onUpdate',function()
    if now>=nextProfile then logProfile(now) end
    drainFolds()
   end
+  if X4LAN_ECONCAP and owner.econ_lines then drainEcon() end
   return
  end
  if now<nextTry then return end
@@ -96,6 +109,11 @@ SetScript('onUpdate',function()
  if result then
   owner=result;nextLog=0
   DebugError('[X4LAN] FRAMEPROBE armed in MoveWorker slot 5 mode='..(X4LAN_FIXEDTICK_MODE or 'probe'))
+  if X4LAN_ECONCAP and not econWatchRegistered then
+   econWatchRegistered=true
+   RegisterEvent('X4MP.EconWatch',econWatch)
+   DebugError('[X4LAN] FEATURE econcap ENABLED')
+  end
   if profiling then
    profileDisabled=false;nextProfile=now+reportEvery
    local s=owner:stats()

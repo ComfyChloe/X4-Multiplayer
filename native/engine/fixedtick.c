@@ -5,6 +5,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <intrin.h>
 #include "fixedtick_signatures.h"
 #include "simprof.c"
 
@@ -231,6 +232,7 @@ static handler hook_begin = {begin_vtable};
 static handler hook_end = {end_vtable};
 static int64_t sim_begin_qpc;
 #include "walkprof.h"
+#include "econcap.h"
 
 static void **table_now(void) {
     return image ? *(void ***)(image + VBI_RVA) : NULL;
@@ -319,6 +321,7 @@ static void disarm_because(const char *reason) {
     if (current) { current->armed = 0; if (reason && !current->reason) current->reason = reason; }
     unpatch();
     walk_uninstall();
+    econcap_disarm();
     unregister_sim_hooks();
     if (table_owned())
         InterlockedCompareExchangePointer((void *volatile *)&registered_table[SLOT], NULL, &hook);
@@ -407,6 +410,7 @@ static void move(handler *self) {
     o->real_time = real;
     o->speed = speed;
     ++o->frames;
+    econcap_frame(game, o->frames, econ_tls_rng());
 }
 
 static int stop(lua_State *L) {
@@ -464,6 +468,10 @@ static int stats(lua_State *L) {
         double frames = walk_win.frames ? (double)walk_win.frames : 1.0;
         char key[48];
         number_field(L, "walk_installed", walk_installed);
+        number_field(L, "econ_watched", econ.watched);
+        number_field(L, "econ_records", (double)econ.records);
+        number_field(L, "econ_dropped_lines", (double)econ.dropped_lines);
+        number_field(L, "econ_dropped_stations", (double)econ.dropped_stations);
         number_field(L, "walk_refused", o->walk_refused);
         number_field(L, "walk_sector_hook", walk_sector_state);
         number_field(L, "walk_frames", (double)walk_win.frames);
@@ -540,6 +548,32 @@ static int folds(lua_State *L) {
     if (o != current || !o->profile) return 1;
     char line[1600];
     for (int i = 1; i <= limit && simprof_next_fold(line, sizeof(line)); ++i) {
+        p_lua_pushlstring(L, line, strlen(line));
+        p_lua_rawseti(L, -2, i);
+    }
+    return 1;
+}
+
+/* Economy capture (econcap.h): watch(UniverseID as a number) and drain(n) of X4ECON lines. */
+static int econ_watch(lua_State *L) {
+    owner *o = p_luaL_checkudata(L, 1, META);
+    double id = p_lua_type(L, 2) == LUA_TNUMBER ? p_lua_tonumber(L, 2) : 0.0;
+    int ok = o == current && o->armed && id >= 1.0 && id < 9007199254740992.0 && econcap_watch((uint64_t)id);
+    p_lua_pushboolean(L, ok);
+    return 1;
+}
+
+static int econ_lines(lua_State *L) {
+    owner *o = p_luaL_checkudata(L, 1, META);
+    int limit = p_lua_type(L, 2) == LUA_TNUMBER ? (int)p_lua_tonumber(L, 2) : 0;
+    if (limit < 0) limit = 0;
+    if (limit > 4096) limit = 4096;
+    p_lua_createtable(L, limit, 0);
+    if (o != current) return 1;
+    static char line[ECON_LINE_BYTES];
+    for (int i = 1; i <= limit; ++i) {
+        size_t n = econ_next_line(line, sizeof(line));
+        if (!n) break;
         p_lua_pushlstring(L, line, strlen(line));
         p_lua_rawseti(L, -2, i);
     }
@@ -689,6 +723,7 @@ __declspec(dllexport) int luaopen_x4lan_fixedtick(lua_State *L) {
     method(L, "__gc", stop); method(L, "stop", stop);
     method(L, "active", active); method(L, "stats", stats);
     method(L, "profile", profile); method(L, "folds", folds);
+    method(L, "econ_watch", econ_watch); method(L, "econ_lines", econ_lines);
     p_lua_settop(L, -2);
     p_lua_createtable(L, 0, 1); method(L, "start", start);
     return 1;
