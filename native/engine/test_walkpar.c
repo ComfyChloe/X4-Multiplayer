@@ -174,6 +174,18 @@ int main(void) {
     assert(wp_win.sector_max_ms > 3.0 && wp_win.sector_max_ms < 3.4);
     assert(wp_ideal_speedup() > 1.4 && wp_ideal_speedup() < 1.9);
 
+    /* Native path: the walk is bracketed by the dispatcher (wp_walk_begin sets in_walk) with NO
+       sector bracket (no Sector::Move body patch). Posts are still counted and cross-sector is
+       derived from source-vs-listener sectors via the resolver. */
+    engine_setup(WP_CENSUS);
+    scene_init();
+    wp_walk_begin();                                 /* in_walk=1, cur_sector stays 0 */
+    engine_post(&o0, &e_same, 10.0, 1);              /* o0 in 100 -> l0 in 100: same-sector */
+    engine_post(&o0, &e_cross, 10.0, 1);             /* o0 in 100 -> l1 in 101: cross-sector */
+    wp_walk_end();
+    assert(wp_win.posts == 2 && wp_win.posts_imm == 2 && wp_win.posts_rootlevel == 0);
+    assert(wp_win.deliver_listeners == 2 && wp_win.xsector_listener == 1);
+
     /* Stage 1 functional: a NORMAL run (log A) and a REPLAY run (log B) of the same scene agree. */
     engine_setup(WP_CENSUS);     /* normal run: phase off, deliveries inline -> A */
     scene_init();

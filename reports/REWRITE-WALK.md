@@ -41,11 +41,14 @@ WP_REPLAY until the dispatcher is installed). Sites registered in `rewrite-coord
 
 ## 2. Stage 0 — hazard census (measurement only)
 
-Driven per frame by: the slot 0/15 sim bracket (`wp_walk_begin/end`, census only), a Sector::Move
-function-entry detour (`wp_sector_enter/exit` on 0x784230 — coexists with the 0x2b1ff58 vtable chain since
-it patches the body not the slot), a PostEvent entry detour (`wp_post`), a DeliverEvent wrapper
-(`wp_deliver_enter/exit/listener`), and counting detours on the creation/global paths (`wp_note_*`). Per
-frame and per sector it records:
+Driven per frame by: the galaxy-call dispatcher at 0x9fdf95 (`wp_walk_begin/end`, both census and replay),
+a PostEvent entry detour (`wp_post`), a DeliverEvent wrapper (`wp_deliver_enter/exit/listener`), and
+counting detours on the creation/global paths (`wp_note_*`). **There is no Sector::Move body patch**: the
+attention-load hooks (`x4lan_hooks_64.dll`) pin and re-verify a 738-byte range at 0x784230, so patching that
+entry trips their integrity check (observed as `HOOKS_DISABLED` in the first attnload run). Per-sector
+attribution instead comes from the source/listener sector resolver (`wp_sector_resolver` walks +0x70 to the
+U::Sector id): a post's task is the source's sector, cross-sector delivery is listener-sector != source-sector.
+Per-sector *timing* comes from walkprof (already chained on the Sector::Move vtable). Per frame it records:
 
 - **Time split:** inclusive Sector::Move ms (sum and max across sectors → ideal speedup = sum/max), and
   inclusive DeliverEvent time while inside a sector (outermost only). This is the deferrable-handler vs
@@ -148,7 +151,7 @@ the cancel passes through to the original so the global schedule still sees it (
 | 0x99a870 | CancelPendingEvents entry detour | cancel_pending_events (32) |
 | 0x99c470 | DeliverEvent wrapper (census + compare log) | deliver_event (32) |
 | 0x99abe0 | FlushCommandQueue (ESL on workers, stage 2) | flush_command_queue_wp (32) |
-| 0x784230 | Sector::Move **function-entry** detour (cur-sector + timing); coexists with the 0x2b1ff58 vtable chain (walkprof/attnload) since it patches the body, not the slot — both noted chained in hooks.tsv | walk sector sha (32) |
+| ~~0x784230~~ | Sector::Move entry detour **WITHDRAWN** — the attnload hooks pin+re-verify a 738-byte range at 0x784230, so patching the body trips HOOKS_DISABLED; sectors attributed via the resolver instead | — |
 
 `dev/check_hook_signatures.py ../x4-re/bin/X4.exe` → 21 signatures PASS (the 5 new ones above included), no
 files modified.
@@ -162,8 +165,6 @@ address fell inside a cut would otherwise return into patched bytes, which the R
 
 - `0x99a3f0` PostEvent, cut 14: `48 85 d2` test rdx,rdx; `0f84 1d030000` je 0x99a716 (relocated);
   `48 89 5c 24 08` mov [rsp+8],rbx. (je target 0x99a716 is outside the 14-byte range.)
-- `0x784230` Sector::Move, cut 15: `40 55` push rbp; `57` push rdi; `48 8d 6c 24 e8` lea rbp,[rsp-0x18]
-  (rsp-relative, not RIP); `48 81 ec 18010000` sub rsp,0x118.
 - `0x99c470` DeliverEvent, cut 16: `48 89 5c 24 20` mov [rsp+0x20],rbx; `55 56 57` push rbp/rsi/rdi;
   `41 54` push r12; `41 55` push r13; `48 83 ec 40` sub rsp,0x40.
 - `0x99a870` CancelPendingEvents, cut 17: `f2 0f11 5c 24 20` movsd [rsp+0x20],xmm3; `55 56` push rbp/rsi;
@@ -198,8 +199,8 @@ gate in fixedtick.c).
 
 **Detour bodies** (walkpar.h): PostEvent → `if (wp_post(src,event,time,imm)) return; else <tramp>`;
 Cancel → `if (wp_cancel(src,type,minTime)) return; else <tramp>`; DeliverEvent → `wp_deliver_enter;
-<tramp>; wp_deliver_exit`; Sector::Move → `wp_sector_enter; r=<tramp>; wp_sector_exit; return r`. ABI:
-PostEvent(rcx=src, rdx=event, xmm2 time, r9b imm); Cancel(rcx=src, edx=type, xmm2 minTime). The DeliverEvent
+<tramp>; wp_deliver_exit`. ABI: PostEvent(rcx=src, rdx=event, xmm2 time, r9b imm); Cancel(rcx=src, edx=type,
+xmm2 minTime). (No Sector::Move detour — see §2.) The DeliverEvent
 per-listener records (for the compare log) are **not yet emitted natively** — a finer hook or a read of the
 event's listeners at enter is the follow-up; `WP_CMP_NODATA` guards the gap. The ai-driver binds its AI-phase
 buffer to the same `walkpar_api()` (scope_begin/end, replay_tasks, buffer_op) — questions Q4/Q7.
