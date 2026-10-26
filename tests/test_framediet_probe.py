@@ -1,10 +1,10 @@
-"""Opt-in server frame diet loader (native/engine/framediet_probe.lua) under real LuaJIT."""
+"""Opt-in server frame diet loader (src/native/engine/framediet_probe.lua) under real LuaJIT."""
 from pathlib import Path
 import unittest
 
 from lupa.luajit21 import LuaRuntime
 
-SOURCE = Path(__file__).resolve().parents[1] / 'native/engine/framediet_probe.lua'
+SOURCE = Path(__file__).resolve().parents[1] / 'src/native/engine/framediet_probe.lua'
 
 STATS = '''
   function stats_table()

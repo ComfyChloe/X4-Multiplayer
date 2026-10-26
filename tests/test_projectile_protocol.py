@@ -9,7 +9,7 @@ from x4lan import projectile_protocol as pp
 from test_game_adapter import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
-LUA = ROOT / 'extension/x4_lan_lab/ui/projectile_protocol.lua'
+LUA = ROOT / 'src/extension/x4_lan_lab/ui/projectile_protocol.lua'
 A, B = 'a' * 32, '0123456789abcdef' * 2
 CLIENT_BOLT = ('BOLT|1|' + A + '|2|7|4|19|1234.5|cluster_14_sector001_macro|1|1030|-10000|160.25'
                '|2300|0|-0.5|0.25|-6.2831853071795862|0|0.69999999999999996')
@@ -107,14 +107,14 @@ class PythonCodecTests(unittest.TestCase):
             pp.serialize('BOLT')
 
     def test_codec_is_used_only_by_the_relay_helper_and_the_guarded_adapter(self):
-        ui = (ROOT / 'extension/x4_lan_lab/ui.xml').read_text()
+        ui = (ROOT / 'src/extension/x4_lan_lab/ui.xml').read_text()
         modules = ('shot_capture', 'projectile_motion', 'projectile_protocol', 'projectile_game')
         for name in modules:
             self.assertEqual(ui.count('name="ui/' + name + '.lua"'), 1)
         positions = [ui.index('name="ui/' + name + '.lua"') for name in modules]
         self.assertEqual(positions, sorted(positions))
-        self.assertIn('not cfg.projectile_visuals', (ROOT/'extension/x4_lan_lab/ui/projectile_game.lua').read_text())
-        for path in list((ROOT / 'x4lan').glob('*.py')) + list((ROOT / 'extension').rglob('*.lua')) + list((ROOT / 'extension').rglob('*.xml')):
+        self.assertIn('not cfg.projectile_visuals', (ROOT/'src/extension/x4_lan_lab/ui/projectile_game.lua').read_text())
+        for path in list((ROOT / 'src/x4lan').glob('*.py')) + list((ROOT / 'src/extension').rglob('*.lua')) + list((ROOT / 'src/extension').rglob('*.xml')):
             if path.name not in ('projectile_protocol.py', 'projectile_protocol.lua', 'projectile_relay.py', 'projectile_game.lua', 'ui.xml'):
                 self.assertNotIn('projectile_protocol', path.read_text(errors='replace'), path)
                 self.assertNotIn('PROJECTILE_PROTOCOL', path.read_text(errors='replace'), path)

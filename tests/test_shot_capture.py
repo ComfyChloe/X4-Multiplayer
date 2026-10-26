@@ -13,8 +13,8 @@ from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / 'extension/x4_lan_lab/ui'
-MD = ROOT / 'extension/x4_lan_lab/md/x4lan_shot_capture.xml'
+UI = ROOT / 'src/extension/x4_lan_lab/ui'
+MD = ROOT / 'src/extension/x4_lan_lab/md/x4lan_shot_capture.xml'
 WALL = "player.systemtime.{'%Y-%m-%dT%H:%M:%S'}"
 
 
@@ -328,7 +328,7 @@ class CanonicalFloorTests(unittest.TestCase):
             (r'@?\$ship\.hullpercentage', "P['hull']"), (r'\ble\b', '<='), (r'\btrue\b', 'True')]
 
     def tick(self, S, P):
-        node = [n for n in E.parse(ROOT / 'extension/x4_lan_lab/md/x4lan_life.xml').iter('do_if')
+        node = [n for n in E.parse(ROOT / 'src/extension/x4_lan_lab/md/x4lan_life.xml').iter('do_if')
                 if n.get('value') == '$arena.$host and not $arena.$dead.{$i}'][0]
         logs = []
 
@@ -373,7 +373,7 @@ class CanonicalFloorTests(unittest.TestCase):
             S = dict(live=False, value=0, lost=False, dead=False)
             self.tick(S, dict(op=True, hull=hull))
             self.assertEqual(S['dead'], dead)
-        health = (ROOT / 'extension/x4_lan_lab/md/x4lan_health.xml').read_text()
+        health = (ROOT / 'src/extension/x4_lan_lab/md/x4lan_health.xml').read_text()
         self.assertTrue('set_object_min_hull object="$ship" exact="2"' not in health)
         self.assertTrue('<append_to_list name="$arena.$healthProxyLost" exact="false"/>' in health)
 

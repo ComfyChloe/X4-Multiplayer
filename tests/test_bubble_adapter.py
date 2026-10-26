@@ -2,7 +2,7 @@
 from pathlib import Path
 import unittest
 from test_game_adapter import MOCK,LuaRuntime
-SCRIPT=Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/ui/bubble_game.lua'
+SCRIPT=Path(__file__).resolve().parents[1]/'src/extension/x4_lan_lab/ui/bubble_game.lua'
 EXTRA='''
 X4LAN_CONFIG.bubble_actions=true
 GetComponentData=function() return 'cluster_14_sector001_macro' end
@@ -34,7 +34,7 @@ class BubbleAdapterTests(unittest.TestCase):
   import xml.etree.ElementTree as ET
   l=self.make("X4LAN_CONFIG.dedicated=true;X4LAN_CONFIG.ship_macro='ship_test'")
   l.execute("local found=false;for _,r in ipairs(requests) do if r[2]=='PrepareShips' then found=true;assert(r[3].teleport==false) end end;assert(found)")
-  root=ET.parse(Path(__file__).resolve().parents[1]/'extension/x4_lan_lab/md/x4lan_bubble.xml')
+  root=ET.parse(Path(__file__).resolve().parents[1]/'src/extension/x4_lan_lab/md/x4lan_bubble.xml')
   teleport=root.find(".//cue[@name='PrepareShips']/actions/do_else/do_if[@value='$args.$teleport']/teleport_player")
   self.assertIsNotNone(teleport)
 

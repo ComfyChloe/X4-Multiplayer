@@ -10,8 +10,8 @@ from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / 'extension/x4_lan_lab/ui'
-MD = ROOT / 'extension/x4_lan_lab/md/x4lan_walk.xml'
+UI = ROOT / 'src/extension/x4_lan_lab/ui'
+MD = ROOT / 'src/extension/x4_lan_lab/md/x4lan_walk.xml'
 STATION = "'station','0','cluster_14_sector001_macro','ABC-123','station_gen_factory_base_01_macro'"
 
 HELPERS = '''

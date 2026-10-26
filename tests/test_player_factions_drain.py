@@ -3,7 +3,7 @@ from pathlib import Path
 import unittest
 from lupa.luajit21 import LuaRuntime
 
-UI = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/ui'
+UI = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/ui'
 
 
 class ClientDrain(unittest.TestCase):

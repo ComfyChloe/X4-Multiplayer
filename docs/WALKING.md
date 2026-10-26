@@ -3,13 +3,13 @@
 Status: internal, 26 October 2026. Walking avatars are implemented for N players and
 covered by Rust, Python and LuaJIT tests with synthetic peers. **No native run yet**:
 whether X4 draws, places and animates the avatars as intended is unverified. The
-in-game procedure is [distribution/HUMAN-WALK-TEST.txt](../distribution/HUMAN-WALK-TEST.txt).
+in-game procedure is [tools/distribution/HUMAN-WALK-TEST.txt](../tools/distribution/HUMAN-WALK-TEST.txt).
 Multi-crew and EVA are design notes (sections 4 and 5), with the groundwork they
 need already in the protocol.
 
-Source: `extension/x4_lan_lab/ui/walk_game.lua` (protocol, interpolation, lifecycle),
-`extension/x4_lan_lab/md/x4lan_walk.xml` (local pose, avatar actors), relay
-`x4lan/bubble.py` and `rust/x4lan-relay/src/session/bubble.rs`. Config:
+Source: `src/extension/x4_lan_lab/ui/walk_game.lua` (protocol, interpolation, lifecycle),
+`src/extension/x4_lan_lab/md/x4lan_walk.xml` (local pose, avatar actors), relay
+`src/x4lan/bubble.py` and `src/rust/x4lan-relay/src/session/bubble.rs`. Config:
 `walking_avatars` (source config off; internal session packages on).
 
 ## 1. What a client sees
@@ -62,7 +62,7 @@ legacy `WALK` (context 1..4, two players) stays accepted by both relays for pari
 is no longer sent; new clients drop it with `WALK_DROP reason=legacy_walk`.
 
 Python relay: two players, as before. Rust relay: every session size. Parity:
-`rust/parity` hand-written and randomized scenarios include WALK2 (2000 randomized
+`src/rust/parity` hand-written and randomized scenarios include WALK2 (2000 randomized
 scenarios identical; WALK2 appears in 157 of their outputs).
 
 ## 3. Context identity and placement

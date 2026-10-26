@@ -162,8 +162,8 @@ REQUIRED TWO-GAME REGRESSIONS
   not pass these gameplay criteria.
 
 SOURCE REFERENCES
-Existing implementation: extension/x4_lan_lab/ui/{bubble,coop,trade}_game.lua,
-extension/x4_lan_lab/md/x4lan_{bubble,coop,trade}.xml, x4lan/{bubble,coop,economy}.py.
+Existing implementation: src/extension/x4_lan_lab/ui/{bubble,coop,trade}_game.lua,
+src/extension/x4_lan_lab/md/x4lan_{bubble,coop,trade}.xml, src/x4lan/{bubble,coop,economy}.py.
 Local schema reference: ../../preparation/game-schemas/libraries/common.xsd
 (engine-owned development reference; do not redistribute in release archives).
 Egosoft Mission Director Guide (event/cue model and saved MD state):

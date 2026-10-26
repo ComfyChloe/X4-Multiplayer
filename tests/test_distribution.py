@@ -2,7 +2,7 @@ from pathlib import Path
 import importlib.util,tempfile,unittest,xml.etree.ElementTree as ET,json
 from unittest.mock import patch
 from types import SimpleNamespace
-D=Path(__file__).resolve().parents[1]/'distribution'
+D=Path(__file__).resolve().parents[1]/'tools/distribution'
 spec=importlib.util.spec_from_file_location('linux_setup',D/'linux_setup.py');setup=importlib.util.module_from_spec(spec);spec.loader.exec_module(setup)
 class DistributionTests(unittest.TestCase):
  def test_desktop_server_opens_terminal_without_shell_interpolation(self):

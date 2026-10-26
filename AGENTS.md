@@ -24,11 +24,11 @@
   `x4lan_net` transport free of hooks.
 - A visual NPC replica is not proof of shared combat, inventory or economy. State
   measured limits and distinguish native X4 tests from mocks/synthetic peers.
-- Keep source `extension/x4_lan_lab/ui/config.lua` inert and free of credentials.
+- Keep source `src/extension/x4_lan_lab/ui/config.lua` inert and free of credentials.
   Store local environments, generated packages, logs, installation state and
   session credentials under `.local/` or outside this checkout. Never commit them.
-- Do not copy `.venv` between computers. Use `python3 dev/bootstrap.py`, then
-  `.venv/bin/python dev/check.py`. Missing LuaJIT coverage is not a passing run.
+- Do not copy `.venv` between computers. Use `python3 tools/dev/bootstrap.py`, then
+  `.venv/bin/python tools/dev/check.py`. Missing LuaJIT coverage is not a passing run.
 - Native tests require X4 to be closed and a new disposable world in profile
   45841, with autosave disabled. Never load, delete or overwrite normal saves.
   Reloading the owned pristine 7.3 starting snapshot is part of that isolated test.

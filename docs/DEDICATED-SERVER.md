@@ -77,7 +77,7 @@ Requirements: Linux x86-64, Rust 1.82+, Cargo, Python 3.10+, and the pinned X4 9
 Linux installation (Steam build 23660954). Build an internal package set:
 
 ```sh
-python3 distribution/build_packages.py /path/to/new-dedicated-set --dedicated     --max-players 4 --runtime-cache /path/to/internal-runtime-cache
+python3 tools/distribution/build_packages.py /path/to/new-dedicated-set --dedicated     --max-players 4 --runtime-cache /path/to/internal-runtime-cache
 ```
 
 `--max-players` (default 3) counts the server slot. Every client slot gets a Windows
@@ -123,7 +123,7 @@ for the same user it either tries to start `~/.steam/root/steam.sh` and exits 1,
 required, please start the Steam client and try again." `run` therefore fails closed
 when `$HOME/.steam/steam.pid` does not name a live process. A Steam login with an
 account that owns X4 is an operator step; the supervisor never automates it.
-`dev/linux_x4_start_probe.sh` reproduces one bounded start under Xvfb + lavapipe with
+`tools/dev/linux_x4_start_probe.sh` reproduces one bounded start under Xvfb + lavapipe with
 an isolated HOME and reports this dialog.
 
 ## WSL2 / WSLg smoke test
@@ -164,7 +164,7 @@ sessions, and persistent-world lifecycle require their own acceptance tests.
 
 ## Native N-player check (pending)
 
-No native N-player run has been made. Synthetic evidence: `rust/x4lan-relay/tests/nplayer.rs`
+No native N-player run has been made. Synthetic evidence: `src/rust/x4lan-relay/tests/nplayer.rs`
 and `tests/test_nplayer_lua.py`. A first native check with a server plus three clients:
 
 1. Build a fresh set with `--max-players 4`; set up the server (Linux package, profile

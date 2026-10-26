@@ -5,7 +5,7 @@ from contextlib import nullcontext
 from unittest.mock import patch
 from types import SimpleNamespace
 ROOT=Path(__file__).resolve().parents[1]
-spec=importlib.util.spec_from_file_location('internal_launcher',ROOT/'distribution/session_launcher.py')
+spec=importlib.util.spec_from_file_location('internal_launcher',ROOT/'tools/distribution/session_launcher.py')
 launcher=importlib.util.module_from_spec(spec);spec.loader.exec_module(launcher)
 
 class InternalSessions(unittest.TestCase):
@@ -265,7 +265,7 @@ class InternalPackageRuntime(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             # Fixture reports and Rust outputs only; this is no release validation.
             source = Path(temp) / 'source'; source.mkdir()
-            for name in ('VERSION.txt', 'docs/VERSIONING.txt', 'docs/DEDICATED-SERVER.md', 'extension', 'x4lan'):
+            for name in ('VERSION.txt', 'docs/VERSIONING.txt', 'docs/DEDICATED-SERVER.md', 'src/extension', 'src/x4lan'):
                 if (ROOT / name).is_dir():
                     shutil.copytree(ROOT / name, source / name, ignore=shutil.ignore_patterns('__pycache__'))
                 else:
@@ -275,7 +275,7 @@ class InternalPackageRuntime(unittest.TestCase):
             (source / 'reports').mkdir()
             for name, suffix in (('automated', 'tests'), ('release', 'checks')):
                 (source / 'reports' / f'{name}-{release}-{suffix}.txt').write_text('Unit-test fixture only.\n')
-            rust = source / 'rust/target/release'; rust.mkdir(parents=True)
+            rust = source / 'src/rust/target/release'; rust.mkdir(parents=True)
             (rust / 'libx4lan_net.so').write_bytes(b'\x7fELF rust x4lan-net fixture')
             (rust / 'x4lan-dedicated').write_bytes(b'\x7fELF supervisor fixture')
             out = Path(temp) / 'set'

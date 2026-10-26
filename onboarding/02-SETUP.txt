@@ -39,8 +39,8 @@ A worktree isolates source files, not the installed mod, profile45841, game proc
 Steam account or relay ports. Never use it as permission for concurrent engine runs.
 
 LINUX DEVELOPMENT ENVIRONMENT
-  python3 dev/bootstrap.py
-  .venv/bin/python dev/check.py
+  python3 tools/dev/bootstrap.py
+  .venv/bin/python tools/dev/check.py
 
 Bootstrap installs pinned development dependencies in this checkout's .venv.
 It does not install/launch X4. Do not copy .venv from another machine. Missing
@@ -49,7 +49,7 @@ The pinned code's retained result is590 PASS/no skips. On first setup, one full
 run establishes your environment. Do not rerun it merely to refresh a status note.
 
 FOCUSED EXAMPLE FOR THE RECENT INSTALLER CHANGES (Linux repository root)
-  PYTHONPATH=tests:. .venv/bin/python -m unittest test_launcher_recovery test_internal_sessions test_profile_settings test_world_launcher test_linux_starters
+  PYTHONPATH=tests:src:tools:. .venv/bin/python -m unittest test_launcher_recovery test_internal_sessions test_profile_settings test_world_launcher test_linux_starters
 
 POWERSHELL FIXTURES (use an already available PowerShell executable)
   pwsh -NoLogo -NoProfile -File tests/test_windows_discovery.ps1

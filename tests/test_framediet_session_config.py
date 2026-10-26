@@ -7,7 +7,7 @@ from unittest.mock import patch
 from lupa.luajit21 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
-spec = importlib.util.spec_from_file_location('framediet_session_launcher', ROOT / 'distribution/session_launcher.py')
+spec = importlib.util.spec_from_file_location('framediet_session_launcher', ROOT / 'tools/distribution/session_launcher.py')
 launcher = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(launcher)
 SESSION = {'token': 't' * 32, 'bubble': 'bubble-01', 'build': 'world1-test-np1-9.00-steam23660954'}

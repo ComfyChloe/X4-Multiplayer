@@ -6,8 +6,8 @@ import xml.etree.ElementTree as E
 from lupa.luajit21 import LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
-LUA = ROOT / 'extension/x4_lan_lab/ui/npc_target_diag.lua'
-MD = ROOT / 'extension/x4_lan_lab/md/x4lan_npc_target_diag.xml'
+LUA = ROOT / 'src/extension/x4_lan_lab/ui/npc_target_diag.lua'
+MD = ROOT / 'src/extension/x4_lan_lab/md/x4lan_npc_target_diag.xml'
 
 
 class NpcTargetDiagTests(unittest.TestCase):

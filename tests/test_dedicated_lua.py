@@ -7,7 +7,7 @@ try:
 except ImportError:
     LuaRuntime = None
 
-SOURCE = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/ui/dedicated_game.lua'
+SOURCE = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/ui/dedicated_game.lua'
 MOCK = r'''
 now,gameTime,paused,quitCount,pauseCount=0,10,false,0,0
 logs,frames,controlLines={}, {}, {}

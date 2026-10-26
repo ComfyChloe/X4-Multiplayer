@@ -52,41 +52,41 @@ Steam account isolation or bypass the content digest to enable an extra API.
 
 TASK-RELEVANT SOURCE MAP (paths relative to repository root)
 Transport/session:
-  x4lan/host.py; native/net.c; extension/x4_lan_lab/ui/client.lua, transport.lua.
+  src/x4lan/host.py; src/native/net.c; src/extension/x4_lan_lab/ui/client.lua, transport.lua.
   tests/test_host.py, test_lua.py, test_reconnect.py.
 Shared starting world/admission:
-  distribution/world_launcher.py; x4lan/seed.py, world_start.py, save_origin.py.
-  extension/x4_lan_lab/ui/seed_game.lua, seed_capture.lua, seed_content.lua.
-  extension/x4_lan_lab/md/x4lan_seed.xml, x4lan_seed_docks.xml.
+  tools/distribution/world_launcher.py; src/x4lan/seed.py, world_start.py, save_origin.py.
+  src/extension/x4_lan_lab/ui/seed_game.lua, seed_capture.lua, seed_content.lua.
+  src/extension/x4_lan_lab/md/x4lan_seed.xml, x4lan_seed_docks.xml.
   tests/test_world_launcher.py, test_seed_gate.py, test_world_start.py.
 NPC scene/identity/sensors/motion:
-  x4lan/universe.py, identity.py; ui/universe_game.lua, universe_protocol.lua,
-  identity_game.lua, motion.lua under extension/x4_lan_lab/.
+  src/x4lan/universe.py, identity.py; ui/universe_game.lua, universe_protocol.lua,
+  identity_game.lua, motion.lua under src/extension/x4_lan_lab/.
   md/x4lan_universe.xml; tests/test_universe*.py, test_identity.py, test_motion.py.
-  dev/validate_native_sensors.py checks retained native observation captures.
+  tools/dev/validate_native_sensors.py checks retained native observation captures.
 Pilot ownership/docking:
-  x4lan/coop.py, docking.py; ui/coop_game.lua, coop_dock_game.lua, coop_dock_exec.lua;
+  src/x4lan/coop.py, docking.py; ui/coop_game.lua, coop_dock_game.lua, coop_dock_exec.lua;
   md/x4lan_coop.xml, x4lan_coop_attachment.xml, x4lan_coop_docks.xml.
   tests/test_coop*.py, test_docking*.py; reports/COOP-DOCKING-PLAN.txt.
 Combat and visuals (coordinate with Claude before changes):
-  x4lan/bubble.py, projectile_relay.py, projectile_protocol.py;
+  src/x4lan/bubble.py, projectile_relay.py, projectile_protocol.py;
   ui/health_game.lua, shot_game.lua, shot_capture.lua, shot_visual.lua,
   projectile_game.lua, projectile_motion.lua, projectile_protocol.lua;
   md/x4lan_health.xml, x4lan_shot*.xml, x4lan_projectile.xml.
   tests/test_health*.py, test_shot*.py, test_projectile*.py.
 Cargo and trade:
-  x4lan/cargo.py, economy.py; ui/cargo_game.lua, trade_game.lua, trade_protocol.lua;
+  src/x4lan/cargo.py, economy.py; ui/cargo_game.lua, trade_game.lua, trade_protocol.lua;
   md/x4lan_cargo.xml, x4lan_trade.xml; tests/test_cargo*.py, test_trade_adapter.py.
   Reuse transaction/fencing ideas after checking current source; don't bolt on a
   second unacknowledged action channel for each new gameplay feature.
 Launcher/packaging:
-  distribution/session_launcher.py, profile_settings.py, windows_setup.ps1,
+  tools/distribution/session_launcher.py, profile_settings.py, windows_setup.ps1,
   linux_setup.py, linux_action.sh, build_packages.py; tests/test_launcher_recovery.py,
   test_internal_sessions.py, test_profile_settings.py, test_linux_starters.py,
   test_windows_discovery.ps1, test_windows_profiles.ps1.
 Missions and observation:
-  x4lan/quests.py, monitor.py; ui/quest_game.lua; md/x4lan_quest.xml.
-  tests/test_quests.py, test_monitor.py; distribution/NEXT-TEST.txt.
+  src/x4lan/quests.py, monitor.py; ui/quest_game.lua; md/x4lan_quest.xml.
+  tests/test_quests.py, test_monitor.py; tools/distribution/NEXT-TEST.txt.
 
 INTERFACE RULES BEFORE AUTHORITY CHANGES
 Read docs/WORLD-SYNC-REQUIREMENTS.txt and the relevant docs/ARCHITECTURE.md section/source.
@@ -98,5 +98,5 @@ native execution. Define retries, duplicate/expiry handling and canonical outcom
 Host-owned health uses WORLD; absent host HEALTH frames are expected. The guest
 pilot HEALTH handshake is a different path, not proof of missing host health.
 
-All ui/ and md/ shorthand above is under extension/x4_lan_lab/. Headers and older
+All ui/ and md/ shorthand above is under src/extension/x4_lan_lab/. Headers and older
 reports can describe historical versions; use current source plus dated evidence.

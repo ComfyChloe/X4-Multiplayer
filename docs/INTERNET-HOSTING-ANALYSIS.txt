@@ -338,12 +338,12 @@ can be made before the attention and client-simulation gates are resolved.
 SOURCE MAP AND REFERENCES (consulted 17 October 2026)
 
 Repository evidence, at the baseline commit above:
-  x4lan/host.py: Session/Relay, plaintext token handshake, p1/p2, AF_INET, 20 Hz.
-  x4lan/coop.py: two-ship ownership and p1 authority assumptions.
-  x4lan/universe.py: UniverseSession, one p2 interest, bounds/window/retry/motion.
-  native/net.c: numeric IPv4 UDP transport; no simulator or graphics bypass.
-  extension/x4_lan_lab/ui/bubble_game.lua: frame, player/ship gates, onUpdate.
-  extension/x4_lan_lab/ui/universe_game.lua: enumeration, replicas, sector scope.
+  src/x4lan/host.py: Session/Relay, plaintext token handshake, p1/p2, AF_INET, 20 Hz.
+  src/x4lan/coop.py: two-ship ownership and p1 authority assumptions.
+  src/x4lan/universe.py: UniverseSession, one p2 interest, bounds/window/retry/motion.
+  src/native/net.c: numeric IPv4 UDP transport; no simulator or graphics bypass.
+  src/extension/x4_lan_lab/ui/bubble_game.lua: frame, player/ship gates, onUpdate.
+  src/extension/x4_lan_lab/ui/universe_game.lua: enumeration, replicas, sector scope.
   reports/world1-native-checks.json and reports/release-7.0.0-checks.txt: measured
     evidence and limits, including synthetic counterparts.
   docs/ARCHITECTURE.md; docs/WORLD-SYNC-REQUIREMENTS.txt; docs/DEVELOPMENT.txt.

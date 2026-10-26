@@ -4,7 +4,7 @@ X4 clients on 26 October2026 (s004, frozen819c070, below). Later PFREQ second-ho
 changes7c23ab2 have synthetic Python/LuaJIT coverage; they were not in that native run.
 
 Two-client evidence must also pass:
-  python dev/validate_player_factions_session.py .local/lane/sessions/<label>
+  python tools/dev/validate_player_factions_session.py .local/lane/sessions/<label>
 The lane runner's independent regex hits alone are insufficient. This validator correlates each
 client with the OTHER human's identity/diplomacy entry, both simultaneously piloted ship owners,
 successful intent calls, and the ordered allied -> neutral -> hostile -> allied round trip.
@@ -16,7 +16,7 @@ Each human gets an own faction. Data, MD and Lua only; no engine hooks. Source c
 inert (player_factions = false); internal packages enable it (session_launcher.py).
 
 POOL
-libraries/factions.xml (generated: python dev/build_player_factions.py) adds
+libraries/factions.xml (generated: python tools/dev/build_player_factions.py) adds
 x4lan_player1 .. x4lan_player16, one per slot (p1 -> 1, p2 -> 2, ...). The pool starts at 1,
 not 2: the host's human must also have a pool faction, because on every OTHER machine the host's
 assets belong to x4lan_player1. Mod-prefixed ids suffice; nothing requires a plain "player2".
@@ -45,7 +45,7 @@ core has no local human: it sends no PFID, maps EVERY human K to x4lan_playerK, 
 its own observer "player" as a human owner, and authors the default alliance for every pair of
 connected humans (also client 2 <-> client 3).
 
-PROTOCOL (relay x4lan/players.py, routed in Relay.step; old relays drop PF* packets)
+PROTOCOL (relay src/x4lan/players.py, routed in Relay.step; old relays drop PF* packets)
   PFID     client -> relay   own name (UTF-8 hex, plain text, max 48 bytes) and icon id, every 2 s
   PFROSTER relay -> clients  every connected human, 1 Hz
   PFREL    host -> relay -> guests   authoritative relation per human pair, revisioned
@@ -154,7 +154,7 @@ NATIVE TEST STEPS (two matched internal packages, new disposable world, profile 
    sector owned by the host's faction within ~5 s.
 6. Save/load the disposable world on one side and repeat 2 (name persistence check).
 
-NATIVE EVIDENCE (single X4 9.00 game, lane b1/b2, new custom_creative world; dev/player_factions_probe.*)
+NATIVE EVIDENCE (single X4 9.00 game, lane b1/b2, new custom_creative world; tools/dev/player_factions_probe.*)
 Runs 2026-10-26 pfprobe-001..003 (logs in .local/lane/runs/, not committed):
 - lookup.faction resolves all 16 pool factions (148 factions in total).
 - set_faction_identity with plain text works at runtime: name/shortname/prefix "Probe Bob", known 0->1,
@@ -232,7 +232,7 @@ per-player money. Proposal: an authority-owned ledger, behind its own flag (play
    save/load on the authority keeps the ledger; a shared mission reward reaches only the
    accepting client; ordinary cargo/magnet and co-op trade results unchanged.
 
-MANUAL CHECKLIST (two humans; what dev/player_factions_session_probe.* cannot prove)
+MANUAL CHECKLIST (two humans; what tools/dev/player_factions_session_probe.* cannot prove)
 Setup: matched internal packages, new world, both players use DIFFERENT commander names; client 1
 runs the authority world (7.x model). Both seated in their own co-op ship, undocked, about 2 km
 apart. Record both x4lan-debug.txt files.
@@ -261,7 +261,7 @@ apart. Record both x4lan-debug.txt files.
 Pass = every step as expected and no FEATURE player_factions DISABLED / BUBBLE STOPPED lines.
 
 NAMES, RADAR, CARGO/MAGNET (session n-001, 26 October 2026 13:24-13:49, lanes b1/b2, tree 67002c0 +
-dev/player_factions_session_probe.{lua,xml}; strict validator success; logs .local/lane/sessions/n-001)
+tools/dev/player_factions_session_probe.{lua,xml}; strict validator success; logs .local/lane/sessions/n-001)
 - Distinct names: client 1 "Alpha Tester", client 2 "Bravo Tester" (set_object_name on player.entity
   before READY; GetPlayerName reads it back). Client 1 shows x4lan_player2 = "Bravo Tester"
   (diplomacy list, faction name, co-op ship 2 owner name); client 2 shows x4lan_player1 = "Alpha

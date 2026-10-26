@@ -13,8 +13,8 @@ import xml.etree.ElementTree as ET
 from test_game_adapter import MOCK, LuaRuntime
 
 ROOT = Path(__file__).resolve().parents[1]
-EXT = ROOT / 'extension/x4_lan_lab'
-spec = importlib.util.spec_from_file_location('build_packages', ROOT / 'distribution/build_packages.py')
+EXT = ROOT / 'src/extension/x4_lan_lab'
+spec = importlib.util.spec_from_file_location('build_packages', ROOT / 'tools/distribution/build_packages.py')
 build_packages = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(build_packages)
 
@@ -85,7 +85,7 @@ class ShipSpecContractTests(unittest.TestCase):
             # fixture reports cannot become production validation records.
             source = Path(temp) / 'source'
             source.mkdir()
-            for name in ('VERSION.txt', 'docs/VERSIONING.txt', 'extension', 'x4lan'):
+            for name in ('VERSION.txt', 'docs/VERSIONING.txt', 'src/extension', 'src/x4lan'):
                 if (ROOT / name).is_dir():
                     shutil.copytree(ROOT / name, source / name,
                                     ignore=shutil.ignore_patterns('__pycache__'))
@@ -150,7 +150,7 @@ class ShipSpecContractTests(unittest.TestCase):
         self.assertIsNone(refused.find('teleport_player'))
 
     def test_generator_source_carries_the_shared_spec(self):
-        source = (ROOT / 'dev/build_bubble_md.py').read_text()
+        source = (ROOT / 'tools/dev/build_bubble_md.py').read_text()
         self.assertIn("name=\"PrepareShips\"", source)
         self.assertIn('not md.X4LAN_Bubble.PrepareShips.$own?', source)
 

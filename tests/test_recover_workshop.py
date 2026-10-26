@@ -7,8 +7,8 @@ import unittest
 from unittest.mock import patch
 
 ROOT = Path(__file__).resolve().parents[1]
-sys.path.insert(0, str(ROOT / 'distribution'))
-spec = importlib.util.spec_from_file_location('recover_workshop', ROOT / 'distribution/recover_workshop.py')
+sys.path.insert(0, str(ROOT / 'tools/distribution'))
+spec = importlib.util.spec_from_file_location('recover_workshop', ROOT / 'tools/distribution/recover_workshop.py')
 helper = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(helper)
 sys.path.pop(0)

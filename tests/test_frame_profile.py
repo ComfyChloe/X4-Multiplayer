@@ -5,7 +5,7 @@ import unittest
 from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / 'extension/x4_lan_lab/ui'
+UI = ROOT / 'src/extension/x4_lan_lab/ui'
 EARLY = ('measure_clock.lua', 'net_rtt.lua', 'frame_profile.lua')
 ADAPTERS = ('bubble_game.lua', 'motion.lua', 'coop_game.lua', 'life_game.lua')
 CLOCK = '''
@@ -59,9 +59,9 @@ for _,v in ipairs(logs) do assert(not v:find('FRAMECOST') and not v:find('MEASUR
         text = (UI / 'config.lua').read_text()
         self.assertIn('frame_profile = false', text)
         self.assertIn('net_probe = false', text)
-        launcher = (ROOT / 'distribution/session_launcher.py').read_text()
+        launcher = (ROOT / 'tools/distribution/session_launcher.py').read_text()
         self.assertIn('frame_profile=True, net_probe=True', launcher)  # on by default in internal packages
-        ui = (ROOT / 'extension/x4_lan_lab/ui.xml').read_text()
+        ui = (ROOT / 'src/extension/x4_lan_lab/ui.xml').read_text()
         order = [ui.index('ui/' + n) for n in ('client.lua', 'measure_clock.lua', 'net_rtt.lua',
                                                   'frame_profile.lua', 'game.lua', 'bubble_game.lua',
                                                   'identity_game.lua', 'frame_profile_install.lua')]

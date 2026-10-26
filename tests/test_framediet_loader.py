@@ -1,10 +1,10 @@
-"""Production frame-diet / RNG-split loader (extension/x4_lan_lab/ui/framediet.lua) under real LuaJIT."""
+"""Production frame-diet / RNG-split loader (src/extension/x4_lan_lab/ui/framediet.lua) under real LuaJIT."""
 from pathlib import Path
 import unittest
 
 from lupa.luajit21 import LuaRuntime
 
-SOURCE = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/ui/framediet.lua'
+SOURCE = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/ui/framediet.lua'
 WINDOWS = '\\\\\\n;\\n?\\n!\\n-\\n'
 LINUX = '/\\n;\\n?\\n!\\n-\\n'
 

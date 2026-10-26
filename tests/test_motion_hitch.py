@@ -8,7 +8,7 @@ import unittest
 from test_game_adapter import LuaRuntime
 import test_coop_adapter
 
-UI = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/ui'
+UI = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/ui'
 
 FLIGHT = """
  local c=X4LAN_BUBBLE_API.coop;c.sectors.cluster_14_sector001_macro=22

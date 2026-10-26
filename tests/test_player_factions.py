@@ -22,7 +22,7 @@ except ImportError:
     etree = None
 
 ROOT = Path(__file__).resolve().parents[1]
-EXT = ROOT / 'extension/x4_lan_lab'
+EXT = ROOT / 'src/extension/x4_lan_lab'
 FACTIONS = EXT / 'libraries/factions.xml'
 MD = EXT / 'md/x4lan_player_factions.xml'
 RE = Path(os.environ.get('X4_RE', ROOT.parent / 'x4-re'))
@@ -34,7 +34,7 @@ P1, P2 = ('192.0.2.1', 1000), ('192.0.2.2', 2000)
 
 def gen_locked():
     import importlib.util
-    spec = importlib.util.spec_from_file_location('gen', ROOT / 'dev/build_player_factions.py')
+    spec = importlib.util.spec_from_file_location('gen', ROOT / 'tools/dev/build_player_factions.py')
     gen = importlib.util.module_from_spec(spec); spec.loader.exec_module(gen)
     return gen.LOCKED
 
@@ -46,7 +46,7 @@ class FactionPoolDiff(unittest.TestCase):
 
     def test_generator_matches_committed_file(self):
         import importlib.util
-        spec = importlib.util.spec_from_file_location('gen', ROOT / 'dev/build_player_factions.py')
+        spec = importlib.util.spec_from_file_location('gen', ROOT / 'tools/dev/build_player_factions.py')
         gen = importlib.util.module_from_spec(spec); spec.loader.exec_module(gen)
         self.assertEqual(FACTIONS.read_text(encoding='utf-8'), gen.build())
 
@@ -87,7 +87,7 @@ class FactionPoolDiff(unittest.TestCase):
 
 
 # Game-schema checks need lxml and the private read-only x4-re extraction (X4_RE or ../x4-re).
-# They are collected only where both exist, so dev/check.py (stdlib + lupa) does not count them
+# They are collected only where both exist, so tools/dev/check.py (stdlib + lupa) does not count them
 # as skipped coverage; run them on the RE machine: python -m unittest tests.test_player_factions
 SCHEMAS = bool(etree and (LIB / 'md.xsd').is_file() and (LIB / 'factions.xsd').is_file())
 VANILLA_FACTIONS = SCHEMAS and (VANILLA / '08__libraries_factions.xml').is_file()
@@ -611,7 +611,7 @@ class FlagDefaults(unittest.TestCase):
     def test_inert_source_and_internal_packages(self):
         cfg = (EXT / 'ui/config.lua').read_text(encoding='utf-8')
         self.assertRegex(cfg, r'\n\s*player_factions = false,')
-        launcher = (ROOT / 'distribution/session_launcher.py').read_text(encoding='utf-8')
+        launcher = (ROOT / 'tools/distribution/session_launcher.py').read_text(encoding='utf-8')
         self.assertIn('player_factions=True', launcher)
         glue = (EXT / 'ui/player_factions.lua').read_text(encoding='utf-8')
         self.assertIn("cfg.player_factions~=true", glue)

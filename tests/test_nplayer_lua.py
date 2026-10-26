@@ -9,7 +9,7 @@ import unittest
 from test_game_adapter import MOCK, LuaRuntime
 from test_bubble_adapter import EXTRA
 
-UI = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/ui'
+UI = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/ui'
 A, B, C, OWN = 'a' * 32, 'b' * 32, 'c' * 32, 'e' * 32
 
 
@@ -219,7 +219,7 @@ class FourPlayerCoopTests(unittest.TestCase):
 
 class NPlayerMdContractTests(unittest.TestCase):
     """Static MD contract only; the scripts still need a native X4 run."""
-    MD = Path(__file__).resolve().parents[1] / 'extension/x4_lan_lab/md'
+    MD = Path(__file__).resolve().parents[1] / 'src/extension/x4_lan_lab/md'
 
     def test_bubble_prepares_ordered_ships_and_counts_shots_for_every_ship(self):
         import xml.etree.ElementTree as ET

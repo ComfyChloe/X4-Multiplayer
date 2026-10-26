@@ -113,7 +113,7 @@ class NpcAdapterTests(unittest.TestCase):
          function step() now=now+.11;A.health.mdAt=now;A.health.now=now;U.frame(now) end
          function actions(name) local t={};for _,v in ipairs(requests) do if v[1]=='X4LAN_NpcCombat' and v[2]==name then t[#t+1]=v[3] end end;return t end
         ''')
-        l.execute((ROOT/'extension/x4_lan_lab/ui/npc_combat_game.lua').read_text())
+        l.execute((ROOT/'src/extension/x4_lan_lab/ui/npc_combat_game.lua').read_text())
         l.execute('''N=A.npcCombat;step();events['X4LAN_NpcCombat.Ready']()
          function hp(seq,hu,alive,code)
           U.receive({'NHP','1',client.lease,string.rep('a',32),'1','1',tostring(seq),'cluster_14_sector001_macro',code or 'HOST-101','ship_arg_s_scout_01_a_macro','argon',tostring(hu or 100),'80',alive or '1'},now)

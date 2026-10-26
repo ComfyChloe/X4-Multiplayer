@@ -9,7 +9,7 @@ class MotionTests(unittest.TestCase):
     def setUp(self):
         self.lua = LuaRuntime(unpack_returned_tuples=True)
         self.lua.execute((Path(__file__).resolve().parents[1] /
-                          'extension/x4_lan_lab/ui/motion.lua').read_text())
+                          'src/extension/x4_lan_lab/ui/motion.lua').read_text())
 
     def test_regular_motion_continues_between_sparse_packets_then_freezes(self):
         self.lua.execute('''

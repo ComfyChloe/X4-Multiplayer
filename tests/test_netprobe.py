@@ -17,7 +17,7 @@ except ImportError:
     LuaRuntime = None
 
 ROOT = Path(__file__).resolve().parents[1]
-UI = ROOT / 'extension/x4_lan_lab/ui'
+UI = ROOT / 'src/extension/x4_lan_lab/ui'
 TOKEN = 'a' * 32
 P1 = ('192.0.2.1', 1000)
 P2 = ('192.0.2.2', 2000)
