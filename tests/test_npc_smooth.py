@@ -405,6 +405,53 @@ class ClientDeadReckoningTests(unittest.TestCase):
           assert(found)
         ''')
 
+    def test_zone_offset_is_learned_so_a_replica_near_the_player_stops_slipping(self):
+        # Engine double of 43dd063's queued-pose model: a write converts the pose into the
+        # replica's current zone, re-parents it to the zone at the target and applies the
+        # zone-local pose in the new zone at the end of the frame; the engine then files the
+        # replica into the zone at its actual position. Zone A (origin 20 km) holds 20-60 km.
+        l = self.guest('X4LAN_CONFIG.npc_motion_diagnostics=1')
+        l.execute('''
+          tick(1);baseline(1,{npcRow(1,41000)},true);tick(2)
+          local object=U.replicas[1].object
+          positions[11]={x=41500,y=200,z=300,yaw=0,pitch=0,roll=0}   -- the player is near
+          origin={A=20000,B=0};function zoneAt(x) return (x>=20000 and x<60000) and 'A' or 'B' end
+          parent={[object]='B'};pending=nil;perFrame=0
+          local set=api.SetObjectSectorPos
+          api.SetObjectSectorPos=function(id,sector,p)
+           set(id,sector,p)
+           if id==object then
+            perFrame=perFrame+1
+            local localX=p.x-origin[parent[id]];parent[id]=zoneAt(p.x)
+            if not pending then pending=localX end
+           end
+          end
+          local base=api.GetContextByClass
+          api.GetContextByClass=function(id,class)
+           if class=='zone' and parent[id] then return parent[id]=='A' and 5 or 6 end;return base(id,class)
+          end
+          function endFrame()
+           if pending then positions[object].x=origin[parent[object]]+pending;pending=nil end
+           parent[object]=zoneAt(positions[object].x)
+          end
+          positions[object].x=positions[object].x+20000   -- already in the slip loop
+          local seq=1;displaced,multi=0,0
+          for k=1,120 do
+           now=now+1/60
+           if k%6==0 then seq=seq+1;U.receive(umove(1,seq,now,41000+k*650/60,650),now) end
+           -- A frame must not start with the replica away from the pose written last frame.
+           if k>30 and math.abs(positions[object].x-U.replicas[1].applied[1])>1 then displaced=displaced+1 end
+           perFrame=0;frames.onUpdate()
+           if k>30 and perFrame>1 then multi=multi+1 end
+           endFrame()
+          end
+          logged=false;for _,v in ipairs(logs) do if v:find('NPC_FRAME_SLIP id=1',1,true) then logged=true end end
+          zone=logged and U.replicas[1].zoneFix~=nil and next(U.replicas[1].zoneFix)~=nil
+        ''')
+        self.assertEqual(l.eval('displaced'), 0)
+        self.assertEqual(l.eval('multi'), 0)
+        self.assertTrue(l.eval('zone'))
+
     def test_targeted_replica_is_announced_as_focus(self):
         l = self.guest('target=0;api.GetPlayerTargetID=function() return target end')
         l.execute('''

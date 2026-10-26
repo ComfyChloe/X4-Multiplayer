@@ -36,7 +36,7 @@ local function log(v) DebugError('[X4LAN] UNIVERSE '..v) end
 -- A baseline pose replaces a live track only after `hold` s without motion.
 local NPC={stale=2.5,cap=50000,hold=8,fast=150,hotBudget=256,jump=100,suppressEvery=2,
  budget=32,evalBudget=768,hotRange=6000,warmRange=25000,focusHold=3,focusEvery=1,motionLive=5,
- scanHost=4096,scanGuest=1024,slipMin=5000,slipSpeed=2}
+ scanHost=4096,scanGuest=1024,slipMin=5000,slipSpeed=2,slipRespawn=1}
 NPC.tiers={
  hot={name='hot',pos=3,ang=.02,look=.25,min=.05,keep=1,weight=4},
  warm={name='warm',pos=25,ang=.06,look=.5,min=.2,keep=2,weight=2},
@@ -317,9 +317,50 @@ function u.receive(f,now)
  end
  return false
 end
--- One NPC_FRAME_SLIP row at most every 5 s (see coop_game.lua SLIP_*: SetObjectSectorPos
--- can land a replica offset by the difference of two zone origins; a second write lands).
-local slipLog={n=0,next=0}
+-- Zone-frame slip (coop_game.lua SLIP_*, 43dd063): SetObjectSectorPos converts the pose
+-- into the replica's current zone, re-parents it to the zone at the target and queues the
+-- zone-local pose, which then lands offset by the difference of the two zone origins; the
+-- engine files the replica back into the old zone and the next write repeats it. Near the
+-- player the target lies in a zone around the player's ship, so it repeats every frame.
+-- For replicas near the player the slip of a re-parenting write is kept per source zone and
+-- subtracted from later writes that start there; elsewhere (and when the predicted target
+-- zone is missed) the pose is rewritten. A slip that lasts slipRespawn s respawns the
+-- replica at the target pose, at most once per 2 s. One NPC_FRAME_SLIP row per 5 s at most.
+local slipLog={n=0,next=0,zone=0,rewrite=0,respawn=0}
+local function zoneOf(object) return C.GetContextByClass(object,'zone',false) end
+local function writePose(r,sector,value,p,slip,dx,dy,dz,now,track)
+ local object=r.object
+ if slip>0 and r.wFrom and r.wFrom~=r.wTo then
+  local k=r.wK;r.zoneFix=r.zoneFix or {};r.zoneFixes=(r.zoneFixes or 0)+1
+  if r.zoneFixes>16 then r.zoneFix={};r.zoneFixes=1 end
+  r.zoneFix[tostring(r.wFrom)]={to=r.wTo,k={k[1]+dx,k[2]+dy,k[3]+dz}}
+ end
+ local from=track and zoneOf(object);local fix=from and r.zoneFix and r.zoneFix[tostring(from)];local k=fix and fix.k
+ local pose=value
+ if k then
+  pose=ffi.new('UIPosRot',{x=value.x-k[1],y=value.y-k[2],z=value.z-k[3],yaw=value.yaw,pitch=value.pitch,roll=value.roll})
+ end
+ C.SetObjectSectorPos(object,sector,pose);r.applied=p
+ if track then r.wFrom,r.wTo,r.wK=from,zoneOf(object),k or {0,0,0} else r.wFrom=nil end
+ local action
+ if k and r.wTo~=fix.to then
+  r.zoneFix[tostring(from)]=nil;C.SetObjectSectorPos(object,sector,value);action='rewrite'
+ elseif slip>0 then
+  action=k and 'zone' or 'rewrite'
+  if not k then C.SetObjectSectorPos(object,sector,value) end
+ end
+ if slip>0 and r.slipSince and now-r.slipSince>=NPC.slipRespawn and now>=(r.nextRespawn or 0) then
+  r.nextRespawn=now+2;r.slipSince=nil;removeReplica(r);r.object=nil;r.applied=nil;r.zoneFix=nil;action='respawn'
+ end
+ if action then
+  count('slips');slipLog.n=slipLog.n+1;slipLog[action]=slipLog[action]+1
+  if now>=slipLog.next then
+   log(string.format('NPC_FRAME_SLIP id=%d slip=%.0f action=%s count=%d zone=%d rewrite=%d respawn=%d',r.entity.id,slip,action,
+    slipLog.n,slipLog.zone,slipLog.rewrite,slipLog.respawn))
+   slipLog.n,slipLog.zone,slipLog.rewrite,slipLog.respawn,slipLog.next=0,0,0,0,now+5
+  end
+ end
+end
 local function apply(r,now,sector,hot)
  if r.entity.kind=='drop' then A.cargo.ensure(r,sector);return end
  if A.npcCombat and A.npcCombat.hidden(r) then
@@ -347,11 +388,13 @@ local function apply(r,now,sector,hot)
  r.tier=(near or u.focusId==r.entity.id) and 'hot' or 'cold'
  local changed=not r.applied
  if r.applied then for i=1,6 do if math.abs(p[i]-r.applied[i])>(i<=3 and .005 or .00001) then changed=true end end end
- local slip=0
+ local slip,dx,dy,dz=0,0,0,0
  if r.applied then
   local a=C.GetObjectPositionInSector(r.object)
-  slip=math.sqrt((a.x-r.applied[1])^2+(a.y-r.applied[2])^2+(a.z-r.applied[3])^2)
-  if slip>math.max(NPC.slipMin,NPC.slipSpeed*speed) then changed=true else slip=0 end
+  dx,dy,dz=a.x-r.applied[1],a.y-r.applied[2],a.z-r.applied[3]
+  slip=math.sqrt(dx*dx+dy*dy+dz*dz)
+  if slip>math.max(NPC.slipMin,NPC.slipSpeed*speed) then changed=true;r.slipSince=r.slipSince or now
+  else slip=0;r.slipSince=nil end
  end
  if changed then
   if diagEvery and r.applied and r.appliedAt then
@@ -359,14 +402,7 @@ local function apply(r,now,sector,hot)
    local expected=math.max(speed,r.speed or 0)*(now-r.appliedAt)
    if d>NPC.jump+2*expected then count('jumps');peak('max_jump',d) end
   end
-  C.SetObjectSectorPos(r.object,sector,value);r.applied=p;r.appliedAt=now
-  if slip>0 then
-   -- The engine pose left the last written pose (zone-frame slip): write once more now.
-   C.SetObjectSectorPos(r.object,sector,value);count('slips');slipLog.n=slipLog.n+1
-   if now>=slipLog.next then
-    log(string.format('NPC_FRAME_SLIP id=%d slip=%.0f count=%d',r.entity.id,slip,slipLog.n));slipLog.n=0;slipLog.next=now+5
-   end
-  end
+  writePose(r,sector,value,p,slip,dx,dy,dz,now,near);r.appliedAt=now
   count(hot and 'hot_writes' or 'writes')
  end
  r.speed=speed;r.frame=u.frameNo

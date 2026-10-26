@@ -62,9 +62,11 @@ clock at most 0.1 s/s. A new sample's error blends out with a 0.3 s time constan
 error above max(1 km, 1 s of speed) snaps, at most once per second per replica, logged
 as `NPC_SNAP`. Prediction coasts 8 s past the last sample, then holds. Replicas moving
 at 150 m/s or more, or moving within 6 km of the player, are written every frame (up to
-256); the rest at most 128 per frame no faster than every 15 ms. A write whose engine
-pose slipped from the last written pose by more than max(5 km, 2 s of speed) is
-repeated in the same frame (`NPC_FRAME_SLIP`). A baseline pose replaces a live track
+256); the rest at most 128 per frame no faster than every 15 ms. When the engine pose
+slipped from the last written pose by more than max(5 km, 2 s of speed) (zone-frame
+re-parenting, as for co-op ships), replicas near the player learn the zone offset per
+source zone and compensate later writes; other slips are rewritten, and a slip lasting
+1 s respawns the replica at its pose (`NPC_FRAME_SLIP` counts each action). A baseline pose replaces a live track
 only after 8 s without motion; replicas pause only when the baseline is 15 s old and
 no motion arrived for 5 s. The co-op `NAV2` path still uses the interpolation buffer
 (minimum-latency offset, 150 ms delay, 350 ms prediction). Engine changes wait for an
