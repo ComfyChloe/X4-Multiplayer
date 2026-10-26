@@ -172,7 +172,7 @@ docking, missions and purchases.
 
 | Layer | Work |
 |---|---|
-| **Rust**, per-frame VBI callback (Windows DLL / Linux `LD_PRELOAD` agent) | transport, protocol, sector channels, relevance, snapshot buffers, interpolation and prediction, intent validation, money ledger, state hashing; reads and writes engine state through the **exported C functions** of X4's Lua FFI API (about 11k on Linux, same names on Windows) |
+| **Rust**, per-frame VBI callback (Windows DLL / Linux `LD_PRELOAD` agent) | transport, protocol, sector channels, relevance, snapshot buffers, interpolation and prediction, intent validation, money ledger, state hashing; reads and writes engine state through the **exported C functions** of X4's Lua FFI API (about 2,376 shared by Linux and Windows; Linux exports 11,250, Windows 2,378; no velocity/angular-velocity or macro exports, and some exports such as `MakePlayerOwnerOf` are empty stubs; see `rust/x4mp-core/FFI-INVENTORY.md` on `contrib/ferrite-rust-core`) |
 | **MD** (thin, event-driven) | only engine actions without a C export (`create_ship`, missions, ownership changes, NPC orders), executed from a queue; no polling cues |
 | **Lua** (thin) | UI and event bridging; no per-object work per frame |
 
