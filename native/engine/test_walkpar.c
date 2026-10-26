@@ -142,6 +142,7 @@ static void engine_setup(int mode) {
     wp_ready = WP_READY_OK;
     wp_thread = 0;
     wp_mode = mode;     /* white-box: set directly (no native dispatcher in the offline test) */
+    wp_frame_reset();   /* scope-only tests don't call wp_walk_begin, so clear the frame here */
 }
 
 int main(void) {
@@ -281,6 +282,24 @@ int main(void) {
     wp_replay_tasks(order, 2);
     assert(wp_buffer_count() == 0);
     assert(wp_logB_n == 2 && wp_logB[0].listener_id == 301 && wp_logB[1].listener_id == 300);
+
+    /* review #3 (ai-driver path): a cross-task cancel reaches the earlier scheduled post of the same
+       (src,type) regardless of task, because wp_cancel's buffer-kill is not task-filtered. So
+       replay_tasks ordering A-before-B cannot leave that post live. (wp_replay keeps global post
+       order on the walk path; this documents the AI-phase scope path.) */
+    engine_setup(WP_REPLAY);
+    scene_init();
+    wp_thread = GetCurrentThreadId();
+    wp_scope_begin(101);                              /* task B: earlier scheduled WARP on o1 */
+    engine_post(&o1, &e_sched, 20.0, 0);
+    wp_scope_end();
+    wp_scope_begin(100);                              /* task A: later cancel of o1 WARP */
+    engine_cancel(&o1, WP_TYPE_WARP, WP_CANCEL_ALL);
+    wp_scope_end();
+    assert(e_sched.freed == 1);                       /* the task-B scheduled post was killed+freed */
+    uint64_t order2[2] = { 100, 101 };                /* replay task A (cancel) before task B */
+    wp_replay_tasks(order2, 2);
+    assert(wp_frame.cancels_applied == 1 && wp_frame.replayed == 0);  /* post dead, only cancel ran */
 
     /* Foreign thread: entry points pass through and count nothing. */
     engine_setup(WP_CENSUS);

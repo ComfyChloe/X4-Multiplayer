@@ -93,6 +93,7 @@ static void (*wp_deliver_cancel)(void *src, int type, double minTime);     /* or
 static int wp_mode;
 static int wp_ready;
 static int wp_phase;          /* 1 while the walk runs (buffering active) */
+static int wp_replay_abort;   /* replay produced a degraded frame: disarm at the next safe point */
 static DWORD wp_thread;       /* the walk (MoveWorker) thread, 0 until wp_walk_begin runs */
 static int64_t wp_qpc_hz_cache;
 
@@ -197,6 +198,8 @@ static void wp_replay(void);
 static void wp_walk_end(void) {
     if (wp_mode == WP_OFF) return;
     if (wp_phase) { wp_phase = 0; wp_replay(); }
+    /* review #2: replay must not silently run degraded; ask for disarm at the next safe point */
+    if (wp_mode == WP_REPLAY && wp_frame.degraded_frames) wp_replay_abort = 1;
     /* fold frame -> window */
     ++wp_win.frames;
     wp_win.sector_ms += wp_frame.sector_ms;
@@ -587,6 +590,7 @@ static void walkpar_set_mode(int mode) {
 static void walkpar_disarm(void) {
     wp_mode = WP_OFF;
     wp_phase = 0;
+    wp_replay_abort = 0;
     wp_thread = 0;
     wp_count = 0;
     wp_ready = WP_READY_IDLE;
@@ -714,8 +718,11 @@ static void walkpar_disarm_native(void) {
 }
 
 /* Armed lazily once per frame until the thread freeze takes (a Rip clash on a hot function entry is
-   transient); set by start(), cleared on disarm. */
-static void walkpar_tick(void) { if (wp_want && !wp_det_n) walkpar_arm_native(wp_want); }
+   transient); set by start(), cleared on disarm. A degraded replay frame disarms here (safe point). */
+static void walkpar_tick(void) {
+    if (wp_replay_abort) { walkpar_disarm_native(); walkpar_disarm(); return; }
+    if (wp_want && !wp_det_n) walkpar_arm_native(wp_want);
+}
 #else
 static int walkpar_arm_native(int mode) { (void)mode; return 0; }
 static void walkpar_disarm_native(void) { wp_want = 0; }
