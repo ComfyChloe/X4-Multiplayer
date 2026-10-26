@@ -24,8 +24,9 @@ players connect as **clients**.
   The camera view is therefore an input of the simulation RNG stream on every X4 (a parity leak). The new
   `rng_split` site moves slot 10's draws to a private stream (proposal of the determinism owner).
 - Expected saving of the behaviour-identical set: ~1.9-2.0 ms per frame on the MoveWorker (11 % of the
-  baseline frame, 7 % under load) plus the whole main-thread draw; with `camera` and `ui_render` another
-  ~2.3-2.6 ms. Measured numbers: section 6 (pending the quiet window).
+  baseline frame, 7 % under load) plus the whole main-thread draw; the opt-in `ui_elements` (Anark element
+  update, a call-site patch) another ~1.9-2.0 ms, `camera` and `ui_render` another ~2.3-2.6 ms. Measured
+  numbers: section 6 (pending the quiet window).
 
 ## 1. Attribution (where the server's frame goes)
 
@@ -39,7 +40,7 @@ attribution <log> --window 35:81 --window 105:261`.
 | frame (wall per MoveWorker frame) | 17.26 | 29.69 | |
 | slot 6 total, UI::CUIController::Move 0xb3bad0 | 5.27 (30.5 %) | 6.21 (20.9 %) | |
 | - Lua: every stack with a lua51_64 frame (game UI + mod) | 0.59 (3.4 %) | 0.82 (2.7 %) | keep |
-| - Anark gameface element update 0x1399c40 | 1.85 (10.7 %) | 1.95 (6.6 %) | next candidate (section 8) |
+| - Anark gameface element update 0x1399c40 | 1.85 (10.7 %) | 1.95 (6.6 %) | `ui_elements` (opt-in) |
 | - Anark scene layer walk (SceneManager slot 3 0xaf8e50 -> AnarkScene slot 12 0xaf8760) | 1.87 (10.8 %) | 2.01 (6.8 %) | `ui_scenes` |
 | - ICom message pump 0xae9880 (VisibilityData::Update 0xadcfa0) | 0.75 (4.3 %) | 1.20 (4.1 %) | keep |
 | slot 10 total, X4::GameRender::Move 0x121c1f0 | 2.30 (13.3 %) | 2.58 (8.7 %) | |
@@ -118,7 +119,7 @@ from the universe ID map), inside the Lua dispatch that the diet keeps.
 
 ## 3. Sites
 
-| site | hook (all data-only) | what is skipped | equivalence |
+| site | hook (data-only except `ui_elements`) | what is skipped | equivalence |
 |---|---|---|---|
 | `ui_scenes` | AnarkScene vtable 0x2bc0e10 slot 12 (entry 0x2bc0e70, fn 0xaf8760), skipped only inside AnarkSceneManager slot 3 (entry 0x2bc0dd8, fn 0xaf8e50) on the MoveWorker | the per-frame UI scene-graph pass (element world matrices, render layers); slot 5 still clears the scene's per-frame lists, so they stay empty (= the engine's state for a scene whose root is not visible) | simulation identical (static + native audit); UI element matrices stale (UI render, picking) |
 | `ui_elements` | CODE PATCH: E8 rel32 at 0x138f477 (call of 0x1399c40 inside 0x138f2c0) retargeted to a near stub; verified against the original target, compare-exchanged, re-verified every frame, restored on disarm | the Anark element update (keyframes/attributes) | no Lua entry, no RNG/ID calls statically; native audit pending; UI animations stall: opt-in |
@@ -146,8 +147,8 @@ Modes: `diet` (skip the active sites), `pass` (all wrappers installed, inert: A/
 (run the originals and measure). Sites: `ui_scenes`, `ui_render`, `camera`, `draw`, `ui_elements`, `rng_split`, `server`
 (= ui_scenes,draw), `all` (= ui_scenes,ui_render,camera,draw; ui_elements and rng_split are always named).
 
-Safety: X4.exe verified by size, SHA-256 and PE header; 18 code signatures (signatures.py `FRAMEDIET_SITES`)
-for every wrapped function, the render-flag test and copy, and the audit probes; every vtable entry must hold the
+Safety: X4.exe verified by size, SHA-256 and PE header; 16 code signatures (signatures.py `FRAMEDIET_SITES`)
+for every wrapped function, the patched call site, the render-flag test and copy, and the audit probes; every vtable entry must hold the
 verified original before anything is written (all-or-nothing install); main Lua thread only; DLL pinned; state
 kept in static storage (the Lua handle only holds a generation number, so a wrapper running on another thread
 never touches memory the Lua GC freed); digest reads through ReadProcessMemory (a component freed meanwhile
@@ -176,7 +177,9 @@ simulation reads. Audit mode tests that per call on the running game (diet off, 
 
 Synthetic (Windows, `build.py --framediet --test`): install/refusal/fail-closed lifecycle, skip only in context,
 other threads and loading pass through, draw bit ownership, period, pass mode, audit counters (RNG steps, IDs,
-events, word histogram, control), rng_split on/off. Real Lua ABI: `framediet_lua_abi.py`. Loader: 14 LuaJIT tests.
+events, word histogram, control), rng_split on/off, the ui_elements call-site patch (skip/pass/audit, argument
+forwarding, restore, foreign retarget, refusal), CPU accounting: 10 groups. Real Lua ABI: `framediet_lua_abi.py`.
+Loader: 14 LuaJIT tests; analyzer: 6 unit tests.
 
 Native (functional, lane b1, other X4 running; `results/2026-10-26-frame-diet-audit.md`): 9,952 frames:
 
@@ -217,8 +220,10 @@ Proposal of the multiplayer determinism owner (rng-streams 23c841f), implemented
 
 ## 6. Measurements
 
-Pending: the quiet-window timing run (Q9): attnload steps 0/8, phases `pass` / `diet:server` / `diet:all`
-every 30 s, slot-loop ms and fps from the fixed-tick probe per phase (`framediet_analyze.py phases`).
+Pending: the quiet-window timing run (Q9), started only when the lead opens the window: attnload steps 0/8,
+phases `pass` / `server` / `all` / `all,ui_elements` every 30 s, MoveWorker slot-loop ms and fps from the fixed-
+tick probe per phase (`framediet_analyze.py phases`), CPU shares of the main thread and the MoveWorker per phase
+(`audit --phases`).
 
 ## 7. What a headless Linux server gets for free
 
@@ -275,7 +280,10 @@ python native/engine/framediet_analyze.py audit [--phases] <collect>\x4lan-debug
 ```
 The framediet overlay holds `native/x4lan_framediet_64.dll`, `ui/framediet_probe.lua` and `ui.xml.files`.
 
-Timing (quiet window, `--timing`; probe + attention-load harness steps 0/8 for 240/360 s + phases every 30 s):
+`x4lane` is `python C:\Users\developer\Documents\X4Mods\lanes\release\dev\x4lane.py` (release 82af231 or newer).
+
+Timing (only inside a quiet window the lead opens with `handoff: frame-diet`; never queued in advance;
+probe + attention-load harness steps 0/8 for 240/360 s + phases every 30 s):
 ```
 x4lane make-overlay attnload --attnload <X4-Multiplayer-attnload> --out <wt>\.local\lane\overlays\attnload --steps 0,8 --durations 240,360 --warmup 20
 x4lane run --agent frame-diet --label timing1 --timing --wait 7200 --overlay <probe> --overlay <attnload> --overlay <framediet> ^
