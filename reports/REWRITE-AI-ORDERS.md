@@ -6,9 +6,11 @@ Target: X4 9.00, Steam build 23660954, Windows `X4.exe` SHA-256 19750A65...6891.
 
 **Status (26 Oct 2026):** M1 offline (static ranking, engine model, exact RNG semantics, X4AITRACE format,
 `order.fight.patrol` + `move.seekenemies` in Rust, replay tests against **hand-built (synthetic) traces**);
-M2a **native**: the first bracket capture of Patrol job ships (section 9a) confirms the model with no
-contradiction (24/24 wait wake times bit-exact, constant draw counts per bracket class). Everything else
-below is offline unless marked native.
+M2a **native**: two bracket captures of Patrol job ships (section 9a) confirm the model with no
+contradiction (51/51 wait wake times bit-exact over both runs, constant draw counts per bracket class);
+`lib.target.selection` is native too (section 6a). The measured census (section 1.3) puts the AI time in
+move.generic, trade.find.free and fight.attack.object.fighter; **M3 = move.generic** (lead, 26 Oct), then
+trade.find.free. Everything else below is offline unless marked native.
 
 ## 1. Ranking of AI orders
 
@@ -35,8 +37,8 @@ traffic are not in jobs and are missing here.
 Top-level job ships only (without subordinates): TradeRoutine 42 %, Patrol 23.5 %, MiningRoutine 14.7 %,
 Police 7.6 %. Profile context (8-sector run): AIDirector 8.0 %, ExecState_Run 8.4 %, Expression_Evaluate 4.1 %
 of MoveWorker samples; the ai-driver agent's profile split of `AIDirector::Move`: ExecState_Run 91 %,
-DoIf 24 %, property lookup 25 %, FindTradeOffer 13 %. The **measured** per-script census (ai-driver stage 0,
-running natively now) replaces this table when it lands.
+DoIf 24 %, property lookup 25 %, FindTradeOffer 13 %. Section 1.3 has the **measured** per-script census;
+it replaces this table for choosing what to port.
 
 ### 1.2 Choice of the first order
 
@@ -44,6 +46,30 @@ Patrol: common (third by cap, second among top-level jobs, and the parent of mos
 sector-local (zones of its own sector, gravidar contacts and distress signals of its own sector), and short.
 Escort (largest) reads its commander's state every leg (cross-entity), TradeRoutine searches trade offers
 galaxy-wide; both come after the order interface and capture path are proven on Patrol.
+
+### 1.3 Measured ranking (native census, 26 Oct)
+
+Share of AI run time by the script on top of the stack (ai-driver stage-0 census, `AIPROF scripts`,
+per-second top 8 weighted by frames, `dev/aiprof_report.py` of contrib/ferrite-rw-ai-driver). Timing is
+not trustworthy in absolute terms (shared PC), the shares are. Loads: ai-driver idle and 8-sector attnload
+(rewrite-coord/results/2026-10-26-ai-driver-census.md) and this agent's run patrol-capture-002 (creative
+start, 408 windows after a 10 s warm-up, census running beside the capture).
+
+| script | lines | idle | attnload | patrol-capture-002 | called by |
+|---|---|---|---|---|---|
+| move.generic | 1,408 | 23.9 % | 24.8 % | 24.0 % (4.5 runs/frame) | ~60 orders and helpers, incl. Patrol L280/L434, move.seekenemies L125, Escort, trade, mining |
+| trade.find.free | 854 | 15.2 % | 19.7 % | 14.5 % (0.2 ms a run) | order.trade.routine, order.mining.routine, order.plunder |
+| fight.attack.object.fighter | 959 | 14.9 % | 12.7 % | 15.1 % (18.5 runs/frame, a third of all runs) | order.fight.attack.object |
+| order.dock | 1,499 | 8.5 % | 7.9 % | 7.8 % | |
+| move.idle | 269 | 7.8 % | 7.6 % | 9.3 % | trade/mining/salvage orders, trade.find.* |
+| order.fight.escort | 2,802 | | | 0.9 % steady; one 235 ms frame at game start (5,428 runs) | |
+
+Escort is the largest job by cap but cheap in steady state (its ships sleep in formation); its cost is the
+start-up burst. Inside the AI phase the interpreter itself dominates (ai-driver's profile: expression
+evaluation 36 % of `AIDirector::Move`, property lookup 25 %; queries: FindTradeOffer 13 %, GetSafePos 9 %,
+GetGlobalPath 4 %), so a native port saves the interpreter share of a script; its queries stay engine work
+until they have native equivalents. Decision (lead, 26 Oct): after Patrol, **move.generic**, then
+**trade.find.free** (needs the economy agent's offer model).
 
 ## 2. Engine model of an AI order (what we reproduce)
 
@@ -185,14 +211,28 @@ abort_called_scripts resume=start).
   police/distress signal: enemy = param2/param3, LoseCover signals, [roll 498/505/510/515];
   BoostRelations: **Unsupported (M1)**; attention change: resume start; destroyed/abandoned/owner change: end
   the move.
-- after the move: [roll 538 if the move ended within 1 s and > 1 km away]; L547 lib.target.selection (opaque
-  in M1); attack: [roll 572], L584 edit_order_param space to the enemy's zone (job ship, zone patrol, enemy
+- after the move: [roll 538 if the move ended within 1 s and > 1 km away]; L547 lib.target.selection (native
+  since cae8e2b, section 6a); attack: [roll 572], L584 edit_order_param space to the enemy's zone (job ship, zone patrol, enemy
   elsewhere in the sector), [roll 587 chance 0], commander + pilot: **Unsupported (M1)** (comm chatter table),
   [roll 615], L621 create_order Attack immediate (14 params); no target: [roll 639].
 - end: cancel the reservation; job expired: create_order MoveDie; return target null, list_targets [].
 - handlers: Attack, MissileLock, Scanned, Inspected, FoundAbandoned, FoundLockbox (opaque), TargetInvalid
   (native: [roll 14 chance 0], [roll 15], abort_called_scripts at the current label), inline
   patch_reset_moveto (native). on_abort: cancel the reservation.
+
+## 6a. lib.target.selection (base 9.00), seek configuration
+
+`rust/x4mp-ai/src/orders/targetselection.rs`. One bracket from start to `<return>` (no `<attention>`
+variants, no blocking action). Ported for the call of move.seekenemies L547 (primary and secondary targets
+null, other targets allowed): candidates = the commander's `$attacktarget`, then `find_gravidar_contact`
+(classes, undocked, `maybeattackedby` = ship, wrecks and build storages excluded); skip chain with its debug rolls
+(L103-L151); priority in f32 in XML order (+10 primary purpose; distance under 5.5 km: 10 or
+10 - (d - 500 m)/500 m; -5 x relation; -3 x relation when escorting; 10 x dps / (hull + shield) with the sum
+in f64 cast to f32; -20 capital; 1 for a player ship in the early game); the first strictly greatest
+priority wins (L286); L184 rolls with `chance="0"`. Refused with `Unsupported` before any draw of the branch:
+big-target reselection L306 (modular, attackable modules, capital: find_object_component), boarding with
+operations present L155, the learned-indestructible list L134, MAD score L256. Native draw counts match the
+capture: no target 3, one target 7, one skipped contact 4 (section 9a).
 
 ## 7. Capture format X4AITRACE v1 and capture points
 
@@ -246,26 +286,42 @@ share (create_position + get_safe_pos draws), and delivery draws per event class
 | `val`, `trace` | values (floats by bits) and the X4AITRACE codec (fail closed on build/version) |
 | `world` | `Facts` (typed reads), `Query`/`Answer`, `Effect`, `Io`, `Cx` (roll, range, query, effect helpers) |
 | `runtime` | `Agent` (frame stack, waiting states, timed wake), calls/returns, two-phase interrupts, aborts with on_abort |
-| `orders::patrol`, `orders::seekenemies` | the two scripts as resumable state machines |
+| `orders::patrol`, `orders::seekenemies`, `orders::targetselection` | the three scripts as resumable state machines |
+| `order` | the order command interface (`OrderSpec`, `Agent::start`, `Agent::status`) |
 | `replay` | trace replay with bit-exact comparison and first-difference report |
+| `native` | checks of native bracket captures (sessions, wake times, draw classes; `x4ai-check`) |
 | `system` | per-sector driver (passes, outbox, barrier merge in sector order), synthetic world, thread-invariance bed |
 
-**Order interface** (for the faction AI that will command orders): an order is started with
-`Agent::start_order(Frame::Patrol(Patrol::new(PatrolParams{..}, ship)), ..)`; its parameters are the
-script's documented order parameters (space, range, pursue, timeout, ...); it reports progress only through
-`Effect`s and its yields, and ends with `Yield::Return` or an abort. New orders implement the same frame
-contract (`resume`, `matches`, `handler_actions`, `block_interrupt`, `on_abort`, `restart_at`).
+**Order interface** (for the faction AI that will command orders; published in rewrite-coord/interfaces.md):
+`OrderSpec` holds an order's typed `<params>` with the XML defaults (`OrderSpec::Patrol(PatrolParams)`),
+round-trips to the engine's `create_order` parameter pairs, and says whether the native port supports it;
+`Agent::start(&spec, ship, facts, io)` starts it on a pilot's agent and `Agent::status()` reports
+Idle / Running{order, top script, waiting} / Unsupported(why). An order reports progress only through
+`Effect`s and its yields and ends with `Yield::Return` or an abort. New scripts implement the same frame
+contract (`resume`, `matches`, `handler_actions`, `block_interrupt`, `on_abort`, `restart_at`); helpers
+(move.generic next) become native callees of every order that calls them.
+
+**Cross-sector wakes.** The census measured that a third of the wakes made during runs target an entity in
+another sector (rewrite-coord/results/2026-10-26-ai-driver-census.md). `system::run_frame` therefore runs a
+frame pass by pass like `AIDirector::Move`: all sectors run one pass in parallel, then a barrier merges
+the pass's outboxes in sector order (pass-major order = a sequential engine frame). The barrier is where a
+wake for another sector's entity is delivered, so it runs in the next pass, where the engine runs it too
+(the synthetic world has no cross-entity wakes yet; the engine binding delivers them there). Until 26 Oct
+the driver merged once per frame (sector-major), which would have moved such wakes to the next frame.
+Cross-sector reads are facts from the frame-start snapshot.
 
 ## 9. Tests (offline)
 
-`cargo test -p x4mp-ai`: 24 tests pass (Windows 11, Rust 1.94.1); clippy clean.
+`cargo test -p x4mp-ai`: 33 tests pass (Windows 11, Rust 1.94.1); clippy clean.
 
-- unit (13): rng 10 (engine constants by bits, step vs native 150-step evidence, inverse step,
+- unit (20): rng 11 (engine constants by bits, step vs native 150-step evidence, inverse step,
   FloatState/U64 edge cases: no draw on n=0 or negative max, max returned at the top; chance comiss
   semantics incl. NaN; range without width draws nothing; flat range = one float draw; WithDistribution
-  fold; stream seeds), val 2 and trace 1 (round trips, refusal of another build/version).
-- patrol replay (9, SYNTHETIC hand-built traces, draws computed with an independent transcription of the
-  formulas): zone patrol (11 native runs, 2 opaque runs, 5 deliveries, 4 interrupt runs, 12 RNG end-state
+  fold; stream seeds; the condition-level debug roll), val 2, trace 1 (round trips, refusal of another
+  build/version), native capture checks 4 (sessions, pairing, wake times, classes), order interface 2.
+- patrol replay (11, SYNTHETIC hand-built traces, draws computed with an independent transcription of the
+  formulas; two of them for native lib.target.selection: three contacts scored and the nearest chosen, and a
+  capital target refused at L306): zone patrol (11 native runs, 2 opaque runs, 5 deliveries, 4 interrupt runs, 12 RNG end-state
   checks: recovery of a missing $space, two legs, nested ResupplyHandler delivery, gravidar interrupt, Attack
   order, opaque AttackHandler, orders.base abort); sector patrol (find_zone with 40 km filter, path with a
   highway removed, TargetInvalidHandler restart at moveto, failed resupply roll back to find_endzone);
@@ -296,16 +352,39 @@ ships, 85 interpreter brackets, 503 deliveries. Evidence: `.local/evidence-061-w
 | unmatched signals / matching scan / global deliveries | 1 (73/73) / 0 / 0 |
 | open | seek start 6 (8x) vs 4 (4x): get_safe_pos engine draws vary; one matched distress signal drew 2 (condition-level `debug_text debugchance` at L383, to confirm) |
 
+**Full-length run patrol-capture-002** (NATIVE, lane b2, profile 45851, release x4lane 8ee0cbd, new world
+`custom_creative`, 420 s of capture, census beside it; evidence `.local/evidence-062-withheld`).
+The probe armed twice at game start (UI reload), so the log holds two sessions: 8 first runs at t = 0, then
+141 brackets and 582 deliveries for the same 8 ships. No contradiction to the model:
+
+| check | result |
+|---|---|
+| `<wait>` wake times (L317, L509) | **27/27 bit-exact** (8 + 14 + 5); 51/51 over both runs |
+| first run / restart / leg L317 -> L493 / L493 -> L509 | 2 (8/8) / 1 (12/12) / 10 (12/12) / 1 (5/5), as in run 001 |
+| leg L317 -> L434 (move.generic to the next zone, new) | 8 (2/2) |
+| L509 -> L317 | 2, or 3 when the L511 resupply roll passes (L511 + L512 debug + L317) and L513 signals `'resupply'` |
+| ResupplyHandler (interrupt.restock, handler 7 of Patrol) | matched once on that signal; its interrupt run drew 7, ended without abort; **not ported** (ResupplyCheck is ~1,000 lines): a native Patrol stops with `Unsupported` there and the original takes over |
+| lib.target.selection | 3 (5x), 4 (2x), 8 (1x) |
+| move.seekenemies start -> move_to L187 | 4 (7x) or 6 (7x): get_safe_pos engine draws still vary |
+| gravidar scans during seek's move_to | **346/346 drew exactly 1** (distress roll); global scan deliveries drew 0 (89/89) except one matched move.generic handler (1) |
+| now captured as callees | move.generic, move.gate, order.fight.attack.object, move.attack.object.capital.steering, order.fight.protect.position (draw classes listed by `x4ai-check`) |
+
 ## 10. Native steps needed (next stage)
 
 1. Done offline (M2a): `aicapture.h` bracket capture on ai-driver's `ad_observer`, tested with synthetic
    engine structures (test_aicapture.c, both modes) and in a local integration build of the ai-driver tree
    (all ai-driver/fixedtick tests still pass); probe Lua hookup checked under LuaJIT with a mock module.
-2. Done natively (section 9a); a full-length run (from lanes/release x4lane.py, `--wait`) adds zone patrols'
-   second legs and resupply rolls.
-3. M2b: value capture (slot-3 swaps on FindComponent, GetGlobalPath, CreatePosition, GetSafePos, the effect
-   classes; facts per bracket) for a full replay of native Patrol traces. Register sites in hooks.tsv first.
-4. Cheap native check of the chance-0 finding: a test MD cue that executes 100,000 `debug_text chance="0"`
+2. Done natively (section 9a), both runs from the lanes/release x4lane.py copy with `--wait`.
+3. **M3 (now): move.generic** (section 1.3), same method as Patrol: spec, Rust port with fail-closed
+   branches, hand-built replay traces, then native draw classes (the captures above already hold
+   move.generic brackets of Patrol ships; a capture with `filter=move.generic` widens them). Then
+   trade.find.free with the economy agent's offer model.
+4. M2b: value capture for a full replay of native traces (facts read, variables written, query answers).
+   Located, not yet hooked: the AI-context variable store (the container dispatcher's case for the context
+   tag ends in one set-variable function: name string + value, remove on tag 0x1a) for writes, and the
+   per-tag property dispatcher (container, token, cursor) plus the chain's continuation for reads. Both are
+   hot interpreter paths: capture mode only, build-pinned, sites registered in hooks.tsv before use.
+5. Cheap native check of the chance-0 finding: a test MD cue that executes 100,000 `debug_text chance="0"`
    in one action list, with the rng-streams counter: the MoveWorker draw count of that frame must rise by
    100,000.
 

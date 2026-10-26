@@ -1,15 +1,16 @@
 //! Per-sector AI driver (authoritative mode) and its thread-invariance test bed.
 //!
-//! Each sector job runs the woken agents of its sector in engine tree order, pass after pass (calls and
-//! returns run in the next pass of the same frame, like `AIDirector::Move`, at most 0x40 passes). An
-//! agent reads only immutable world data ([`Services`]) and its own state, draws from its own stream
-//! (`rng::stream_seed(session, uid, 'AISC')`) and writes effects into its sector's [`Outbox`]. The
-//! barrier applies all outboxes in sector order, then emission order, which is the order a sequential
-//! run produces; so 1 and N threads give identical results by construction (tested below).
+//! A frame runs in passes like `AIDirector::Move` (calls, returns and wakes made in a pass run in the
+//! next pass of the same frame; at most 0x40 passes). In a pass each sector job runs the due agents of
+//! its sector in engine tree order; an agent reads only immutable world data ([`Services`]) and its own
+//! state, draws from its own stream (`rng::stream_seed(session, uid, 'AISC')`) and writes effects into
+//! its sector's [`Outbox`]. The barrier after every pass applies all outboxes in sector order, then
+//! emission order, which is the order a sequential run produces; so 1 and N threads give identical
+//! results by construction (tested below).
 //!
 //! The ECS binding (x4mp-sim `System::run_sector` / `barrier`, rewrite-coord/interfaces.md v0) is a thin
-//! adapter over [`run_sector`] and [`apply_barrier`]; it is not wired yet because x4mp-sim is not on the
-//! base branch.
+//! adapter over [`run_pass`] and the per-pass barrier of [`run_frame`]; it is not wired yet because
+//! x4mp-sim is not on the base branch.
 
 use crate::replay::FactStore;
 use crate::rng::{stream_seed, Stream, PURPOSE_AI_SCRIPT};
@@ -31,8 +32,8 @@ pub trait Services: Facts + Sync {
     fn opaque_call(&self, ent: Uid, script: &str, rng: &mut Stream) -> Option<RetVals>;
 }
 
-/// One sector job's exclusive borrows during the parallel phase.
-type Job<'a> = (&'a mut SectorAi, &'a mut Outbox, &'a mut Vec<Uid>);
+/// One sector job's exclusive borrows during a parallel pass.
+type Job<'a> = (&'a mut SectorAi, &'a mut Outbox, &'a mut Vec<Uid>, &'a mut bool);
 
 /// Effect log entries: entity, XML line, effect.
 pub type EffectLog = Vec<(Uid, u32, Effect)>;
@@ -88,51 +89,47 @@ fn due(a: &Agent, now: Time) -> bool {
     }
 }
 
-/// Run one sector's woken agents for the frame at game time `now`. Blocked `move_to`s are completed
-/// by the movement system, which reports them through [`complete_moves`] at the barrier.
-pub fn run_sector(s: &mut SectorAi, services: &dyn Services, now: Time, moving: &mut Vec<Uid>, out: &mut Outbox) {
+/// Run one pass over a sector's due agents at game time `now`; returns whether any agent ran. Blocked
+/// `move_to`s are completed by the movement system, which reports them through [`complete_moves`].
+pub fn run_pass(s: &mut SectorAi, services: &dyn Services, now: Time, moving: &mut Vec<Uid>, out: &mut Outbox) -> bool {
     let mut io = NativeIo { services, out, rolls: 0 };
-    for _pass in 0..MAX_PASSES {
-        let mut ran = false;
-        for a in s.agents.iter_mut() {
-            if a.stack.is_empty() || moving.contains(&a.ent) || !due(a, now) {
-                continue;
-            }
-            ran = true;
-            if let Some(Frame::Opaque { script }) = a.stack.last() {
-                let script = script.clone();
-                let _ = a.next_wake();
-                match services.opaque_call(a.ent, &script, &mut a.rng) {
-                    Some(vals) => a.after_yield(&Yield::Return(vals)),
-                    None => {
-                        io.out.stopped.push((a.ent, format!("opaque callee {script} refused")));
-                        a.stack.clear();
-                        a.waiting.clear();
-                    }
-                }
-                continue;
-            }
-            match a.run(services, &mut io) {
-                Ok(Yield::MoveTo) => moving.push(a.ent),
-                Ok(_) => {}
-                Err(Stop::Unsupported { script, line, what }) => {
-                    let why = format!("{script} L{line}: {what}");
-                    io.out.stopped.push((a.ent, why.clone()));
-                    a.stopped = Some(why);
-                    a.stack.clear();
-                    a.waiting.clear();
-                }
-                Err(Stop::Mismatch(m)) => {
-                    io.out.stopped.push((a.ent, m));
-                    a.stack.clear();
-                    a.waiting.clear();
-                }
-            }
+    let mut ran = false;
+    for a in s.agents.iter_mut() {
+        if a.stack.is_empty() || moving.contains(&a.ent) || !due(a, now) {
+            continue;
         }
-        if !ran {
-            break;
+        ran = true;
+        if let Some(Frame::Opaque { script }) = a.stack.last() {
+            let script = script.clone();
+            let _ = a.next_wake();
+            match services.opaque_call(a.ent, &script, &mut a.rng) {
+                Some(vals) => a.after_yield(&Yield::Return(vals)),
+                None => {
+                    io.out.stopped.push((a.ent, format!("opaque callee {script} refused")));
+                    a.stack.clear();
+                    a.waiting.clear();
+                }
+            }
+            continue;
+        }
+        match a.run(services, &mut io) {
+            Ok(Yield::MoveTo) => moving.push(a.ent),
+            Ok(_) => {}
+            Err(Stop::Unsupported { script, line, what }) => {
+                let why = format!("{script} L{line}: {what}");
+                io.out.stopped.push((a.ent, why.clone()));
+                a.stopped = Some(why);
+                a.stack.clear();
+                a.waiting.clear();
+            }
+            Err(Stop::Mismatch(m)) => {
+                io.out.stopped.push((a.ent, m));
+                a.stack.clear();
+                a.waiting.clear();
+            }
         }
     }
+    ran
 }
 
 /// Barrier: the movement system finished these `move_to`s (arrival); their agents wake next frame.
@@ -150,47 +147,68 @@ pub fn complete_moves(sectors: &mut [SectorAi], arrived: &[Uid]) {
     }
 }
 
-/// Run all sectors for one frame on `threads` worker threads, then merge the outboxes in sector order.
-/// Returns the merged outbox and the entities that issued a `move_to` this frame (sector order).
+/// Run all sectors for one frame on `threads` worker threads, pass by pass like `AIDirector::Move`:
+/// every pass runs the sectors in parallel, then a barrier merges the pass's outboxes in sector order
+/// (pass-major order, which is the order of a sequential engine frame). The barrier is where a wake
+/// that one sector's pass makes for another sector's entity belongs, so that it runs in the next pass as
+/// in the engine (the census measured a third of the wakes during runs crossing sectors; the synthetic
+/// world makes none yet). Returns the merged outbox and the entities that issued a `move_to` this frame
+/// (sector order).
 pub fn run_frame(sectors: &mut [SectorAi], services: &dyn Services, now: Time, threads: usize) -> (Outbox, Vec<Uid>) {
     let n = sectors.len();
-    let mut outs: Vec<Outbox> = vec![Outbox::default(); n];
     let mut moves: Vec<Vec<Uid>> = vec![Vec::new(); n];
-    if threads <= 1 {
-        for (i, s) in sectors.iter_mut().enumerate() {
-            run_sector(s, services, now, &mut moves[i], &mut outs[i]);
-        }
-    } else {
-        // Work stealing over sector indices; each job owns its sector, outbox and move list.
-        let next = AtomicUsize::new(0);
-        let slots: Vec<std::sync::Mutex<Option<Job<'_>>>> = sectors
-            .iter_mut()
-            .zip(outs.iter_mut())
-            .zip(moves.iter_mut())
-            .map(|((s, o), m)| std::sync::Mutex::new(Some((s, o, m))))
-            .collect();
-        std::thread::scope(|sc| {
-            for _ in 0..threads.min(n.max(1)) {
-                sc.spawn(|| loop {
-                    let i = next.fetch_add(1, Ordering::Relaxed);
-                    if i >= n {
-                        break;
-                    }
-                    let job = slots[i].lock().expect("slot").take();
-                    if let Some((s, o, m)) = job {
-                        run_sector(s, services, now, m, o);
-                    }
-                });
-            }
-        });
-    }
     let mut merged = Outbox::default();
-    let mut moved = Vec::new();
-    for (o, m) in outs.into_iter().zip(moves) {
-        merged.effects.extend(o.effects);
-        merged.stopped.extend(o.stopped);
-        moved.extend(m);
+    for _pass in 0..MAX_PASSES {
+        // Nothing due anywhere: the frame is done (saves starting the workers for an empty pass).
+        let any_due = sectors
+            .iter()
+            .zip(&moves)
+            .any(|(s, m)| s.agents.iter().any(|a| !a.stack.is_empty() && !m.contains(&a.ent) && due(a, now)));
+        if !any_due {
+            break;
+        }
+        let mut outs: Vec<Outbox> = vec![Outbox::default(); n];
+        let mut ran: Vec<bool> = vec![false; n];
+        if threads <= 1 {
+            for (i, s) in sectors.iter_mut().enumerate() {
+                ran[i] = run_pass(s, services, now, &mut moves[i], &mut outs[i]);
+            }
+        } else {
+            // Work stealing over sector indices; each job owns its sector, outbox and move list.
+            let next = AtomicUsize::new(0);
+            let slots: Vec<std::sync::Mutex<Option<Job<'_>>>> = sectors
+                .iter_mut()
+                .zip(outs.iter_mut())
+                .zip(moves.iter_mut())
+                .zip(ran.iter_mut())
+                .map(|(((s, o), m), r)| std::sync::Mutex::new(Some((s, o, m, r))))
+                .collect();
+            std::thread::scope(|sc| {
+                for _ in 0..threads.min(n.max(1)) {
+                    sc.spawn(|| loop {
+                        let i = next.fetch_add(1, Ordering::Relaxed);
+                        if i >= n {
+                            break;
+                        }
+                        let job = slots[i].lock().expect("slot").take();
+                        if let Some((s, o, m, r)) = job {
+                            *r = run_pass(s, services, now, m, o);
+                        }
+                    });
+                }
+            });
+        }
+        // Barrier: sector order, then emission order. Cross-entity wakes would be applied here; the
+        // synthetic world has none (its signals target the sender's own ship).
+        for o in outs {
+            merged.effects.extend(o.effects);
+            merged.stopped.extend(o.stopped);
+        }
+        if !ran.iter().any(|r| *r) {
+            break;
+        }
     }
+    let moved = moves.into_iter().flatten().collect();
     (merged, moved)
 }
 
