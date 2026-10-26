@@ -616,6 +616,7 @@ static int start(lua_State *L) {
         else if (!strcmp(mode, "profile")) profiling = 1;
         else if (!strcmp(mode, "walkcensus")) census = 1;   /* stage 0 walk census (entry detours) */
         else if (!strcmp(mode, "walkreplay")) census = 2;   /* stage 1 deferred replay (+ call site) */
+        else if (!strcmp(mode, "aireplay")) census = 3;     /* explicit AI scopes only; walk stays inline */
         else return failure(L, "unsupported mode");
         if (top > (profiling ? 3 : 1)) return failure(L, "unsupported mode");
         /* profile[, interval_ms (0.5..10, default 1)[, max stack depth (8..64, default 32)]] */
@@ -711,6 +712,7 @@ static int start(lua_State *L) {
     (void)walkpar_api();
     if (census == 1) wp_want = WP_CENSUS;
     else if (census == 2) wp_want = WP_REPLAY;
+    else if (census == 3) wp_want = WP_AI_REPLAY;
     if (profiling) {
         /* A sampler that cannot start leaves the probe running; stats() reports why. */
         o->profile = 1;

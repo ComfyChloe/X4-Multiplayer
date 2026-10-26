@@ -158,12 +158,16 @@ int main(void) {
     /* Exercise the native binding path, not just engine_setup's injected fakes. */
     wp_det[WPD_POST].tramp = (void *)fake_post_original;
     wp_det[WPD_CANCEL].tramp = (void *)fake_cancel_original;
+    wp_det[WPD_CANCEL].installed = 1;
     wp_bind_replay_callbacks();
     assert(wp_registry_find == wp_native_find);
     assert(wp_deliver_post == fake_post_original);
     assert(wp_deliver_cancel == fake_cancel_original);
     assert(wp_replay_ready());
     assert(wp_native_find(200) == NULL);     /* no registry while loading */
+    wp_det[WPD_CANCEL].installed = 0;
+    wp_bind_replay_callbacks();
+    assert(!wp_replay_ready());             /* a stale trampoline after census rearm is not enough */
     wp_det[WPD_POST].tramp = wp_det[WPD_CANCEL].tramp = NULL;
 
     /* Missing wiring must pass through before taking ownership of an event. */
@@ -365,6 +369,75 @@ int main(void) {
     wp_replay_tasks(order2, 2);
     assert(wp_frame.cancels_applied == 1 && wp_frame.replayed == 0);  /* post dead, only cancel ran */
 
+    /* Q20: sector grouping must not change original A1 B1 A2 emission order.
+       Equal keys retain emission order; full-width keys include the pass number. */
+    engine_setup(WP_REPLAY);
+    scene_init();
+    wp_walk_begin();
+    FakeEvent a1 = e_same, a2 = e_same, b1 = e_same, b2 = e_same;
+    a1.payload[0] = 1; a2.payload[0] = 3; b1.payload[0] = 2; b2.payload[0] = 4;
+    wp_scope_begin(100);
+    wp_set_order((1ull << 32) | 0); engine_post(&o0, &a1, 10, 1);
+    wp_set_order((1ull << 32) | 2); engine_post(&o0, &a2, 10, 1);
+    wp_scope_end();
+    wp_scope_begin(101);
+    wp_set_order((1ull << 32) | 1); engine_post(&o1, &b1, 10, 1);
+    wp_set_order((1ull << 32) | 2); engine_post(&o1, &b2, 10, 1);
+    wp_scope_end();
+    wp_replay_ordered();
+    assert(wp_logB_n == 4 && wp_count == 0 && wp_order == 0);
+    for (unsigned i = 0; i < 4; ++i) assert(wp_logB[i].payload == i + 1);
+    wp_replay_ordered();
+    assert(wp_logB_n == 4);  /* never replay consumed events twice */
+
+    /* A logically later post executed first must survive an earlier-key cancel. */
+    engine_setup(WP_REPLAY);
+    scene_init();
+    wp_walk_begin();
+    wp_scope_begin(101);
+    wp_set_order(20); engine_post(&o1, &e_sched, 20, 0);
+    wp_scope_end();
+    wp_scope_begin(100);
+    wp_set_order(10); engine_cancel(&o1, WP_TYPE_WARP, WP_CANCEL_ALL);
+    wp_scope_end();
+    assert(!e_sched.freed && !wp_buf[0].dead);
+    wp_replay_ordered();
+    assert(wp_frame.replayed == 1 && wp_frame.cancels_applied == 1);
+    assert(wp_buf[0].kind == WP_OP_CANCEL && wp_buf[1].kind == WP_OP_POST);
+
+    /* Earlier-key scheduled posts still cancel, immediate posts never cancel. */
+    engine_setup(WP_REPLAY);
+    scene_init();
+    wp_walk_begin();
+    wp_set_order(10); engine_post(&o0, &e_sched, 20, 0);
+    wp_set_order(10); engine_post(&o0, &e_same, 10, 1);
+    wp_set_order(20); engine_cancel(&o0, WP_TYPE_WARP, WP_CANCEL_ALL);
+    engine_cancel(&o0, WP_TYPE_ATTACKED, WP_CANCEL_ALL);
+    assert(e_sched.freed && !e_same.freed);
+    int imm = -1; void *borrowed = &e_same;
+    assert(wp_buffer_event(0, &imm, &borrowed) == 0 && !borrowed && imm == 0);
+    assert(wp_buffer_event(1, &imm, &borrowed) == WP_OP_POST && imm == 1 && borrowed == &e_same);
+    assert(wp_buffer_event(2, &imm, &borrowed) == WP_OP_CANCEL && imm == 0 && !borrowed);
+    wp_replay_ordered();
+    assert(wp_frame.replayed == 1 && wp_frame.cancels_applied == 2);
+    assert(wp_buffer_event(0, &imm, &borrowed) == 0 && !borrowed);
+
+    /* AI-only mode keeps the whole galaxy walk inline, buffering explicit scopes. */
+    engine_setup(WP_AI_REPLAY);
+    scene_init();
+    assert(wp_get_mode() == WP_AI_REPLAY);
+    wp_walk_begin();
+    engine_post(&o0, &e_sched, 20, 0);
+    assert(wp_count == 0 && g_scheduled == 1);
+    wp_walk_end();
+    wp_scope_begin(100);
+    engine_post(&o0, &e_same, 10, 1);
+    assert(wp_count == 1 && wp_frame.replayed == 0);
+    /* replay closes buffering itself, even when the caller left the scope open */
+    wp_replay_ordered();
+    assert(!wp_phase && wp_count == 0 && wp_frame.replayed == 1);
+    wp_scope_end();
+
     /* Foreign thread: entry points pass through and count nothing. */
     engine_setup(WP_CENSUS);
     scene_init();
@@ -383,5 +456,6 @@ int main(void) {
     puts("PASS: cancel kills only scheduled posts and frees them; gone source dropped+freed; overflow passes through");
     puts("PASS: comparison reports no-data, the first differing type, and cue activations as a multiset");
     puts("PASS: ai-driver scope + ordered replay; foreign-thread entry points pass through and count nothing");
+    puts("PASS: Q20 original-order keys, cancel ordering, borrowed-event readout and AI-only scope mode");
     return 0;
 }

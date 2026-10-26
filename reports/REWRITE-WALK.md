@@ -251,7 +251,31 @@ buffer to the same `walkpar_api()` (scope_begin/end, replay_tasks, buffer_op) �
    L 0x3d1eda8, 0x1092e80 ≈ L 0x1097d70 (design §7). Needs the Linux build / VPS, which belongs to x4mods-61
    — coordinate access through the lead (not requested yet; after the replay run).
 
-## 9. Open questions
+## 9. AI original-order barrier (Q20)
+
+`WP_HAS_ORDER` exposes append-only `wp_api` entries `set_order(uint64_t)` and
+`replay_ordered()`. AI callers set `(pass << 32) | wake_index` before each context.
+Replay sorts by this key and emission sequence, preserving equal-key ordering.
+A buffered cancel only kills already-buffered scheduled posts whose key is no
+greater than its own. Later-key posts survive; lower-key posts emitted after the
+cancel are handled by the original queue when the sorted operations replay.
+Walk callers leave all keys zero and retain their existing emission order.
+
+`WP_HAS_AI_REPLAY` adds `WP_AI_REPLAY` (3), `get_mode()` and
+`int buffer_event(size_t, int *imm, void **event)`. The latter returns the operation
+kind, or zero for absent/consumed entries, clearing outputs in that case. Its event
+pointer is borrowed only until the next cancellation, replay or reset. Existing
+`buffer_op` remains unchanged. Native Lua start mode `aireplay` installs all three
+event detours, keeps the galaxy walk inline, and buffers only explicit AI scopes.
+Starting in census and switching modes does not bypass cancellation-hook readiness.
+
+Synthetic regressions cover interleaved sector keys, stable ties, 64-bit keys,
+cancel-before-later-post, earlier-post cancellation, immediate-post preservation,
+borrowed readout, no duplicate replay, and AI-only scope isolation. These establish
+buffer semantics only. Delaying immediate delivery can still change same-pass AI
+observations; ordered replay does not prove AI behavioural equivalence.
+
+## 10. Open questions
 
 ### Native replay wiring correction (26 October, Codex continuation)
 
