@@ -8,10 +8,14 @@
 //! decision taken on a snapshot can be checked at the barrier against the live book
 //! ([`crate::msg`]).
 //!
-//! Snapshot order is engine tree order: sector (`SectorIx`), then the owner's `OrderKey`
-//! inside the sector, then the offer id. Searches return offers in that order, which is
-//! the order the original space gatherer visits containers in (to be confirmed against the
-//! capture of `FindTradeOfferAction` results, see reports/REWRITE-ECONOMY.md).
+//! Snapshot order is the engine's search order: sector (`SectorIx`), then the owner's
+//! `OrderKey` inside the sector, then the owner's offer list (`list` 0 = Container+0x8f8,
+//! 1 = +0x910) and the position in it. The search core 0x7f2880 visits the space's zones,
+//! each zone's stations (child bucket 2) and then other containers, and filters each
+//! container's two lists in order; a single-result search then picks
+//! `Random::U64(matches)` (thread RNG) and a multiple-result search returns the matches in
+//! that order. That the ecs-core tree key reproduces the zone order is to be confirmed with
+//! a capture of search results (reports/REWRITE-ECONOMY.md §6).
 
 use crate::ids::{OrderKey, SectorIx, TradeId, UniverseId, WareIx};
 
@@ -24,15 +28,22 @@ pub struct Offer {
     pub sector: SectorIx,
     /// Tree-order key of the owner inside `sector`.
     pub key: OrderKey,
+    /// Owner's offer list: 0 = Container+0x8f8, 1 = Container+0x910.
+    pub list: u8,
+    /// Position in that list.
+    pub pos: u32,
     pub ware: WareIx,
-    /// `true`: the owner buys (buy offer); `false`: the owner sells (sell offer).
+    /// `true`: the owner buys (buy offer: Trade+0x10 set, +0x18 empty); `false`: sells.
     pub buy: bool,
-    /// Offered amount before reservations.
+    /// Offered amount (Trade+0x40).
     pub amount: u32,
-    /// Sum of the reservations held against this offer.
+    /// Model-level sum of the reservations the barrier applied against this offer.
     pub reserved: u32,
-    /// Unit price in cents (engine money is an `i64` in cents, Lua shows credits).
+    /// Unit price in cents (Trade+0x30 tag; engine money is an `i64` in cents).
     pub unit_price: i64,
+    /// Trade+0x54 flags (bundle 0x10, unbundle 0x20, supply 0x40, shady 0x8000, fixed price
+    /// 0x100000, ...).
+    pub flags: u32,
     /// Bumped by the owner's sector on every change of amount, reservation or price.
     pub version: u32,
 }
@@ -44,7 +55,7 @@ impl Offer {
     }
 }
 
-/// Offers of one sector, kept sorted by `(key, id)`.
+/// Offers of one sector, kept sorted by `(key, list, pos, id)`.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct OfferBook {
     offers: Vec<Offer>,
@@ -67,20 +78,21 @@ impl OfferBook {
         &self.offers
     }
 
-    fn position(&self, key: OrderKey, id: TradeId) -> Result<usize, usize> {
-        self.offers.binary_search_by(|o| (o.key, o.id).cmp(&(key, id)))
+    fn position(&self, key: OrderKey, list: u8, pos: u32, id: TradeId) -> Result<usize, usize> {
+        self.offers.binary_search_by(|o| (o.key, o.list, o.pos, o.id).cmp(&(key, list, pos, id)))
     }
 
     /// Inserts or replaces an offer; a replacement that changes anything bumps the version.
     pub fn upsert(&mut self, mut offer: Offer) {
-        match self.position(offer.key, offer.id) {
+        match self.position(offer.key, offer.list, offer.pos, offer.id) {
             Ok(i) => {
                 let old = &self.offers[i];
                 let changed = old.amount != offer.amount
                     || old.reserved != offer.reserved
                     || old.unit_price != offer.unit_price
                     || old.ware != offer.ware
-                    || old.buy != offer.buy;
+                    || old.buy != offer.buy
+                    || old.flags != offer.flags;
                 offer.version = if changed { old.version.wrapping_add(1) } else { old.version };
                 self.offers[i] = offer;
             }
@@ -88,8 +100,9 @@ impl OfferBook {
         }
     }
 
-    pub fn remove(&mut self, key: OrderKey, id: TradeId) -> Option<Offer> {
-        self.position(key, id).ok().map(|i| self.offers.remove(i))
+    pub fn remove(&mut self, id: TradeId) -> Option<Offer> {
+        let i = self.offers.iter().position(|o| o.id == id)?;
+        Some(self.offers.remove(i))
     }
 
     pub fn find_by_id(&self, id: TradeId) -> Option<&Offer> {
@@ -175,11 +188,14 @@ mod tests {
             owner: UniverseId(1000 + key),
             sector: SectorIx(sector),
             key: OrderKey(key),
+            list: if buy { 0 } else { 1 },
+            pos: 0,
             ware: WareIx(ware),
             buy,
             amount,
             reserved: 0,
             unit_price: 1600,
+            flags: 0,
             version: 0,
         }
     }

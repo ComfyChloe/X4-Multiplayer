@@ -126,11 +126,14 @@ mod tests {
             owner: UniverseId(5),
             sector: SectorIx(0),
             key: OrderKey(1),
+            list: 1,
+            pos: 0,
             ware: WareIx(0),
             buy: false,
             amount,
             reserved: 0,
             unit_price: 100,
+            flags: 0,
             version: 0,
         });
         b

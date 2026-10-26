@@ -170,11 +170,14 @@ impl SectorEconomy {
                     owner: st.uid,
                     sector: self.sector,
                     key: st.key,
+                    list: 1,
+                    pos: w.0 as u32,
                     ware: w,
                     buy: false,
                     amount: a.max(0) as u32,
                     reserved,
                     unit_price: 100 + w.0 as i64,
+                    flags: 0,
                     version: 0,
                 });
             }
@@ -183,7 +186,7 @@ impl SectorEconomy {
                     let pick = snapshot
                         .find(d.ware, false)
                         .filter(|o| o.sector != self.sector && o.available() >= d.amount)
-                        .min_by_key(|o| (o.unit_price, o.sector, o.key, o.id));
+                        .min_by_key(|o| (o.unit_price, o.sector, o.key, o.list, o.pos));
                     if let Some(o) = pick {
                         out.push(EconMsg {
                             stamp: Stamp {
