@@ -59,6 +59,20 @@ def win():
     return lanewin
 
 
+def tool_version() -> str:
+    """The commit of this tool: lanes/release RELEASE.txt, or the development checkout's HEAD."""
+    release = ROOT / 'RELEASE.txt'
+    if release.is_file():
+        first = release.read_text(encoding='utf-8').split('\n', 1)[0].split()
+        return f'release {first[-1][:12]}' if first else 'release ?'
+    try:
+        head = subprocess.run(['git', '-C', str(ROOT), 'rev-parse', '--short', 'HEAD'], capture_output=True,
+                              text=True, timeout=10).stdout.strip()
+        return f'dev {head or "?"} ({ROOT})'
+    except (OSError, subprocess.SubprocessError):
+        return f'dev ? ({ROOT})'
+
+
 def pinned_sha256() -> str:
     from native.engine.signatures import EXECUTABLE
     return EXECUTABLE['sha256'].lower()
@@ -552,7 +566,8 @@ class Run:
         self.network = 'offline'            # 'loopback' only inside a session
         self.repin = bool(getattr(args, 'repin_profile', False))
         self.result = {
-            'tool': 'dev/x4lane.py', 'tool_version': TOOL_VERSION, 'run_id': None, 'agent': args.agent,
+            'tool': 'dev/x4lane.py', 'tool_version': TOOL_VERSION, 'tool_commit': tool_version(),
+            'run_id': None, 'agent': args.agent,
             'label': args.label, 'lane': None, 'profile': None, 'machine': socket.gethostname(),
             'started_at': core.now_iso(), 'verdict': None, 'exit_reason': None, 'exit_code': None,
             'message': None, 'command': sys.argv, 'warnings': [], 'timings': {}, 'x4': {},
@@ -1373,7 +1388,8 @@ class SessionRun:
         self.port = None
         self.reserved_since = None
         self.result = {
-            'tool': 'dev/x4lane.py', 'tool_version': TOOL_VERSION, 'kind': 'session', 'session_id': None,
+            'tool': 'dev/x4lane.py', 'tool_version': TOOL_VERSION, 'tool_commit': tool_version(),
+            'kind': 'session', 'session_id': None,
             'agent': args.agent, 'label': args.label, 'machine': socket.gethostname(), 'started_at': core.now_iso(),
             'verdict': None, 'exit_reason': None, 'exit_code': None, 'message': None, 'command': sys.argv,
             'clients': [], 'server': None, 'network': {}, 'until': None, 'timings': {}, 'warnings': [],
