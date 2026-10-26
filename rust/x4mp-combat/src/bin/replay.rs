@@ -64,6 +64,8 @@ fn main() -> ExitCode {
             report.time,
             report.result
         );
+        // the same records through the program's shared shadow framework (x4mp-sim)
+        println!("  {}", x4mp_combat::sim::shadow_replay(&records).line());
         for (index, diff) in &report.first {
             let r = &records[*index];
             println!("  #{index} component={:#x} chain={} joint={} diff={diff:?} before={:?} command={:?} clock={:?} after={:?}", r.component, r.chain, r.joint, r.before, r.command, r.clock, r.after);

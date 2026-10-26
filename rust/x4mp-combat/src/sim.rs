@@ -15,9 +15,11 @@
 //! MoveWorker's MXCSR is 0x1fbf natively (round to nearest, no FTZ/DAZ; only sticky flags
 //! set), the same control bits a fresh x4mp-sim worker starts with.
 
+use x4mp_sim::shadow::{Policy, Recorded, ReplayReport, SystemUnderTest};
 use x4mp_sim::{Component, SectorCtx, System};
 
-use crate::ikjoint::{step_with_dt, JointCommand, JointState, Outcome};
+use crate::capture::Record;
+use crate::ikjoint::{rotate_toward, step_with_dt, JointCommand, JointState, Outcome};
 
 x4mp_sim::impl_fields!(JointState { value, time, velocity, target, wrap });
 x4mp_sim::impl_fields!(JointCommand { target, min, max, max_speed, accel, feed_forward, snap });
@@ -94,6 +96,43 @@ impl System for TurretJointSystem {
             *output = JointOutput { stepped: true, reached, outcome: outcome_code(outcome) };
         }
     }
+}
+
+/// What one captured call produced: the joint afterwards and the original's return value.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct JointStepOut {
+    pub joint: JointState,
+    pub result: bool,
+}
+x4mp_sim::impl_fields!(JointStepOut { joint, result });
+
+/// The joint step as an x4mp-sim `SystemUnderTest`, so captured calls replay through the
+/// program's shared shadow framework (exactness policy, field paths, per-field statistics).
+pub struct JointStepUnderTest;
+
+impl SystemUnderTest for JointStepUnderTest {
+    type Input = Record;
+    type Output = JointStepOut;
+
+    fn name(&self) -> &str {
+        TurretJointSystem::NAME
+    }
+
+    fn run(&mut self, record: &Record) -> JointStepOut {
+        let mut joint = record.before;
+        let result = rotate_toward(&mut joint, &record.command, record.clock);
+        JointStepOut { joint, result }
+    }
+}
+
+/// Replay captured calls with `Policy::exact()` (floats bit-exact, -0 != 0); one "frame" per call.
+pub fn shadow_replay(records: &[Record]) -> ReplayReport {
+    let frames = records.iter().enumerate().map(|(i, r)| Recorded {
+        frame: i as u64,
+        input: *r,
+        expected: JointStepOut { joint: r.after, result: r.result },
+    });
+    x4mp_sim::shadow::replay(&mut JointStepUnderTest, frames, &Policy::exact())
 }
 
 #[cfg(test)]
@@ -236,6 +275,30 @@ mod tests {
             stepped += input.active as usize;
         }
         assert_eq!(stepped, 12 * 32, "inactive rows are not stepped");
+    }
+
+    #[test]
+    fn captured_calls_replay_through_the_shared_shadow_framework() {
+        let mut rng = Rng::new(21);
+        let mut records: Vec<Record> = (0..2_000)
+            .map(|i| {
+                let clock = FrameClock { now: 200.0 + i as f64 * 0.02, previous: 199.98 + i as f64 * 0.02 };
+                let before = random_state(&mut rng, clock.previous);
+                let command = random_command(&mut rng);
+                let mut after = before;
+                let result = step(&mut after, &command, clock).0;
+                Record { component: i, chain: 0, joint: 0, before, command, clock, after, result }
+            })
+            .collect();
+        let report = shadow_replay(&records);
+        assert!(report.is_clean(), "{}", report.line());
+        assert_eq!(report.frames, 2_000);
+        assert!(report.line().starts_with("REPLAY combat.turret_joint frames=2000 mismatched_frames=0"));
+        // one flipped bit in one recorded velocity is found, with its field path
+        records[777].after.velocity = f32::from_bits(records[777].after.velocity.to_bits() ^ 1);
+        let report = shadow_replay(&records);
+        assert_eq!((report.frames_mismatched, report.first_mismatched_frame), (1, Some(777)));
+        assert!(report.line().contains("velocity"), "{}", report.line());
     }
 
     #[test]
