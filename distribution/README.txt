@@ -57,6 +57,11 @@ GUEST
 3. Run 04-TEST-CONNECTION, then 05-START-X4. The launcher downloads and checks
    the shared world, then X4 loads it automatically. Do not choose another save.
 
+DEDICATED-SERVER SETS (only when DEDICATED-SERVER.md is in this folder)
+01-INSTALL does not ask for a role. The Linux package is the server; every client
+package (Windows11[-GuestK] or Linux-Client[K]) is a client and follows GUEST above.
+Each client slot has a Windows and a Linux package; use the one for your OS.
+
 The numbers identify actions; guests skip HOST-only actions 02 and 03.
 Windows: double-click the numbered .cmd files. Linux: execute the matching .sh
 files; they open a terminal automatically. If your file manager opens an editor

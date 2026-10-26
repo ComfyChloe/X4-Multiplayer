@@ -49,6 +49,12 @@ def role_slot(role):
     return 'p' + str(int(match[1]) + 1)
 
 
+def dedicated_setup_role(package):
+    """A dedicated package fixes its setup role: the server package hosts, every client joins."""
+    if not package.get('dedicated'): return None
+    return 'host' if role_slot(package.get('role')) == 'p1' else 'guest'
+
+
 def slot_profile(slot):
     number = int(slot[1:])
     return '45841' if number <= 2 else str(45839 + number)
@@ -286,6 +292,10 @@ def configure(role, server=None, invite=None):
         if (ROOT / 'session.json').exists():
             raise RuntimeError('This folder already has a session. Reuse it, or use a fresh extracted package for a new session.')
         package = read_json(ROOT / 'package.json')
+        fixed = dedicated_setup_role(package)
+        if fixed and role != fixed:
+            raise RuntimeError('This dedicated ' + ('server' if fixed == 'host' else 'client')
+                               + ' package cannot be configured as ' + role + '. Use the matching package.')
         if role == 'host':
             players = package.get('max_players') if package.get('dedicated') else None
             if players is not None and (type(players) is not int or not 2 <= players <= MAX_PLAYERS):
@@ -560,7 +570,11 @@ def setup(args):
     if (ROOT / 'session.json').exists():
         recover_session_metadata()
     if not (ROOT / 'session.json').exists():
-        role = args.role or input('Role: [H]ost or [G]uest? ').strip().lower()
+        package_path = ROOT / 'package.json'
+        fixed = dedicated_setup_role(read_json(package_path)) if package_path.is_file() else None
+        if fixed and args.role is None:
+            print('Dedicated ' + ('server' if fixed == 'host' else 'client') + ' package.')
+        role = args.role or fixed or input('Role: [H]ost or [G]uest? ').strip().lower()
         role = {'h': 'host', 'g': 'guest'}.get(role, role)
         if role == 'host':
             from x4lan.monitor import addresses

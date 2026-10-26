@@ -32,17 +32,26 @@ def copy_server_runtime(root):
         shutil.copy2(SOURCE / 'x4lan' / (name + '.py'), root / 'x4lan' / (name + '.py'))
 
 def dedicated_roles(max_players):
-    """Server (role host, player 1) plus one Windows client package per further player.
+    """Linux server (role host, player 1) plus a Windows and a Linux client package per further player.
 
     Role names keep the legacy spelling (guest = player 2, guestK = player K+1). Player K
     uses isolated profile 45841 for K <= 2, otherwise 45839+K, so clients can share a PC.
+    Both client packages of one slot are interchangeable: same role, profile and pair.
     """
     if not 2 <= max_players <= 8:
         raise ValueError('--max-players must be from 2 to 8.')
-    roles = [('Linux', 'host', '45841'), ('Windows11', 'guest', '45841')]
-    for k in range(2, max_players):
-        roles.append(('Windows11', 'guest%d' % k, str(45840 + k)))
+    roles = [('Linux', 'host', '45841')]
+    for k in range(1, max_players):
+        role, profile = ('guest', '45841') if k == 1 else ('guest%d' % k, str(45840 + k))
+        roles += [('Windows11', role, profile), ('Linux', role, profile)]
     return roles
+
+
+def package_name(release, platform, role):
+    """Windows11[-GuestK] (legacy) for Windows clients; Linux is the server, Linux-Client[K] a client."""
+    if role == 'host': return f'X4-LAN-{release}-{platform}'
+    if platform == 'Linux': return f'X4-LAN-{release}-Linux-Client' + role[5:]
+    return f'X4-LAN-{release}-{platform}' + ('-Guest' + role[5:] if role != 'guest' else '')
 
 
 def build(destination: Path, runtime_cache: Path | None = None, dedicated=False, max_players=3):
@@ -63,14 +72,18 @@ def build(destination: Path, runtime_cache: Path | None = None, dedicated=False,
     pair_id = 'internal-dist-' + secrets.token_hex(8)
     folders, archives = [], []
     roles = dedicated_roles(max_players) if dedicated else [('Linux', 'host', '45841'), ('Windows11', 'guest', '45841')]
+    if dedicated:
+        # One Rust build per set: the server binary plus the x4lan-net module that every
+        # Linux package of this set (server and clients) loads.
+        subprocess.run(['cargo', 'build', '--release', '--bin', 'x4lan-dedicated'], cwd=SOURCE / 'rust', check=True)
+        subprocess.run(['cargo', 'build', '--release', '-p', 'x4lan-net'], cwd=SOURCE / 'rust', check=True)
     for platform, role, profile in roles:
-        suffix = '-Guest' + role[5:] if role.startswith('guest') and role != 'guest' else ''
-        root = destination / f'X4-LAN-{release}-{platform}{suffix}'
+        root = destination / (package_name(release, platform, role) if dedicated else f'X4-LAN-{release}-{platform}')
         root.mkdir(); folders.append(root)
         package = dict(package_id=None, pair_id=pair_id, slot=None, platform=platform, role=role, dedicated=dedicated,
                        release=7, version=release, channel='internal', steam_build=BUILD,
                        game_version='9.00 (611726)', test_profile=profile,
-                       runtime_bundled=bool(runtime_cache), roles=[r[1] for r in roles])
+                       runtime_bundled=bool(runtime_cache), roles=list(dict.fromkeys(r[1] for r in roles)))
         if dedicated: package['max_players'] = max_players
         write(root / 'package.json', json.dumps(package, indent=2) + '\n')
         write(root / 'VERSION.txt', release + '\n')
@@ -101,9 +114,8 @@ def build(destination: Path, runtime_cache: Path | None = None, dedicated=False,
         shutil.copy2(DIST / 'action.py', root / 'action.py')
         copy_server_runtime(root)
         if dedicated and role == 'host':
-            subprocess.run(['cargo', 'build', '--release', '--bin', 'x4lan-dedicated'], cwd=SOURCE / 'rust', check=True)
-            subprocess.run(['cargo', 'build', '--release', '-p', 'x4lan-net'], cwd=SOURCE / 'rust', check=True)
             shutil.copy2(SOURCE / 'rust/target/release/x4lan-dedicated', root / 'x4lan-dedicated')
+        if dedicated and platform == 'Linux':
             shutil.copy2(SOURCE / 'rust/target/release/libx4lan_net.so', extension / 'native/x4lan_net.so')
         if platform == 'Linux': shutil.copy2(DIST / 'linux_setup.py', root / 'setup_linux.py')
         else: shutil.copy2(DIST / 'windows_setup.ps1', root / 'setup_windows.ps1')
