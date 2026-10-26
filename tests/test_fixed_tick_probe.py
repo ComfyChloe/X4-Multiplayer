@@ -56,6 +56,16 @@ class FixedTickProbeTests(unittest.TestCase):
           ui();assert(logs[2]:find('fixed=1 fixedFrames=1 wallElapsed=0.500000 gameElapsed=0.250000',1,true))
         ''')
 
+    def test_catchup_mode_logs_step_counters(self):
+        self.runtime().execute('''
+          X4LAN_FIXEDTICK_MODE='fixed60catchup';fixed=1
+          local base=handle.stats
+          handle.stats=function(self) local s=base(self);s.catchup=1;s.steps_total=120;s.zero_step_frames=200
+            s.multi_step_frames=3;s.dropped_ticks=0;s.last_steps=0;s.accumulator=.004;return s end
+          ui();assert(modes[1]=='fixed60catchup')
+          ui();assert(logs[2]:find('catchup=1 steps=120 zeroStep=200 multiStep=3 dropped=0 lastSteps=0 acc=0.004000',1,true))
+        ''')
+
     def test_fixed60_refusal_is_an_error(self):
         with self.assertRaisesRegex(Exception, 'frame-rate limit is not 60'):
             self.runtime().execute('''

@@ -1,5 +1,6 @@
 -- Opt-in cadence probe for an explicitly isolated development installation.
--- X4LAN_FIXEDTICK_MODE='fixed60' additionally forces dt=1/60 (Stage 1).
+-- X4LAN_FIXEDTICK_MODE='fixed60' forces dt=1/60 (Stage 1); 'fixed60catchup' schedules
+-- k/60 steps with k Jolt sub-steps so game time tracks wall time (Stage 2).
 if not X4LAN_CONFIG or X4LAN_CONFIG.test_profile~='45841' then return end
 if X4LAN_FIXEDTICK_PROBE then return end
 X4LAN_FIXEDTICK_PROBE=true
@@ -16,7 +17,10 @@ local function logStats(now)
   s.frames,s.wall_dt,s.max_wall_dt,s.game_dt,s.real_dt,s.game_time,s.real_time,s.speed,
   s.paused_frames,s.loading_skips,s.game_time_regressions)..
   string.format(' fixed=%d fixedFrames=%d wallElapsed=%.6f gameElapsed=%.6f',
-  s.fixed or 0,s.fixed_frames or 0,s.wall_elapsed or 0,s.game_elapsed or 0))
+  s.fixed or 0,s.fixed_frames or 0,s.wall_elapsed or 0,s.game_elapsed or 0)..
+  string.format(' catchup=%d steps=%d zeroStep=%d multiStep=%d dropped=%d lastSteps=%d acc=%.6f',
+  s.catchup or 0,s.steps_total or 0,s.zero_step_frames or 0,s.multi_step_frames or 0,
+  s.dropped_ticks or 0,s.last_steps or 0,s.accumulator or 0))
  nextLog=now+1
 end
 SetScript('onUpdate',function()

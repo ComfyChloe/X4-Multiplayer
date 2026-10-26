@@ -51,6 +51,35 @@ static void setup_fixed(void) {
     fake_owner.fixed = 1;
 }
 
+static int fake_collision_steps;
+
+/* Mirrors the catch-up branch of start() after its executable checks. */
+static void setup_catchup(void) {
+    setup_fixed();
+    fake_collision_steps = 2;
+    *(int **)(image + COLLISION_STEPS_PTR_RVA) = &fake_collision_steps;
+    collision_steps = &fake_collision_steps;
+    saved_collision_steps = fake_collision_steps;
+    fake_collision_steps = 1;
+    fake_owner.catchup = 1;
+    fake_owner.last_steps = 1;
+    *(unsigned *)(image + LIMIT_FPS_RVA) = 144;
+    *(int64_t *)(image + FRAME_QPC_RVA) = 1000000;
+}
+
+/* One engine frame of `seconds` wall time: FrameTick stored a new QPC (10 MHz). */
+static void catchup_frame(double seconds) {
+    *(int64_t *)(image + FRAME_QPC_RVA) += (int64_t)(seconds * 10000000.0 + 0.5);
+    fake_now.QuadPart += (int64_t)(seconds * 10000000.0 + 0.5);
+    move(&hook);
+}
+
+static void run_catchup(double fps, int frames) {
+    setup_catchup();
+    move(&hook);
+    for (int i = 0; i < frames; ++i) catchup_frame(1.0 / fps);
+}
+
 static void fixed_frame(void) {
     fake_now.QuadPart += 166667;
     *(double *)(image + GAME_TIME_RVA) += 1.0 / 60.0;
@@ -124,8 +153,35 @@ int main(void) {
     setup_fixed(); stop(&fake_lua); stop(&fake_lua);
     assert_restored(NULL); assert(!current && *capture_dt() == 1.0 / 30.0);
 
+    /* Stage 2: steps track wall time at any frame rate, physics sub-steps equal k. */
+    run_catchup(60.0, 600);
+    assert(fake_owner.armed && fake_owner.steps_total >= 598 && fake_owner.steps_total <= 600);
+    assert(fake_owner.dropped_ticks == 0);
+    run_catchup(30.0, 300);
+    assert(fake_owner.armed && fake_owner.last_steps == 2 && fake_collision_steps == 2);
+    assert(*capture_dt() == 2.0 / 60.0 && fake_owner.steps_total >= 598);
+    run_catchup(144.0, 1440);
+    assert(fake_owner.armed && fake_owner.zero_step_frames > 700);
+    assert(fake_owner.steps_total >= 598 && fake_owner.steps_total <= 600);
+    run_catchup(1000.0, 10000);
+    assert(fake_owner.armed && fake_owner.steps_total >= 598 && fake_owner.steps_total <= 600);
+    setup_catchup(); move(&hook); catchup_frame(1.0);
+    assert(fake_owner.last_steps == MAX_CATCHUP && fake_owner.dropped_ticks == 60 - MAX_CATCHUP);
+    assert(fake_collision_steps == (int)MAX_CATCHUP);
+    setup_catchup(); move(&hook); catchup_frame(1.0 / 30.0);
+    fake_collision_steps = 7; catchup_frame(1.0 / 60.0);
+    assert(!fake_owner.armed && !patched && fake_owner.reason && !strcmp(fake_owner.reason, "collision steps changed"));
+    assert(fake_collision_steps == 2 && *capture_dt() == 1.0 / 30.0);
+    setup_catchup(); move(&hook); catchup_frame(1.0 / 30.0);
+    *capture_dt() = 0.5; catchup_frame(1.0 / 60.0);
+    assert(!fake_owner.armed && !strcmp(fake_owner.reason, "capture frame time changed"));
+    setup_catchup(); move(&hook); catchup_frame(1.0 / 30.0); stop(&fake_lua);
+    assert(!patched && fake_collision_steps == 2 && *capture_dt() == 1.0 / 30.0);
+    assert(*(unsigned short *)(image + DT_BRANCH_RVA) == branch_original);
+
     VirtualFree(image, 0, MEM_RELEASE);
     puts("PASS: fixedtick read-only cadence, pause/loading, lifetime and fail-closed guards");
     puts("PASS: fixed60 dt branch patch, per-frame guards and restore on every disarm");
+    puts("PASS: fixed60catchup tracks wall time at 30/60/144/1000 fps, bounded catch-up, Jolt sub-steps, restore");
     return 0;
 }

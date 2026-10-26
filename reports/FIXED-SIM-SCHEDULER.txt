@@ -120,6 +120,33 @@ Limits: Stage 1 makes every step identical in size, not wall-synchronous; any
 frame below 60 fps slows game time. Not multiplayer determinism (RNG, attention,
 worker ordering, thread races remain). Not packaged; tracked config never loads it.
 
+STAGE 2 — BOUNDED CATCH-UP WITH EXACT PHYSICS SUB-STEPS — 26 OCTOBER 2026
+Implementation (X4LAN_FIXEDTICK_MODE='fixed60catchup' -> native.start('fixed60catchup')):
+- Uses the Stage 1 dt branch. Every simulation frame (slot 5) adds the wall time
+  between FrameTick's stored frame QPC values (0x6b60e80) to an accumulator, takes
+  k = whole 1/60 ticks (0..4, 1e-3 tick tolerance), writes the next frame's dt =
+  k/60 and sets Jolt's collision-step count (int at *(0x6cf1510), read by
+  XPhys::Scene::Step at 0xba8ce before PhysicsSystem::Update) to k (1 when k=0).
+  Jolt therefore integrates k sub-steps of exactly 1/60 s. Ticks beyond 4 per
+  frame are dropped and counted (bounded catch-up). k=0 frames advance no time.
+- No 60 Hz limiter requirement in this mode. Guards each frame: capture inactive,
+  frame time and collision steps equal the last scheduled values, patched bytes.
+  Disarm restores the branch bytes, the capture frame time and the original
+  collision-step count. New signature: physics_collision_steps (0xba8ce, 39 bytes,
+  no base relocations in range).
+- Limit: game logic (AI, MD, events) still runs once per frame with dt k/60; only
+  physics gets true 1/60 sub-steps. Multiple logic steps per frame need a main-loop
+  change (later stage). One frame of lag between measured wall time and its dt.
+Validation (offline): synthetic tests track wall time within one tick at 30, 60,
+144 and 1000 fps, cap a 1 s stall at 4 ticks with 56 dropped, refuse foreign
+writes to frame time or collision steps, and restore everything on stop; real
+LuaJIT probe tests 8/8; lua51_64.dll ABI PASS; 10 signatures PASS on the copied
+and installed X4.exe. No native run yet.
+
+NEXT STAGES (unchanged plan): 3 render continues while simulation is held without
+semaphore misuse; 4 explicit input/UI/Lua cadence and pause/loading/SETA/save/load
+rules; 5 render-only interpolation without feedback into authoritative state.
+
 CURRENT STATE / NEXT ACTION
 Stage 0 probe plus opt-in Stage 1 fixed60 implemented; Stage 1 native run
 passed at the 60 Hz cap (above). The x4lan_fixedtick module is not packaged or loaded
@@ -128,5 +155,4 @@ callback. Probe mode measures cadence without changing frame time; fixed60 mode
 changes only the FrameTick dt branch and never releases semaphores.
 Offline implementation checks are complete except the pre-existing full-suite
 launcher failure above. The two-sandbox baseline and Stage 1 runs are recorded above.
-Next: Stage 2, zero/multi-step scheduling with bounded catch-up so
-game time tracks wall time at 30/60/144/uncapped presentation rates.
+Next: native Stage 2 run (fixed60catchup at 30/60/144/uncapped), then Stage 3.

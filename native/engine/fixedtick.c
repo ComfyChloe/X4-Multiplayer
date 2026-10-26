@@ -43,6 +43,12 @@ API(void *, luaL_checkudata, (lua_State *, int, const char *));
 #define LIMIT_ENABLED_RVA 0x6adfbb0u
 #define LIMIT_FPS_RVA 0x6adfbb4u
 #define FIXED_HZ 60u
+/* Stage 2: per frame the next dt is k/60 (k = whole ticks of accumulated wall time,
+   0..MAX_CATCHUP) and Jolt's collision-step count is k, so physics advances in
+   exact 1/60 s sub-steps. The frame QPC is the value FrameTick stored this frame. */
+#define FRAME_QPC_RVA 0x6b60e80u
+#define COLLISION_STEPS_PTR_RVA 0x6cf1510u
+#define MAX_CATCHUP 4u
 #define LUA_TSTRING 4
 static const unsigned short branch_original = 0x0874; /* je +8 */
 static const unsigned short branch_patched = 0x9066;  /* 66 90 */
@@ -68,6 +74,14 @@ typedef struct {
     const char *reason;
     int armed;
     int fixed;
+    int catchup;
+    int64_t last_frame_qpc;
+    double accumulator;
+    uint64_t steps_total;
+    uint64_t zero_step_frames;
+    uint64_t multi_step_frames;
+    uint64_t dropped_ticks;
+    unsigned last_steps;
 } owner;
 typedef struct { void **vtable; } handler;
 static unsigned char *image;
@@ -77,6 +91,8 @@ static DWORD owner_thread;
 static int64_t qpc_frequency;
 static int patched;
 static double saved_capture_dt;
+static int *collision_steps;
+static int saved_collision_steps;
 
 static BOOL WINAPI read_qpc(LARGE_INTEGER *value) { return QueryPerformanceCounter(value); }
 static BOOL (WINAPI *qpc_read)(LARGE_INTEGER *) = read_qpc;
@@ -208,8 +224,15 @@ static int limiter_at_fixed_rate(void) {
 
 static const char *fixed_guard(void) {
     if (*(volatile unsigned char *)(image + CAPTURE_ACTIVE_RVA)) return "movie capture active";
-    if (*(volatile double *)capture_dt() != 1.0 / FIXED_HZ) return "capture frame time changed";
-    if (!limiter_at_fixed_rate()) return "frame-rate limit is not 60";
+    if (!(current && current->catchup) && *(volatile double *)capture_dt() != 1.0 / FIXED_HZ)
+        return "capture frame time changed";
+    if (current && current->catchup) {
+        if (*(volatile double *)capture_dt() != (double)current->last_steps / FIXED_HZ)
+            return "capture frame time changed";
+        if (!collision_steps || *collision_steps != (current->last_steps ? (int)current->last_steps : 1))
+            return "collision steps changed";
+    }
+    if (!(current && current->catchup) && !limiter_at_fixed_rate()) return "frame-rate limit is not 60";
     if (*(volatile unsigned short *)(image + DT_BRANCH_RVA) != branch_patched) return "dt branch changed";
     return NULL;
 }
@@ -217,8 +240,35 @@ static const char *fixed_guard(void) {
 static void unpatch(void) {
     if (!patched) return;
     write_branch(branch_patched, branch_original);
-    if (*capture_dt() == 1.0 / FIXED_HZ) *capture_dt() = saved_capture_dt;
+    double dt = *capture_dt();
+    for (unsigned k = 0; k <= MAX_CATCHUP; ++k)
+        if (dt == (double)k / FIXED_HZ) { *capture_dt() = saved_capture_dt; break; }
+    if (collision_steps) { *collision_steps = saved_collision_steps; collision_steps = NULL; }
     patched = 0;
+}
+
+/* Called once per simulation frame after FrameTick: account this frame's wall time and
+   choose the next frame's step count. One frame of lag; long-run exact. */
+static void schedule_next(owner *o) {
+    int64_t qpc = *(volatile int64_t *)(image + FRAME_QPC_RVA);
+    if (o->last_frame_qpc && qpc > o->last_frame_qpc && qpc_frequency > 0)
+        o->accumulator += (double)(qpc - o->last_frame_qpc) / (double)qpc_frequency;
+    o->last_frame_qpc = qpc;
+    /* A 1e-3 tick tolerance keeps steady rates (e.g. 30 fps with QPC rounding) at a
+       constant step count instead of alternating k-1/k+1. */
+    unsigned k = (unsigned)(o->accumulator * FIXED_HZ + 1e-3);
+    if (k > MAX_CATCHUP) {
+        o->dropped_ticks += k - MAX_CATCHUP;
+        o->accumulator -= (double)(k - MAX_CATCHUP) / FIXED_HZ;
+        k = MAX_CATCHUP;
+    }
+    o->accumulator -= (double)k / FIXED_HZ;
+    if (o->accumulator < 0.0) o->accumulator = 0.0;
+    *capture_dt() = (double)k / FIXED_HZ;
+    *collision_steps = k ? (int)k : 1;
+    o->last_steps = k;
+    o->steps_total += k;
+    if (!k) ++o->zero_step_frames; else if (k > 1) ++o->multi_step_frames;
 }
 
 static void disarm_because(const char *reason) {
@@ -255,6 +305,7 @@ static void move(handler *self) {
         o->game_elapsed += o->last_game_dt;
         if (o->fixed && fabs(o->last_real_dt - 1.0 / FIXED_HZ) < 1e-9) ++o->fixed_frames;
     }
+    if (o->catchup) schedule_next(o);
     if (speed == 0.0) ++o->paused_frames;
     o->previous_qpc = now.QuadPart;
     o->previous_game_time = game;
@@ -285,7 +336,7 @@ static void number_field(lua_State *L, const char *name, double value) {
 
 static int stats(lua_State *L) {
     owner *o = p_luaL_checkudata(L, 1, META);
-    p_lua_createtable(L, 0, 19);
+    p_lua_createtable(L, 0, 26);
     number_field(L, "frames", (double)o->frames);
     number_field(L, "loading_skips", (double)o->loading_skips);
     number_field(L, "paused_frames", (double)o->paused_frames);
@@ -301,6 +352,13 @@ static int stats(lua_State *L) {
     number_field(L, "fixed_frames", (double)o->fixed_frames);
     number_field(L, "wall_elapsed", o->wall_elapsed);
     number_field(L, "game_elapsed", o->game_elapsed);
+    number_field(L, "catchup", o->catchup);
+    number_field(L, "steps_total", (double)o->steps_total);
+    number_field(L, "zero_step_frames", (double)o->zero_step_frames);
+    number_field(L, "multi_step_frames", (double)o->multi_step_frames);
+    number_field(L, "dropped_ticks", (double)o->dropped_ticks);
+    number_field(L, "last_steps", o->last_steps);
+    number_field(L, "accumulator", o->accumulator);
     if (o->reason) { p_lua_pushlstring(L, o->reason, strlen(o->reason)); p_lua_setfield(L, -2, "reason"); }
     return 1;
 }
@@ -315,8 +373,10 @@ static int start(lua_State *L) {
     int fixed = 0;
     if (p_lua_gettop(L) == 1 && p_lua_type(L, 1) == LUA_TSTRING) {
         const char *mode = p_lua_tolstring(L, 1, NULL);
-        if (!mode || strcmp(mode, "fixed60")) return failure(L, "unsupported mode");
-        fixed = 1;
+        if (!mode) return failure(L, "unsupported mode");
+        if (!strcmp(mode, "fixed60")) fixed = 1;
+        else if (!strcmp(mode, "fixed60catchup")) fixed = 2;
+        else return failure(L, "unsupported mode");
     } else if (p_lua_gettop(L) != 0) return failure(L, "unsupported mode");
     if (current) return failure(L, "an owner already exists; stop it first");
     int main_thread = p_lua_pushthread(L);
@@ -332,7 +392,14 @@ static int start(lua_State *L) {
             !readable(image + CAPTURE_ACTIVE_RVA, 1, 0) ||
             !readable(image + LIMIT_ENABLED_RVA, 8, 0)) return failure(L, "fixed-dt globals unavailable");
         if (*(unsigned char *)(image + CAPTURE_ACTIVE_RVA)) return failure(L, "movie capture active");
-        if (!limiter_at_fixed_rate()) return failure(L, "frame-rate limit is not 60");
+        if (fixed == 1 && !limiter_at_fixed_rate()) return failure(L, "frame-rate limit is not 60");
+        if (fixed == 2) {
+            if (!readable(image + COLLISION_STEPS_PTR_RVA, sizeof(void *), 0) ||
+                !readable(image + FRAME_QPC_RVA, sizeof(int64_t), 0)) return failure(L, "catch-up globals unavailable");
+            int *steps = *(int **)(image + COLLISION_STEPS_PTR_RVA);
+            if (!readable(steps, sizeof(int), 1)) return failure(L, "collision steps unavailable");
+            if (*steps < 1 || *steps > (int)MAX_CATCHUP) return failure(L, "unexpected collision steps");
+        }
         if (*(unsigned short *)(image + DT_BRANCH_RVA) != branch_original) return failure(L, "dt branch changed");
     }
     LARGE_INTEGER frequency;
@@ -365,6 +432,13 @@ static int start(lua_State *L) {
         }
         patched = 1;
         o->fixed = 1;
+        if (fixed == 2) {
+            collision_steps = *(int **)(image + COLLISION_STEPS_PTR_RVA);
+            saved_collision_steps = *collision_steps;
+            *collision_steps = 1;
+            o->catchup = 1;
+            o->last_steps = 1;
+        }
     }
     o->armed = 1;
     return 1;
