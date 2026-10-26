@@ -253,6 +253,29 @@ buffer to the same `walkpar_api()` (scope_begin/end, replay_tasks, buffer_op) â€
 
 ## 9. Open questions
 
+### Native replay wiring correction (26 October, Codex continuation)
+
+The first `stage1-replay` lane run finished its harness successfully but **failed
+semantic replay**: every sampled window had zero replayed posts and nonzero dropped
+posts. The native arming path had never bound the registry resolver or the original
+PostEvent/CancelPendingEvents trampolines; synthetic tests injected these and hid
+the omission. This run is not evidence of replay correctness or gameplay parity.
+
+Native arming now binds all three before enabling buffering. The source resolver
+follows FlushCommandQueue: Find with flags zero, dynamic cast from UniverseID to
+EventSource, and reject a released reference object. Component-only flag four
+would incorrectly reject other EventSources. The called functions are byte-pinned.
+Missing callbacks now leave posts/cancels inline, flag the frame degraded and
+request disarm, rather than claiming all source objects disappeared. Tests cover
+native callback binding and each missing callback independently.
+
+Validation: fixedtick, walkpar and wpdetour synthetic Windows tests passed; all
+24 executable/hook signature checks passed. The aggregate build/test command's
+unchanged simprof timing test failed its 3% suspension gate at 3.20% under concurrent
+machine load; this is recorded as a failure, not a fully green suite. Corrected
+native replay still requires a new run with positive replay counts and explicit
+dropped-event checks. Full same-frame behavioural equivalence remains unproven.
+
 - The DeliverEvent per-listener histogram wants each dispatched listener's RTTI; the cheapest native hook is
   to read GetListenersForType at the Deliver enter (walk src+0x28) rather than a per-listener callback â€”
   confirm with the first census run.

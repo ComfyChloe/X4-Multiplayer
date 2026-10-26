@@ -155,6 +155,35 @@ int main(void) {
     walkpar_set_mode(WP_REPLAY);
     assert(wp_mode == WP_OFF);              /* refused -> stays off */
 
+    /* Exercise the native binding path, not just engine_setup's injected fakes. */
+    wp_det[WPD_POST].tramp = (void *)fake_post_original;
+    wp_det[WPD_CANCEL].tramp = (void *)fake_cancel_original;
+    wp_bind_replay_callbacks();
+    assert(wp_registry_find == wp_native_find);
+    assert(wp_deliver_post == fake_post_original);
+    assert(wp_deliver_cancel == fake_cancel_original);
+    assert(wp_replay_ready());
+    assert(wp_native_find(200) == NULL);     /* no registry while loading */
+    wp_det[WPD_POST].tramp = wp_det[WPD_CANCEL].tramp = NULL;
+
+    /* Missing wiring must pass through before taking ownership of an event. */
+    for (int missing = 0; missing < 3; ++missing) {
+        engine_setup(WP_REPLAY);
+        scene_init();
+        if (missing == 0) wp_registry_find = NULL;
+        if (missing == 1) wp_deliver_post = NULL;
+        if (missing == 2) wp_deliver_cancel = NULL;
+        wp_walk_begin();
+        engine_post(&o0, &e_sched, 20.0, 0);
+        engine_cancel(&o0, WP_TYPE_WARP, WP_CANCEL_ALL);
+        wp_walk_end();
+        assert(g_scheduled == 1 && g_cancel_calls == 1);
+        assert(wp_count == 0 && !e_sched.freed);
+        assert(wp_frame.replayed == 0 && wp_frame.replay_dropped == 0);
+        assert(wp_frame.degraded_frames == 2 && wp_replay_abort);
+    }
+    wp_replay_abort = 0;
+
     /* native sector resolver: +0x70 parent walk to the Sector vtable, cached per frame */
     {
         void **sec = (void **)(image + 0x9000);

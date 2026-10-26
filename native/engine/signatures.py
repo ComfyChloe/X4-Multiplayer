@@ -59,6 +59,9 @@ WALKPAR_SITES = {
     'deliver_event': (0x99C470, 32, '68495212139fb6021fef265da1417ea5b63fff7273223d4a66fd7d7c7531c8fd'),
     'flush_command_queue_wp': (0x99ABE0, 32, '620991e9852f6df27038c7b746fd02825e2e27b177522e608247405445ec1df2'),
     'galaxy_walk_call': (0x9FDF95, 6, '06fb8e64fd4cfe4e113548c517924cf04284f71137cbf513b861888669b074c5'),
+    'walk_registry_find': (0xCED70, 32, 'de126e38d2532250fc386f851f355cdb4812bf6b4507ace0549728e27505f268'),
+    'walk_dynamic_cast': (0x19EFB18, 32, 'fd90f2d45c0b2f5e2507ca0c07198bc3572ea03948f1302f226b7048ea3e592f'),
+    'walk_get_listeners': (0x999AE0, 32, 'fb18c04c970d8402e8ef0ba5588360b145b99cadfd9210eb324671b6690cf2b4'),
 }
 WALKPAR_GALAXY_CALL_RVA = 0x9FDF95
 

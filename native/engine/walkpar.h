@@ -141,6 +141,11 @@ static uint64_t wp_cue_xor[2], wp_cue_cnt[2];
 
 static int wp_on_thread(void) { return wp_thread && GetCurrentThreadId() == wp_thread; }
 
+/* A missing callback is an integration error, not evidence that every source died. */
+static int wp_replay_ready(void) {
+    return wp_registry_find && wp_deliver_post && wp_deliver_cancel;
+}
+
 static uint64_t wp_fnv(uint64_t h, uint64_t x) {
     h ^= x;
     h *= 0x100000001b3ull;
@@ -312,6 +317,7 @@ static int wp_post(void *src, void *event, double time, int imm) {
         if (s && s != wp_cur_sector) ++wp_frame.xsector_post;
     }
     if (!wp_phase) return 0;                        /* census-only */
+    if (!wp_replay_ready()) { ++wp_frame.degraded_frames; return 0; }
     if (type == WP_TYPE_ADD_TEMP_ZONE) {            /* must stay synchronous (design §1.3) */
         ++wp_frame.posts_temp_zone_inline;
         return 0;
@@ -333,6 +339,7 @@ static int wp_cancel(void *src, int type, double minTime) {
     if (wp_mode == WP_OFF || !wp_on_thread() || !wp_active()) return 0;
     ++wp_frame.cancels;
     if (!wp_phase) return 0;
+    if (!wp_replay_ready()) { ++wp_frame.degraded_frames; return 0; }
     uint64_t sid = wp_id_of(src);
     /* Kill only this task's buffered SCHEDULED posts (imm==0): an immediate post was already
        delivered before the cancel in normal mode, so replay must still deliver it (review #2).
@@ -622,6 +629,7 @@ static void walkpar_set_mode(int mode) {
     if (wp_ready != WP_READY_OK) { wp_mode = WP_OFF; return; }
     /* both modes are bracketed by the galaxy-call dispatcher; refuse until it is installed */
     if ((mode == WP_CENSUS || mode == WP_REPLAY) && !walkpar_dispatcher_on()) { wp_mode = WP_OFF; return; }
+    if (mode == WP_REPLAY && !wp_replay_ready()) { wp_mode = WP_OFF; return; }
     wp_mode = (mode == WP_CENSUS || mode == WP_REPLAY) ? mode : WP_OFF;
 }
 
@@ -689,6 +697,32 @@ static int wp_want;     /* requested mode, armed lazily each frame until the thr
    object graph (bounded, aligned, canonical user-space), cached per source per frame; on any doubt
    it returns 0 (the post counts as rootlevel) and never faults. */
 #define WP_SECTOR_VFTABLE_RVA 0x2b1ea48u
+
+/* Same ID lookup/cast used by FlushCommandQueue (0x99ace0..0x99ad12). Sources
+   are EventSources, including non-components: Find's flags must be zero, not
+   the component-only flag 4 used by the public component exports. */
+#define WP_UIDMAP_RVA 0x6cf1500u
+#define WP_FIND_RVA 0xced70u
+#define WP_DYNAMIC_CAST_RVA 0x19efb18u
+#define WP_UID_TYPE_RVA 0x31fc508u
+#define WP_SOURCE_TYPE_RVA 0x3216a98u
+static void *wp_native_find(uint64_t id) {
+    void *map = *(void **)(image + WP_UIDMAP_RVA);
+    if (!map || !id) return NULL;
+    void *(*find)(void *, uint64_t, unsigned) =
+        (void *(*)(void *, uint64_t, unsigned))(image + WP_FIND_RVA);
+    void *(*cast)(void *, int, void *, void *, int) =
+        (void *(*)(void *, int, void *, void *, int))(image + WP_DYNAMIC_CAST_RVA);
+    void *base = find(map, id, 0);
+    if (!base) return NULL;
+    void *src = cast(base, 0, image + WP_UID_TYPE_RVA, image + WP_SOURCE_TYPE_RVA, 0);
+    if (src) {
+        /* FlushCommandQueue rejects a released source's reference object too. */
+        void *ref = ((void *(*)(void *))(*(void ***)src)[565])(src);
+        if (ref && *(unsigned *)((char *)ref + 12) == 3) return NULL;
+    }
+    return src;
+}
 static uint64_t wp_native_sector(void *comp) {
     if (!comp) return 0;
     unsigned h = (unsigned)(((uintptr_t)comp >> 4) & (WP_SCACHE - 1));
@@ -718,6 +752,15 @@ static wp_detour wp_det[WPD_N] = {
     {0x99a870, 17, -1, NULL, 32, NULL, {0}, NULL, 0},
 };
 static int wp_det_n;    /* how many of wp_det are armed */
+
+/* Also exercised by the offline wiring test: tests that inject only fake
+   callbacks cannot detect an omitted native binding. Call after installation,
+   before enabling any buffering; the original paths must bypass our detours. */
+static void wp_bind_replay_callbacks(void) {
+    wp_registry_find = wp_native_find;
+    wp_deliver_post = (void (*)(void *, void *, double, int))wp_det[WPD_POST].tramp;
+    wp_deliver_cancel = (void (*)(void *, int, double))wp_det[WPD_CANCEL].tramp;
+}
 
 static void wp_d_post(void *src, void *event, double time, int imm) {
     if (wp_post(src, event, time, imm)) return;      /* buffered: skip the original */
@@ -766,6 +809,7 @@ static int walkpar_arm_native(int mode) {
         return 0;
     }
     wp_det_n = n;
+    wp_bind_replay_callbacks();
     walkpar_set_mode(mode);
     return 1;
 }
