@@ -69,7 +69,7 @@ typedef struct {
     double hull;
     uint32_t vtable, ctrl_vtable, orders[2], root;
     int32_t attention;
-    uint16_t depth, owner, cover;
+    uint16_t depth, owner, cover, class_flags;
     uint8_t class_id, flags, ctrl, pad;
 } mirror_row;
 
@@ -427,6 +427,7 @@ static void mirror_fill(mirror_row *r, const unsigned char *comp, const mirror_c
     r->depth = (uint16_t)depth;
     r->class_id = cid;
     r->vtable = vt;
+    r->class_flags = cls->flags;
     r->hull = NAN;
     r->owner = r->cover = 0xffff;
     r->attention = *(const int32_t *)(comp + MO_ATTENTION);
@@ -560,7 +561,7 @@ static const mirror_core_col mirror_core_cols[] = {
     {0x05, ME_I32, 1, "attention"}, {0x06, ME_U8, 1, "flags"}, {0x07, ME_U32, 1, "vtable"}, {0x08, ME_U8, 1, "ctrl"},
     {0x09, ME_U32, 1, "ctrl_vtable"}, {0x0a, ME_F32, 16, "pose"}, {0x0b, ME_F32, 8, "vel"}, {0x0c, ME_U64, 1, "pose_ref"},
     {0x0d, ME_F32, 16, "nav_cache"}, {0x0e, ME_F64, 1, "hull"}, {0x0f, ME_U16, 1, "owner"}, {0x10, ME_U16, 1, "cover"},
-    {0x11, ME_U32, 2, "orders"},
+    {0x11, ME_U32, 2, "orders"}, {0x12, ME_U16, 1, "class_flags"},
 };
 #define MIRROR_CORE_COLS (sizeof(mirror_core_cols) / sizeof(mirror_core_cols[0]))
 
@@ -582,6 +583,7 @@ static const void *mirror_core_value(const mirror_row *r, uint16_t id) {
     case 0x0e: return &r->hull;
     case 0x0f: return &r->owner;
     case 0x10: return &r->cover;
+    case 0x12: return &r->class_flags;
     default: return r->orders;
     }
 }

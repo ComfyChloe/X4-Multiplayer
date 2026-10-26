@@ -13,7 +13,10 @@
 //!    match with `nav_cache` row 0 is reported separately.
 //! 2. **sector**: `sec` must equal the composition of the captured local poses along the parent
 //!    chain up to the sector, computed with the engine's own operation order ([`apply_local`]).
-//!    Skipped when an ancestor was not recorded or a pose reference is set.
+//!    Only for Object classes: the export refuses everything else and returns zeros (it requires
+//!    IsRealClass(object)); zones, clusters and highways are counted as not applicable. Skipped
+//!    (and counted by reason) when an ancestor was not recorded, a pose reference is set or an
+//!    ancestor's pose was not captured.
 
 use std::collections::HashMap;
 
@@ -87,7 +90,11 @@ pub struct CheckReport {
     pub local_max_ulps: u64,
     pub sector_exact: usize,
     pub sector_mismatch: usize,
-    pub sector_skipped: usize,
+    /// Not an Object class: the export answers zeros by design.
+    pub sector_not_object: usize,
+    pub sector_skipped_ancestor: usize,
+    pub sector_skipped_ref: usize,
+    pub sector_skipped_pose: usize,
     pub sector_max_ulps: u64,
     /// First few mismatch descriptions.
     pub notes: Vec<String>,
@@ -96,7 +103,7 @@ pub struct CheckReport {
 impl CheckReport {
     pub fn line(&self) -> String {
         format!(
-            "MIRRORCHECK RESULT lines={} frame_missing={} uid_missing={} local_exact={} local_cache_exact={} local_mismatch={} local_max_ulps={} sector_exact={} sector_mismatch={} sector_skipped={} sector_max_ulps={}",
+            "MIRRORCHECK RESULT lines={} frame_missing={} uid_missing={} local_exact={} local_cache_exact={} local_mismatch={} local_max_ulps={} sector_exact={} sector_mismatch={} sector_not_object={} sector_skipped_ancestor={} sector_skipped_ref={} sector_skipped_pose={} sector_max_ulps={}",
             self.lines,
             self.frame_missing,
             self.uid_missing,
@@ -106,7 +113,10 @@ impl CheckReport {
             self.local_max_ulps,
             self.sector_exact,
             self.sector_mismatch,
-            self.sector_skipped,
+            self.sector_not_object,
+            self.sector_skipped_ancestor,
+            self.sector_skipped_ref,
+            self.sector_skipped_pose,
             self.sector_max_ulps
         )
     }
@@ -125,10 +135,15 @@ struct Row {
     parent: u64,
     class: u8,
     flags: u8,
+    /// C++ class derives from U::Object (capture column class_flags; older captures: by class id).
+    object: bool,
     pose: Mat4f,
     cache: Option<Mat4f>,
     pose_ref: u64,
 }
+
+/// Class ids of the recorded non-Object (Space) classes, for captures without class_flags.
+const SPACE_CLASSES: [u8; 6] = [0x0f, 0x2f, 0x33, 0x58, 0x6d, 0x76];
 
 fn index_frame(f: &FrameRecord) -> HashMap<u64, Row> {
     let mut map = HashMap::new();
@@ -144,6 +159,7 @@ fn index_frame(f: &FrameRecord) -> HashMap<u64, Row> {
         };
         let cache = s.column(col::NAV_CACHE).map(|c| c.f32s());
         let refs = s.column(col::POSE_REF).map(|c| c.u64s());
+        let class_flags = s.column(col::CLASS_FLAGS).map(|c| c.u16s());
         for r in 0..uid.len() {
             let m = Mat4f::from_flat(pose[r * 16..r * 16 + 16].try_into().expect("16"));
             let c = cache
@@ -156,6 +172,10 @@ fn index_frame(f: &FrameRecord) -> HashMap<u64, Row> {
                     parent: parent[r],
                     class: class[r],
                     flags: flags[r],
+                    object: match &class_flags {
+                        Some(f) => f[r] & crate::comp::ClassFlags::OBJECT != 0,
+                        None => !SPACE_CLASSES.contains(&class[r]),
+                    },
                     pose: m,
                     cache: c,
                     pose_ref: refs.as_ref().map_or(0, |v| v[r]),
@@ -211,29 +231,37 @@ pub fn check_frames(frames: &[FrameRecord], lines: &[CheckLine]) -> CheckReport 
                 ),
             );
         }
-        // 2. composition up to the sector (class 0x58)
+        // 2. composition up to the sector (class 0x58), Object classes only
+        if !row.object {
+            rep.sector_not_object += 1;
+            continue;
+        }
         let mut m = Mat4f::IDENTITY;
         let mut at = l.uid;
-        let mut ok = true;
+        let mut skipped = None;
         let mut steps = 0;
         loop {
             let Some(r) = rows.get(&at) else {
-                ok = false;
+                skipped = Some(&mut rep.sector_skipped_ancestor);
                 break;
             };
             if r.class == 0x58 {
                 break;
             }
-            if r.pose_ref != 0 || r.flags & 0x20 == 0 || steps > 64 {
-                ok = false;
+            if r.pose_ref != 0 {
+                skipped = Some(&mut rep.sector_skipped_ref);
+                break;
+            }
+            if r.flags & 0x20 == 0 || steps > 64 {
+                skipped = Some(&mut rep.sector_skipped_pose);
                 break;
             }
             m = apply_local(&m, &r.pose);
             at = r.parent;
             steps += 1;
         }
-        if !ok {
-            rep.sector_skipped += 1;
+        if let Some(counter) = skipped {
+            *counter += 1;
             continue;
         }
         let p = m.position();

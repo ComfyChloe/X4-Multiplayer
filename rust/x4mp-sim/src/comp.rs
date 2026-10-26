@@ -425,6 +425,29 @@ impl RngState {
     }
 }
 
+/// Base classes of the engine object's C++ class (capture column `class_flags`): 1 positional,
+/// 2 destructible, 4 object, 8 controllable, 16 defensible, 32 ship, 64 station, 128 space,
+/// 256 container.
+#[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
+pub struct ClassFlags(pub u16);
+impl_fields!(newtype ClassFlags);
+
+impl ClassFlags {
+    pub const POSITIONAL: u16 = 1;
+    pub const DESTRUCTIBLE: u16 = 2;
+    pub const OBJECT: u16 = 4;
+    pub const CONTROLLABLE: u16 = 8;
+    pub const DEFENSIBLE: u16 = 16;
+    pub const SHIP: u16 = 32;
+    pub const STATION: u16 = 64;
+    pub const SPACE: u16 = 128;
+    pub const CONTAINER: u16 = 256;
+
+    pub fn has(self, bit: u16) -> bool {
+        self.0 & bit != 0
+    }
+}
+
 /// Primary vtable RVA of the engine object (identifies its C++ class; optional component,
 /// filled by the mirror when registered).
 #[derive(Clone, Copy, PartialEq, Eq, Default, Debug)]
@@ -458,6 +481,7 @@ component_names!(
     Owner => "owner",
     OrderState => "orders",
     RngState => "rng",
+    ClassFlags => "class_flags",
     VtableRva => "vtable",
     NavCache => "nav_cache",
 );

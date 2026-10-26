@@ -160,6 +160,9 @@ pub mod col {
     pub const COVER: u16 = 0x10;
     /// `u32 x2` order vector length, current order index (Controllable).
     pub const ORDERS: u16 = 0x11;
+    /// `u16` base classes of the C++ class (bits: 1 positional, 2 destructible, 4 object,
+    /// 8 controllable, 16 defensible, 32 ship, 64 station, 128 space, 256 container).
+    pub const CLASS_FLAGS: u16 = 0x12;
 }
 
 /// The v1 core schema in id order.
@@ -183,6 +186,7 @@ pub fn core_schema() -> Vec<ColumnDesc> {
         ColumnDesc::new(col::OWNER, U16, 1, "owner"),
         ColumnDesc::new(col::COVER, U16, 1, "cover"),
         ColumnDesc::new(col::ORDERS, U32, 2, "orders"),
+        ColumnDesc::new(col::CLASS_FLAGS, U16, 1, "class_flags"),
     ]
 }
 
@@ -419,7 +423,7 @@ mod tests {
         for (i, c) in s.iter().enumerate() {
             assert!(s[i + 1..].iter().all(|d| d.id != c.id && d.name != c.name), "{c:?}");
         }
-        assert_eq!(s.iter().map(|c| c.row_bytes()).sum::<usize>(), 221);
+        assert_eq!(s.iter().map(|c| c.row_bytes()).sum::<usize>(), 223);
         assert_eq!(tag_name(TAG_FRAM), "FRAM");
     }
 

@@ -50,6 +50,7 @@ impl Universe {
     pub fn new(session_seed: u64) -> Universe {
         let mut u = Universe::bare(session_seed);
         u.register::<comp::ClassId>()
+            .register::<comp::ClassFlags>()
             .register::<comp::Attention>()
             .register::<comp::Tree>()
             .register::<comp::EngineFlags>()

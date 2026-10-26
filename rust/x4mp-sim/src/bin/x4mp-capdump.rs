@@ -12,6 +12,16 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::process::ExitCode;
 
+/// Line output that ends the program quietly when stdout is closed (e.g. piped into `head`).
+macro_rules! out {
+    ($($t:tt)*) => {{
+        use std::io::Write as _;
+        if writeln!(std::io::stdout().lock(), $($t)*).is_err() {
+            std::process::exit(0);
+        }
+    }};
+}
+
 use x4mp_sim::capture::check::{check_frames, parse_check_line};
 use x4mp_sim::capture::{col, mirror, tag_name, CaptureReader, Dict, FrameRecord, Header, SectorRecord};
 use x4mp_sim::comp::{ClassId, NavCache, VtableRva};
@@ -41,13 +51,13 @@ fn open(path: &str) -> Result<(CaptureReader<BufReader<File>>, Vec<FrameRecord>)
 }
 
 fn print_header(h: &Header) {
-    println!("format {}.{} producer={:?}", h.version.0, h.version.1, h.producer);
-    println!("pin {}", h.pin.describe());
-    println!("layout {}", x4mp_core::sha256::hex(&h.layout_sha256));
-    println!("session_seed {:#x} interval {} flags {:#x}", h.session_seed, h.interval, h.flags);
+    out!("format {}.{} producer={:?}", h.version.0, h.version.1, h.producer);
+    out!("pin {}", h.pin.describe());
+    out!("layout {}", x4mp_core::sha256::hex(&h.layout_sha256));
+    out!("session_seed {:#x} interval {} flags {:#x}", h.session_seed, h.interval, h.flags);
     let cols: Vec<String> =
         h.columns.iter().map(|c| format!("{:#x}:{}:{:?}x{}", c.id, c.name, c.elem, c.count)).collect();
-    println!("columns {}", cols.join(" "));
+    out!("columns {}", cols.join(" "));
 }
 
 fn class_name(c: u8) -> String {
@@ -58,7 +68,7 @@ fn info(path: &str) -> Result<ExitCode, String> {
     let (r, frames) = open(path)?;
     print_header(r.header());
     for (i, name) in r.dict(Dict::Faction) {
-        println!("faction {i} {name}");
+        out!("faction {i} {name}");
     }
     let mut rows = 0u64;
     for f in &frames {
@@ -67,7 +77,7 @@ fn info(path: &str) -> Result<ExitCode, String> {
             k[usize::from(s.kind.min(2))] += 1;
             k
         });
-        println!(
+        out!(
             "frame {} t={:.6} roots={} (sectors {} clusters {} galaxy {}) rows={} flags={:#x}",
             f.frame,
             f.game_time,
@@ -89,24 +99,24 @@ fn info(path: &str) -> Result<ExitCode, String> {
             }
         }
         let top: Vec<String> = by_class.iter().map(|(c, n)| format!("{}={n}", class_name(*c))).collect();
-        println!("classes (last frame) {}", top.join(" "));
+        out!("classes (last frame) {}", top.join(" "));
     }
     match r.stats() {
         Some(s) => {
-            println!("STAT frames={} dropped={} bytes={} walk_errors={}", s.frames, s.dropped, s.bytes, s.walk_errors)
+            out!("STAT frames={} dropped={} bytes={} walk_errors={}", s.frames, s.dropped, s.bytes, s.walk_errors)
         }
-        None => println!("STAT missing (capture not closed)"),
+        None => out!("STAT missing (capture not closed)"),
     }
     if r.unknown_records() > 0 {
-        println!("unknown records {}", r.unknown_records());
+        out!("unknown records {}", r.unknown_records());
     }
-    println!("total frames={} rows={}", frames.len(), rows);
+    out!("total frames={} rows={}", frames.len(), rows);
     let _ = tag_name;
     Ok(ExitCode::SUCCESS)
 }
 
 fn dump_root(s: &SectorRecord, rows: usize) {
-    println!("root {:#x} kind={} rows={}", s.root_uid, s.kind, s.rows);
+    out!("root {:#x} kind={} rows={}", s.root_uid, s.kind, s.rows);
     let uid = s.column(col::UID).map(|c| c.u64s()).unwrap_or_default();
     let class = s.column(col::CLASS).map(|c| c.u8s()).unwrap_or_default();
     let parent = s.column(col::PARENT).map(|c| c.u64s()).unwrap_or_default();
@@ -120,7 +130,7 @@ fn dump_root(s: &SectorRecord, rows: usize) {
     for r in 0..(s.rows as usize).min(rows) {
         let p =
             if pose.len() >= r * 16 + 3 { [pose[r * 16], pose[r * 16 + 1], pose[r * 16 + 2]] } else { [f32::NAN; 3] };
-        println!(
+        out!(
             "  {:>3} uid={:#x} {:<14} parent={:#x} depth={} att={} flags={:#04x} ctrl={} pos={:.3},{:.3},{:.3} hull={} owner={}",
             r,
             uid.get(r).copied().unwrap_or(0),
@@ -188,8 +198,8 @@ fn diff(a: &str, b: &str, tols: &[(String, u64)]) -> Result<ExitCode, String> {
     if fa.len() != fb.len() {
         c.structural("frames", fa.len().to_string(), fb.len().to_string());
     }
-    println!("compared frames={frames}");
-    print!("{}", c.summary());
+    out!("compared frames={frames}");
+    out!("{}", c.summary().trim_end());
     Ok(if c.is_clean() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
 
@@ -198,7 +208,7 @@ fn check(cap: &str, log: &str, layout: Option<&str>) -> Result<ExitCode, String>
     if let Some(l) = layout {
         let got = x4mp_core::sha256::hex(&r.header().layout_sha256);
         if got != l {
-            println!("layout mismatch: capture {got} expected {l}");
+            out!("layout mismatch: capture {got} expected {l}");
             return Ok(ExitCode::from(1));
         }
     }
@@ -211,11 +221,11 @@ fn check(cap: &str, log: &str, layout: Option<&str>) -> Result<ExitCode, String>
         }
     }
     let rep = check_frames(&frames, &lines);
-    println!("{}", rep.line());
+    out!("{}", rep.line());
     for n in &rep.notes {
-        println!("  {n}");
+        out!("  {n}");
     }
-    println!("verdict {}", if rep.exact() { "EXACT" } else { "NOT EXACT" });
+    out!("verdict {}", if rep.exact() { "EXACT" } else { "NOT EXACT" });
     Ok(if rep.exact() { ExitCode::SUCCESS } else { ExitCode::from(1) })
 }
 

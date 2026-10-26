@@ -202,13 +202,21 @@ fn check_logic_on_golden_frames() {
     }
     let rep = check_frames(&frames, &lines);
     assert!(rep.exact(), "{}", rep.line());
-    assert_eq!((rep.local_exact, rep.sector_exact, rep.sector_skipped), (2, 2, 0));
+    assert_eq!((rep.local_exact, rep.sector_exact, rep.sector_skipped_ancestor), (2, 2, 0));
     // the docked ship's chain passes through unrecorded components: sector check skipped
     let mut l = lines[0];
     l.uid = 9;
     l.off = [0.0, 0.0, 0.0];
     let rep = check_frames(&frames, &[l]);
-    assert_eq!((rep.local_exact, rep.sector_skipped), (1, 1));
+    assert_eq!((rep.local_exact, rep.sector_skipped_ancestor), (1, 1));
+    // a zone is not an Object class: the export answers zeros, the check does not apply
+    let mut z = lines[0];
+    z.uid = 4;
+    z.off = m(4).position();
+    z.sec = [0.0; 3];
+    let rep = check_frames(&frames, &[z]);
+    assert!(rep.exact(), "{}", rep.line());
+    assert_eq!((rep.local_exact, rep.sector_not_object), (1, 1));
     // one ulp off is a mismatch
     let mut bad = lines[1];
     bad.sec[1] = f32::from_bits(bad.sec[1].to_bits() + 1);
