@@ -378,8 +378,8 @@ class HandoffTests(Temp):
         self.assertEqual(core.read_owner(path)['handoff'], 'frame-diet')
 
 
-class PreflightHandoffTests(Temp):
-    """Run.preflight() with fake Windows hooks: who may start while quiet.lock exists."""
+class FakeWindows(Temp):
+    """Fake Windows hooks (Steam, RAM, processes, locks) so the real preflight code runs anywhere."""
 
     def setUp(self):
         super().setUp()
@@ -415,6 +415,11 @@ class PreflightHandoffTests(Temp):
             'agent: overhaul-lead', 'purpose: drain', f'handoff: {handoff}')))
         return path
 
+
+
+class PreflightHandoffTests(FakeWindows):
+    """Run.preflight(): who may start while quiet.lock exists."""
+
     def test_only_the_named_timing_run_adopts(self):
         quiet = self.quiet('frame-diet')
         for agent, timing in (('walk', True), ('frame-diet', False)):
@@ -447,6 +452,126 @@ class PreflightHandoffTests(Temp):
         self.assertEqual(core.read_owner(self.paths.quiet_lock)['run'], run.run_id)
         run.release()
         self.assertFalse(self.paths.quiet_lock.exists())
+
+
+class SessionPieceTests(Temp):
+    def test_repin_profile_moves_every_gate_to_the_lane(self):
+        lab = make_lab(self.tmp / 'lane')
+        (lab / 'ui' / 'simtick.lua').write_text("assert(cfg.test_profile=='45841','simtick requires 45841')\n")
+        (lab / 'ui' / 'seed.lua').write_text("assert(path:sub(-#'/45841/save')=='/45841/save','x')\n"
+                                             "local p=cfg.test_profile or \"45841\"\nport = 45841\n")
+        (lab / 'ui' / 'bubble.lua').write_text("assert(profile=='45841' or profile=='45842','x')\n")
+        changed = core.repin_profile(lab, '45853', self.tmp / 'lane')
+        self.assertEqual(changed, {'ui/bubble.lua': 1, 'ui/config.lua': 1, 'ui/seed.lua': 3, 'ui/simtick.lua': 1})
+        self.assertIn('test_profile = "45853"', (lab / 'ui' / 'config.lua').read_text())
+        seed = (lab / 'ui' / 'seed.lua').read_text()
+        self.assertIn("'/45853/save')=='/45853/save'", seed)
+        self.assertIn('port = 45841', seed)                       # unquoted numbers are not gates
+        self.assertIn("profile=='45853' or profile=='45842'", (lab / 'ui' / 'bubble.lua').read_text())
+        self.assertIn("'simtick requires 45841'", (lab / 'ui' / 'simtick.lua').read_text())  # message only
+        with self.assertRaises(core.UnsafeError):
+            core.repin_profile(lab, '45841', self.tmp / 'lane')
+
+    def test_loopback_config_guard(self):
+        ok = CONFIG + ('X4LAN_CONFIG.enabled = true\nX4LAN_CONFIG.host = "127.0.0.1"\n'
+                       'X4LAN_CONFIG.token = "0123456789abcdef0123456789abcdef"\nX4LAN_CONFIG.port = 50123\n')
+        core.check_loopback_config(ok)
+        for bad in (ok + 'X4LAN_CONFIG.host = "localhost"\n', ok + 'X4LAN_CONFIG.relay = "10.1.2.3"\n',
+                    ok.replace('127.0.0.1', '76.13.109.115'), ok + 'X4LAN_CONFIG.url = "https://example.com"\n',
+                    ok + 'X4LAN_CONFIG.host = "0.0.0.0"\n'):
+            with self.assertRaises(core.OverlayError, msg=bad):
+                core.check_loopback_config(bad)
+        with self.assertRaises(core.OverlayError):
+            core.check_offline_config(ok)                          # single runs stay offline
+
+    def test_free_port_and_server_command(self):
+        import socket
+        port = core.free_loopback_port()
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as udp:
+            udp.bind(('127.0.0.1', port))
+        values = {k: f'<{k}>' for k in x4lane.SERVER_TOKENS}
+        values['port'] = port
+        command = x4lane.server_command('{python} -m x4lan.host --bind 127.0.0.1 --port {port} --token {token}',
+                                        values)
+        self.assertEqual(command, f'<python> -m x4lan.host --bind 127.0.0.1 --port {port} --token <token>')
+        with self.assertRaises(core.UsageError):
+            x4lane.server_command('relay --port {prot}', values)
+
+    def test_per_client_options_and_endpoint_rule(self):
+        self.assertEqual(x4lane.per_client(['1:a', '2:b=c', '1:d'], '--client-config', 2),
+                         {1: ['a', 'd'], 2: ['b=c']})
+        for bad in (['3:x'], ['x'], ['0:x']):
+            with self.assertRaises(core.UsageError):
+                x4lane.per_client(bad, '--client-lua', 2)
+        good = [{'proto': 'udp', 'local': '127.0.0.1', 'lport': 1},
+                {'proto': 'tcp', 'local': '127.0.0.1', 'remote': '0.0.0.0', 'lport': 1},
+                {'proto': 'tcp', 'local': '127.0.0.1', 'remote': '127.0.0.1', 'lport': 1},
+                {'proto': 'udp6', 'local': '::1', 'lport': 1}]
+        bad = [{'proto': 'udp', 'local': '0.0.0.0', 'lport': 1},
+               {'proto': 'tcp', 'local': '127.0.0.1', 'remote': '93.184.216.34', 'lport': 1},
+               {'proto': 'udp6', 'local': '::', 'lport': 1},
+               {'proto': 'tcp', 'local': '192.168.1.5', 'remote': '0.0.0.0', 'lport': 1}]
+        self.assertTrue(all(x4lane.loopback_endpoint(e) for e in good))
+        self.assertFalse(any(x4lane.loopback_endpoint(e) for e in bad))
+
+    def test_session_telemetry_overlay_installs_loopback_config(self):
+        root = self.tmp / 'worktree'
+        (root / '.local' / 'engine').mkdir(parents=True)
+        (root / '.local' / 'engine' / 'x4lan_simtick_64.dll').write_bytes(b'MZ')
+        out = self.tmp / 'overlay-session'
+        self.assertEqual(x4lane.main(['make-overlay', 'session-telemetry', '--out', str(out), '--root', str(root)]), 0)
+        lab = make_lab(self.tmp / 'lane')
+        tokens = {'@X4LANE_PORT@': '50123', '@X4LANE_TOKEN@': 'ab' * 16, '@X4LANE_BUILD@': 'lane-session',
+                  '@X4LANE_BUBBLE@': 'bubble-01', '@X4LANE_SLOT@': 'p2'}
+        core.apply_overlays(lab, [out], self.tmp / 'lane', tokens)
+        config = (lab / 'ui' / 'config.lua').read_text()
+        for expected in ('X4LAN_CONFIG.port = 50123', 'X4LAN_CONFIG.slot = "p2"', 'X4LAN_CONFIG.enabled = true'):
+            self.assertIn(expected, config)
+        core.check_loopback_config(config)
+        self.assertEqual((lab / 'native' / 'x4lan_simtick_64.dll').read_bytes(), b'MZ')
+
+
+class SessionPreflightTests(FakeWindows):
+    def session(self, *extra):
+        argv = ['session', '--agent', 'player-factions', '--collect', str(self.tmp / 'sess'), '--timeout', '60',
+                '--clients', '2', *extra]
+        run = x4lane.SessionRun(x4lane.parser().parse_args(argv), self.paths)
+        run.outdir = self.tmp / 'sess'
+        run.outdir.mkdir(exist_ok=True)
+        run.lanes = None
+        for index in (1, 2):
+            client = x4lane.Run(run.client_args(index, {'overlay': {1: [], 2: []}, 'extension': {1: [], 2: []},
+                                                        'lua': {1: [], 2: []}, 'config': {1: [], 2: []}}), self.paths)
+            client.network = 'loopback'
+            run.clients.append(client)
+        run.session_id = 'sess-1'
+        return run
+
+    def test_takes_two_lanes_and_gives_both_back_when_one_is_missing(self):
+        run = self.session()
+        run.preflight()
+        self.assertEqual([c.lane.name for c in run.clients], ['b1', 'b2'])
+        for client in run.clients:
+            client.give_back_lane()
+        blockers = [core.DirLock.acquire(self.paths.lane(n).lock, {'agent': 'x', 'run': n}) for n in ('b2', 'b3', 'b4')]
+        run = self.session()
+        with self.assertRaises(x4lane.TransientRefusal):
+            run.preflight()
+        self.assertFalse(self.paths.lane('b1').lock.exists())    # nothing kept after a partial take
+        for blocker in blockers:
+            blocker.release()
+
+    def test_ram_guard_counts_every_instance(self):
+        run = self.session('--min-free-gb', '25')                 # fake host has 40 GB free
+        with self.assertRaises(x4lane.TransientRefusal) as refused:
+            run.preflight()
+        self.assertIn('50 GB for 2', str(refused.exception))
+        self.assertFalse(any(self.paths.lane(n).lock.exists() for n in core.LANE_PROFILES))
+
+    def test_quiet_lock_blocks_sessions(self):
+        self.quiet('somebody-else')
+        with self.assertRaises(x4lane.TransientRefusal):
+            self.session().preflight()
 
 
 class LogWatcherTests(Temp):

@@ -24,10 +24,12 @@ Usage and caveats: reports/NATIVE-LANES.md and rewrite-coord/native-lane.md.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import importlib.util
 import json
 import os
 import re
+import secrets
 import shutil
 import socket
 import subprocess
@@ -364,6 +366,17 @@ def cmd_setup(args, paths):
     return 0
 
 
+def acquire_launch_lock(paths, agent, purpose, run):
+    deadline = time.monotonic() + LAUNCH_LOCK_WAIT_S
+    while True:
+        try:
+            return core.DirLock.acquire(paths.launch_lock, lock_info(agent, purpose, run), win().pid_alive)
+        except core.LockBusy:
+            if time.monotonic() > deadline:
+                raise LaunchFailed('lane-launch.lock stayed busy')
+            time.sleep(1)
+
+
 def lock_info(agent, purpose, run=None) -> dict:
     me = os.getpid()
     return {'agent': agent, 'purpose': purpose, 'start': core.now_iso(), 'tool': 'dev/x4lane.py',
@@ -464,6 +477,11 @@ class Run:
         self.reason = None
         self.message = None
         self.other_seen = {}
+        self.closing = None                 # (time, windows sent) after request_close()
+        self.owns_quiet = False             # a session holds quiet.lock for all of its clients
+        self.extra_tokens = {}              # session tokens (@X4LANE_PORT@, @X4LANE_SLOT@, ...)
+        self.network = 'offline'            # 'loopback' only inside a session
+        self.repin = bool(getattr(args, 'repin_profile', False))
         self.result = {
             'tool': 'dev/x4lane.py', 'tool_version': TOOL_VERSION, 'run_id': None, 'agent': args.agent,
             'label': args.label, 'lane': None, 'profile': None, 'machine': socket.gethostname(),
@@ -545,8 +563,9 @@ class Run:
         self.outdir.mkdir(parents=True, exist_ok=True)
         self.result['paths']['outdir'] = str(self.outdir)
 
-    def preflight(self):
-        """One attempt to get a lane; raises TransientRefusal/Refused."""
+    def general_checks(self, instances=1):
+        """Checks before any lane is taken. Returns the quiet.lock owner (or None) and whether this
+        run may adopt it (quiet-window handoff)."""
         paths, a = self.paths, self.args
         quiet_owner = core.read_owner(paths.quiet_lock) if paths.quiet_lock.exists() else None
         handoff = bool(quiet_owner is not None and a.timing and quiet_owner.get('handoff') == a.agent)
@@ -563,21 +582,30 @@ class Run:
                           'and the lanes do not write Workshop selections (see the Workshop incident). '
                           'Use --allow-workshop only if that is acceptable for this run.')
         _total, avail = free_ram_gb()
-        if avail < a.min_free_gb:
-            raise TransientRefusal(f'only {avail} GB RAM free (need {a.min_free_gb:g} GB)')
-        base_lab = check_base(paths, self.base_lab)
+        need = a.min_free_gb * instances
+        if avail < need:
+            raise TransientRefusal(f'only {avail} GB RAM free (need {a.min_free_gb:g} GB per X4, '
+                                   f'{need:g} GB for {instances})')
+        self.base_lab = check_base(paths, self.base_lab)
+        ensure_x4lock(paths)
+        return quiet_owner, handoff
+
+    def usable_lanes(self, wanted):
         names, problems = [], []
-        for name in (list(core.LANE_PROFILES) if a.lane == 'auto' else [a.lane]):
-            found = verify_view(paths, paths.lane(name), check_hash=False)
+        for name in wanted:
+            found = verify_view(self.paths, self.paths.lane(name), check_hash=False)
             problems += found
             if not found:
                 names.append(name)
         if not names:
             raise Refused('; '.join(problems))
-        ensure_x4lock(paths)
-        busy = []
+        return names
+
+    def take_lane(self, names):
+        """Take the first free lane of names (lane lock, pinned X4.exe check); raises TransientRefusal."""
+        a, busy = self.args, []
         for name in names:
-            lane = paths.lane(name)
+            lane = self.paths.lane(name)
             run_id = core.run_id(name, a.agent)
             try:
                 lock = core.DirLock.acquire(lane.lock, lock_info(a.agent, f'x4lane run {a.label or ""}'.strip(), run_id),
@@ -585,14 +613,27 @@ class Run:
             except core.LockBusy as busy_error:
                 busy.append(str(busy_error))
                 continue
-            self.lock, self.lane, self.run_id, self.base_lab = lock, lane, run_id, base_lab
+            self.lock, self.lane, self.run_id = lock, lane, run_id
             break
         if self.lock is None:
             raise TransientRefusal('no free lane: ' + '; '.join(busy))
+        problems = verify_view(self.paths, self.lane, check_hash=True)
+        if problems:
+            self.give_back_lane()
+            raise Refused('; '.join(problems))
+        self.result.update(run_id=self.run_id, lane=self.lane.name, profile=self.lane.profile)
+
+    def give_back_lane(self):
+        if self.lock is not None:
+            self.lock.release()
+        self.lock = self.lane = None
+
+    def preflight(self):
+        """One attempt to get a lane; raises TransientRefusal/Refused."""
+        paths, a = self.paths, self.args
+        quiet_owner, handoff = self.general_checks()
+        self.take_lane(self.usable_lanes(list(core.LANE_PROFILES) if a.lane == 'auto' else [a.lane]))
         try:
-            problems = verify_view(paths, self.lane, check_hash=True)
-            if problems:
-                raise Refused('; '.join(problems))
             if a.timing:
                 others = [describe_x4(p) for p in x4_processes()]
                 if others:
@@ -612,10 +653,8 @@ class Run:
                     raise TransientRefusal(str(error))
                 self.result['quiet_lock']['held_by_this_run'] = True
         except Exception:
-            self.lock.release()
-            self.lock = self.lane = None
+            self.give_back_lane()
             raise
-        self.result.update(run_id=self.run_id, lane=self.lane.name, profile=self.lane.profile)
         self.result['quiet_lock']['present_at_start'] = quiet_owner is not None
 
     def acquire(self):
@@ -652,10 +691,17 @@ class Run:
         self.state('prepare')
         self.kill_orphans()
         tokens = {'@X4LANE_LANE@': lane.name, '@X4LANE_PROFILE@': lane.profile,
-                  '@X4LANE_RUN@': self.run_id, '@X4LANE_AGENT@': a.agent}
+                  '@X4LANE_RUN@': self.run_id, '@X4LANE_AGENT@': a.agent, **self.extra_tokens}
         reset_extensions(self.paths, lane, self.base_lab)
-        manifest = core.apply_overlays(lane.lab, self.overlays, lane.dir, tokens, a.ui_file, a.lua)
-        core.check_offline_config((lane.lab / 'ui' / 'config.lua').read_text(encoding='utf-8'))
+        lua_lines = [core.substitute_text(line, tokens) for line in a.lua]
+        manifest = core.apply_overlays(lane.lab, self.overlays, lane.dir, tokens, a.ui_file, lua_lines)
+        if self.repin:
+            manifest['repinned'] = core.repin_profile(lane.lab, lane.profile, lane.dir)
+        config_text = (lane.lab / 'ui' / 'config.lua').read_text(encoding='utf-8')
+        if self.network == 'loopback':
+            core.check_loopback_config(config_text)
+        else:
+            core.check_offline_config(config_text)
         core.copy_tree(self.paths.autostart_source, lane.extensions / core.AUTOSTART_ID, lane.dir)
         quit_after = round(a.timeout + a.settle + CLOSE_GRACE_S + 240, 1)
         settings = core.autostart_settings(
@@ -669,6 +715,9 @@ class Run:
             core.copy_tree(path, lane.extensions / path.name, lane.dir, tokens)
             extension_ids.append(ident)
             manifest.setdefault('extensions', []).append({'dir': str(path), 'id': ident})
+            if self.repin:
+                manifest.setdefault('repinned_extensions', {})[path.name] = core.repin_profile(
+                    lane.extensions / path.name, lane.profile, lane.dir)
         appid = lane.game / 'steam_appid.txt'
         if not appid.is_file() or appid.read_text(encoding='ascii', errors='replace').strip() != core.STEAM_APP_ID:
             core.safe_write(appid, core.STEAM_APP_ID, lane.dir)
@@ -721,51 +770,51 @@ class Run:
                 out.append(proc)
         return out
 
+    def quiet_is_ours(self):
+        return self.quiet is not None or self.owns_quiet
+
     def launch_x4(self):
-        paths, lane = self.paths, self.lane
-        deadline = time.monotonic() + LAUNCH_LOCK_WAIT_S
-        while True:
-            try:
-                self.launch_lock = core.DirLock.acquire(paths.launch_lock, lock_info(self.args.agent,
-                                                   f'launching lane {lane.name}', self.run_id), win().pid_alive)
-                break
-            except core.LockBusy:
-                if time.monotonic() > deadline:
-                    raise LaunchFailed('lane-launch.lock stayed busy')
-                time.sleep(1)
+        self.launch_lock = acquire_launch_lock(self.paths, self.args.agent, f'launching lane {self.lane.name}',
+                                               self.run_id)
         try:
-            if paths.quiet_lock.exists() and not self.quiet:
-                raise Refused('quiet.lock appeared before launch; not starting X4')
-            others = [describe_x4(p) for p in x4_processes()]
-            self.result['other_x4']['at_start'] = others
-            for entry in others:
-                self.other_seen[entry['pid']] = entry
-            holders = [] if self.args.test_skip_release else self.holders()
-            if self.args.test_skip_release:
-                self.warn('--test-skip-release: the instance lock was deliberately not released')
-            if len(holders) > 1:
-                raise LaunchFailed(f'several X4 hold the instance lock: {[p.pid for p in holders]}',
-                                   'lock_release_failed')
-            if holders:
-                holder = holders[0]
-                code, lines = x4lock(paths, 'release', '--pid', holder.pid, '--expect-path', holder.exe,
-                                     '--wait-ms', 30000)
-                self.result['x4lock'] += [f'release pid {holder.pid} exit {code}'] + lines
-                if code != 0:
-                    raise LaunchFailed(f'x4lock release of pid {holder.pid} failed (exit {code}); '
-                                       'X4 not started (it would show "Game is already running!")',
-                                       'lock_release_failed')
-            code, lines = x4lock(paths, 'list')
-            name_present = any(line.strip() == 'lock_name_present_in_my_session=true' for line in lines)
-            if name_present and not self.args.test_skip_release:
-                raise LaunchFailed('EGOSOFT_X4_INSTANCE exists but no X4 holds it (another process does); '
-                                   'X4 not started', 'lock_release_failed')
-            self.mark('lock_released_s')
-            self.start_x4()
-            self.wait_for_mutex()
+            self.start_sequence()
         finally:
             self.launch_lock.release()
             self.launch_lock = None
+
+    def start_sequence(self):
+        """Release the instance lock of the X4 that holds it, start our X4, wait until it holds the
+        lock itself. The caller holds rewrite-coord/lane-launch.lock."""
+        paths = self.paths
+        if paths.quiet_lock.exists() and not self.quiet_is_ours():
+            raise Refused('quiet.lock appeared before launch; not starting X4')
+        others = [describe_x4(p) for p in x4_processes()]
+        self.result['other_x4']['at_start'] = others
+        for entry in others:
+            self.other_seen[entry['pid']] = entry
+        holders = [] if self.args.test_skip_release else self.holders()
+        if self.args.test_skip_release:
+            self.warn('--test-skip-release: the instance lock was deliberately not released')
+        if len(holders) > 1:
+            raise LaunchFailed(f'several X4 hold the instance lock: {[p.pid for p in holders]}',
+                               'lock_release_failed')
+        if holders:
+            holder = holders[0]
+            code, lines = x4lock(paths, 'release', '--pid', holder.pid, '--expect-path', holder.exe,
+                                 '--wait-ms', 30000)
+            self.result['x4lock'] += [f'release pid {holder.pid} exit {code}'] + lines
+            if code != 0:
+                raise LaunchFailed(f'x4lock release of pid {holder.pid} failed (exit {code}); '
+                                   'X4 not started (it would show "Game is already running!")',
+                                   'lock_release_failed')
+        code, lines = x4lock(paths, 'list')
+        name_present = any(line.strip() == 'lock_name_present_in_my_session=true' for line in lines)
+        if name_present and not self.args.test_skip_release:
+            raise LaunchFailed('EGOSOFT_X4_INSTANCE exists but no X4 holds it (another process does); '
+                               'X4 not started', 'lock_release_failed')
+        self.mark('lock_released_s')
+        self.start_x4()
+        self.wait_for_mutex()
 
     def start_x4(self):
         args = self.launch_args()
@@ -835,37 +884,49 @@ class Run:
                 self.other_seen[proc.pid] = entry
                 self.result['other_x4']['during_run'].append(entry)
 
+    def begin_monitor(self):
+        self.mon = {'start': time.monotonic(), 'dialog': 0.0, 'sample': 0.0, 'refresh': 0.0}
+
+    def poll(self, now):
+        """One monitoring step: debug log, dialogs (2 s), other X4/memory (10 s), lock refresh (60 s).
+        Returns (reason, message) when this X4 failed or exited, else None."""
+        m = self.mon
+        self.watch.poll()
+        if now >= m['dialog']:
+            m['dialog'] = now + 2
+            self.check_dialogs()
+        if now >= m['sample']:
+            m['sample'] = now + 10
+            self.sample()
+            if self.paths.quiet_lock.exists() and not self.quiet_is_ours() \
+                    and 'quiet.lock appeared during the run' not in self.result['warnings']:
+                self.warn('quiet.lock appeared during the run')
+        if now >= m['refresh']:
+            m['refresh'] = now + 60
+            self.lock.refresh()
+            if self.quiet:
+                self.quiet.refresh()
+        if self.watch.failed_line is not None:
+            return 'fail_pattern', f'--fail-on matched: {self.watch.failed_line}'
+        if self.proc.poll() is not None:
+            self.watch.flush()
+            quit_marker = 'autostart_quit' in self.watch.markers
+            return 'x4_exited', (f'X4 exited with code {self.proc.returncode}'
+                                 + (' after the autostart quit_after safety net' if quit_marker else ''))
+        return None
+
     def monitor(self):
         a = self.args
-        start = time.monotonic()
-        next_dialog = next_sample = next_refresh = 0.0
+        self.begin_monitor()
+        start = self.mon['start']
         settle_until = None
         while True:
             now = time.monotonic()
-            self.watch.poll()
-            if now >= next_dialog:
-                next_dialog = now + 2
-                self.check_dialogs()
-            if now >= next_sample:
-                next_sample = now + 10
-                self.sample()
-                if self.paths.quiet_lock.exists() and not self.quiet \
-                        and 'quiet.lock appeared during the run' not in self.result['warnings']:
-                    self.warn('quiet.lock appeared during the run')
-            if now >= next_refresh:
-                next_refresh = now + 60
-                self.lock.refresh()
-                if self.quiet:
-                    self.quiet.refresh()
-            if self.watch.failed_line is not None:
-                return 'fail_pattern', f'--fail-on matched: {self.watch.failed_line}'
-            if self.proc.poll() is not None:
-                self.watch.flush()
-                quit_marker = 'autostart_quit' in self.watch.markers
-                if settle_until is not None:
+            ended = self.poll(now)
+            if ended:
+                if ended[0] == 'x4_exited' and settle_until is not None:
                     return 'until_matched', 'X4 exited during --settle'
-                return 'x4_exited', (f'X4 exited with code {self.proc.returncode}'
-                                     + (' after the autostart quit_after safety net' if quit_marker else ''))
+                return ended
             if settle_until is None and self.watch.until_matched:
                 self.mark('until_s')
                 settle_until = now + a.settle
@@ -877,25 +938,34 @@ class Run:
                 return 'timeout', f'--until not matched within {a.timeout} s ({self.watch.until_hits} hit(s))'
             time.sleep(POLL_S)
 
+    def request_close(self):
+        """Post WM_CLOSE to our X4 (exe path checked); close_x4() waits and terminates if needed."""
+        proc = self.proc
+        if proc is None or proc.poll() is not None or getattr(self, 'closing', None) is not None:
+            return
+        exe = None
+        handle = win().open_process(proc.pid, win().PROCESS_QUERY_LIMITED_INFORMATION)
+        if handle:
+            with handle as h:
+                exe = win().image_path(h)
+        if exe is None or Path(exe) != self.lane.exe:
+            self.warn(f'pid {proc.pid} image {exe} is not the lane X4; terminating through our own handle')
+        sent = win().post_close(proc.pid) if exe and Path(exe) == self.lane.exe else 0
+        self.closing = (time.monotonic(), sent)
+
     def close_x4(self):
         x4 = self.result['x4']
         proc = self.proc
         if proc is None:
             return
-        if proc.poll() is not None:
+        self.request_close()
+        if getattr(self, 'closing', None) is None:
             x4.setdefault('closed', 'exited by itself')
         else:
-            exe = None
-            handle = win().open_process(proc.pid, win().PROCESS_QUERY_LIMITED_INFORMATION)
-            if handle:
-                with handle as h:
-                    exe = win().image_path(h)
-            if exe is None or Path(exe) != self.lane.exe:
-                self.warn(f'pid {proc.pid} image {exe} is not the lane X4; terminating through our own handle')
-            closed_at = time.monotonic()
-            sent = win().post_close(proc.pid) if exe and Path(exe) == self.lane.exe else 0
+            closed_at, sent = self.closing
+            grace = (self.args.close_grace if sent else 0.1) - (time.monotonic() - closed_at)
             try:
-                proc.wait(timeout=self.args.close_grace if sent else 0.1)
+                proc.wait(timeout=max(0.1, grace))
                 x4['closed'] = 'graceful (WM_CLOSE)'
                 x4['close_s'] = round(time.monotonic() - closed_at, 2)
             except subprocess.TimeoutExpired:
@@ -1050,6 +1120,468 @@ def cmd_run(args, paths):
 
 
 # ---------------------------------------------------------------------------------------
+# session: N clients (lanes) at once in one loopback session, optional server process
+
+
+class NetworkViolation(LaneError):
+    pass
+
+
+class ServerFailed(LaneError):
+    pass
+
+
+SERVER_TOKENS = ('port', 'token', 'build', 'bubble', 'clients', 'session', 'outdir', 'python', 'repo')
+ATOM = re.compile(r'[A-Za-z0-9_.-]{1,96}')
+
+
+def loopback_endpoint(entry) -> bool:
+    """A server endpoint is allowed only on loopback (TCP peers on loopback too, or listening)."""
+    if entry['proto'] in ('tcp', 'udp'):
+        ok = entry['local'] == core.LOOPBACK
+        return ok and (entry['proto'] == 'udp' or entry['remote'] in ('0.0.0.0', core.LOOPBACK))
+    ok = entry['local'] == '::1'
+    return ok and (entry['proto'] == 'udp6' or entry['remote'] in ('::', '::1'))
+
+
+def server_command(template, values) -> str:
+    command = template
+    for key in SERVER_TOKENS:
+        command = command.replace('{' + key + '}', str(values[key]))
+    leftover = re.findall(r'\{(\w+)\}', command)
+    if leftover:
+        raise UsageError(f'--server-cmd: unknown placeholder(s) {leftover}; known: {list(SERVER_TOKENS)}')
+    return command
+
+
+class Server:
+    """The caller's relay/server process of a session: started before the clients, kept in a
+    kill-on-close job (with every process it starts), checked for non-loopback endpoints."""
+
+    def __init__(self, command, cwd, outdir, port, ready, until, fail_on, t0):
+        self.command, self.cwd, self.port, self.t0 = command, Path(cwd), port, t0
+        self.log_path = Path(outdir) / 'server.log'
+        self.ready, self.until, self.fail_on = ready, until, fail_on
+        self.proc = self.job = self.log = self.watch = self.ready_watch = None
+        self.result = {'command': command, 'cwd': str(cwd), 'port': port, 'bind': core.LOOPBACK,
+                       'log': str(self.log_path), 'endpoints': [], 'violations': []}
+
+    def start(self, env):
+        self.log = open(self.log_path, 'wb')
+        self.job = win().KillOnCloseJob()
+        self.proc = subprocess.Popen(self.command, cwd=str(self.cwd), stdin=subprocess.DEVNULL, stdout=self.log,
+                                     stderr=subprocess.STDOUT, env=env,
+                                     creationflags=subprocess.CREATE_NEW_PROCESS_GROUP | subprocess.CREATE_NO_WINDOW)
+        self.job.assign(int(self.proc._handle))                   # processes it starts join the job
+        self.result['pid'] = self.proc.pid
+        self.watch = core.LogWatcher(self.log_path, until=self.until, fail_on=self.fail_on)
+        self.watch.t0 = self.t0
+        if self.ready is not None:
+            self.ready_watch = core.LogWatcher(self.log_path, until=self.ready)
+
+    def pids(self):
+        try:
+            pids = self.job.pids()
+        except OSError:
+            pids = []
+        if not pids and self.proc is not None and self.proc.poll() is None:
+            pids = [self.proc.pid]
+        return pids
+
+    def check_network(self):
+        found = win().endpoints(self.pids())
+        if found:
+            self.result['endpoints'] = found
+        bad = [e for e in found if not loopback_endpoint(e)]
+        if bad:
+            self.result['violations'] = bad
+            raise NetworkViolation(f'the server has endpoint(s) outside loopback: {bad}')
+        return found
+
+    def wait_ready(self, timeout):
+        deadline = time.monotonic() + timeout
+        while True:
+            if self.proc.poll() is not None:
+                raise ServerFailed(f'the server exited with code {self.proc.returncode} before it was ready '
+                                   f'(see {self.log_path})')
+            found = self.check_network()
+            if self.ready_watch is not None:
+                self.ready_watch.poll()
+                if self.ready_watch.until_matched:
+                    return
+            elif any(e['lport'] == self.port for e in found):
+                return
+            if time.monotonic() > deadline:
+                raise ServerFailed(f'the server was not ready within {timeout:g} s (no '
+                                   + ('--server-ready match' if self.ready is not None
+                                      else f'endpoint on {core.LOOPBACK}:{self.port}') + ')')
+            time.sleep(0.25)
+
+    def poll(self):
+        self.watch.poll()
+        if self.watch.failed_line is not None:
+            return 'fail_pattern', f'--server-fail-on matched: {self.watch.failed_line}'
+        if self.proc.poll() is not None:
+            return 'server_failed', f'the server exited with code {self.proc.returncode} during the session'
+        return None
+
+    def stop(self):
+        if self.proc is not None and self.proc.poll() is None:
+            self.job.terminate(1)
+            try:
+                self.proc.wait(timeout=10)
+            except subprocess.TimeoutExpired:
+                self.proc.kill()
+                self.proc.wait(timeout=10)
+            self.result['stopped'] = 'terminated by the runner'
+        if self.proc is not None:
+            self.result['exit_code'] = self.proc.returncode
+        if self.log is not None:
+            self.log.close()
+            self.log = None
+        if self.watch is not None:
+            self.watch.flush()
+            self.result['log_lines'] = self.watch.lines
+            if self.until is not None:
+                self.result['until'] = {'regex': self.until.pattern, 'line': self.watch.until_line,
+                                        's': self.watch.until_at}
+        if self.job is not None:
+            self.job.close()
+            self.job = None
+
+
+def per_client(values, option, clients):
+    out = {index: [] for index in range(1, clients + 1)}
+    for value in values:
+        match = re.match(r'^(\d+):(.+)$', value, re.S)
+        if not match or not 1 <= int(match.group(1)) <= clients:
+            raise UsageError(f'{option} {value!r}: use N:VALUE with N = 1..{clients}')
+        out[int(match.group(1))].append(match.group(2))
+    return out
+
+
+class SessionRun:
+    """N lanes (clients) at once: all lane locks for the whole run, per-client overlays/config, one
+    --gamestart/--seed, loopback-only networking, an optional server on a free 127.0.0.1 port."""
+
+    def __init__(self, args, paths):
+        self.args, self.paths = args, paths
+        self.t0 = time.monotonic()
+        self.clients, self.server, self.quiet, self.launch_lock, self.outdir = [], None, None, None, None
+        self.session_id = None
+        self.port = None
+        self.result = {
+            'tool': 'dev/x4lane.py', 'tool_version': TOOL_VERSION, 'kind': 'session', 'session_id': None,
+            'agent': args.agent, 'label': args.label, 'machine': socket.gethostname(), 'started_at': core.now_iso(),
+            'verdict': None, 'exit_reason': None, 'exit_code': None, 'message': None, 'command': sys.argv,
+            'clients': [], 'server': None, 'network': {}, 'until': None, 'timings': {}, 'warnings': [],
+            'quiet_lock': {'present_at_start': None, 'held_by_this_run': False}, 'timing_trustworthy': False,
+            'other_x4': {'seen': [], 'any': None},
+        }
+
+    def elapsed(self):
+        return round(time.monotonic() - self.t0, 3)
+
+    def mark(self, name):
+        self.result['timings'][name] = self.elapsed()
+
+    def warn(self, text):
+        self.result['warnings'].append(text)
+
+    def client_args(self, index, per):
+        a = self.args
+        return argparse.Namespace(
+            agent=a.agent, label=f'{a.label} client{index}'.strip(), collect=str(self.outdir / f'client{index}'),
+            overwrite=a.overwrite, overlay=list(a.overlay) + per['overlay'][index],
+            extension=list(a.extension) + per['extension'][index], base=a.base,
+            lua=list(a.lua) + per['lua'][index], ui_file=list(a.ui_file), config=list(a.config) + per['config'][index],
+            until=a.until, until_count=a.until_count, timeout=a.timeout, settle=a.settle, expect=list(a.expect),
+            fail_on=list(a.fail_on), gamestart=a.gamestart, seed=a.seed, start=a.start, alive=a.alive,
+            sound=a.sound, wait=0, timing=a.timing, min_free_gb=a.min_free_gb, close_grace=a.close_grace,
+            allow_workshop=a.allow_workshop, test_skip_release=False, lane='auto', repin_profile=not a.no_repin)
+
+    def validate(self):
+        a, paths = self.args, self.paths
+        require_windows()
+        core.check_agent(a.agent)
+        if not 2 <= a.clients <= 3:
+            raise UsageError('--clients must be 2 or 3')
+        for value, option in ((a.build, '--build'), (a.bubble, '--bubble')):
+            if not ATOM.fullmatch(value):
+                raise UsageError(f'{option} must be 1..96 characters of letters, digits, _ . -')
+        if a.until_mode not in ('all', 'any'):
+            raise UsageError('--until-mode must be all or any')
+        self.lanes = None
+        if a.lanes:
+            self.lanes = [name.strip() for name in a.lanes.split(',') if name.strip()]
+            if len(self.lanes) != a.clients or len(set(self.lanes)) != a.clients \
+                    or any(name not in core.LANE_PROFILES for name in self.lanes):
+                raise UsageError(f'--lanes needs {a.clients} different lanes of {list(core.LANE_PROFILES)}')
+        self.outdir = core.check_outdir(a.collect, paths, a.overwrite)
+        self.outdir.mkdir(parents=True, exist_ok=True)
+        self.server_until = core.compile_regex(a.server_until, '--server-until') if a.server_until else None
+        self.server_ready = core.compile_regex(a.server_ready, '--server-ready') if a.server_ready else None
+        self.server_fail = [core.compile_regex(p, '--server-fail-on') for p in a.server_fail_on]
+        if (a.server_until or a.server_ready or a.server_fail_on) and not a.server_cmd:
+            raise UsageError('--server-until/--server-ready/--server-fail-on need --server-cmd')
+        self.server_cwd = Path(a.server_cwd).resolve() if a.server_cwd else ROOT
+        if a.server_cmd:
+            server_command(a.server_cmd, {k: 0 for k in SERVER_TOKENS})          # placeholder check
+            if not self.server_cwd.is_dir():
+                raise UsageError(f'--server-cwd {self.server_cwd} is not a directory')
+        per = {'overlay': per_client(a.client_overlay, '--client-overlay', a.clients),
+               'extension': per_client(a.client_extension, '--client-extension', a.clients),
+               'lua': per_client(a.client_lua, '--client-lua', a.clients),
+               'config': per_client(a.client_config, '--client-config', a.clients)}
+        self.session_id = core.run_id('session', a.agent)
+        self.result['session_id'] = self.session_id
+        for index in range(1, a.clients + 1):
+            client = Run(self.client_args(index, per), paths)
+            client.network = 'loopback'
+            client.validate()
+            self.clients.append(client)
+        self.result['paths'] = {'outdir': str(self.outdir)}
+
+    def preflight(self):
+        a, first = self.args, self.clients[0]
+        quiet_owner, handoff = first.general_checks(instances=a.clients)
+        for client in self.clients[1:]:
+            client.base_lab = first.base_lab
+        usable = first.usable_lanes(self.lanes or list(core.LANE_PROFILES))
+        if self.lanes and usable != self.lanes:
+            raise Refused(f'lanes {sorted(set(self.lanes) - set(usable))} are not usable')
+        taken = []
+        try:
+            for index, client in enumerate(self.clients):
+                held = {c.lane.name for c in taken}
+                choice = [self.lanes[index]] if self.lanes else [n for n in usable if n not in held]
+                client.take_lane(choice)
+                taken.append(client)
+            if a.timing:
+                others = [describe_x4(p) for p in x4_processes()]
+                if others:
+                    raise TransientRefusal(f'--timing needs no other X4 running: {others}')
+                info = dict(lock_info(a.agent, f'x4lane timing session {self.session_id}', self.session_id),
+                            owner=f'x4lane session {self.session_id} (agent {a.agent})',
+                            reason='timing-sensitive lane session', since=core.now_iso(),
+                            release='dev/x4lane.py removes it when the session ends')
+                try:
+                    self.quiet = (core.DirLock.adopt(self.paths.quiet_lock, info, a.agent) if handoff else
+                                  core.DirLock.acquire(self.paths.quiet_lock, info, take_stale=False))
+                except core.LockBusy as error:
+                    raise TransientRefusal(str(error))
+                self.result['quiet_lock']['held_by_this_run'] = True
+                for client in self.clients:
+                    client.owns_quiet = True
+        except Exception:
+            for client in taken:
+                client.give_back_lane()
+            raise
+        self.result['quiet_lock']['present_at_start'] = quiet_owner is not None
+
+    def acquire(self):
+        deadline = time.monotonic() + max(0, self.args.wait)
+        while True:
+            try:
+                self.preflight()
+                return
+            except TransientRefusal as error:
+                if time.monotonic() + TRANSIENT_WAIT_S > deadline:
+                    raise
+                print(f'x4lane: waiting ({error})', flush=True)
+                time.sleep(TRANSIENT_WAIT_S)
+
+    def prepare(self):
+        a = self.args
+        self.port = core.free_loopback_port()
+        token = secrets.token_hex(16)
+        self.values = {'port': self.port, 'token': token, 'build': a.build, 'bubble': a.bubble,
+                       'clients': a.clients, 'session': self.session_id, 'outdir': str(self.outdir),
+                       'python': f'"{sys.executable}"', 'repo': str(ROOT)}
+        self.result['network'] = {'bind': core.LOOPBACK, 'port': self.port, 'build': a.build, 'bubble': a.bubble,
+                                  'token_sha256_12': hashlib.sha256(token.encode()).hexdigest()[:12]}
+        for index, client in enumerate(self.clients, 1):
+            client.extra_tokens = {
+                '@X4LANE_PORT@': str(self.port), '@X4LANE_TOKEN@': token, '@X4LANE_BUILD@': a.build,
+                '@X4LANE_BUBBLE@': a.bubble, '@X4LANE_CLIENT@': str(index), '@X4LANE_CLIENTS@': str(a.clients),
+                '@X4LANE_SLOT@': f'p{index}', '@X4LANE_SESSION@': self.session_id}
+            client.prepare()
+        self.mark('prepared_s')
+
+    def start_server(self):
+        a = self.args
+        if not a.server_cmd:
+            return
+        command = server_command(a.server_cmd, self.values)
+        env = dict(os.environ, PYTHONUNBUFFERED='1', X4LANE_PORT=str(self.port), X4LANE_TOKEN=self.values['token'],
+                   X4LANE_BUILD=a.build, X4LANE_BUBBLE=a.bubble, X4LANE_SESSION=self.session_id)
+        self.server = Server(command, self.server_cwd, self.outdir, self.port, self.server_ready, self.server_until,
+                             self.server_fail, self.t0)
+        self.server.result['command'] = command.replace(self.values['token'], '<token>')
+        self.server.start(env)
+        self.server.wait_ready(a.server_ready_timeout)
+        self.mark('server_ready_s')
+
+    def launch(self):
+        first = self.clients[0]
+        self.launch_lock = acquire_launch_lock(self.paths, self.args.agent, f'launching session {self.session_id}',
+                                               self.session_id)
+        try:
+            for client in self.clients:
+                client.start_sequence()
+        finally:
+            self.launch_lock.release()
+            self.launch_lock = None
+        self.mark('launched_s')
+
+    def passed(self):
+        a = self.args
+        if a.until is None and self.server_until is None:
+            return False
+        if a.until is not None:
+            hits = [c.watch.until_matched for c in self.clients]
+            if not (all(hits) if a.until_mode == 'all' else any(hits)):
+                return False
+        return self.server_until is None or self.server.watch.until_matched
+
+    def monitor(self):
+        a = self.args
+        for client in self.clients:
+            client.begin_monitor()
+        start, settle_until, next_network = time.monotonic(), None, 0.0
+        while True:
+            now = time.monotonic()
+            for index, client in enumerate(self.clients, 1):
+                ended = client.poll(now)
+                if ended and settle_until is None:
+                    return ended[0], f'client {index} (lane {client.lane.name}): {ended[1]}'
+            if self.server is not None:
+                ended = self.server.poll()
+                if ended and settle_until is None:
+                    return ended
+                if now >= next_network:
+                    next_network = now + 5
+                    self.server.check_network()
+            if settle_until is None and self.passed():
+                self.mark('until_s')
+                settle_until = now + a.settle
+            if settle_until is not None and now >= settle_until:
+                return 'until_matched', 'session pass condition met (--until ' + a.until_mode + \
+                    (', --server-until' if self.server_until is not None else '') + ')'
+            if settle_until is None and now - start >= a.timeout:
+                if a.until is None and self.server_until is None:
+                    return 'duration_elapsed', f'--timeout {a.timeout:g} s elapsed (no --until)'
+                hits = [c.watch.until_hits for c in self.clients]
+                return 'timeout', f'pass condition not met within {a.timeout:g} s (client --until hits {hits})'
+            time.sleep(POLL_S)
+
+    def shutdown(self):
+        steps = [client.request_close for client in self.clients] + [client.close_x4 for client in self.clients]
+        if self.server is not None:
+            steps.append(self.server.stop)
+        for client in self.clients:
+            steps += [client.collect, client.restore]
+        steps += [client.release for client in self.clients]
+        for step in steps:
+            try:
+                step()
+            except Exception as error:                               # noqa: BLE001
+                self.warn(f'{getattr(step, "__name__", step)} failed: {type(error).__name__}: {error}')
+        for attr in ('launch_lock', 'quiet'):
+            lock = getattr(self, attr)
+            if lock is not None:
+                try:
+                    if not lock.release():
+                        self.warn(f'{lock.path.name} had been taken over; left in place')
+                except Exception as error:                           # noqa: BLE001
+                    self.warn(f'releasing {lock.path.name} failed: {error}')
+                setattr(self, attr, None)
+        self.mark('closed_s')
+
+    def finish(self, reason, message):
+        r, a = self.result, self.args
+        if reason in ('until_matched', 'duration_elapsed'):
+            missing = [(i, [e for e in c.watch.expect_report() if not e['ok']])
+                       for i, c in enumerate(self.clients, 1) if c.watch is not None and not c.watch.expectations_ok()]
+            if missing:
+                reason, message = 'expect_failed', f'expectations not met: {missing}'
+        code = {'until_matched': 0, 'duration_elapsed': 0, 'usage': 1, 'refused': 2, 'timeout': 3,
+                'x4_exited': 4, 'fail_pattern': 5, 'network_violation': 5, 'expect_failed': 6,
+                'launch_failed': 7, 'already_running': 7, 'lock_release_failed': 7, 'server_failed': 7,
+                'error': 8, 'interrupted': 9}[reason]
+        members = {c.proc.pid for c in self.clients if c.proc is not None}
+        seen = {}
+        for client in self.clients:
+            for pid, entry in client.other_seen.items():
+                if pid not in members:
+                    seen[pid] = entry
+        r['other_x4'] = {'seen': list(seen.values()), 'any': bool(seen)}
+        r['timing_trustworthy'] = bool(r['quiet_lock']['held_by_this_run'] and not seen
+                                       and reason in ('until_matched', 'duration_elapsed', 'expect_failed'))
+        r['timing_note'] = ('quiet.lock held by this session and no other X4 seen' if r['timing_trustworthy'] else
+                            'functional result only: timings are not trustworthy')
+        if a.until is not None:
+            r['until'] = {'regex': a.until, 'count': a.until_count, 'mode': a.until_mode,
+                          'hits': [c.watch.until_hits if c.watch else 0 for c in self.clients]}
+        for index, client in enumerate(self.clients, 1):
+            cr = client.result
+            cr.update(client=index, slot=f'p{index}', session_id=self.session_id, verdict='pass' if code == 0 else 'fail',
+                      exit_reason=reason, exit_code=code, message=message, finished_at=core.now_iso())
+            cr['timings']['total_s'] = client.elapsed()
+            if client.outdir is not None:
+                core.write_json(client.outdir / 'result.json', cr)
+            r['clients'].append(cr)
+        r['server'] = self.server.result if self.server is not None else None
+        r.update(verdict='pass' if code == 0 else 'fail', exit_reason=reason, exit_code=code, message=message,
+                 finished_at=core.now_iso())
+        r['timings']['total_s'] = self.elapsed()
+        return code
+
+    def execute(self) -> int:
+        reason, message = 'error', None
+        try:
+            self.validate()
+            self.acquire()
+            self.prepare()
+            self.start_server()
+            self.launch()
+            reason, message = self.monitor()
+        except UsageError as error:
+            reason, message = 'usage', str(error)
+        except Refused as error:
+            reason, message = 'refused', str(error)
+        except LaunchFailed as error:
+            reason, message = error.reason, str(error)
+        except ServerFailed as error:
+            reason, message = 'server_failed', str(error)
+        except NetworkViolation as error:
+            reason, message = 'network_violation', str(error)
+        except KeyboardInterrupt:
+            reason, message = 'interrupted', 'interrupted (Ctrl-C)'
+        except Exception as error:                                   # noqa: BLE001
+            reason, message = 'error', f'{type(error).__name__}: {error}'
+            self.result['traceback'] = traceback.format_exc()
+        finally:
+            self.shutdown()
+        code = self.finish(reason, message)
+        if self.outdir is not None:
+            core.write_json(self.outdir / 'result.json', self.result)
+        r = self.result
+        lanes = ','.join(c.lane.name if c.lane else '-' for c in self.clients) or '-'
+        print(f"X4LANE SESSION verdict={r['verdict']} reason={r['exit_reason']} lanes={lanes} "
+              f"port={self.port} total={r['timings'].get('total_s')}s outdir={self.outdir}")
+        if message:
+            print(f'X4LANE MESSAGE {message}')
+        for warning in r['warnings'] + [w for c in self.clients for w in c.result['warnings']]:
+            print(f'X4LANE WARNING {warning}')
+        return code
+
+
+def cmd_session(args, paths):
+    return SessionRun(args, paths).execute()
+
+
+# ---------------------------------------------------------------------------------------
 # restore / unlock
 
 
@@ -1129,6 +1661,29 @@ def cmd_make_overlay(args, paths):
             (out / 'ui' / 'config.lua.append').write_text(
                 f"X4LAN_FIXEDTICK_MODE = '{args.mode}' -- x4lane probe overlay\n", encoding='utf-8')
         note += ['', f'mode: {args.mode}. Expect "[X4LAN] FRAMEPROBE armed" and per-second FRAMEPROBE/WALKPROF lines.']
+    elif args.kind == 'session-telemetry':
+        root = Path(args.root or ROOT).resolve()
+        copy_into(Path(args.dll) if args.dll else root / '.local' / 'engine' / 'x4lan_simtick_64.dll', out,
+                  'native/x4lan_simtick_64.dll', note)
+        (out / 'ui').mkdir(parents=True, exist_ok=True)
+        (out / 'ui' / 'config.lua.append').write_text('\n'.join([
+            '-- x4lane session-telemetry overlay (test only): the 7.x telemetry adapter of every client',
+            '-- talks to the session server on 127.0.0.1; slot p1..pN follows the client number.',
+            'X4LAN_CONFIG.enabled = true',
+            'X4LAN_CONFIG.host = "127.0.0.1"',
+            'X4LAN_CONFIG.port = @X4LANE_PORT@',
+            'X4LAN_CONFIG.token = "@X4LANE_TOKEN@"',
+            'X4LAN_CONFIG.build = "@X4LANE_BUILD@"',
+            'X4LAN_CONFIG.bubble = "@X4LANE_BUBBLE@"',
+            'X4LAN_CONFIG.slot = "@X4LANE_SLOT@"',
+            'X4LAN_CONFIG.mode = "telemetry"', '']), encoding='utf-8')
+        note += ['', 'Session use: x4lane session --clients 2 --overlay <this> --server-cmd '
+                 '"{python} -m x4lan.host --bind 127.0.0.1 --port {port} --token {token} --build {build} '
+                 '--bubble {bubble}" (server cwd: a worktree with the x4lan package; default this one)',
+                 'Clients log "[X4LAN] connected to relay as pN" and every 5 s "[X4LAN] relay=connected '
+                 'remote=receiving"; the relay prints "p1@127.0.0.1:<port>, p2@127.0.0.1:<port>".',
+                 'Needs re-pinned profile gates (session default) and the simtick DLL from '
+                 'native/engine/build.py (no --fixedtick).']
     else:
         attn = Path(args.attnload).resolve()
         installer = attn / 'dev' / 'install_attention_load_test.py'
@@ -1223,13 +1778,59 @@ def parser():
     r.add_argument('--min-free-gb', type=float, default=core.MIN_FREE_RAM_GB)
     r.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S, help='seconds after WM_CLOSE before kill')
     r.add_argument('--allow-workshop', action='store_true')
+    r.add_argument('--repin-profile', action='store_true',
+                   help="re-pin the x4_lan_lab profile gates ('45841', /45841/save) to the lane profile")
     r.add_argument('--test-skip-release', action='store_true', help=argparse.SUPPRESS)  # lane self-test only
+    q = sub.add_parser('session', help='2-3 clients (lanes) at once in one loopback session, optional server')
+    q.add_argument('--clients', type=int, default=2)
+    q.add_argument('--lanes', help='comma list of lanes, one per client (default: any free lanes)')
+    q.add_argument('--agent', required=True)
+    q.add_argument('--label', default='')
+    q.add_argument('--collect', required=True, help='output directory (session result.json, clientN/, server.log)')
+    q.add_argument('--overwrite', action='store_true')
+    q.add_argument('--timeout', type=float, required=True)
+    q.add_argument('--overlay', action='append', default=[], help='overlay for every client')
+    q.add_argument('--client-overlay', action='append', default=[], help='N:DIR overlay for client N (after --overlay)')
+    q.add_argument('--extension', action='append', default=[])
+    q.add_argument('--client-extension', action='append', default=[], help='N:DIR')
+    q.add_argument('--lua', action='append', default=[])
+    q.add_argument('--client-lua', action='append', default=[], help='N:LINE')
+    q.add_argument('--config', action='append', default=[], help='KEY=VALUE for every client config.xml')
+    q.add_argument('--client-config', action='append', default=[], help='N:KEY=VALUE')
+    q.add_argument('--ui-file', action='append', default=[])
+    q.add_argument('--base')
+    q.add_argument('--until', help='regex every client log must match (--until-mode all) or one (any)')
+    q.add_argument('--until-count', type=int, default=1)
+    q.add_argument('--until-mode', default='all', choices=('all', 'any'))
+    q.add_argument('--settle', type=float, default=3.0)
+    q.add_argument('--expect', action='append', default=[], help="'[N:]REGEX' for every client log")
+    q.add_argument('--fail-on', action='append', default=[], help='regex on any client log that fails the session')
+    q.add_argument('--server-cmd', help='server command line; placeholders {port} {token} {build} {bubble} '
+                                        '{clients} {session} {outdir} {python} {repo}')
+    q.add_argument('--server-cwd', help='server working directory (default: this worktree)')
+    q.add_argument('--server-ready', help='regex on the server output that means ready (default: bound on the port)')
+    q.add_argument('--server-ready-timeout', type=float, default=60.0)
+    q.add_argument('--server-until', help='regex the server output must match for the session to pass')
+    q.add_argument('--server-fail-on', action='append', default=[])
+    q.add_argument('--build', default='lane-session', help='build label for @X4LANE_BUILD@ / {build}')
+    q.add_argument('--bubble', default='bubble-01', help='bubble id for @X4LANE_BUBBLE@ / {bubble}')
+    q.add_argument('--gamestart', default='custom_creative')
+    q.add_argument('--seed', type=int, default=276944566)
+    q.add_argument('--start', default='module', choices=('module', 'menu'))
+    q.add_argument('--alive', type=float, default=10.0)
+    q.add_argument('--sound', action='store_true')
+    q.add_argument('--wait', type=float, default=0.0)
+    q.add_argument('--timing', action='store_true')
+    q.add_argument('--min-free-gb', type=float, default=core.MIN_FREE_RAM_GB, help='per X4 instance')
+    q.add_argument('--close-grace', type=float, default=CLOSE_GRACE_S)
+    q.add_argument('--allow-workshop', action='store_true')
+    q.add_argument('--no-repin', action='store_true', help='keep the 45841 profile gates (default: re-pin per lane)')
     s = sub.add_parser('restore', help='reset a lane to base after a crashed runner')
     s.add_argument('--lane', required=True, choices=tuple(core.LANE_PROFILES))
     s = sub.add_parser('unlock', help='remove a stale lane lock')
     s.add_argument('--lane', required=True, choices=tuple(core.LANE_PROFILES))
     m = sub.add_parser('make-overlay', help='build a ready overlay directory')
-    m.add_argument('kind', choices=('probe', 'attnload'))
+    m.add_argument('kind', choices=('probe', 'attnload', 'session-telemetry'))
     m.add_argument('--out', required=True)
     m.add_argument('--force', action='store_true')
     m.add_argument('--dll', help='DLL to use instead of the default build output')
@@ -1249,8 +1850,8 @@ def main(argv=None):
     if args.command == 'make-overlay' and args.kind == 'attnload' and not args.attnload:
         print('make-overlay attnload needs --attnload WORKTREE', file=sys.stderr)
         return 1
-    handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'restore': cmd_restore,
-                'unlock': cmd_unlock, 'make-overlay': cmd_make_overlay}
+    handlers = {'status': cmd_status, 'setup': cmd_setup, 'run': cmd_run, 'session': cmd_session,
+                'restore': cmd_restore, 'unlock': cmd_unlock, 'make-overlay': cmd_make_overlay}
     try:
         return handlers[args.command](args, paths)
     except LaneError as error:

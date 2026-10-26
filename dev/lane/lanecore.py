@@ -461,6 +461,74 @@ def check_offline_config(text: str):
         raise OverlayError('lane x4_lan_lab config is not offline: ' + '; '.join(problems))
 
 
+LOOPBACK = '127.0.0.1'
+IPV4_LITERAL = re.compile(r'["\'](\d{1,3}(?:\.\d{1,3}){3})["\']')
+
+
+def check_loopback_config(text: str):
+    """Session runs may enable networking, but only towards 127.0.0.1: every host value and every
+    quoted IPv4 literal must be 127.0.0.1 and no quoted URL may appear."""
+    problems = []
+    for host in re.findall(r'\bhost\s*=\s*["\']([^"\']*)["\']', text):
+        if host.strip() != LOOPBACK:
+            problems.append(f'host {host!r} is not {LOOPBACK}')
+    for literal in IPV4_LITERAL.findall(text):
+        if literal != LOOPBACK:
+            problems.append(f'address {literal} is not {LOOPBACK}')
+    if re.search(r'["\'][a-zA-Z][a-zA-Z0-9+.-]*://', text):
+        problems.append('a quoted URL')
+    if problems:
+        raise OverlayError('session config is not loopback-only: ' + '; '.join(sorted(set(problems))))
+
+
+PIN_QUOTED = re.compile(r'(["\'])45841\1')
+PIN_SAVE = '/45841/save'
+
+
+def repin_profile(lab, profile: str, root) -> dict:
+    """Re-pin the profile gates of a lane copy from 45841 to the lane's own profile: quoted '45841'
+    literals (config test_profile, gate comparisons) and '/45841/save' paths in every .lua file.
+    Each gate then accepts exactly the lane profile, as it accepted exactly 45841 before."""
+    if not re.fullmatch(r'\d{5}', profile) or profile not in LANE_PROFILES.values():
+        raise UnsafeError(f'{profile} is not a lane profile')
+    lab = Path(lab)
+    changed = {}
+    for item in sorted(lab.rglob('*.lua')):
+        text = item.read_text(encoding='utf-8')
+        new, quoted = PIN_QUOTED.subn(lambda m: f'{m.group(1)}{profile}{m.group(1)}', text)
+        count = quoted + new.count(PIN_SAVE)
+        new = new.replace(PIN_SAVE, f'/{profile}/save')
+        if count:
+            safe_write(item, new, root)
+            changed[item.relative_to(lab).as_posix()] = count
+    return changed
+
+
+def substitute_text(text: str, tokens: dict) -> str:
+    for key, value in (tokens or {}).items():
+        text = text.replace(key, value)
+    return text
+
+
+def free_loopback_port() -> int:
+    """A port that is free on 127.0.0.1 for both UDP and TCP right now."""
+    for _ in range(50):
+        udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        tcp = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            udp.bind((LOOPBACK, 0))
+            port = udp.getsockname()[1]
+            try:
+                tcp.bind((LOOPBACK, port))
+            except OSError:
+                continue
+            return port
+        finally:
+            udp.close()
+            tcp.close()
+    raise LaneError('no free loopback port found')
+
+
 def check_base_lab(path):
     path = Path(path)
     for required in ('content.xml', 'ui.xml', 'ui/config.lua', 'md/x4lan.xml'):
