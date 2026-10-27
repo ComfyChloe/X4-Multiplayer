@@ -1,0 +1,4 @@
+bundle: x4-multiplayer-all-refs.bundle | 6288117 bytes | sha256=31DFB1126AB47D18F9DA4B153644FA18DFC1B202124B77BF62382A3EEB9E2C16
+taken:  2026-10-27 15:17 local
+source: https://github.com/Lith7ium/X4-Multiplayer
+mirror: https://github.com/ComfyChloe/X4-Multiplayer (archive/* refs)
