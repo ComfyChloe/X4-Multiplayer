@@ -226,15 +226,16 @@ class NpcFlickerTests(unittest.TestCase):
 
     def test_dense_highway_scene_bounds_engine_writes_per_frame(self):
         # 200 replicas at 3 km/s: the old scheduler wrote every fast replica every frame (live:
-        # about 1,700 writes/s and 13-16 fps). Writes are now bounded per frame, near replicas
-        # first, the rest by distance class and round robin; no replica moves backwards.
+        # about 1,700 writes/s and 13-16 fps). Near replicas are written every frame; the rest
+        # share a per-frame time budget by distance class and round robin; nothing moves back.
         l=self.guest();l.execute('''
           tick(1);local rows={};for id=1,200 do rows[#rows+1]=npcRow(id,id*100) end
           baseline(1,rows,true);tick(3)
           local t0=now;local nextS={};local seq=1
           for id=1,200 do nextS[id]=now+(id%20)*.015 end
           local back,mostPerFrame=0,0;local prev={};local lastWrite={};longestGap=0
-          local budget=U.replicaWrite.budgetPerFrame
+          -- No timed clock in the doubles: each write counts estimatedWriteMs of the budget.
+          local budget=math.ceil(U.replicaWrite.budgetMs/U.replicaWrite.estimatedWriteMs)
           for f=1,240 do
            now=now+1/60
            for id=1,200 do
@@ -242,8 +243,16 @@ class NpcFlickerTests(unittest.TestCase):
              seq=seq+1;U.receive(umove(id,seq,nextS[id],id*100+(nextS[id]-t0)*3000,3000),now);nextS[id]=nextS[id]+.3
             end
            end
+           -- Replicas that were near before this frame are written outside the budget.
+           local wasNear={}
+           for id=1,200 do wasNear[id]=U.replicas[id].object and U.replicas[id].writeClass=='near' end
            local before=#writes+1;frames.onUpdate()
-           mostPerFrame=math.max(mostPerFrame,#writes-before+1)
+           local budgeted=0
+           for i=before,#writes do
+            local id=U.replicaKeys[tostring(writes[i].id)]
+            if not wasNear[id] then budgeted=budgeted+1 end
+           end
+           mostPerFrame=math.max(mostPerFrame,budgeted)
            for id=1,200 do
             local object=U.replicas[id].object
             if object then

@@ -1,7 +1,11 @@
--- Opt-in measurement support: a wall clock for frame_profile.lua and net_rtt.lua.
--- Loads nothing and defines nothing unless a matched package enables a measurement.
+-- Measurement support: a wall clock for frame_profile.lua, net_rtt.lua and the NPC replica
+-- write budget (universe_game.lua, world_sync sessions). Loads nothing and defines nothing
+-- unless a matched package enables a measurement or world synchronization.
 local cfg=X4LAN_CONFIG
-if not cfg or not cfg.enabled or (cfg.frame_profile~=true and cfg.net_probe~=true) then return end
+local wanted=cfg and (cfg.frame_profile==true or cfg.net_probe==true or cfg.world_sync==true)
+if not cfg or not cfg.enabled or not wanted then
+ return
+end
 local M={}
 X4LAN_MEASURE=M
 

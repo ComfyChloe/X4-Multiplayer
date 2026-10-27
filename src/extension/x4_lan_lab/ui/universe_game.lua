@@ -90,6 +90,18 @@ local function diagFlush(now,role,extra)
    local g=u.gaps[b];if g then parts[#parts+1]=string.format('%s:%d:%.0f',b,g.n,g.max) end
   end
   if #parts>0 then out[#out+1]='gap_err='..table.concat(parts,',') end
+  -- Engine write budget: configured ms per frame, mean and peak ms used by budgeted visits,
+  -- mean ms of the unbudgeted near writes; clock=estimated when no timed clock exists.
+  local stats=u.writeStats
+  if stats and stats.frames>0 then
+   out[#out+1]=string.format('budget_ms=%.1f used_ms=%.2f used_ms_max=%.2f near_ms=%.2f budget_clock=%s',
+    u.replicaWrite.budgetMs,stats.usedMs/stats.frames,stats.usedMaxMs,stats.nearMs/stats.frames,
+    stats.measured and 'measured' or 'estimated')
+   stats.frames=0
+   stats.usedMs=0
+   stats.usedMaxMs=0
+   stats.nearMs=0
+  end
  elseif #errors>0 then
   -- Host: divergence (m) between the real pose and the shared prediction at send time.
   out[#out+1]=string.format('pred_err_p50=%.1f pred_err_p95=%.1f pred_err_max=%.1f',
@@ -440,11 +452,17 @@ end
 --  view  (within viewRange):             every viewInterval s, fastViewInterval s when fast
 --  far   (beyond viewRange):             checked every farInterval s, written only when the
 --                                        pose moved more than farError m, or after farRefresh s
--- A write is skipped when the pose changed less than minMove m and minTurn rad. At most
--- budgetPerFrame replicas are visited per frame: never-written replicas first, then near
--- ones, then the most overdue (round robin).
+-- A write is skipped when the pose changed less than minMove m and minTurn rad.
+-- Near replicas (moving within nearRange, or the player's target) are written every frame
+-- without any limit: a battle must not starve the ships the player looks at. All other due
+-- visits share a per-frame time budget (config npc_write_budget_ms, default budgetMs),
+-- measured with the profiler clock (measure_clock.lua); without a timed clock each write
+-- counts estimatedWriteMs (config npc_write_cost_ms) and each visit without a write
+-- estimatedVisitMs. Order: never-written replicas first, then the most overdue (round robin).
 local REPLICA_WRITE={
- budgetPerFrame=12,
+ budgetMs=4,
+ estimatedWriteMs=.35,
+ estimatedVisitMs=.02,
  nearRange=2500,
  nearMinSpeed=1,
  viewRange=15000,
@@ -458,6 +476,28 @@ local REPLICA_WRITE={
  minTurn=.01*math.pi/180,
 }
 u.replicaWrite=REPLICA_WRITE
+local MAX_WRITE_BUDGET_MS=50
+-- A configured number in milliseconds within (0, MAX_WRITE_BUDGET_MS], else the default.
+local function configuredMs(value,default)
+ local number=tonumber(value)
+ if number and number>0 and number<=MAX_WRITE_BUDGET_MS then
+  return number
+ end
+ return default
+end
+REPLICA_WRITE.budgetMs=configuredMs(cfg.npc_write_budget_ms,REPLICA_WRITE.budgetMs)
+REPLICA_WRITE.estimatedWriteMs=configuredMs(cfg.npc_write_cost_ms,REPLICA_WRITE.estimatedWriteMs)
+-- The profiler clock in seconds, or nil when no timed clock is available.
+local function writeClock()
+ local measure=rawget(_G,'X4LAN_MEASURE')
+ if measure and measure.timed and type(measure.clock)=='function' then
+  return measure.clock
+ end
+ return nil
+end
+-- Budget use per diagnostic window (NPC_DIAG budget_ms, used_ms, used_ms_max, near_ms).
+local writeStats={frames=0,usedMs=0,usedMaxMs=0,nearMs=0}
+u.writeStats=writeStats
 local RADIANS_TO_DEGREES=180/math.pi
 local ZONE_FIX_LIMIT=16          -- learned zone offsets kept per replica
 local RESPAWN_INTERVAL=2         -- seconds between two slip respawns of one replica
@@ -692,7 +732,7 @@ function u.writeReplica(replica,now,sectorId)
  local slip,slipOffset=measureSlip(replica,speed,now)
  if slip==0 and not needsWrite(replica,pose,class,now) then
   count('write_skips')
-  return
+  return false
  end
  countJump(replica,pose,speed,now)
  -- Zones are tracked near the player and for slipTrack s after any slip of this replica.
@@ -700,6 +740,7 @@ function u.writeReplica(replica,now,sectorId)
  writePose(replica,sectorId,enginePose,pose,slip,slipOffset,now,trackZones)
  replica.appliedAt=now
  count(class=='near' and 'near_writes' or 'writes')
+ return true
 end
 -- Visit order: never-written replicas first, then near ones, then the most overdue.
 local function visitBefore(a,b)
@@ -723,7 +764,12 @@ local function playerPosition(sectorId)
  local position=C.GetObjectPositionInSector(own)
  return {position.x,position.y,position.z}
 end
--- Per frame: the replicas whose visit is due, at most budgetPerFrame of them.
+local function isNear(replica)
+ return replica.object and (replica.writeClass=='near' or u.focusId==replica.entity.id)
+end
+local SECONDS_TO_MS=1000
+local BUDGET_EPSILON_MS=1e-6  -- summed clock and estimate steps must not overshoot by rounding
+-- Per frame: every due near replica, then the other due visits within the time budget.
 function u.renderReplicas(now,sectorId)
  local ids=u.renderIds or {}
  if #ids==0 then
@@ -732,28 +778,58 @@ function u.renderReplicas(now,sectorId)
  u.frameNo=u.frameNo+1
  u.renderT=u.clock.base and M.drTime(u.clock,now)
  u.playerPos=playerPosition(sectorId)
- local due={}
+ local near={}
+ local others={}
  local nearCount=0
  for _,id in ipairs(ids) do
   local replica=u.replicas[id]
   if replica and replica.sector==u.interest then
-   if replica.writeClass=='near' then
+   if isNear(replica) then
     nearCount=nearCount+1
    end
    if now>=(replica.nextWrite or 0) then
-    due[#due+1]=replica
+    if isNear(replica) then
+     near[#near+1]=replica
+    else
+     others[#others+1]=replica
+    end
    end
   end
  end
  u.nearCount=nearCount
- table.sort(due,visitBefore)
- local visits=math.min(#due,REPLICA_WRITE.budgetPerFrame)
- for i=1,visits do
-  u.writeReplica(due[i],now,sectorId)
+ local clock=writeClock()
+ local nearStart=clock and clock()
+ for _,replica in ipairs(near) do
+  u.writeReplica(replica,now,sectorId)
  end
- if #due>visits then
-  count('write_deferred',#due-visits)
+ if clock then
+  writeStats.nearMs=writeStats.nearMs+(clock()-nearStart)*SECONDS_TO_MS
  end
+ table.sort(others,visitBefore)
+ local start=clock and clock()
+ local usedMs=0
+ local visited=0
+ for _,replica in ipairs(others) do
+  if usedMs>=REPLICA_WRITE.budgetMs-BUDGET_EPSILON_MS then
+   break
+  end
+  local wrote=u.writeReplica(replica,now,sectorId)
+  visited=visited+1
+  if clock then
+   usedMs=(clock()-start)*SECONDS_TO_MS
+  elseif wrote then
+   usedMs=usedMs+REPLICA_WRITE.estimatedWriteMs
+  else
+   usedMs=usedMs+REPLICA_WRITE.estimatedVisitMs
+  end
+ end
+ if #others>visited then
+  count('write_deferred',#others-visited)
+ end
+ writeStats.frames=writeStats.frames+1
+ writeStats.usedMs=writeStats.usedMs+usedMs
+ writeStats.usedMaxMs=math.max(writeStats.usedMaxMs,usedMs)
+ writeStats.measured=clock~=nil
 end
 -- Server: player ship positions per sector, keyed by key(sector): engine IDs are 64-bit
 -- cdata, and two cdata values that compare equal are still different table keys (live:

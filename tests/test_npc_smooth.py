@@ -6,6 +6,7 @@ behaviour; the live failure modes they reproduce are described in the commit mes
 from pathlib import Path
 import math
 import random
+import re
 import unittest
 
 from test_game_adapter import LuaRuntime
@@ -653,28 +654,61 @@ class ReplicaWriteRateTests(unittest.TestCase):
         self.assertEqual(far_still, 0)
         self.assertEqual(near_still, 0)             # below 1 cm / 0.01 degrees: no write
 
-    def test_writes_per_frame_are_capped_round_robin(self):
+    BATTLE = '''
+      -- A battle: 30 replicas moving within 2.5 km of the player, 100 fast ones at 8-14 km.
+      tick(1);local rows={}
+      for id=1,30 do rows[#rows+1]=npcRow(id,200+id*40) end
+      for id=31,130 do rows[#rows+1]=npcRow(id,8000+id*40) end
+      baseline(1,rows,true);tick(20)
+      local t0=now;local seq=1;nearMissed=0;mostBudgeted=0
+      for f=1,120 do
+       now=now+1/60
+       if f%15==1 then
+        for id=1,30 do seq=seq+1;feed(id,seq,200+id*40,200,t0) end
+        for id=31,130 do seq=seq+1;feed(id,seq,8000+id*40,1000,t0) end
+       end
+       local before=#writes+1;frames.onUpdate()
+       local written={};local budgeted=0
+       for i=before,#writes do
+        local id=U.replicaKeys[tostring(writes[i].id)];written[id]=true
+        if id>30 then budgeted=budgeted+1 end
+       end
+       if f>20 then
+        for id=1,30 do if not written[id] then nearMissed=nearMissed+1 end end
+        mostBudgeted=math.max(mostBudgeted,budgeted)
+       end
+      end
+      row=nil;for _,v in ipairs(logs) do if v:find('budget_ms=',1,true) then row=v end end
+    '''
+
+    def test_near_replicas_are_never_capped_and_the_rest_share_a_time_budget(self):
+        # User: "oh god only 12?" - in a battle the ships the player looks at must not starve.
+        # Timed clock double: each engine write takes 0.5 ms, the budget is 4 ms.
         l = self.guest('X4LAN_CONFIG.npc_motion_diagnostics=1')
         l.execute('''
-          tick(1);local rows={};for id=1,50 do rows[#rows+1]=npcRow(id,100+id*20) end
-          baseline(1,rows,true);tick(10)
-          local t0=now;local seq=1;most=0;local last={};gap=0
-          for f=1,180 do
-           now=now+1/60
-           if f%15==1 then for id=1,50 do seq=seq+1;feed(id,seq,100+id*20,200,t0) end end
-           local before=#writes+1;frames.onUpdate()
-           most=math.max(most,#writes-before+1)
-           for i=before,#writes do
-            local id=U.replicaKeys[tostring(writes[i].id)]
-            if f>30 and last[id] then gap=math.max(gap,f-last[id]) end
-            last[id]=f
-           end
-          end
-          deferred=false;for _,v in ipairs(logs) do if v:find('write_deferred=',1,true) then deferred=true end end
+          fakeClock=0;X4LAN_MEASURE={timed=true,clock=function() return fakeClock end}
+          local set=api.SetObjectSectorPos
+          api.SetObjectSectorPos=function(id,sector,p) set(id,sector,p);fakeClock=fakeClock+.0005 end
         ''')
-        self.assertLessEqual(l.eval('most'), 12)
-        self.assertLessEqual(l.eval('gap'), 6)      # 50 near replicas share 12 writes per frame
-        self.assertTrue(l.eval('deferred'))
+        l.execute(self.BATTLE)
+        self.assertEqual(l.eval('nearMissed'), 0)      # all 30 near replicas, every frame
+        self.assertLessEqual(l.eval('mostBudgeted'), 8)  # 4 ms / 0.5 ms per write
+        self.assertGreater(l.eval('mostBudgeted'), 0)
+        row = l.eval('row')
+        for field in ('budget_ms=4.0', 'used_ms=', 'used_ms_max=', 'near_ms=', 'budget_clock=measured',
+                      'write_deferred='):
+            self.assertIn(field, row)
+        used_max = float(re.search(r'used_ms_max=([\d.]+)', row).group(1))
+        self.assertLessEqual(used_max, 4.5)
+
+    def test_configured_budget_and_estimated_cost_without_a_clock(self):
+        l = self.guest('X4LAN_CONFIG.npc_motion_diagnostics=1;X4LAN_CONFIG.npc_write_budget_ms=2')
+        l.execute(self.BATTLE)
+        self.assertEqual(l.eval('nearMissed'), 0)
+        # No timed clock: 0.35 ms estimated per write, so a 2 ms budget allows 6 writes.
+        self.assertLessEqual(l.eval('mostBudgeted'), 6)
+        self.assertIn('budget_ms=2.0', l.eval('row'))
+        self.assertIn('budget_clock=estimated', l.eval('row'))
 
     def test_replica_sections_appear_in_framecost(self):
         l = self.guest('''
@@ -819,8 +853,8 @@ class NpcSceneTests(unittest.TestCase):
         self.assertEqual(jumps, 0)
         self.assertLess(p95, 30, p95)
         self.assertLess(rate, 200, rate)   # 70 NPCs; the old scheme sent 640/s regardless
-        # Engine pose writes: at most budgetPerFrame (12) per 60 fps frame; the old scheduler
-        # wrote every moving replica every frame (about 3,000/s for this scene).
+        # Engine pose writes: near replicas every frame, the rest within a 4 ms budget; the old
+        # scheduler wrote every moving replica every frame (about 3,000/s for this scene).
         self.assertLess(engine_writes / 10, 721, engine_writes / 10)
 
     @staticmethod

@@ -69,9 +69,13 @@ holds. Prediction is continuous; engine pose writes (`SetObjectSectorPos`, about
 0.3-0.4 ms each on the client's main thread) depend on distance from the local player:
 replicas moving within 2.5 km (or the player's target) every frame, within 15 km every
 0.25 s (0.125 s at 150 m/s or more), beyond that checked every 0.5 s and written only
-after 100 m of change or 5 s. Changes below 1 cm and 0.01 degrees are not written, and at
-most 12 replicas are visited per frame (never-written first, then near, then the most
-overdue). `NPC_DIAG` counts `writes`, `near_writes`, `write_skips` and `write_deferred`;
+after 100 m of change or 5 s. Changes below 1 cm and 0.01 degrees are not written. Near
+replicas have no limit; all other due visits share a per-frame time budget (config
+`npc_write_budget_ms`, default 4 ms), measured with the measurement clock, which
+`world_sync` sessions now load. Without a timed clock each write counts
+`npc_write_cost_ms` (default 0.35 ms). Order: never-written first, then the most overdue.
+`NPC_DIAG` counts `writes`, `near_writes`, `write_skips` and `write_deferred` and reports
+`budget_ms`, `used_ms`, `used_ms_max`, `near_ms` and `budget_clock` (measured or estimated);
 FRAMECOST has `universe.render`, `universe.write` (including the engine writes) and
 `universe.publish` sections. When the engine pose slipped from the last written pose by
 more than max(5 km,
